@@ -2,7 +2,8 @@
   "name": "modelence",
   "version": "1.0.0",
   "description": "Full-stack JavaScript platform for startups",
-  "main": "index.js",
+  "main": "index.ts",
+  "types": "index.ts",
   "bin": {
     "modelence": "./bin/modelence.js"
   },
