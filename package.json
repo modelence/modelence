@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/modelence/modelence/issues"
   },
-  "homepage": "https://modelence.com"
+  "homepage": "https://modelence.com",
+  "devDependencies": {
+    "@types/node": "^22.5.1"
+  }
 }
