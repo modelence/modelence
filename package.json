@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "modelence",
   "version": "1.0.0",
   "description": "Full-stack JavaScript platform for startups",
@@ -6,6 +7,10 @@
   "types": "index.ts",
   "bin": {
     "modelence": "./bin/modelence.js"
+  },
+  "exports": {
+    "./data": "./data/index.ts",
+    "./app": "./app/index.ts"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
