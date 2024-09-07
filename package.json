@@ -27,5 +27,8 @@
   "homepage": "https://modelence.com",
   "devDependencies": {
     "@types/node": "^22.5.1"
+  },
+  "dependencies": {
+    "mongodb": "^6.8.1"
   }
 }
