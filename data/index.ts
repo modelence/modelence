@@ -1,3 +1,3 @@
 export * from './DataModel';
 
-export { createDataSource } from './dataSource';
+export { createDataSource } from './createDataSource';
