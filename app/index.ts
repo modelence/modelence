@@ -1,10 +1,14 @@
 import { loadModels } from '../data/dataSources';
+import { loadModules } from '../load';
 import { connect } from '../db/client';
 import { DataSource } from '../data/types';
 import { addDataSource } from '../db';
+import { startServer } from './server';
 
 export async function startApp() {
   const dataSources = await loadModels();
+  await loadModules('**/*(.actions|actions).{js,ts}');
+  await loadModules('**/*(.loaders|loaders).{js,ts}');
 
   const client = await connect();
 
@@ -15,4 +19,6 @@ export async function startApp() {
       collection.createIndex(index);
     });
   });
+
+  await startServer();
 }

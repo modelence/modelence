@@ -1,0 +1,126 @@
+import http from 'http';
+import next from 'next';
+import express, { Request, Response } from 'express';
+import { callLoader } from '../data/loader';
+
+export async function startServer() {
+  const app = express();
+
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  // app.use('/img', express.static('public/img'));
+
+  const nextApp = next({ dev: process.env.NODE_ENV !== 'production' });
+  const handler = nextApp.getRequestHandler();
+
+  try {
+    await nextApp.prepare();
+
+    app.get('/api/internal/loader/:loaderName', async (req: Request, res: Response) => {
+      const { loaderName } = req.params;
+      
+      try {
+        // TODO: pass args
+        const result = await callLoader(loaderName);
+        res.json(result);
+      } catch (error) {
+        console.error(`Error in loader ${loaderName}:`, error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    // app.post('/api/internal/action', (req: Request, res: Response) => {
+    //   // Handle POST request
+    // });
+
+    // Handle all other requests with Next.js
+    app.all('*', (req: Request, res: Response) => {
+      return handler(req, res);
+    });
+
+    console.log('Next.js app prepared successfully');
+  } catch (error) {
+    console.error('Error preparing Next.js app:', error);
+    process.exit(1);
+  }
+
+  const server = http.createServer(app);
+  const port = process.env.PORT || 3000;
+  server.listen(port, () => {
+    console.log(`Application started on port ${port}`);
+  });
+}
+
+
+// import passport from 'passport';
+// import session from 'express-session';
+// import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+
+// Session middleware
+// app.use(session({
+//   secret: process.env.SESSION_SECRET || 'default_secret',
+//   resave: false,
+//   saveUninitialized: false
+// }));
+
+// Passport middleware
+// app.use(passport.initialize());
+// app.use(passport.session());
+
+// // Passport Google strategy setup
+// passport.use(new GoogleStrategy({
+//   clientID: process.env.GOOGLE_CLIENT_ID || '',
+//   clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+//   callbackURL: "/auth/google/callback"
+// },
+// function(accessToken: string, refreshToken: string, profile: any, cb: (error: any, user?: any) => void) {
+//   // Here you would typically find or create a user in your database
+//   // For now, we'll just pass the profile info
+//   return cb(null, profile);
+// }));
+
+// passport.serializeUser((user: Express.User, done: (err: any, id?: unknown) => void) => {
+//   done(null, user);
+// });
+
+// passport.deserializeUser((user: Express.User, done: (err: any, user?: Express.User | false | null) => void) => {
+//   done(null, user);
+// });
+
+// // Google Auth routes
+// app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+// app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }),
+//   function(req: Request, res: Response) {
+//     // Successful authentication, redirect home.
+//     res.redirect('/');
+//   }
+// );
+
+// // Logout route
+// app.get('/logout', (req: Request, res: Response, next: NextFunction) => {
+//   req.logout(function(err) {
+//     if (err) { return next(err); }
+//     res.redirect('/');
+//   });
+// });
+
+// // Middleware to check if user is authenticated
+// function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
+//   if (req.isAuthenticated()) {
+//     return next();
+//   }
+//   res.redirect('/login');
+// }
+
+
+// app.get('/bundle.js', function (req: Request, res: Response) {
+//   res.sendFile('dist/client/bundle.js', { root: '.' });
+// });
+
+
+// // Update your catch-all route
+// app.get('/', function (req: Request, res: Response) {
+//   res.sendFile(path.join('client', 'index.html'), { root: path.join(__dirname, '..') });
+// });
+
