@@ -11,7 +11,8 @@
   "exports": {
     "./data": "./data/index.ts",
     "./app": "./app/index.ts",
-    "./db": "./db/index.ts"
+    "./db": "./db/index.ts",
+    "./actions": "./actions/index.ts"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -27,9 +28,13 @@
   },
   "homepage": "https://modelence.com",
   "devDependencies": {
-    "@types/node": "^22.5.1"
+    "@types/node": "^22.5.1",
+    "@types/react": "^18.3.5"
   },
   "dependencies": {
-    "mongodb": "^6.8.1"
+    "express": "^4.21.0",
+    "glob": "^11.0.0",
+    "mongodb": "^6.8.1",
+    "next": "^14.2.11"
   }
 }
