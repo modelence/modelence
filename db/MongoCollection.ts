@@ -1,4 +1,4 @@
-import { Collection, Document, UpdateResult, DeleteResult, InsertOneResult } from 'mongodb';
+import { Collection, Document, UpdateResult, DeleteResult, InsertOneResult, AggregateOptions, AggregationCursor } from 'mongodb';
 
 export class MongoCollection {
   private collection: Collection;
@@ -31,6 +31,10 @@ export class MongoCollection {
     return await this.collection.deleteOne(selector);
   }
 
+  aggregate(pipeline: Document[], options?: AggregateOptions): AggregationCursor<Document> {
+    return this.collection.aggregate(pipeline, options);
+  }
+
   // TODO: Add more methods as needed:
-  // insertMany, updateMany, deleteMany, aggregate, etc.
+  // insertMany, updateMany, deleteMany, etc.
 }
