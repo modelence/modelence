@@ -27,6 +27,10 @@ export async function connect() {
   }
 }
 
+export function getClient() {
+  return client;
+}
+
 // export async function closeConnection() {
 //   if (client) {
 //     await client.close();
