@@ -32,6 +32,7 @@
     "@types/react": "^18.3.5"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "glob": "^11.0.0",
     "mongodb": "^6.8.1",
