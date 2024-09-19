@@ -1,16 +1,18 @@
 import { DataModel } from './DataModel';
-import { DataSource, DbIndex } from './types';
+import { DataSource, DbIndex, ModelSchema } from './types';
 
 export function createDataSource<T extends object>(
   collectionName: string,
   ModelClass: typeof DataModel<T>,
   options: {
-    indexes: Array<DbIndex>
+    schema: ModelSchema<T>;
+    indexes: Array<DbIndex>;
   }
 ): DataSource<T> {
   return {
     collectionName,
     ModelClass,
-    indexes: options.indexes
+    schema: options.schema,
+    indexes: options.indexes,
   };
 }
