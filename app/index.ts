@@ -3,6 +3,7 @@ import os from 'os';
 
 import { startServer } from './server';
 import { initModules } from './initModules';
+import { dataSources } from '../data/dataSources';
 
 export async function startApp() {
   dotenv.config();
@@ -20,6 +21,13 @@ async function connectCloudBackend() {
   }
 
   try {
+    const dataModels = Object.values(dataSources).map(({ ModelClass, schema }) => {
+      return {
+        name: ModelClass.name,
+        schema
+      };
+    });
+
     const response = await fetch(`${MODELENCE_SERVICE_ENDPOINT}/api/connect`, {
       method: 'POST',
       headers: {
@@ -27,7 +35,8 @@ async function connectCloudBackend() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        hostname: os.hostname()
+        hostname: os.hostname(),
+        dataModels
       })
     });
 
