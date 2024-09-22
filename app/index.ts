@@ -4,12 +4,14 @@ import os from 'os';
 import { startServer } from './server';
 import { initModules } from './initModules';
 import { dataSources } from '../data/dataSources';
+import { initDb } from '../db';
 
 export async function startApp() {
   dotenv.config();
 
   await initModules();
-  await connectCloudBackend();
+  const appConfig = await connectCloudBackend();
+  await initDb(appConfig.mongodbUri);
   await startServer();
 }
 
@@ -46,6 +48,7 @@ async function connectCloudBackend() {
 
     const data = await response.json();
     console.log('Successfully connected to Modelence backend:', data);
+    return data;
   } catch (error) {
     console.error('Unable to connect to Modelence backend:', error);
     throw error;

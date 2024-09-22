@@ -2,10 +2,10 @@ import { MongoClient, ServerApiVersion } from 'mongodb';
 
 let client: MongoClient | null = null;
 
-export async function connect() {
+export async function connect(mongodbUri: string) {
   if (client) return client;
 
-  client = new MongoClient(process.env.MONGODB_URI ?? '', {
+  client = new MongoClient(mongodbUri, {
     serverApi: {
       version: ServerApiVersion.v1,
       strict: true,
