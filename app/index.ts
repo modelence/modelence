@@ -27,7 +27,7 @@ async function connectCloudBackend() {
       return {
         name: ModelClass.name,
         schema,
-        collection: collectionName
+        collections: [collectionName]
       };
     });
 
