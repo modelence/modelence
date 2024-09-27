@@ -23,10 +23,11 @@ async function connectCloudBackend() {
   }
 
   try {
-    const dataModels = Object.values(dataSources).map(({ ModelClass, schema }) => {
+    const dataModels = Object.values(dataSources).map(({ ModelClass, schema, collectionName }) => {
       return {
         name: ModelClass.name,
-        schema
+        schema,
+        collection: collectionName
       };
     });
 
@@ -47,7 +48,7 @@ async function connectCloudBackend() {
     }
 
     const data = await response.json();
-    console.log('Successfully connected to Modelence backend:', data);
+    console.log('Successfully connected to Modelence backend');
     return data;
   } catch (error) {
     console.error('Unable to connect to Modelence backend:', error);
