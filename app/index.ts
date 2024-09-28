@@ -5,13 +5,15 @@ import { startServer } from './server';
 import { initModules } from './initModules';
 import { dataSources } from '../data/dataSources';
 import { initDb } from '../db';
-import { ConfigSchema, loadConfigs } from '../config';
+import { ConfigSchema } from '../config';
+import { loadConfigs, setSchema } from '../config/server';
 
 export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
   dotenv.config();
 
   await initModules();
   
+  setSchema(configSchema ?? {});
   const { mongodbUri, configs } = await connectCloudBackend({ configSchema });
   loadConfigs(configs);
 
