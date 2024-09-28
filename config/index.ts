@@ -1,38 +1,11 @@
-type ConfigType = 'text' | 'number' | 'string' | 'boolean' | 'secret';
+import { isServer } from '../utils';
+import { getConfig as getServerConfig} from './server';
+import { getConfig as getClientConfig } from './client';
 
-type ConfigKey = string;
+import { ConfigKey, ConfigSchema } from './types';
 
-type ConfigParams = {
-  type: ConfigType;
-  default: DefaultType<ConfigType>;
-  isPublic: boolean;
-};
+export type { ConfigSchema };
 
-type AppConfig = {
-  key: ConfigKey;
-  value: string;
-  type: ConfigType;
-}
-
-export type ConfigSchema = {
-  [key: string]: ConfigParams;
-};
-
-type DefaultType<T> = T extends 'number' ? number :
-                      T extends 'string' ? string :
-                      T extends 'boolean' ? boolean :
-                      never;
-
-let config: Record<ConfigKey, AppConfig> = {};
-
-export function loadConfigs(configs: AppConfig[]) {
-  configs.forEach(({ key, type, value }) => {
-    config[key] = {
-      key,
-      type,
-      value
-    };
-  });
-
-  console.log('loadConfig', config);
+export function getConfig(key: ConfigKey) {
+  return isServer() ? getServerConfig(key) : getClientConfig(key);
 }
