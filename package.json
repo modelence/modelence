@@ -12,6 +12,7 @@
     "./data": "./data/index.ts",
     "./app": "./app/index.ts",
     "./db": "./db/index.ts",
+    "./config": "./config/index.ts",
     "./actions": "./actions/index.ts"
   },
   "scripts": {

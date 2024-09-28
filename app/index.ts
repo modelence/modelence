@@ -5,17 +5,21 @@ import { startServer } from './server';
 import { initModules } from './initModules';
 import { dataSources } from '../data/dataSources';
 import { initDb } from '../db';
+import { ConfigSchema, loadConfigs } from '../config';
 
-export async function startApp() {
+export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
   dotenv.config();
 
   await initModules();
-  const appConfig = await connectCloudBackend();
-  await initDb(appConfig.mongodbUri);
+  
+  const { mongodbUri, configs } = await connectCloudBackend({ configSchema });
+  loadConfigs(configs);
+
+  await initDb(mongodbUri);
   await startServer();
 }
 
-async function connectCloudBackend() {
+async function connectCloudBackend({ configSchema }: { configSchema?: ConfigSchema }) {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
   
   if (!MODELENCE_SERVICE_ENDPOINT) {
@@ -39,7 +43,8 @@ async function connectCloudBackend() {
       },
       body: JSON.stringify({
         hostname: os.hostname(),
-        dataModels
+        dataModels,
+        configSchema
       })
     });
 
