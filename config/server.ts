@@ -29,5 +29,13 @@ export function loadConfigs(configs: AppConfig[]) {
 }
 
 export function setSchema(schema: ConfigSchema) {
+  // TODO: more validation on the schema structure
+  Object.entries(schema).forEach(([key, value]) => {
+    const { type, isPublic } = value;
+    if (type === 'secret' && isPublic) {
+      throw new Error(`Config ${key} with type "secret" cannot be public`);
+    }
+  });
+
   configSchema = schema;
 }
