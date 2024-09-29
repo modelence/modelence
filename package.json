@@ -6,7 +6,7 @@
   "main": "index.ts",
   "types": "index.ts",
   "exports": {
-    ".": "./client/index.ts",
+    ".": "./index.ts",
     "./data": "./data/index.ts",
     "./app": "./app/index.ts",
     "./db": "./db/index.ts",
