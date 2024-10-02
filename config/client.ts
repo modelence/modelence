@@ -9,5 +9,4 @@ export function getConfig(key: ConfigKey) {
 
 export async function loadConfig() {
   config = await callLoader('_system.configs');
-  console.log('client config', config);
 }
