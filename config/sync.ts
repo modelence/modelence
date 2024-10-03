@@ -1,5 +1,7 @@
 import { time } from '../time';
 import { fetchConfigs } from '../app/backendApi';
+import { loadConfigs } from './server';
+
 let isSyncing = false;
 
 const SYNC_INTERVAL = time.seconds(10);
@@ -24,7 +26,6 @@ export function startConfigSync() {
 }
 
 async function syncConfig() {
-  console.log('syncing config');
-  const configs = await fetchConfigs();
-  console.log('configs fetched', configs);
+  const { configs } = await fetchConfigs();
+  loadConfigs(configs);
 }
