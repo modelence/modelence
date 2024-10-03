@@ -3,6 +3,11 @@ import { dataSources } from '../data/dataSources';
 import { ConfigSchema } from '../config';
 
 export async function connectCloudBackend({ configSchema }: { configSchema?: ConfigSchema }) {
+  const containerId = process.env.MODELENCE_CONTAINER_ID;
+  if (!containerId) {
+    throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
+  }
+
   try {
     const dataModels = Object.values(dataSources).map(({ ModelClass, schema, collectionName }) => {
       return {
@@ -14,15 +19,16 @@ export async function connectCloudBackend({ configSchema }: { configSchema?: Con
 
     const data = await callApi('/api/connect', 'POST', {
       hostname: os.hostname(),
+      containerId,
       dataModels,
       configSchema
     });
 
-    console.log('Successfully connected to Modelence backend');
+    console.log('Successfully connected to Modelence Cloud');
 
     return data;
   } catch (error) {
-    console.error('Unable to connect to Modelence backend:', error);
+    console.error('Unable to connect to Modelence Cloud:', error);
     throw error;
   }
 }
@@ -36,7 +42,7 @@ async function callApi(endpoint: string, method: string, payload?: object) {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
   
   if (!MODELENCE_SERVICE_ENDPOINT) {
-    throw new Error('Unable to connect to Modelence API: MODELENCE_SERVICE_ENDPOINT is not set');
+    throw new Error('Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set');
   }
 
   const response = await fetch(`${MODELENCE_SERVICE_ENDPOINT}/${endpoint}`, {
@@ -50,7 +56,7 @@ async function callApi(endpoint: string, method: string, payload?: object) {
 
   if (!response.ok) {
     const data = await response.json();
-    throw new Error(`Unable to connect to Modelence API: HTTP status: ${response.status}, ${data?.error}`);
+    throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data?.error}`);
   }
 
   return await response.json();
