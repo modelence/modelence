@@ -8,6 +8,7 @@ import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
+import { createStsClient } from './aws';
 
 export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
   dotenv.config();
@@ -15,11 +16,12 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   await initModules();
   
   setSchema(configSchema ?? {});
-  const { mongodbUri, ampEndpoint, configs } = await connectCloudBackend({ configSchema });
+  const { mongodbUri, ampEndpoint, ampAccessKey, ampSecret, configs } = await connectCloudBackend({ configSchema });
   loadConfigs(configs);
 
   await initDb(mongodbUri);
-  await initMetrics({ ampEndpoint });
+  const stsClient = await createStsClient({ accessKey: ampAccessKey, secret: ampSecret });
+  await initMetrics({ ampEndpoint, stsClient });
   await startConfigSync();
 
   await startServer();

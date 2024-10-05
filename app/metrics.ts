@@ -5,6 +5,7 @@ import { Resource } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { Counter, metrics, Attributes } from '@opentelemetry/api';
 import { diag, DiagLogLevel, DiagConsoleLogger } from '@opentelemetry/api';
+import { STSClient } from '@aws-sdk/client-sts';
 
 const loaderMetrics = {
   callCounter: null as Counter<Attributes> | null,
@@ -12,7 +13,7 @@ const loaderMetrics = {
 
 let isInitialized = false;
 
-export const initMetrics = ({ ampEndpoint }: { ampEndpoint: string }) => {
+export const initMetrics = ({ ampEndpoint, stsClient }: { ampEndpoint: string, stsClient: STSClient }) => {
   console.log('initMetrics', ampEndpoint);
   if (isInitialized) {
     throw new Error('Metrics are already initialized, duplicate "initMetrics" call received');
