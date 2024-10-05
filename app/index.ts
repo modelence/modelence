@@ -7,6 +7,7 @@ import { ConfigSchema } from '../config';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
+import { initMetrics } from './metrics';
 
 export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
   dotenv.config();
@@ -18,6 +19,7 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   loadConfigs(configs);
 
   await initDb(mongodbUri);
+  await initMetrics();
   await startConfigSync();
 
   await startServer();
