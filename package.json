@@ -31,17 +31,21 @@
     "@types/react": "^18.3.5"
   },
   "dependencies": {
+    "@aws-sdk/client-amp": "^3.665.0",
     "@aws-sdk/client-sts": "^3.665.0",
+    "@aws-sdk/types": "^3.664.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.53.0",
     "@opentelemetry/sdk-metrics": "^1.26.0",
     "@opentelemetry/sdk-node": "^0.53.0",
     "@opentelemetry/sdk-trace-node": "^1.26.0",
     "@opentelemetry/semantic-conventions": "^1.27.0",
+    "aws-sigv4-fetch": "^4.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "glob": "^11.0.0",
     "mongodb": "^6.8.1",
-    "next": "^14.2.11"
+    "next": "^14.2.11",
+    "snappy": "^7.2.2"
   }
 }

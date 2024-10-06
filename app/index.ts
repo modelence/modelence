@@ -21,7 +21,7 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
 
   await initDb(mongodbUri);
   const stsClient = await createStsClient({ accessKey: ampAccessKey, secret: ampSecret });
-  await initMetrics({ ampEndpoint, stsClient });
+  await initMetrics({ ampEndpoint, region: 'us-west-2', ampAccessKey, ampSecret });
   await startConfigSync();
 
   await startServer();
