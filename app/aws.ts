@@ -2,6 +2,7 @@ import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
 const region = 'us-west-2'; // TODO: make this configurable
 
+// TODO: remove this whole thing if remains unused
 export function createStsClient({ accessKey, secret }: { accessKey: string, secret: string }) {
   const stsClient = new STSClient({ 
     region: region,
