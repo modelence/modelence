@@ -62,8 +62,44 @@ export function createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret,
     }
   };
 
+  // TODO: make this exportable
+  /* no-await */queryMetrics(signedFetch, ampEndpoint, '{__name__=~"loader.*"}').then((response) => {
+    const data = response.data;
+    console.log('query data', JSON.stringify(data, null, 2));
+  });
+
   return customMetricExporter;
 }
+
+export async function queryMetrics(signedFetch: typeof fetch, ampEndpoint: string, query: string, time?: string, timeout?: string): Promise<any> {
+  const params = new URLSearchParams({
+    query,
+    ...(time && { time }),
+    ...(timeout && { timeout }),
+  });
+
+  const queryUrl = ampEndpoint.split('/').slice(0, -1).join('/') + `/query?${params.toString()}`;
+  console.log('queryMetrics', queryUrl);
+
+  try {
+    const response = await signedFetch(queryUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const json = await response.json();
+      throw new Error(`HTTP error! status: ${response.status} ${json.error}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error querying metrics:', error);
+    throw error;
+  }
+};
 
 function convertToPrometheusFormat(scopedMetrics: ScopeMetrics[]) {
   const timeseries = [];
