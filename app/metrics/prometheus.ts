@@ -2,6 +2,7 @@ import protobuf from 'protobufjs';
 import snappy from 'snappy';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { DataPoint, ResourceMetrics, ScopeMetrics, Histogram, ExponentialHistogram } from '@opentelemetry/sdk-metrics';
+import { AttributeValue } from '@opentelemetry/api';
 import prometheusProtoJson from './prometheusProto';
 import { createSignedFetcher } from 'aws-sigv4-fetch';
 
@@ -101,8 +102,12 @@ export async function queryMetrics(signedFetch: typeof fetch, ampEndpoint: strin
   }
 };
 
+type TimeseriesLabel = { name: string; value: AttributeValue | undefined };
+type TimeseriesSample = { value: number | Histogram | ExponentialHistogram; timestamp: number };
+type TimeseriesRecord = { labels: TimeseriesLabel[]; samples: TimeseriesSample[] };
+
 function convertToPrometheusFormat(scopedMetrics: ScopeMetrics[]) {
-  const timeseries = [];
+  const timeseries: TimeseriesRecord[] = [];
 
   scopedMetrics.forEach(({ metrics, scope }) => {
     metrics.forEach(({ descriptor, dataPoints }) => {
