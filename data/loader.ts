@@ -1,5 +1,5 @@
 import { requireServer } from '../utils';
-import { recordLoaderCall } from '../app/metrics';
+import { recordLoaderCall, recordLoaderResponse } from '../app/metrics/callMetrics';
 
 type Handler<T extends any[]> = (...args: T) => Promise<any> | any;
 
@@ -36,6 +36,11 @@ export async function callLoader(name: string, ...args: any[]) {
     throw new Error(`Loader with name '${name}' is not defined.`);
   }
 
-  recordLoaderCall({ name });
-  return await loader.handler(...args);
+  recordLoaderCall(name);
+  const startTime = Date.now();
+  const response = await loader.handler(...args);
+  const duration = Date.now() - startTime;
+  recordLoaderResponse(name, duration);
+
+  return response;
 }

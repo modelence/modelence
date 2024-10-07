@@ -27,15 +27,15 @@ export function createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret,
       throw new Error('signedFetch is not initialized');
     }
 
-    // console.log('customMetricExporter.export', metrics);
-    console.log('scopeMetrics', JSON.stringify(resourceMetrics.scopeMetrics));
-
     try {
       const data = convertToPrometheusFormat(resourceMetrics.scopeMetrics);
-      console.log('data', data);
+      console.log('timeseries data', JSON.stringify(data.timeseries, null, 2));
 
-      const err = WriteRequest.verify(data);
-      if (err) throw Error(err);
+      // const err = WriteRequest.verify(data);
+      // if (err) {
+      //   console.error('Error verifying data', err);
+      //   throw Error(err);
+      // }
 
       const message = WriteRequest.create(data);
       const buffer = WriteRequest.encode(message).finish();
@@ -53,6 +53,7 @@ export function createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret,
       });
 
       if (response.ok) {
+        console.log('Prometheus exporter success');
         resultCallback({ code: 0 });  // ExportResult.SUCCESS
       } else {
         console.error('Failed to export metrics', response);
@@ -63,8 +64,10 @@ export function createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret,
     }
   };
 
+  const ampQueryEndpoint = ampEndpoint.split('/').slice(0, -1).join('/') + `/query`;
+
   // TODO: make this exportable
-  /* no-await */queryMetrics(signedFetch, ampEndpoint, '{__name__=~"loader.*"}').then((response) => {
+  /* no-await */queryMetrics(signedFetch, ampQueryEndpoint, '{__name__=~"modelence.*"}').then((response) => {
     const data = response.data;
     console.log('query data', JSON.stringify(data, null, 2));
   });
@@ -72,14 +75,14 @@ export function createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret,
   return customMetricExporter;
 }
 
-export async function queryMetrics(signedFetch: typeof fetch, ampEndpoint: string, query: string, time?: string, timeout?: string): Promise<any> {
+export async function queryMetrics(signedFetch: typeof fetch, ampQueryEndpoint: string, query: string, time?: string, timeout?: string): Promise<any> {
   const params = new URLSearchParams({
     query,
     ...(time && { time }),
     ...(timeout && { timeout }),
   });
 
-  const queryUrl = ampEndpoint.split('/').slice(0, -1).join('/') + `/query?${params.toString()}`;
+  const queryUrl = ampQueryEndpoint + `?${params.toString()}`;
   console.log('queryMetrics', queryUrl);
 
   try {
