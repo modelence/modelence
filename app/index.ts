@@ -16,12 +16,11 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   await initModules();
   
   setSchema(configSchema ?? {});
-  const { mongodbUri, ampEndpoint, ampAccessKey, ampSecret, configs } = await connectCloudBackend({ configSchema });
+  const { mongodbUri, elasticServerUrl, elasticSecretToken, configs } = await connectCloudBackend({ configSchema });
   loadConfigs(configs);
 
   await initDb(mongodbUri);
-  const stsClient = await createStsClient({ accessKey: ampAccessKey, secret: ampSecret });
-  await initMetrics({ ampEndpoint, region: 'us-west-2', ampAccessKey, ampSecret });
+  await initMetrics({ elasticServerUrl, elasticSecretToken });
   await startConfigSync();
 
   await startServer();
