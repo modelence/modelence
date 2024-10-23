@@ -1,10 +1,3 @@
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { Resource } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-// import { diag, DiagLogLevel, DiagConsoleLogger } from '@opentelemetry/api';
-import { createPrometheusExporter } from './metrics/prometheus';
-import { initCallMetrics } from './metrics/callMetrics';
 import elasticApm from 'elastic-apm-node';
 
 let isInitialized = false;
@@ -19,22 +12,6 @@ export const initMetrics = async ({ elasticServerUrl, elasticSecretToken }:
   isInitialized = true;
 
   initElasticApm({ elasticServerUrl, elasticSecretToken });
-
-  // const sdk = new NodeSDK({
-  //   resource: new Resource({
-  //     [ATTR_SERVICE_NAME]: 'modelence-app',
-  //     [ATTR_SERVICE_VERSION]: '1.0',
-  //   }),
-  //   metricReader: new PeriodicExportingMetricReader({
-  //     exporter: createPrometheusExporter({ ampEndpoint, ampAccessKey, ampSecret, region }),
-  //     exportIntervalMillis: 10000,
-  //   }),
-  //   instrumentations: [],
-  // });
-
-  // sdk.start();
-
-  // initCallMetrics();
 };
 
 function initElasticApm({ elasticServerUrl, elasticSecretToken }: { elasticServerUrl: string, elasticSecretToken: string }) {
