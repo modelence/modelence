@@ -42,6 +42,7 @@
     "@opentelemetry/semantic-conventions": "^1.27.0",
     "aws-sigv4-fetch": "^4.0.1",
     "dotenv": "^16.4.5",
+    "elastic-apm-node": "^4.8.0",
     "express": "^4.21.0",
     "glob": "^11.0.0",
     "mongodb": "^6.8.1",
