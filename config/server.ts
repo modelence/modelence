@@ -5,7 +5,7 @@ let config: Record<ConfigKey, AppConfig> = {};
 let isInitialized = false;
 
 export function getConfig(key: ConfigKey) {
-  return config[key];
+  return config[key]?.value;
 }
 
 export function getPublicConfigs() {

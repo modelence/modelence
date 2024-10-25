@@ -16,11 +16,11 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   await initModules();
   
   setSchema(configSchema ?? {});
-  const { mongodbUri, elasticServerUrl, elasticSecretToken, configs } = await connectCloudBackend({ configSchema });
+  const { mongodbUri, configs } = await connectCloudBackend({ configSchema });
   loadConfigs(configs);
 
   await initDb(mongodbUri);
-  await initMetrics({ elasticServerUrl, elasticSecretToken });
+  await initMetrics();
   await startConfigSync();
 
   await startServer();
