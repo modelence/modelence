@@ -20,7 +20,9 @@ export function getPublicConfigs() {
 
 export function loadConfigs(configs: AppConfig[]) {
   configs.forEach(({ key, type, value }) => {
-    if (!configSchema[key]) {
+    const isSystemConfig = key.toLowerCase().startsWith('_system.');
+
+    if (!isSystemConfig && !configSchema[key]) {
       // Ignore unknown configs
       return;
     }
