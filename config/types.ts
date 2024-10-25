@@ -1,16 +1,16 @@
-type ConfigType = 'text' | 'number' | 'string' | 'boolean' | 'secret';
+type ConfigType = 'text' | 'string' | 'number' | 'boolean' | 'secret';
 
 export type ConfigKey = string;
 
 type ConfigParams = {
   type: ConfigType;
-  default: DefaultType<ConfigType>;
+  default: ValueType<ConfigType>;
   isPublic: boolean;
 };
 
 export type AppConfig = {
   key: ConfigKey;
-  value: string;
+  value: ValueType<ConfigType>;
   type: ConfigType;
 }
 
@@ -18,7 +18,9 @@ export type ConfigSchema = {
   [key: string]: ConfigParams;
 };
 
-type DefaultType<T> = T extends 'number' ? number :
-                      T extends 'string' ? string :
-                      T extends 'boolean' ? boolean :
-                      never;
+type ValueType<T> = T extends 'number' ? number :
+  T extends 'string' ? string :
+  T extends 'text' ? string :
+  T extends 'boolean' ? boolean :
+  T extends 'secret' ? string :
+  never;

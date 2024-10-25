@@ -1,20 +1,24 @@
 import elasticApm from 'elastic-apm-node';
 
+import { getConfig } from '../config/server';
+
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
 
-export const initMetrics = async ({ elasticServerUrl, elasticSecretToken }: 
-  { elasticServerUrl: string, elasticSecretToken: string }) => {
+export const initMetrics = async () => {
   if (isInitialized) {
     throw new Error('Metrics are already initialized, duplicate "initMetrics" call received');
   }
 
   isInitialized = true;
 
-  initElasticApm({ elasticServerUrl, elasticSecretToken });
+  initElasticApm();
 };
 
-function initElasticApm({ elasticServerUrl, elasticSecretToken }: { elasticServerUrl: string, elasticSecretToken: string }) {
+function initElasticApm() {
+  const elasticServerUrl = getConfig('_system.elastic.serverUrl') as string;
+  const elasticSecretToken = getConfig('_system.elastic.secretToken') as string;
+
   apm = elasticApm.start({
     serviceName: 'typesonic',
     secretToken: elasticSecretToken,
