@@ -2,6 +2,7 @@ import http from 'http';
 import next from 'next';
 import express, { Request, Response } from 'express';
 import { callLoader } from '../data/loader';
+import { logInfo } from './logs';
 
 export async function startServer() {
   const app = express();
@@ -47,7 +48,7 @@ export async function startServer() {
   const server = http.createServer(app);
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`Application started on port ${port}`);
+    logInfo(`Application started on port ${port}`, { source: 'app' });
   });
 }
 

@@ -40,6 +40,8 @@
     "express": "^4.21.0",
     "glob": "^11.0.0",
     "mongodb": "^6.8.1",
-    "next": "^14.2.11"
+    "next": "^14.2.11",
+    "winston": "^3.15.0",
+    "winston-elasticsearch": "^0.19.0"
   }
 }
