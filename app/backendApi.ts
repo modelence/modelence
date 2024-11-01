@@ -38,6 +38,13 @@ export async function fetchConfigs() {
   return data;
 }
 
+export async function syncStatus() {
+  const data = await callApi('/api/sync', 'POST', {
+    containerId: process.env.MODELENCE_CONTAINER_ID
+  });
+  return data;
+}
+
 async function callApi(endpoint: string, method: string, payload?: object) {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
   

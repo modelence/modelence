@@ -1,5 +1,5 @@
 import { time } from '../time';
-import { fetchConfigs } from '../app/backendApi';
+import { fetchConfigs, syncStatus } from '../app/backendApi';
 import { loadConfigs } from './server';
 
 let isSyncing = false;
@@ -13,11 +13,17 @@ export function startConfigSync() {
     }
   
     isSyncing = true;
+
+    // TODO: move this sync outside of config
+    try {
+      await syncStatus();
+    } catch (error) {
+      console.error('Error syncing status', error);
+    }
   
     try {
       await syncConfig();
     } catch (error) {
-      // TODO: send modelence logs also
       console.error('Error syncing config', error);
     }
   
