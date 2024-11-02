@@ -4,6 +4,7 @@ import winston from 'winston';
 import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
+import { startLoggerProcess } from './loggerProcess';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -17,14 +18,14 @@ export const initMetrics = async () => {
   isInitialized = true;
 
   await initElasticApm();
-
-  // process.stdout.pipe(createLoggingStream(process.stdout));
-  // process.stderr.pipe(createLoggingStream(process.stderr));
 };
 
 async function initElasticApm() {
   const elasticServerUrl = getConfig('_system.elastic.serverUrl') as string;
   const elasticSecretToken = getConfig('_system.elastic.secretToken') as string;
+
+  // TODO: Move cloud.id to config: getConfig('_system.elastic.cloudId') as string;
+  const elasticCloudId = 'Modelence:dXMtd2VzdC0yLmF3cy5mb3VuZC5pbzo0NDMkNzdmYWU4ZDMwMzQ2NDZlMTg2ODYwYjIyYmY1MTc0OGIkNTFlZTMwNmI4YzVhNDVjYWI4NjVmNzA5ZmIyZTdiZDI=';
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   apm = elasticApm.start({
@@ -40,7 +41,7 @@ async function initElasticApm() {
     level: 'debug',
     clientOpts: {
       cloud: {
-        id: 'Modelence:dXMtd2VzdC0yLmF3cy5mb3VuZC5pbzo0NDMkNzdmYWU4ZDMwMzQ2NDZlMTg2ODYwYjIyYmY1MTc0OGIkNTFlZTMwNmI4YzVhNDVjYWI4NjVmNzA5ZmIyZTdiZDI='
+        id: elasticCloudId,
       },
       auth: {
         apiKey: elasticApiKey
@@ -50,6 +51,7 @@ async function initElasticApm() {
         rejectUnauthorized: false
       }
     },
+    bufferLimit: 1000,
     silent: false,
   });
 
@@ -63,25 +65,14 @@ async function initElasticApm() {
       winston.format.json(),
     ),
     transports: [
-      new winston.transports.Console(),
+      // new winston.transports.Console(), // TODO: remove, just for debugging
       esTransport
     ]
   });
-}
 
-function createLoggingStream(originalStream: NodeJS.WriteStream | NodeJS.WritableStream) {
-  return new Writable({
-    write(chunk, encoding, callback) {
-      originalStream.write(chunk);
-
-      const message = chunk.toString();
-
-      log(message, {
-        source: 'console',
-      }, 'info');
-      
-      callback();
-    }
+  startLoggerProcess({
+    elasticCloudId,
+    elasticApiKey
   });
 }
 
@@ -95,13 +86,9 @@ export function startLoaderTransaction(loaderName: string, args: any[]) {
   return transaction;
 }
 
-export function log(
-  message: string,
-  args: object,
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error' = 'info',
-) {
+export function getLogger() {
   if (!logger) {
     throw new Error('Logger is not initialized');
   }
-  logger.info(message, args);
+  return logger;
 }

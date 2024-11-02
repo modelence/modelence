@@ -16,7 +16,7 @@ type LoaderResult<T> = {
 };
 
 export async function callLoader<T>(loaderName: string, ...args: any[]): Promise<T> {
-  const response = await fetch(`/api/internal/loader/${loaderName}`, {
+  const response = await fetch(`/api/_internal/loader/${loaderName}`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

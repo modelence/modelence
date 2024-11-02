@@ -1,5 +1,9 @@
-import { log } from './metrics';
+import { getLogger } from './metrics';
 
 export function logInfo(message: string, args: object) {
-  log(message, args, 'info');
+  getLogger().info(message, args);
+}
+
+export function logError(message: string, args: object) {
+  getLogger().error(message, args);
 }
