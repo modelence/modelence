@@ -11,13 +11,14 @@ export async function startServer() {
   app.use(express.urlencoded({ extended: true }));
   // app.use('/img', express.static('public/img'));
 
-  const nextApp = next({ dev: process.env.NODE_ENV !== 'production' });
+  const isDev = process.env.NODE_ENV !== 'production';
+  const nextApp = next({ dev: isDev });
   const handler = nextApp.getRequestHandler();
 
   try {
     await nextApp.prepare();
 
-    app.get('/api/internal/loader/:loaderName', async (req: Request, res: Response) => {
+    app.get('/api/_internal/loader/:loaderName', async (req: Request, res: Response) => {
       const { loaderName } = req.params;
       
       try {
@@ -30,7 +31,7 @@ export async function startServer() {
       }
     });
 
-    // app.post('/api/internal/action', (req: Request, res: Response) => {
+    // app.post('/api/_internal/action', (req: Request, res: Response) => {
     //   // Handle POST request
     // });
 
@@ -48,7 +49,8 @@ export async function startServer() {
   const server = http.createServer(app);
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    logInfo(`Application started on port ${port}`, { source: 'app' });
+    logInfo(`Application started`, { source: 'app' });
+    console.log(`Application started on port ${port}`);
   });
 }
 

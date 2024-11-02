@@ -5,9 +5,6 @@
   "description": "Full-stack JavaScript platform for startups",
   "main": "index.ts",
   "types": "index.ts",
-  "bin": {
-    "modelence-logger": "./bin/modelence-logger"
-  },
   "exports": {
     ".": "./index.ts",
     "./data": "./data/index.ts",
