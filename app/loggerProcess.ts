@@ -4,10 +4,15 @@
 import { logInfo, logError } from './logs';
 import process from 'process';
 
-const buffer = {
+type LogEntry = { log: string, timestamp: Date | null, sequenceId?: number };
+type LogBuffer = LogEntry[];
+
+const buffer: { stdout: LogBuffer, stderr: LogBuffer } = {
   stdout: [{ log: '', timestamp: null }],
   stderr: [{ log: '', timestamp: null }]
 }
+
+let sequenceId = 1;
 
 export function startLoggerProcess({ elasticCloudId, elasticApiKey }: { elasticCloudId: string, elasticApiKey: string }) {
   const originalStdoutWrite = process.stdout.write;
@@ -59,7 +64,7 @@ export function startLoggerProcess({ elasticCloudId, elasticApiKey }: { elasticC
   // logger.unref();
 }
 
-function addToBuffer(chunk: string, buffer: { log: string, timestamp: Date | null }[]) {
+function addToBuffer(chunk: string, buffer: LogBuffer) {
   if (chunk.length === 0) {
     return;
   }
@@ -70,6 +75,7 @@ function addToBuffer(chunk: string, buffer: { log: string, timestamp: Date | nul
     const current = buffer[buffer.length - 1];
     if (!current.timestamp) {
       current.timestamp = timestamp;
+      current.sequenceId = sequenceId++;
     }
 
     if (chunk[i] === '\n') {
@@ -88,11 +94,11 @@ async function sendLogs() {
   const stderrLogs = buffer.stderr.slice(0, -1);
   buffer.stderr = [buffer.stderr[buffer.stderr.length - 1]];
 
-  stdoutLogs.forEach(({ log, timestamp }: { log: string, timestamp: Date | null }) => {
-    logInfo(log, { timestamp, source: 'console' });
+  stdoutLogs.forEach(({ log, timestamp, sequenceId }: LogEntry) => {
+    logInfo(log, { timestamp, source: 'console', sequenceId });
   });
-  stderrLogs.forEach(({ log, timestamp }: { log: string, timestamp: Date | null }) => {
-    logError(log, { timestamp, source: 'console' });
+  stderrLogs.forEach(({ log, timestamp, sequenceId }: LogEntry) => {
+    logError(log, { timestamp, source: 'console', sequenceId });
   });
 }
 
