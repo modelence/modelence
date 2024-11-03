@@ -27,6 +27,7 @@
   },
   "homepage": "https://modelence.com",
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
     "@types/react": "^18.3.5"
   },
