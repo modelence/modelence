@@ -11,7 +11,7 @@ export class MongoCollection {
     return await this.collection.findOne(query, options);
   }
 
-  async find(query: Document,  options?: { sort?: Document }): Promise<Document[]> {
+  async find(query: Document, options?: { sort?: Document }): Promise<Document[]> {
     const cursor = this.collection.find(query);
     if (options?.sort) {
       cursor.sort(options.sort);

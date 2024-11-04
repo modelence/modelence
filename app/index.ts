@@ -8,7 +8,8 @@ import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
-import { createStsClient } from './aws';
+import { startCronJobs } from '../cron/jobs';
+// import { createStsClient } from './aws';
 
 export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
   dotenv.config();
@@ -21,7 +22,8 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
 
   await initDb(mongodbUri);
   await initMetrics();
-  await startConfigSync();
+  startConfigSync();
+  await startCronJobs();
 
   await startServer();
 }
