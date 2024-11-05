@@ -11,6 +11,7 @@
     "./app": "./app/index.ts",
     "./db": "./db/index.ts",
     "./cron": "./cron/index.ts",
+    "./time": "./time.ts",
     "./config": "./config/index.ts",
     "./actions": "./actions/index.ts"
   },
