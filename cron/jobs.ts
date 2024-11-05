@@ -124,14 +124,12 @@ async function tickCronJobs() {
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
       state.isRunning = true;
       state.startTs = now;
-      console.log(`Running cron job '${alias}'`);
       // TODO: log cron trace start
       // TODO: enforce job timeout
       handler().then(() => {
         state.scheduledRunTs = state.startTs ? state.startTs + params.interval : now;
         state.startTs = undefined;
         state.isRunning = false;
-        console.log(`Finished cron job '${alias}'`);
         // TODO: log cron trace success
       }).catch((err) => {
         state.scheduledRunTs = state.startTs ? state.startTs + params.interval : now;
