@@ -23,7 +23,10 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   await initDb(mongodbUri);
   await initMetrics();
   startConfigSync();
-  await startCronJobs();
+
+  if (Number(process.env.MODELENCE_CRON_INSTANCE)) {
+    await startCronJobs();
+  }
 
   await startServer();
 }

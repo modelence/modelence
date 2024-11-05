@@ -10,4 +10,9 @@ export type CronJob = {
     timeout: number;
   },
   handler: () => Promise<void>;
+  state: {
+    startTs?: number;
+    scheduledRunTs?: number;
+    isRunning: boolean;
+  }
 }
