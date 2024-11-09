@@ -31,6 +31,8 @@ async function initElasticApm() {
     secretToken: elasticSecretToken,
     serverUrl: elasticApmEndpoint,
     environment: 'dev',
+    transactionSampleRate: 1.0,
+    centralConfig: false,
     // logLevel: 'debug'
   });
 
