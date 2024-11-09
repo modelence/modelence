@@ -21,17 +21,15 @@ export const initMetrics = async () => {
 };
 
 async function initElasticApm() {
-  const elasticServerUrl = getConfig('_system.elastic.serverUrl') as string;
+  const elasticApmEndpoint = getConfig('_system.elastic.apmEndpoint') as string;
   const elasticSecretToken = getConfig('_system.elastic.secretToken') as string;
-
-  // TODO: Move cloud.id to config: getConfig('_system.elastic.cloudId') as string;
-  const elasticCloudId = 'Modelence:dXMtd2VzdC0yLmF3cy5mb3VuZC5pbzo0NDMkNzdmYWU4ZDMwMzQ2NDZlMTg2ODYwYjIyYmY1MTc0OGIkNTFlZTMwNmI4YzVhNDVjYWI4NjVmNzA5ZmIyZTdiZDI=';
+  const elasticCloudId = getConfig('_system.elastic.cloudId') as string;
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   apm = elasticApm.start({
     serviceName: 'typesonic',
     secretToken: elasticSecretToken,
-    serverUrl: elasticServerUrl,
+    serverUrl: elasticApmEndpoint,
     environment: 'dev',
     // logLevel: 'debug'
   });
