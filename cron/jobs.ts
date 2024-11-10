@@ -4,6 +4,7 @@ import { time } from '../time';
 import { MongoCollection } from '../db/MongoCollection';
 import { getClient } from '../db/client';
 import { CronJob, CronJobInputParams } from './types';
+import { isAppStarted } from '../app/state';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
@@ -16,16 +17,24 @@ const LOCK_TRANSFER_DELAY = time.seconds(10);
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsCollection: MongoCollection;
-
 let cronJobsInterval: NodeJS.Timeout;
 
+// TODO: allow changing interval and timeout with cron jobconfigs
 export function addCronJob(
   alias: CronJob['alias'],
-  { interval, timeout = DEFAULT_TIMEOUT }: CronJobInputParams,
+  { description = '', interval, timeout = DEFAULT_TIMEOUT }: CronJobInputParams,
   handler: CronJob['handler'],
 ) {
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
+  }
+
+  if (isAppStarted()) {
+    throw new Error(`Unable to add a cron job - app has already been started: [${alias}]`);
+  }
+
+  if (cronJobsInterval) {
+    throw new Error(`Unable to add a cron job - cron jobs have already been initialized: [${alias}]`);
   }
 
   if (interval < time.seconds(5)) {
@@ -38,7 +47,7 @@ export function addCronJob(
 
   cronJobs[alias] = {
     alias,
-    params: { interval, timeout },
+    params: { description, interval, timeout },
     handler,
     state: {
       isRunning: false,
@@ -142,6 +151,15 @@ async function tickCronJobs() {
       });
     }
   });
+}
+
+export function getCronJobsMetadata() {
+  return Object.values(cronJobs).map(({ alias, params }) => ({
+    alias,
+    description: params.description,
+    interval: params.interval,
+    timeout: params.timeout,
+  }));
 }
 
 // const runCronJob = () => {

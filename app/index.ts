@@ -8,16 +8,22 @@ import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
-import { startCronJobs } from '../cron/jobs';
+import { markAppStarted } from './state';
+import { startCronJobs, getCronJobsMetadata } from '../cron/jobs';
 // import { createStsClient } from './aws';
 
 export async function startApp({ configSchema }: { configSchema?: ConfigSchema } = {}) {
+  markAppStarted();
+
   dotenv.config();
 
   await initModules();
   
   setSchema(configSchema ?? {});
-  const { mongodbUri, configs } = await connectCloudBackend({ configSchema });
+  const { mongodbUri, configs } = await connectCloudBackend({
+    configSchema,
+    cronJobsMetadata: getCronJobsMetadata(),
+  });
   loadConfigs(configs);
 
   await initDb(mongodbUri);
