@@ -68,7 +68,9 @@ export async function startCronJobs() {
     'lock.containerId': { $exists: true }
   });
 
-  await cronJobsCollection.updateMany(
+  // TODO: handle different application versions with different parameters for the same job alias
+
+  await cronJobsCollection.upsertMany(
     aliasSelector,
     {
       $set: {
