@@ -36,6 +36,10 @@ export class MongoCollection {
     return await this.collection.updateMany(selector, update);
   }
 
+  async upsertMany(selector: Document, update: Document): Promise<UpdateResult> {
+    return await this.collection.updateMany(selector, update, { upsert: true });
+  }
+
   async deleteOne(selector: Document): Promise<DeleteResult> {
     return await this.collection.deleteOne(selector);
   }
