@@ -1,8 +1,9 @@
 import os from 'os';
 import { dataSources } from '../data/dataSources';
 import { ConfigSchema } from '../config';
+import { CronJobMetadata } from '../cron/types';
 
-export async function connectCloudBackend({ configSchema }: { configSchema?: ConfigSchema }) {
+export async function connectCloudBackend({ configSchema, cronJobsMetadata }: { configSchema?: ConfigSchema, cronJobsMetadata: CronJobMetadata[] }) {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
@@ -21,7 +22,8 @@ export async function connectCloudBackend({ configSchema }: { configSchema?: Con
       hostname: os.hostname(),
       containerId,
       dataModels,
-      configSchema
+      configSchema,
+      cronJobsMetadata,
     });
 
     console.log('Successfully connected to Modelence Cloud');

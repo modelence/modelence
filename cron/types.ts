@@ -1,11 +1,7 @@
-export type CronJobInputParams = {
-  interval: number;
-  timeout?: number;
-}
-
 export type CronJob = {
   alias: string;
   params: {
+    description: string;
     interval: number;
     timeout: number;
   },
@@ -15,4 +11,17 @@ export type CronJob = {
     scheduledRunTs?: number;
     isRunning: boolean;
   }
+}
+
+export type CronJobInputParams = {
+  description?: string;
+  interval: number;
+  timeout?: number;
+}
+
+export type CronJobMetadata = {
+  alias: string;
+  description: string;
+  interval: number;
+  timeout: number;
 }
