@@ -1,5 +1,5 @@
 import { requireServer } from '../utils';
-import { startLoaderTransaction } from '../app/metrics';
+import { startTransaction } from '../app/metrics';
 
 type Handler<T extends any[]> = (...args: T) => Promise<any> | any;
 
@@ -36,7 +36,7 @@ export async function callLoader(name: string, ...args: any[]) {
     throw new Error(`Loader with name '${name}' is not defined.`);
   }
 
-  const transaction = startLoaderTransaction(name, args);
+  const transaction = startTransaction('loader', `loader:${name}`, { args });
   const response = await loader.handler(...args);
   transaction.end();
 

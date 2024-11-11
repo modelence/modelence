@@ -5,6 +5,7 @@ import { MongoCollection } from '../db/MongoCollection';
 import { getClient } from '../db/client';
 import { CronJob, CronJobInputParams } from './types';
 import { isAppStarted } from '../app/state';
+import { startTransaction, captureError } from '../app/metrics';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
@@ -121,7 +122,8 @@ async function tickCronJobs() {
   // TODO: periodically check if the locks are still there
 
   const now = Date.now();
-  Object.values(cronJobs).forEach(async ({ alias, params, handler, state }) => {
+  Object.values(cronJobs).forEach(async (job) => {
+    const { params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         // TODO: log cron trace timeout error
@@ -133,23 +135,29 @@ async function tickCronJobs() {
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      state.isRunning = true;
-      state.startTs = now;
-      // TODO: log cron trace start
-      // TODO: enforce job timeout
-      handler().then(() => {
-        handleCronJobCompletion(state, params);
-        // TODO: log cron trace success
-      }).catch((err) => {
-        handleCronJobCompletion(state, params);
-        console.error(`Error in cron job '${alias}':`, err);
-        // TODO: log cron trace error
-      });
-      await cronJobsCollection.updateOne({ alias }, {
-        $set: {
-          lastStartDate: new Date(now),
-        }
-      });
+      await startCronJob(job);
+    }
+  });
+}
+
+async function startCronJob(job: CronJob) {
+  const { alias, params, handler, state } = job;
+  state.isRunning = true;
+  state.startTs = Date.now();
+  const transaction = startTransaction('cron', `cron:${alias}`);
+  // TODO: enforce job timeout
+  handler().then(() => {
+    handleCronJobCompletion(state, params);
+    transaction.end('success');
+  }).catch((err) => {
+    handleCronJobCompletion(state, params);
+    captureError(err);
+    transaction.end('error');
+    console.error(`Error in cron job '${alias}':`, err);
+  });
+  await cronJobsCollection.updateOne({ alias }, {
+    $set: {
+      lastStartDate: new Date(state.startTs),
     }
   });
 }
