@@ -32,6 +32,10 @@ export class MongoCollection {
     return await this.collection.updateOne(selector, update);
   }
 
+  async upsertOne(selector: Document, update: Document): Promise<UpdateResult> {
+    return await this.collection.updateOne(selector, update, { upsert: true });
+  }
+
   async updateMany(selector: Document, update: Document): Promise<UpdateResult> {
     return await this.collection.updateMany(selector, update);
   }
