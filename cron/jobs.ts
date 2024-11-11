@@ -121,7 +121,7 @@ async function tickCronJobs() {
   // TODO: periodically check if the locks are still there
 
   const now = Date.now();
-  Object.values(cronJobs).forEach(({ alias, params, handler, state }) => {
+  Object.values(cronJobs).forEach(async ({ alias, params, handler, state }) => {
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         // TODO: log cron trace timeout error
@@ -138,19 +138,26 @@ async function tickCronJobs() {
       // TODO: log cron trace start
       // TODO: enforce job timeout
       handler().then(() => {
-        state.scheduledRunTs = state.startTs ? state.startTs + params.interval : now;
-        state.startTs = undefined;
-        state.isRunning = false;
+        handleCronJobCompletion(state, params);
         // TODO: log cron trace success
       }).catch((err) => {
-        state.scheduledRunTs = state.startTs ? state.startTs + params.interval : now;
-        state.startTs = undefined;
-        state.isRunning = false;
+        handleCronJobCompletion(state, params);
         console.error(`Error in cron job '${alias}':`, err);
         // TODO: log cron trace error
       });
+      await cronJobsCollection.updateOne({ alias }, {
+        $set: {
+          lastStartDate: new Date(now),
+        }
+      });
     }
   });
+}
+
+function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
+  state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
+  state.startTs = undefined;
+  state.isRunning = false;
 }
 
 export function getCronJobsMetadata() {
