@@ -76,14 +76,24 @@ async function initElasticApm() {
   });
 }
 
-export function startLoaderTransaction(loaderName: string, args: any[]) {
+export function startTransaction(type: 'loader' | 'cron', name: string, context?: Record<string, any>) {
   if (!apm) {
-    throw new Error('Elastic APM is not initialized');
+    throw new Error('startTransaction: Elastic APM is not initialized');
   }
 
-  const transaction = apm.startTransaction(`loader:${loaderName}`, 'loader');
-  apm.setCustomContext({ args });
+  const transaction = apm.startTransaction(name, type);
+  if (context) {
+    apm.setCustomContext(context);
+  }
   return transaction;
+}
+
+export function captureError(error: Error) {
+  if (!apm) {
+    throw new Error('captureError: Elastic APM is not initialized');
+  }
+
+  apm.captureError(error);
 }
 
 export function getLogger() {
