@@ -1,7 +1,7 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
 
-type Handler<T extends any[]> = (...args: T) => Promise<any> | any;
+type Handler<T extends any[]> = (args: Record<string, unknown>) => Promise<any> | any;
 
 type Loader<T extends any[]> = {
   name: string;
@@ -28,7 +28,7 @@ export function _createLoaderInternal<T extends any[]>(name: string, handler: Ha
   loaders[name] = { name, handler };
 }
 
-export async function callLoader(name: string, ...args: any[]) {
+export async function callLoader(name: string, args: Record<string, unknown>) {
   requireServer();
 
   const loader = loaders[name];
@@ -37,7 +37,7 @@ export async function callLoader(name: string, ...args: any[]) {
   }
 
   const transaction = startTransaction('loader', `loader:${name}`, { args });
-  const response = await loader.handler(...args);
+  const response = await loader.handler(args);
   transaction.end();
 
   return response;
