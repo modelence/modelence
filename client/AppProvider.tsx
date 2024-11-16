@@ -8,18 +8,19 @@
 "use client";
 
 import React, { useState, useEffect, ReactNode } from 'react';
-import { loadConfig } from '../config/client';
+import { initSession } from './session';
 
 interface AppProviderProps {
   children: ReactNode;
+  loadingElement?: ReactNode;
 }
 
-export function AppProvider({ children }: AppProviderProps) {
+export function AppProvider({ children, loadingElement }: AppProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function initConfig() {
-      await loadConfig();
+      await initSession();
       setIsLoading(false);
     }
 
@@ -27,8 +28,7 @@ export function AppProvider({ children }: AppProviderProps) {
   }, []);
 
   if (isLoading) {
-    // TODO: support customizable loading component
-    return <div>Loading...</div>;
+    return loadingElement ?? <div>Loading...</div>;
   }
 
   return <>{children}</>;
