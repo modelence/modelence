@@ -1,8 +1,6 @@
 import { DataModel } from './DataModel';
-import { IndexSpecification } from 'mongodb';
+import { IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import { SchemaTypes } from './SchemaTypes';
-
-export type DbIndex = IndexSpecification;
 
 type ModelSchemaType<T> = 
   T extends string ? typeof SchemaTypes.String :
@@ -21,5 +19,9 @@ export type DataSource<T extends object> = {
   collectionName: string;
   ModelClass: typeof DataModel<T>;
   schema: ModelSchema<T>;
-  indexes: Array<DbIndex>;
+  indexes: Array<ReturnType<typeof DbIndex>>;
 };
+
+export function DbIndex(indexSpec: IndexSpecification, options?: CreateIndexesOptions) {
+  return { indexSpec, options };
+}

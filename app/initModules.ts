@@ -4,7 +4,7 @@ import { loadModels } from '../data/dataSources';
 import { loadModules } from '../load';
 import { _createLoaderInternal } from '../data/loader';
 import { getPublicConfigs } from '../config/server';
-import { fetchSessionByToken } from './session';
+import { fetchSessionByToken } from '../auth';
 
 export async function initModules() {
   await initSystemLoaders();
@@ -18,8 +18,11 @@ async function initSystemLoaders() {
   _createLoaderInternal('_system.initSession', async function(args) {
     const authToken = z.string().optional().parse(args.authToken);
 
+    const { session, user } = await fetchSessionByToken(authToken);
+
     return {
-      session: await fetchSessionByToken(authToken),
+      session,
+      user,
       configs: getPublicConfigs(),
     };
   });
