@@ -1,8 +1,13 @@
+'use client';
+
 import { callLoader } from './loader';
 import { ConfigKey, AppConfig } from '../config/types';
 import { _setConfig } from '../config/client';
+import { useState, useEffect } from 'react';
 
 type Configs = Record<ConfigKey, AppConfig>;
+
+let currentUser: object | null = null;
 
 export async function initSession() {
   const existingSession = getLocalStorageSession();
@@ -11,7 +16,7 @@ export async function initSession() {
   });
   _setConfig(configs);
   localStorage.setItem('modelence.session', JSON.stringify(session));
-  console.log('user', user);
+  currentUser = Object.freeze(user);
 }
 
 function getLocalStorageSession() {
@@ -22,4 +27,15 @@ function getLocalStorageSession() {
     console.error('Error parsing session from localStorage', e);
     return null;
   }
+}
+
+export function useSession() {
+  const [user, setUser] = useState(currentUser);
+
+  // TODO: re-fetch the user on demand
+  useEffect(() => {
+    // Fetch and update currentUser
+  }, []);
+
+  return { user };
 }
