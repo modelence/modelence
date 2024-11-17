@@ -31,7 +31,7 @@ export async function callLoader<T>(loaderName: string, args: Record<string, unk
   return await response.json();
 }
 
-export function useLoader<T>(loaderName: string, args: Record<string, unknown>): LoaderResult<T> {
+export function useLoader<T>(loaderName: string, args: Record<string, unknown> = {}): LoaderResult<T> {
   const [result, setResult] = useState<LoaderResult<T>>({
     isLoading: true,
     error: null,
