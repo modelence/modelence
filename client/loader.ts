@@ -15,22 +15,23 @@ type LoaderResult<T> = {
   data: T | null;
 };
 
-export async function callLoader<T>(loaderName: string, ...args: any[]): Promise<T> {
+export async function callLoader<T>(loaderName: string, args: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch(`/api/_internal/loader/${loaderName}`, {
-    method: 'GET',
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ args }),
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error. status: ${response.status}`);
+    throw new Error(`Error calling loader '${loaderName}'. status: ${response.status}`);
   }
 
   return await response.json();
 }
 
-export function useLoader<T>(loaderName: string, ...args: any[]): LoaderResult<T> {
+export function useLoader<T>(loaderName: string, args: Record<string, unknown>): LoaderResult<T> {
   const [result, setResult] = useState<LoaderResult<T>>({
     isLoading: true,
     error: null,
@@ -40,7 +41,7 @@ export function useLoader<T>(loaderName: string, ...args: any[]): LoaderResult<T
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await callLoader<T>(loaderName, ...args);
+        const data = await callLoader<T>(loaderName, args);
         setResult({ isLoading: false, error: null, data });
       } catch (error) {
         setResult({ isLoading: false, error: error as Error, data: null });
@@ -48,7 +49,7 @@ export function useLoader<T>(loaderName: string, ...args: any[]): LoaderResult<T
     };
 
     fetchData();
-  }, [loaderName, ...args]);
+  }, [loaderName, args]);
 
   return result;
 }

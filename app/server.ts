@@ -1,7 +1,7 @@
 import http from 'http';
 import next from 'next';
 import express, { Request, Response } from 'express';
-import { callLoader } from '../data/loader';
+import { runLoader } from '../data/loader';
 import { logInfo } from './logs';
 
 export async function startServer() {
@@ -18,12 +18,11 @@ export async function startServer() {
   try {
     await nextApp.prepare();
 
-    app.get('/api/_internal/loader/:loaderName', async (req: Request, res: Response) => {
+    app.post('/api/_internal/loader/:loaderName', async (req: Request, res: Response) => {
       const { loaderName } = req.params;
       
       try {
-        // TODO: pass args
-        const result = await callLoader(loaderName);
+        const result = await runLoader(loaderName, req.body.args);
         res.json(result);
       } catch (error) {
         console.error(`Error in loader ${loaderName}:`, error);
