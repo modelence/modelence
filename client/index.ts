@@ -7,3 +7,4 @@ export const AppProvider = 'useClient' in React
   : OriginalAppProvider;
 
 export { useLoader } from './loader';
+export { useSession } from './session';

@@ -52,6 +52,7 @@ export async function fetchSessionByToken(authToken?: string) {
   return {
     user: {
       id: userDoc._id,
+      handle: userDoc.handle,
       isGuest: userDoc.isGuest,
     },
     session: {
@@ -71,10 +72,11 @@ async function createGuestUser() {
     .toString('base64')
     .replace(/[+/]/g, c => c === '+' ? 'a' : 'b');
 
+  const handle = `guest_${guestId}`;
   // TODO: re-try on handle collision
   
   const result = await usersCollection.insertOne({
-    handle: `guest_${guestId}`,
+    handle,
     isGuest: true,
     sessions: [{
       authToken: newAuthToken,
@@ -86,6 +88,7 @@ async function createGuestUser() {
   return {
     user: {
       id: result.insertedId,
+      handle,
       isGuest: true,
     },
     session: {

@@ -7,7 +7,7 @@
 */
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 type LoaderResult<T> = {
   isLoading: boolean;
@@ -32,6 +32,9 @@ export async function callLoader<T>(loaderName: string, args: Record<string, unk
 }
 
 export function useLoader<T>(loaderName: string, args: Record<string, unknown> = {}): LoaderResult<T> {
+  // Memoize the args object to maintain reference stability and prevent infinite re-renders
+  const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
+
   const [result, setResult] = useState<LoaderResult<T>>({
     isLoading: true,
     error: null,
@@ -41,7 +44,7 @@ export function useLoader<T>(loaderName: string, args: Record<string, unknown> =
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await callLoader<T>(loaderName, args);
+        const data = await callLoader<T>(loaderName, stableArgs);
         setResult({ isLoading: false, error: null, data });
       } catch (error) {
         setResult({ isLoading: false, error: error as Error, data: null });
@@ -49,7 +52,7 @@ export function useLoader<T>(loaderName: string, args: Record<string, unknown> =
     };
 
     fetchData();
-  }, [loaderName, args]);
+  }, [loaderName, stableArgs]);
 
   return result;
 }
