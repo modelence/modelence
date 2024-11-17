@@ -6,7 +6,7 @@ export function createDataSource<T extends object>(
   ModelClass: typeof DataModel<T>,
   options: {
     schema: ModelSchema<T>;
-    indexes: Array<DbIndex>;
+    indexes: Array<ReturnType<typeof DbIndex>>;
   }
 ): DataSource<T> {
   return {

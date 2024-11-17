@@ -11,8 +11,8 @@ export async function initDb(mongodbUri: string) {
   Object.values(dataSources).forEach((dataSource: DataSource<any>) => {
     const collection = client.db().collection(dataSource.collectionName);
     db[dataSource.collectionName] = new MongoCollection(collection);
-    dataSource.indexes.forEach((index) => {
-      collection.createIndex(index);
+    dataSource.indexes.forEach(({ indexSpec, options }) => {
+      collection.createIndex(indexSpec, options);
     });
   });
 }
