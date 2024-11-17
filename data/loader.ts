@@ -28,7 +28,7 @@ export function _createLoaderInternal<T extends any[]>(name: string, handler: Ha
   loaders[name] = { name, handler };
 }
 
-export async function callLoader(name: string, args: Record<string, unknown>) {
+export async function runLoader(name: string, args: Record<string, unknown>) {
   requireServer();
 
   const loader = loaders[name];
