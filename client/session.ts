@@ -1,5 +1,6 @@
 'use client';
 
+import { z } from 'zod';
 import { callLoader } from './loader';
 import { ConfigKey, AppConfig } from '../config/types';
 import { _setConfig } from '../config/client';
@@ -7,7 +8,10 @@ import { useState, useEffect } from 'react';
 
 type Configs = Record<ConfigKey, AppConfig>;
 
-let currentUser: object | null = null;
+let currentUser: {
+  id: string;
+  handle: string;
+} | null = null;
 
 export async function initSession() {
   const existingSession = getLocalStorageSession();
@@ -16,7 +20,10 @@ export async function initSession() {
   });
   _setConfig(configs);
   localStorage.setItem('modelence.session', JSON.stringify(session));
-  currentUser = Object.freeze(user);
+  currentUser = user ? Object.freeze(z.object({
+    id: z.string(),
+    handle: z.string(),
+  }).parse(user)) : null;
 }
 
 function getLocalStorageSession() {
