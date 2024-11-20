@@ -1,9 +1,10 @@
 import { randomBytes } from 'crypto';
-
 import { MongoCollection } from '../db/MongoCollection';
 import { getClient } from '../db/client';
 import { time } from '../time';
+import { MongoClient } from 'mongodb';
 
+let sessionsCollection: MongoCollection;
 let usersCollection: MongoCollection;
 
 export async function initAuth() {
@@ -12,61 +13,87 @@ export async function initAuth() {
     throw new Error('Failed to init auth: MongoDB client not initialized');
   }
 
+  sessionsCollection = await initSessionsCollection(client);
+  usersCollection = await initUsersCollection(client);
+}
+
+async function initSessionsCollection(client: MongoClient) {
+  const rawCollection = client.db().collection('_modelenceSessions');
+  await rawCollection.createIndexes([
+    { key: { authToken: 1 }, unique: true },
+    { key: { expiresAt: 1 }},
+  ]);
+  // TODO: add TTL index on expiresAt
+  return new MongoCollection(rawCollection);
+}
+
+async function initUsersCollection(client: MongoClient) {
   const rawCollection = client.db().collection('_modelenceUsers');
-  rawCollection.createIndex(
+  await rawCollection.createIndex(
     { handle: 1 },
     {
       unique: true,
       collation: { locale: 'en', strength: 2 }  // Case-insensitive
     }
   );
-  usersCollection = new MongoCollection(rawCollection);
+  return new MongoCollection(rawCollection);
 }
 
 export async function fetchSessionByToken(authToken?: string) {
-  if (!authToken) {
-    return await createGuestUser();
+  const existingSession = authToken ? await sessionsCollection.findOne({ authToken }) : null;
+  const session = existingSession ? {
+    authToken: existingSession.authToken,
+    expiresAt: existingSession.expiresAt,
+    userId: existingSession.userId,
+  } : await createSession();
+
+  const userDoc = session.userId ? await usersCollection.findOne({ _id: session.userId }) : null;
+
+  const newExpiresAt = new Date(Date.now() + time.days(7));
+
+  if (existingSession) {
+    // Extend session expiration
+    await sessionsCollection.updateOne(
+      { authToken },
+      {
+        $set: { expiresAt: newExpiresAt }
+      }
+    );
   }
 
-  const userDoc = await usersCollection.findOne({
-    'sessions.authToken': authToken,
-  });
-
-  if (!userDoc) {
-    return await createGuestUser();
-  }
-
-  const session = userDoc.sessions.find(s => s.authToken === authToken);
-
-  const expiresAt = Date.now() + time.days(14);
-  await usersCollection.updateOne(
-    { 
-      _id: userDoc._id,
-      'sessions.authToken': authToken 
-    },
-    { 
-      $set: { 'sessions.$.expiresAt': expiresAt }
-    }
-  );
-  
   return {
-    user: {
+    user: userDoc ? {
       id: userDoc._id,
       handle: userDoc.handle,
-      isGuest: userDoc.isGuest,
-    },
+    } : null,
     session: {
       authToken: session.authToken,
-      expiresAt
+      expiresAt: newExpiresAt,
     }
+  };
+}
+
+async function createSession() {
+  // TODO: add rate-limiting and captcha handling
+
+  const authToken = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + time.days(7));
+
+  await sessionsCollection.insertOne({
+    authToken,
+    expiresAt,
+    userId: null,
+  });
+
+  return {
+    authToken,
+    expiresAt,
+    userId: null,
   };
 }
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
-
-  const newAuthToken = randomBytes(32).toString('base64url');
-  const expiresAt = Date.now() + time.days(14);
 
   const guestId = randomBytes(9)
     .toString('base64')
@@ -77,23 +104,8 @@ async function createGuestUser() {
   
   const result = await usersCollection.insertOne({
     handle,
-    isGuest: true,
-    sessions: [{
-      authToken: newAuthToken,
-      expiresAt
-    }],
     createdAt: new Date(),
   });
 
-  return {
-    user: {
-      id: result.insertedId,
-      handle,
-      isGuest: true,
-    },
-    session: {
-      authToken: newAuthToken,
-      expiresAt
-    }
-  }
+  return result.insertedId;
 }
