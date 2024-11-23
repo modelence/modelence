@@ -26,5 +26,7 @@ async function initSystemMethods() {
   });
 
   _createMethodInternal('effect', '_system.sessionHeartbeat', async function(args, context) {
+    // TODO: update session last active timestamp
+    console.log('session heartbeat');
   });
 }

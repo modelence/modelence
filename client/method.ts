@@ -50,9 +50,8 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
     throw new Error(`Status: ${response.status}`);
   }
 
-  // console.log('response', await response.text());
-
-  return await response.json();
+  const text = await response.text();
+  return text ? JSON.parse(text) : undefined;
 }
 
 export function useLoader<T>(methodName: string, args: Args = {}): MethodResult<T> {
