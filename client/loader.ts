@@ -8,6 +8,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import { getLocalStorageSession } from './localStorage';
 
 type LoaderResult<T> = {
   isLoading: boolean;
@@ -21,7 +22,18 @@ export async function callLoader<T>(loaderName: string, args: Record<string, unk
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ args }),
+    body: JSON.stringify({
+      args,
+      authToken: getLocalStorageSession()?.authToken,
+      clientInfo: {
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        pixelRatio: window.devicePixelRatio,
+        orientation: window.screen.orientation?.type
+      }
+    }),
   });
 
   if (!response.ok) {

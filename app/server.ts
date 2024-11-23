@@ -1,6 +1,7 @@
 import http from 'http';
 import next from 'next';
 import express, { Request, Response } from 'express';
+import z from 'zod';
 import { runLoader } from '../data/loader';
 import { logInfo } from './logs';
 
@@ -20,9 +21,29 @@ export async function startServer() {
 
     app.post('/api/_internal/loader/:loaderName', async (req: Request, res: Response) => {
       const { loaderName } = req.params;
+
+      const authToken = z.string().nullable().parse(req.body.authToken);
+
+      const clientInfo = z.object({
+        screenWidth: z.number(),
+        screenHeight: z.number(),
+        windowWidth: z.number(),
+        windowHeight: z.number(),
+        pixelRatio: z.number(),
+        orientation: z.string().nullable(),
+      }).parse(req.body.clientInfo);
+      
+      const connectionInfo = {
+        ip: req.ip || req.socket.remoteAddress, // TODO: handle cases with Proxy
+        userAgent: req.get('user-agent'),
+        acceptLanguage: req.get('accept-language'),
+        referrer: req.get('referrer'),
+      };
+
+      // TODO: fetch user from authToken
       
       try {
-        const result = await runLoader(loaderName, req.body.args);
+        const result = await runLoader(loaderName, req.body.args, { authToken, clientInfo, connectionInfo });
         res.json(result);
       } catch (error) {
         console.error(`Error in loader ${loaderName}:`, error);
