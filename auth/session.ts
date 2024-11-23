@@ -25,19 +25,9 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
   const existingSession = authToken ? await sessionsCollection.findOne({ authToken }) : null;
 
   if (existingSession) {
-    const newExpiresAt = new Date(Date.now() + time.days(7));
-
-    // Extend session expiration
-    await sessionsCollection.updateOne(
-      { authToken },
-      {
-        $set: { expiresAt: newExpiresAt }
-      }
-    );
-
     return {
       authToken: String(existingSession.authToken),
-      expiresAt: newExpiresAt,
+      expiresAt: new Date(existingSession.expiresAt),
       userId: existingSession.userId ? String(existingSession.userId) : null,
     }
   }
@@ -64,4 +54,16 @@ async function createSession(): Promise<Session> {
     expiresAt,
     userId: null,
   };
+}
+
+export async function processSessionHeartbeat(session: Session) {
+  const now = Date.now();
+  const newExpiresAt = new Date(now + time.days(7));
+
+  await sessionsCollection.updateOne({ authToken: session.authToken }, {
+    $set: {
+      lastActiveDate: new Date(now),
+      expiresAt: newExpiresAt
+    }
+  });
 }

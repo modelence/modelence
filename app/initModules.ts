@@ -2,6 +2,7 @@ import { loadModels } from '../data/dataSources';
 import { loadModules } from '../load';
 import { _createMethodInternal } from '../methods';
 import { getPublicConfigs } from '../config/server';
+import { processSessionHeartbeat } from '../auth/session';
 
 export async function initModules() {
   await initSystemMethods();
@@ -23,8 +24,6 @@ async function initSystemMethods() {
   });
 
   _createMethodInternal('effect', '_system.sessionHeartbeat', async function(args, { session }) {
-    
-    // TODO: update session last active timestamp
-    console.log('session heartbeat');
+    await processSessionHeartbeat(session);
   });
 }
