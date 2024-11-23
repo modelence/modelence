@@ -1,7 +1,31 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
 
-type Handler<T extends any[]> = (args: Record<string, unknown>) => Promise<any> | any;
+type ClientInfo = {
+  screenWidth: number;
+  screenHeight: number;
+  windowWidth: number;
+  windowHeight: number;
+  pixelRatio: number;
+  orientation: string | null;
+};
+
+type ConnectionInfo = {
+  ip?: string;
+  userAgent?: string;
+  acceptLanguage?: string;
+  referrer?: string;
+};
+
+type Context = {
+  authToken: string | null;
+  clientInfo: ClientInfo;
+  connectionInfo: ConnectionInfo;
+};
+
+type Args = Record<string, unknown>;
+
+type Handler<T extends any[]> = (args: Args, context: Context) => Promise<any> | any;
 
 type Loader<T extends any[]> = {
   name: string;
@@ -28,7 +52,7 @@ export function _createLoaderInternal<T extends any[]>(name: string, handler: Ha
   loaders[name] = { name, handler };
 }
 
-export async function runLoader(name: string, args: Record<string, unknown>) {
+export async function runLoader(name: string, args: Args, context: Context) {
   requireServer();
 
   const loader = loaders[name];
@@ -37,7 +61,7 @@ export async function runLoader(name: string, args: Record<string, unknown>) {
   }
 
   const transaction = startTransaction('loader', `loader:${name}`, { args });
-  const response = await loader.handler(args);
+  const response = await loader.handler(args, context);
   transaction.end();
 
   return response;

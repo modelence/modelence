@@ -15,10 +15,8 @@ export async function initModules() {
 }
 
 async function initSystemLoaders() {
-  _createLoaderInternal('_system.initSession', async function(args) {
-    const authToken = z.string().optional().parse(args.authToken);
-
-    const { session, user } = await fetchSessionByToken(authToken);
+  _createLoaderInternal('_system.initSession', async function(args, context) {
+    const { session, user } = await fetchSessionByToken(context.authToken);
 
     return {
       session,

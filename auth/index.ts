@@ -39,7 +39,7 @@ async function initUsersCollection(client: MongoClient) {
   return new MongoCollection(rawCollection);
 }
 
-export async function fetchSessionByToken(authToken?: string) {
+export async function fetchSessionByToken(authToken: string | null) {
   const existingSession = authToken ? await sessionsCollection.findOne({ authToken }) : null;
   const session = existingSession ? {
     authToken: existingSession.authToken,
@@ -77,10 +77,12 @@ async function createSession() {
   // TODO: add rate-limiting and captcha handling
 
   const authToken = randomBytes(32).toString('base64url');
-  const expiresAt = new Date(Date.now() + time.days(7));
+  const now = Date.now();
+  const expiresAt = new Date(now + time.days(7));
 
   await sessionsCollection.insertOne({
     authToken,
+    createdAt: new Date(now),
     expiresAt,
     userId: null,
   });
