@@ -2,7 +2,7 @@ import http from 'http';
 import next from 'next';
 import express, { Request, Response } from 'express';
 import z from 'zod';
-import { runLoader } from '../data/loader';
+import { runMethod } from '../methods';
 import { logInfo } from './logs';
 
 export async function startServer() {
@@ -19,41 +19,18 @@ export async function startServer() {
   try {
     await nextApp.prepare();
 
-    app.post('/api/_internal/loader/:loaderName', async (req: Request, res: Response) => {
-      const { loaderName } = req.params;
+    app.post('/api/_internal/method/:methodName', async (req: Request, res: Response) => {
+      const { methodName } = req.params;
+      const context = getCallContext(req);
 
-      const authToken = z.string().nullable().parse(req.body.authToken);
-
-      const clientInfo = z.object({
-        screenWidth: z.number(),
-        screenHeight: z.number(),
-        windowWidth: z.number(),
-        windowHeight: z.number(),
-        pixelRatio: z.number(),
-        orientation: z.string().nullable(),
-      }).parse(req.body.clientInfo);
-      
-      const connectionInfo = {
-        ip: req.ip || req.socket.remoteAddress, // TODO: handle cases with Proxy
-        userAgent: req.get('user-agent'),
-        acceptLanguage: req.get('accept-language'),
-        referrer: req.get('referrer'),
-      };
-
-      // TODO: fetch user from authToken
-      
       try {
-        const result = await runLoader(loaderName, req.body.args, { authToken, clientInfo, connectionInfo });
+        const result = await runMethod(methodName, req.body.args, context);
         res.json(result);
       } catch (error) {
-        console.error(`Error in loader ${loaderName}:`, error);
+        console.error(`Error in method ${methodName}:`, error);
         res.status(500).json({ error: 'Internal server error' });
       }
     });
-
-    // app.post('/api/_internal/action', (req: Request, res: Response) => {
-    //   // Handle POST request
-    // });
 
     // Handle all other requests with Next.js
     app.all('*', (req: Request, res: Response) => {
@@ -72,6 +49,31 @@ export async function startServer() {
     logInfo(`Application started`, { source: 'app' });
     console.log(`Application started on port ${port}`);
   });
+}
+
+function getCallContext(req: Request) {
+  const authToken = z.string().nullable().parse(req.body.authToken);
+
+  const clientInfo = z.object({
+    screenWidth: z.number(),
+    screenHeight: z.number(),
+    windowWidth: z.number(),
+    windowHeight: z.number(),
+    pixelRatio: z.number(),
+    orientation: z.string().nullable(),
+  }).parse(req.body.clientInfo);
+
+  const connectionInfo = {
+    ip: req.ip || req.socket.remoteAddress, // TODO: handle cases with Proxy
+    userAgent: req.get('user-agent'),
+    acceptLanguage: req.get('accept-language'),
+    referrer: req.get('referrer'),
+  };
+
+  // TODO: fetch user from authToken
+  const user = null;
+
+  return { authToken, clientInfo, connectionInfo, user };
 }
 
 

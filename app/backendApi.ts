@@ -1,6 +1,6 @@
 import os from 'os';
 import { dataSources } from '../data/dataSources';
-import { ConfigSchema } from '../config';
+import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 
 export async function connectCloudBackend({ configSchema, cronJobsMetadata }: { configSchema?: ConfigSchema, cronJobsMetadata: CronJobMetadata[] }) {

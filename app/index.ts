@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { startServer } from './server';
 import { initModules } from './initModules';
 import { initDb } from '../db';
-import { ConfigSchema } from '../config';
+import { ConfigSchema } from '../config/types';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';

@@ -21,7 +21,7 @@ let cronJobsCollection: MongoCollection;
 let cronJobsInterval: NodeJS.Timeout;
 
 // TODO: allow changing interval and timeout with cron jobconfigs
-export function addCronJob(
+export function defineCronJob(
   alias: CronJob['alias'],
   { description = '', interval, timeout = DEFAULT_TIMEOUT }: CronJobInputParams,
   handler: CronJob['handler'],

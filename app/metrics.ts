@@ -76,7 +76,7 @@ async function initElasticApm() {
   });
 }
 
-export function startTransaction(type: 'loader' | 'cron', name: string, context?: Record<string, any>) {
+export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
   if (!apm) {
     throw new Error('startTransaction: Elastic APM is not initialized');
   }
