@@ -10,14 +10,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getLocalStorageSession } from './localStorage';
 
-type LoaderResult<T> = {
+type Args = Record<string, unknown>;
+
+type MethodResult<T> = {
   isLoading: boolean;
   error: Error | null;
   data: T | null;
 };
 
-export async function callLoader<T>(loaderName: string, args: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch(`/api/_internal/loader/${loaderName}`, {
+export async function callMethod<T = unknown>(methodName: string, args: Args = {}): Promise<T> {
+  try {
+    return await call<T>(`/api/_internal/method/${methodName}`, args);
+  } catch (error) {
+    throw new Error(`Error calling method '${methodName}': ${error.toString()}`);
+  }
+}
+
+async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -37,17 +47,19 @@ export async function callLoader<T>(loaderName: string, args: Record<string, unk
   });
 
   if (!response.ok) {
-    throw new Error(`Error calling loader '${loaderName}'. status: ${response.status}`);
+    throw new Error(`Status: ${response.status}`);
   }
+
+  // console.log('response', await response.text());
 
   return await response.json();
 }
 
-export function useLoader<T>(loaderName: string, args: Record<string, unknown> = {}): LoaderResult<T> {
+export function useLoader<T>(methodName: string, args: Args = {}): MethodResult<T> {
   // Memoize the args object to maintain reference stability and prevent infinite re-renders
   const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
 
-  const [result, setResult] = useState<LoaderResult<T>>({
+  const [result, setResult] = useState<MethodResult<T>>({
     isLoading: true,
     error: null,
     data: null,
@@ -56,7 +68,7 @@ export function useLoader<T>(loaderName: string, args: Record<string, unknown> =
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await callLoader<T>(loaderName, stableArgs);
+        const data = await callMethod<T>(methodName, stableArgs);
         setResult({ isLoading: false, error: null, data });
       } catch (error) {
         setResult({ isLoading: false, error: error as Error, data: null });
@@ -64,7 +76,7 @@ export function useLoader<T>(loaderName: string, args: Record<string, unknown> =
     };
 
     fetchData();
-  }, [loaderName, stableArgs]);
+  }, [methodName, stableArgs]);
 
   return result;
 }
