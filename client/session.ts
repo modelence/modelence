@@ -37,7 +37,7 @@ export async function initSession() {
 }
 
 async function loopSessionHeartbeat() {
-  // await callMethod('_system.sessionHeartbeat');
+  await callMethod('_system.sessionHeartbeat');
   setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
