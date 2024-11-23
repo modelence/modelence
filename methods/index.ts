@@ -1,5 +1,6 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
+import { Session, User } from '../auth/types';
 
 type ClientInfo = {
   screenWidth: number;
@@ -18,7 +19,8 @@ type ConnectionInfo = {
 };
 
 type Context = {
-  authToken: string | null;
+  session: Session;
+  user: User | null;
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
 };

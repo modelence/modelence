@@ -3,6 +3,7 @@ import next from 'next';
 import express, { Request, Response } from 'express';
 import z from 'zod';
 import { runMethod } from '../methods';
+import { authenticate } from '../auth';
 import { logInfo } from './logs';
 
 export async function startServer() {
@@ -21,7 +22,7 @@ export async function startServer() {
 
     app.post('/api/_internal/method/:methodName', async (req: Request, res: Response) => {
       const { methodName } = req.params;
-      const context = getCallContext(req);
+      const context = await getCallContext(req);
 
       try {
         const result = await runMethod(methodName, req.body.args, context);
@@ -51,7 +52,7 @@ export async function startServer() {
   });
 }
 
-function getCallContext(req: Request) {
+async function getCallContext(req: Request) {
   const authToken = z.string().nullable().parse(req.body.authToken);
 
   const clientInfo = z.object({
@@ -70,10 +71,9 @@ function getCallContext(req: Request) {
     referrer: req.get('referrer'),
   };
 
-  // TODO: fetch user from authToken
-  const user = null;
+  const { session, user } = await authenticate(authToken);
 
-  return { authToken, clientInfo, connectionInfo, user };
+  return { clientInfo, connectionInfo, session, user };
 }
 
 

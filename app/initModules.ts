@@ -1,10 +1,7 @@
-import { z } from 'zod';
-
 import { loadModels } from '../data/dataSources';
 import { loadModules } from '../load';
 import { _createMethodInternal } from '../methods';
 import { getPublicConfigs } from '../config/server';
-import { fetchSessionByToken } from '../auth';
 
 export async function initModules() {
   await initSystemMethods();
@@ -15,8 +12,8 @@ export async function initModules() {
 }
 
 async function initSystemMethods() {
-  _createMethodInternal('query', '_system.initSession', async function(args, context) {
-    const { session, user } = await fetchSessionByToken(context.authToken);
+  _createMethodInternal('effect', '_system.initSession', async function(args, { session, user }) {
+    // TODO: mark or track app load somewhere
 
     return {
       session,
@@ -25,7 +22,8 @@ async function initSystemMethods() {
     };
   });
 
-  _createMethodInternal('effect', '_system.sessionHeartbeat', async function(args, context) {
+  _createMethodInternal('effect', '_system.sessionHeartbeat', async function(args, { session }) {
+    
     // TODO: update session last active timestamp
     console.log('session heartbeat');
   });
