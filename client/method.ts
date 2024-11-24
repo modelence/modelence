@@ -64,6 +64,7 @@ export function useLoader<T>(methodName: string, args: Args = {}): MethodResult<
     data: null,
   });
 
+  // TODO: handle a case when useEffect is triggered before the result is returned
   useEffect(() => {
     const fetchData = async () => {
       try {

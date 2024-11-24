@@ -29,8 +29,10 @@ type Args = Record<string, unknown>;
 
 type Handler<T extends any[]> = (args: Args, context: Context) => Promise<any> | any;
 
+type MethodType = 'query' | 'mutation';
+
 type Method<T extends any[]> = {
-  type: 'query' | 'effect';
+  type: MethodType;
   name: string;
   handler: Handler<T>;
 };
@@ -46,7 +48,7 @@ export function createQuery<T extends any[]>(name: string, handler: Handler<T>) 
   return _createMethodInternal('query', name, handler);
 }
 
-export function _createMethodInternal<T extends any[]>(type: 'query' | 'effect', name: string, handler: Handler<T>) {
+export function _createMethodInternal<T extends any[]>(type: MethodType, name: string, handler: Handler<T>) {
   requireServer();
 
   if (methods[name]) {

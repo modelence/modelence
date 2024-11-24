@@ -13,7 +13,7 @@ export async function initModules() {
 }
 
 async function initSystemMethods() {
-  _createMethodInternal('effect', '_system.initSession', async function(args, { session, user }) {
+  _createMethodInternal('mutation', '_system.initSession', async function(args, { session, user }) {
     // TODO: mark or track app load somewhere
 
     return {
@@ -23,7 +23,7 @@ async function initSystemMethods() {
     };
   });
 
-  _createMethodInternal('effect', '_system.sessionHeartbeat', async function(args, { session }) {
+  _createMethodInternal('mutation', '_system.sessionHeartbeat', async function(args, { session }) {
     await processSessionHeartbeat(session);
   });
 }
