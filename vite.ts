@@ -16,7 +16,7 @@ export function defineViteConfig() {
     '.eslintrc.yaml'
   ].find(file => fs.existsSync(path.join(appDir, file)));
 
-  const plugins = [react()];
+  const plugins = [react(), modelenceAssetPlugin()];
 
   if (eslintConfigFile) {
     plugins.push(
@@ -50,3 +50,22 @@ export function defineViteConfig() {
   })
 }
 
+function modelenceAssetPlugin() {
+  return  {
+    name: 'modelence-asset-handler',
+    async transform(code, id) {
+      const assetRegex = /\.(png|jpe?g|gif|svg|mpwebm|ogg|mp3|wav|flac|aac)$/;
+      if (assetRegex.test(id)) {
+        if (process.env.NODE_ENV === 'development') {
+          return code;
+        }
+        // TODO: Upload to CDN
+        // return `export default "${cdnUrl}"`;
+        return code;
+      }
+    },
+    async generateBundle(options, bundle) {
+      // Handle asset URLs in the final bundle
+    }
+  };
+}
