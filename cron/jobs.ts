@@ -68,7 +68,7 @@ export async function startCronJobs() {
 
   const rawCollection = client.db().collection('_modelenceCronJobs');
   cronJobsCollection = new MongoCollection(rawCollection);
-  rawCollection.createIndex({ alias: 1 }, { unique: true });
+  await rawCollection.createIndex({ alias: 1 }, { unique: true, background: true });
 
   const aliasList = Object.keys(cronJobs);
   const aliasSelector = { alias: { $in: aliasList } };
