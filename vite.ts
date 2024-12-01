@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path';
 
 export const defineViteConfig = () => defineConfig({
   plugins: [react()],
@@ -11,6 +12,11 @@ export const defineViteConfig = () => defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:4000'
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(process.cwd(), 'src')
     }
   }
 })
