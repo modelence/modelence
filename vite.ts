@@ -5,7 +5,7 @@ export const defineViteConfig = () => defineConfig({
   plugins: [react()],
   root: process.cwd(),
   build: {
-    outDir: 'dist/client',
+    outDir: '.modelence/client',
     emptyOutDir: true
   },
   server: {

@@ -81,9 +81,9 @@ async function initViteServer(app: express.Application, isDev: boolean) {
       throw error;
     }
   } else {
-    app.use(express.static('dist/client'));
+    app.use(express.static('.modelence/client'));
     app.get('*', (req, res) => {
-      res.sendFile('index.html', { root: 'dist/client' });
+      res.sendFile('index.html', { root: '.modelence/client' });
     });
   }
 }
@@ -175,7 +175,7 @@ async function getCallContext(req: Request) {
 
 
 // app.get('/bundle.js', function (req: Request, res: Response) {
-//   res.sendFile('dist/client/bundle.js', { root: '.' });
+//   res.sendFile('.modelence/client/bundle.js', { root: '.' });
 // });
 
 
