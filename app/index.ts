@@ -33,7 +33,7 @@ export async function startApp({ configSchema }: { configSchema?: ConfigSchema }
   startConfigSync();
 
   if (Number(process.env.MODELENCE_CRON_INSTANCE)) {
-    await startCronJobs();
+    startCronJobs().catch(console.error);
   }
 
   await startServer();

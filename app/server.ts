@@ -1,47 +1,37 @@
 import http from 'http';
-import next from 'next';
 import express, { Request, Response } from 'express';
+// import next from 'next';
 import z from 'zod';
 import { runMethod } from '../methods';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
 
+const useNextJs = false;
+
 export async function startServer() {
   const app = express();
+  const isDev = process.env.NODE_ENV !== 'production';
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-  // app.use('/img', express.static('public/img'));
 
-  const isDev = process.env.NODE_ENV !== 'production';
-  const nextApp = next({ dev: isDev });
-  const handler = nextApp.getRequestHandler();
+  app.post('/api/_internal/method/:methodName', async (req: Request, res: Response) => {
+    const { methodName } = req.params;
+    const context = await getCallContext(req);
 
-  try {
-    await nextApp.prepare();
+    try {
+      const result = await runMethod(methodName, req.body.args, context);
+      res.json(result);
+    } catch (error) {
+      console.error(`Error in method ${methodName}:`, error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
-    app.post('/api/_internal/method/:methodName', async (req: Request, res: Response) => {
-      const { methodName } = req.params;
-      const context = await getCallContext(req);
-
-      try {
-        const result = await runMethod(methodName, req.body.args, context);
-        res.json(result);
-      } catch (error) {
-        console.error(`Error in method ${methodName}:`, error);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    });
-
-    // Handle all other requests with Next.js
-    app.all('*', (req: Request, res: Response) => {
-      return handler(req, res);
-    });
-
-    console.log('Next.js app prepared successfully');
-  } catch (error) {
-    console.error('Error preparing Next.js app:', error);
-    process.exit(1);
+  if (useNextJs) {
+    await initNextjsServer(app, isDev);
+  } else {
+    await initViteServer(app, isDev);
   }
 
   const server = http.createServer(app);
@@ -50,6 +40,52 @@ export async function startServer() {
     logInfo(`Application started`, { source: 'app' });
     console.log(`Application started on port ${port}`);
   });
+}
+
+async function initNextjsServer(app: express.Application, isDev: boolean) {
+  // const nextApp = next({ dev: isDev });
+  // const nextHandler = nextApp.getRequestHandler();
+  // await nextApp.prepare();
+  
+  // app.all('*', (req: Request, res: Response) => {
+  //   return nextHandler(req, res);
+  // });
+}
+
+async function initViteServer(app: express.Application, isDev: boolean) {
+  if (isDev) {
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const { defineViteConfig } = await import('../vite');
+      console.log('Starting Vite dev server...');
+      const vite = await createViteServer({
+        ...defineViteConfig(),
+        server: {
+          middlewareMode: true,
+        },
+        root: './src/client'
+      });
+      
+      app.use(vite.middlewares);
+      
+      app.use('*', async (req: Request, res: Response) => {
+        try {
+          res.sendFile('index.html', { root: './src/client' });
+        } catch (e) {
+          console.error('Error serving index.html:', e);
+          res.status(500).send('Internal Server Error');
+        }
+      });
+    } catch (error) {
+      console.error('Failed to start Vite server:', error);
+      throw error;
+    }
+  } else {
+    app.use(express.static('dist/client'));
+    app.get('*', (req, res) => {
+      res.sendFile('index.html', { root: 'dist/client' });
+    });
+  }
 }
 
 async function getCallContext(req: Request) {
@@ -75,7 +111,6 @@ async function getCallContext(req: Request) {
 
   return { clientInfo, connectionInfo, session, user };
 }
-
 
 // import passport from 'passport';
 // import session from 'express-session';
@@ -148,4 +183,5 @@ async function getCallContext(req: Request) {
 // app.get('/', function (req: Request, res: Response) {
 //   res.sendFile(path.join('client', 'index.html'), { root: path.join(__dirname, '..') });
 // });
+
 
