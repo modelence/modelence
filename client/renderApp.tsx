@@ -2,12 +2,18 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { AppProvider } from 'modelence/client';
+import { setErrorHandler, ErrorHandler } from './errorHandler';
 
-export function renderApp({ loadingElement, routesElement, favicon }: {
+export function renderApp({ loadingElement, routesElement, favicon, errorHandler }: {
   loadingElement: React.ReactNode,
   routesElement: React.ReactNode,
-  favicon?: string
+  favicon?: string,
+  errorHandler?: ErrorHandler
 }) {
+  if (errorHandler) {
+    setErrorHandler(errorHandler);
+  }
+
   window.addEventListener('unload', () => {
     // The presence of any 'unload' event handler, even empty,
     // prevents bfcache in most browsers

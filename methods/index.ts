@@ -1,41 +1,6 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
-import { Session, User } from '../auth/types';
-
-type ClientInfo = {
-  screenWidth: number;
-  screenHeight: number;
-  windowWidth: number;
-  windowHeight: number;
-  pixelRatio: number;
-  orientation: string | null;
-};
-
-type ConnectionInfo = {
-  ip?: string;
-  userAgent?: string;
-  acceptLanguage?: string;
-  referrer?: string;
-};
-
-type Context = {
-  session: Session;
-  user: User | null;
-  clientInfo: ClientInfo;
-  connectionInfo: ConnectionInfo;
-};
-
-type Args = Record<string, unknown>;
-
-type Handler<T extends any[]> = (args: Args, context: Context) => Promise<any> | any;
-
-type MethodType = 'query' | 'mutation';
-
-type Method<T extends any[]> = {
-  type: MethodType;
-  name: string;
-  handler: Handler<T>;
-};
+import { Method, Handler, MethodType, Args, Context } from './types';
 
 const methods: Record<string, Method<any>> = {};
 
@@ -48,7 +13,7 @@ export function createQuery<T extends any[]>(name: string, handler: Handler<T>) 
   return _createMethodInternal('query', name, handler);
 }
 
-export function _createMethodInternal<T extends any[]>(type: MethodType, name: string, handler: Handler<T>) {
+export function _createMethodInternal<T extends any>(type: MethodType, name: string, handler: Handler<T>) {
   requireServer();
 
   if (methods[name]) {

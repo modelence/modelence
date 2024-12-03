@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { getLocalStorageSession } from './localStorage';
+import { handleError } from './errorHandler';
 
 type Args = Record<string, unknown>;
 
@@ -22,7 +23,8 @@ export async function callMethod<T = unknown>(methodName: string, args: Args = {
   try {
     return await call<T>(`/api/_internal/method/${methodName}`, args);
   } catch (error) {
-    throw new Error(`Error calling method '${methodName}': ${error.toString()}`);
+    handleError(error as Error, methodName);
+    throw error;
   }
 }
 
