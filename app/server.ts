@@ -86,6 +86,19 @@ async function initViteServer(app: express.Application, isDev: boolean) {
       res.sendFile('index.html', { root: '.modelence/client' });
     });
   }
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Promise Rejection:');
+    console.error(reason instanceof Error ? reason.stack : reason);
+    console.error('Promise:', promise);
+  });
+  
+  // Global uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:');
+    console.error(error.stack);  // This gives you the full stack trace
+    console.trace('Full application stack:');  // Additional context
+  });
 }
 
 async function getCallContext(req: Request) {
