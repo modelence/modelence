@@ -41,7 +41,6 @@
     "dotenv": "^16.4.5",
     "elastic-apm-node": "^4.8.0",
     "express": "^4.21.0",
-    "glob": "^11.0.0",
     "mongodb": "^6.8.1",
     "react-router-dom": "^7.0.1",
     "winston": "^3.15.0",

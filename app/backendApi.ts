@@ -1,20 +1,20 @@
 import os from 'os';
-import { dataSources } from '../data/dataSources';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
+import { Store } from '../data/store';
 
-export async function connectCloudBackend({ configSchema, cronJobsMetadata }: { configSchema?: ConfigSchema, cronJobsMetadata: CronJobMetadata[] }) {
+export async function connectCloudBackend({ configSchema, cronJobsMetadata, stores }: { configSchema?: ConfigSchema, cronJobsMetadata: CronJobMetadata[], stores: Store<any>[] }) {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
   }
 
   try {
-    const dataModels = Object.values(dataSources).map(({ ModelClass, schema, collectionName }) => {
+    const dataModels = Object.values(stores).map(store => {
       return {
-        name: ModelClass.name,
-        schema,
-        collections: [collectionName]
+        name: store.getName(),
+        schema: store.getSchema(),
+        collections: [store.getName()]
       };
     });
 

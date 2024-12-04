@@ -1,13 +1,11 @@
 export { startApp } from './app';
+export { Module } from './app/module';
 
 export { createQuery } from './methods';
 
-export * from './data/DataModel';
-export { createDataSource } from './data/createDataSource';
 export { SchemaTypes } from './data/SchemaTypes';
 export { DbIndex } from './data/types';
-
-export { db } from './db';
+export { Store } from './data/store';
 
 export { defineCronJob } from './cron/jobs';
 

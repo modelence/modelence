@@ -6,11 +6,20 @@ const methods: Record<string, Method<any>> = {};
 
 export function createQuery<T extends any[]>(name: string, handler: Handler<T>) {
   requireServer();
+  validateMethodName(name);
+  return _createMethodInternal('query', name, handler);
+}
 
+export function createMutation<T extends any[]>(name: string, handler: Handler<T>) {
+  requireServer();
+  validateMethodName(name);
+  return _createMethodInternal('mutation', name, handler);
+}
+
+function validateMethodName(name: string) {
   if (name.toLowerCase().startsWith('_system.')) {
     throw new Error(`Method name cannot start with a reserved prefix: '_system.' (${name})`);
   }
-  return _createMethodInternal('query', name, handler);
 }
 
 export function _createMethodInternal<T extends any>(type: MethodType, name: string, handler: Handler<T>) {

@@ -1,3 +1,5 @@
+// Deprecated: use Store instead
+
 import { Collection, Document, UpdateResult, DeleteResult, InsertOneResult, AggregateOptions, AggregationCursor, FindCursor } from 'mongodb';
 
 export class MongoCollection {

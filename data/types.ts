@@ -1,4 +1,3 @@
-import { DataModel } from './DataModel';
 import { IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import { SchemaTypes } from './SchemaTypes';
 
@@ -13,13 +12,6 @@ type ModelSchemaType<T> =
 
 export type ModelSchema<T> = {
   [K in keyof T]: ModelSchemaType<T[K]>
-};
-
-export type DataSource<T extends object> = {
-  collectionName: string;
-  ModelClass: typeof DataModel<T>;
-  schema: ModelSchema<T>;
-  indexes: Array<ReturnType<typeof DbIndex>>;
 };
 
 export function DbIndex(indexSpec: IndexSpecification, options?: CreateIndexesOptions) {
