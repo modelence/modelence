@@ -13,7 +13,3 @@ type ModelSchemaType<T> =
 export type ModelSchema<T> = {
   [K in keyof T]: ModelSchemaType<T[K]>
 };
-
-export function DbIndex(indexSpec: IndexSpecification, options?: CreateIndexesOptions) {
-  return { indexSpec, options };
-}
