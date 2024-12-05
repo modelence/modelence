@@ -1,4 +1,17 @@
-import { AggregateOptions, AggregationCursor, Collection, DeleteResult, Document, FindCursor, IndexDescription, InsertOneResult, MongoClient, UpdateResult } from 'mongodb';
+import {
+  AggregateOptions,
+  AggregationCursor,
+  Collection,
+  DeleteResult,
+  Document,
+  IndexDescription,
+  InsertOneResult,
+  MongoClient,
+  UpdateResult,
+  Filter,
+  WithId,
+  OptionalUnlessRequiredId,
+} from 'mongodb';
 
 import { ModelSchema } from './types';
 
@@ -6,7 +19,7 @@ export class Store<T extends object> {
   private readonly name: string;
   private readonly schema: ModelSchema<T>;
   private readonly indexes: IndexDescription[];
-  private collection?: Collection;
+  private collection?: Collection<T>;
 
   constructor(
     name: string,
@@ -34,7 +47,7 @@ export class Store<T extends object> {
     this.collection.createIndexes(this.indexes);
   }
 
-  requireCollection(): Collection {
+  requireCollection() {
     if (!this.collection) {
       throw new Error(`Collection ${this.name} is not provisioned`);
     }
@@ -42,11 +55,11 @@ export class Store<T extends object> {
     return this.collection;
   }
 
-  async findOne(query: Document, options?: { sort?: Document }): Promise<Document | null> {
+  async findOne(query: Filter<T>, options?: { sort?: Document }): Promise<WithId<T> | null> {
     return await this.requireCollection().findOne(query, options);
   }
 
-  find(query: Document, options?: { sort?: Document }): FindCursor<Document> {
+  find(query: Filter<T>, options?: { sort?: Document }) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
@@ -54,36 +67,36 @@ export class Store<T extends object> {
     return cursor;
   }
 
-  async fetch(query: Document, options?: { sort?: Document }): Promise<Document[]> {
+  async fetch(query: Filter<T>, options?: { sort?: Document }) {
     const cursor = this.find(query, options)
     return await cursor.toArray();
   }
 
-  async insertOne(document: Document): Promise<InsertOneResult> {
+  async insertOne(document: OptionalUnlessRequiredId<T>): Promise<InsertOneResult> {
     return await this.requireCollection().insertOne(document);
   }
 
-  async updateOne(selector: Document, update: Document): Promise<UpdateResult> {
+  async updateOne(selector: Filter<T>, update: Document): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update);
   }
 
-  async upsertOne(selector: Document, update: Document): Promise<UpdateResult> {
+  async upsertOne(selector: Filter<T>, update: Document): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update, { upsert: true });
   }
 
-  async updateMany(selector: Document, update: Document): Promise<UpdateResult> {
+  async updateMany(selector: Filter<T>, update: Document): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update);
   }
 
-  async upsertMany(selector: Document, update: Document): Promise<UpdateResult> {
+  async upsertMany(selector: Filter<T>, update: Document): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update, { upsert: true });
   }
 
-  async deleteOne(selector: Document): Promise<DeleteResult> {
+  async deleteOne(selector: Filter<T>): Promise<DeleteResult> {
     return await this.requireCollection().deleteOne(selector);
   }
 
-  async deleteMany(selector: Document): Promise<DeleteResult> {
+  async deleteMany(selector: Filter<T>): Promise<DeleteResult> {
     return await this.requireCollection().deleteMany(selector);
   }
 
