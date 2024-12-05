@@ -13,4 +13,4 @@ export { useNavigate } from 'react-router-dom';
 export { renderApp, Routes, Route } from './client/renderApp';
 export { useLoader } from './client/method';
 export { useSession } from './client/session';
-export { signupWithPassword } from './auth/client/signup';
+export { signupWithPassword, loginWithPassword } from './auth/client';
