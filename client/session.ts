@@ -25,7 +25,7 @@ export async function initSession() {
 
   isInitialized = true;
 
-  const { configs, session, user } = await callMethod<{ configs: Configs, session: object, user: object }>('_system.initSession');
+  const { configs, session, user } = await callMethod<{ configs: Configs, session: object, user: object }>('_system.session.init');
   _setConfig(configs);
   setLocalStorageSession(session);
   currentUser = user ? Object.freeze(z.object({
@@ -37,7 +37,7 @@ export async function initSession() {
 }
 
 async function loopSessionHeartbeat() {
-  await callMethod('_system.sessionHeartbeat');
+  await callMethod('_system.session.heartbeat');
   setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 

@@ -1,14 +1,6 @@
 import { Session, User } from './types';
-import { initSessions, obtainSession } from './session';
-import { _createMethodInternal } from '../methods';
-import { handleSignupWithPassword } from './signup';
-import { initUsersCollection, usersCollection } from './users';
-
-export async function initAuth() {
-  _createMethodInternal('mutation', '_system.signupWithPassword', handleSignupWithPassword);
-  await initSessions();
-  await initUsersCollection();
-}
+import { obtainSession } from './session';
+import { usersCollection } from './user';
 
 export async function authenticate(authToken: string | null): Promise<{ session: Session, user: User | null }> {
   const session = await obtainSession(authToken);

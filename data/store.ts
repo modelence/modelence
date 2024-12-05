@@ -1,16 +1,16 @@
-import { AggregateOptions, AggregationCursor, Collection, DeleteResult, Document, FindCursor, InsertOneResult, MongoClient, UpdateResult } from 'mongodb';
+import { AggregateOptions, AggregationCursor, Collection, DeleteResult, Document, FindCursor, IndexDescription, InsertOneResult, MongoClient, UpdateResult } from 'mongodb';
 
-import { DbIndex, ModelSchema } from './types';
+import { ModelSchema } from './types';
 
 export class Store<T extends object> {
   private readonly name: string;
   private readonly schema: ModelSchema<T>;
-  private readonly indexes: Array<ReturnType<typeof DbIndex>>;
+  private readonly indexes: IndexDescription[];
   private collection?: Collection;
 
   constructor(
     name: string,
-    { schema, indexes }: { schema: ModelSchema<T>, indexes: Array<ReturnType<typeof DbIndex>> }
+    { schema, indexes }: { schema: ModelSchema<T>, indexes: IndexDescription[] }
   ) {
     this.name = name;
     this.schema = schema;
@@ -31,9 +31,7 @@ export class Store<T extends object> {
     }
 
     this.collection = client.db().collection(this.name);
-    for (const { indexSpec, options } of this.indexes) {
-      this.collection.createIndex(indexSpec, options);
-    }
+    this.collection.createIndexes(this.indexes);
   }
 
   requireCollection(): Collection {
