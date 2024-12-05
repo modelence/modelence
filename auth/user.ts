@@ -8,15 +8,27 @@ import { handleSignupWithPassword } from './signup';
 // TODO: get rid of, directly infer from schema
 type DataType = {
   handle: string;
-  email: string;
+  emails?: Array<{
+    address: string;
+    verified: boolean;
+  }>;
   createdAt: Date;
+  authMethods: {
+    password?: {
+      hash: string;
+    },
+    google?: {
+      id: string;
+    }
+  };
 };
 
 export const usersCollection = new Store<DataType>('_modelenceUsers', {
   schema: {
     handle: SchemaTypes.String,
-    email: SchemaTypes.String,
+    emails: SchemaTypes.Array,
     createdAt: SchemaTypes.Date,
+    authMethods: SchemaTypes.Object,
   },
   indexes: [
     {
@@ -36,10 +48,11 @@ async function createGuestUser() {
 
   const handle = `guest_${guestId}`;
   // TODO: re-try on handle collision
-  
+
   const result = await usersCollection.insertOne({
     handle,
     createdAt: new Date(),
+    authMethods: {},
   });
 
   return result.insertedId;
