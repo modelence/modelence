@@ -11,12 +11,14 @@ import {
   Filter,
   WithId,
   OptionalUnlessRequiredId,
+  FindOptions,
 } from 'mongodb';
 
 import { ModelSchema } from './types';
 
 export class Store<T extends object> {
   private readonly name: string;
+  // TODO: have a single definition for types and schema (maybe zod?)
   private readonly schema: ModelSchema<T>;
   private readonly indexes: IndexDescription[];
   private collection?: Collection<T>;
@@ -55,7 +57,10 @@ export class Store<T extends object> {
     return this.collection;
   }
 
-  async findOne(query: Filter<T>, options?: { sort?: Document }): Promise<WithId<T> | null> {
+  async findOne(
+    query: Filter<T>, 
+    options?: FindOptions
+  ): Promise<WithId<T> | null> {
     return await this.requireCollection().findOne(query, options);
   }
 
