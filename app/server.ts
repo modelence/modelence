@@ -23,8 +23,16 @@ export async function startServer() {
       const result = await runMethod(methodName, req.body.args, context);
       res.json(result);
     } catch (error) {
+      // TODO: introduce error codes and handle them differently
+      // TODO: support multiple errors
       console.error(`Error in method ${methodName}:`, error);
-      res.status(500).json({ error: 'Internal server error' });
+      // res.status(500).json({ error: 'Internal server error' });
+
+      if (error instanceof z.ZodError) {
+        res.status(400).send(error.errors.map(e => e.message).join('; '));
+      } else {
+        res.status(500).send(error.toString());
+      }
     }
   });
 
