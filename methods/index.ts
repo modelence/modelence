@@ -40,7 +40,7 @@ function validateSystemMethodName(name: string) {
   }
 }
 
-export function _createMethodInternal<T extends any>(type: MethodType, name: string, handler: Handler<T>) {
+function _createMethodInternal<T extends any>(type: MethodType, name: string, handler: Handler<T>) {
   requireServer();
 
   if (methods[name]) {

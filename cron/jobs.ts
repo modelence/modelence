@@ -1,11 +1,12 @@
 // import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 
 import { time } from '../time';
-import { MongoCollection } from '../db/MongoCollection';
-import { getClient } from '../db/client';
 import { CronJob, CronJobInputParams } from './types';
 import { isAppStarted } from '../app/state';
 import { startTransaction, captureError } from '../app/metrics';
+import { Module } from '../app/module';
+import { SchemaTypes } from '../data/types';
+import { Store } from '../data/store';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
@@ -17,8 +18,28 @@ const DEFAULT_TIMEOUT = time.minutes(1);
 const LOCK_TRANSFER_DELAY = time.seconds(10);
 
 const cronJobs: Record<string, CronJob> = {};
-let cronJobsCollection: MongoCollection;
 let cronJobsInterval: NodeJS.Timeout;
+
+// TODO: get rid of, directly infer from schema
+type DataType = {
+  alias: string;
+  lastStartDate?: Date;
+  lock?: {
+    containerId: string;
+    acquireDate: Date;
+  };
+};
+
+const cronJobsCollection = new Store<DataType>('_modelenceCronJobs', {
+  schema: {
+    alias: SchemaTypes.String,
+    lastStartDate: SchemaTypes.Date,
+    lock: SchemaTypes.Object,
+  },
+  indexes: [
+    { key: { alias: 1 }, unique: true, background: true },
+  ]
+});
 
 // TODO: allow changing interval and timeout with cron jobconfigs
 export function defineCronJob(
@@ -60,15 +81,6 @@ export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
   }
-
-  const client = getClient();
-  if (!client) {
-    throw new Error('Failed to start cron jobs: MongoDB client not initialized');
-  }
-
-  const rawCollection = client.db().collection('_modelenceCronJobs');
-  cronJobsCollection = new MongoCollection(rawCollection);
-  await rawCollection.createIndex({ alias: 1 }, { unique: true, background: true });
 
   const aliasList = Object.keys(cronJobs);
   const aliasSelector = { alias: { $in: aliasList } };
@@ -176,6 +188,10 @@ export function getCronJobsMetadata() {
     timeout: params.timeout,
   }));
 }
+
+export default new Module('_system.cron', {
+  stores: [cronJobsCollection],
+});
 
 // const runCronJob = () => {
 //   const worker = new Worker(filePath, {

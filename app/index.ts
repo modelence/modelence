@@ -11,6 +11,7 @@ import { markAppStarted } from './state';
 import { startCronJobs, getCronJobsMetadata } from '../cron/jobs';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
+import cronModule from '../cron/jobs';
 // import { createStsClient } from './aws';
 import { Module } from './module';
 import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
@@ -18,7 +19,7 @@ import { Store } from '../data/store';
 
 export async function startApp({ configSchema, modules = [] }: { configSchema?: ConfigSchema, modules?: Module[] } = {}) {
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule];
+  const systemModules = [userModule, sessionModule, cronModule];
   markAppStarted();
 
   dotenv.config();

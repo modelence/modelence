@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 
 import { Module } from '../app/module';
 import { Store } from '../data/store';
-import { SchemaTypes } from '../data/SchemaTypes';
+import { SchemaTypes } from '../data/types';
 import { handleSignupWithPassword } from './signup';
 
 // TODO: get rid of, directly infer from schema
