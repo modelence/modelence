@@ -16,9 +16,27 @@ export function createMutation<T extends any[]>(name: string, handler: Handler<T
   return _createMethodInternal('mutation', name, handler);
 }
 
+export function _createSystemQuery<T extends any[]>(name: string, handler: Handler<T>) {
+  requireServer();
+  validateSystemMethodName(name);
+  return _createMethodInternal('query', name, handler);
+}
+
+export function _createSystemMutation<T extends any[]>(name: string, handler: Handler<T>) {
+  requireServer();
+  validateSystemMethodName(name);
+  return _createMethodInternal('mutation', name, handler);
+}
+
 function validateMethodName(name: string) {
   if (name.toLowerCase().startsWith('_system.')) {
     throw new Error(`Method name cannot start with a reserved prefix: '_system.' (${name})`);
+  }
+}
+
+function validateSystemMethodName(name: string) {
+  if (!name.toLowerCase().startsWith('_system.')) {
+    throw new Error(`System method name must start with a prefix: '_system.' (${name})`);
   }
 }
 

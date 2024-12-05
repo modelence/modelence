@@ -1,45 +1,29 @@
 import { randomBytes } from 'crypto';
 import { time } from '../time';
-import { MongoCollection } from '../db/MongoCollection';
-import { getClient } from '../db/client';
 import { Session } from './types';
-import { _createMethodInternal } from '../methods';
 import { getPublicConfigs } from '../config/server';
+import { Module } from '../app/module';
+import { Store } from '../data/store';
+import { SchemaTypes } from '../data/SchemaTypes';
 
-let sessionsCollection: MongoCollection;
+type DataType = {
+  authToken: string;
+  expiresAt: Date;
+  userId: string | null;
+};
 
-export async function initSessions() {
-  initSessionMethods();
-
-  const client = getClient();
-  if (!client) {
-    throw new Error('Failed to init sessions: MongoDB client not initialized');
-  }
-
-  const rawCollection = client.db().collection('_modelenceSessions');
-  await rawCollection.createIndexes([
+export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
+  schema: {
+    authToken: SchemaTypes.String,
+    expiresAt: SchemaTypes.Date,
+    userId: SchemaTypes.String,
+  },
+  indexes: [
     { key: { authToken: 1 }, unique: true },
     { key: { expiresAt: 1 }},
-  ]);
+  ]
   // TODO: add TTL index on expiresAt
-  sessionsCollection = new MongoCollection(rawCollection);
-}
-
-function initSessionMethods() {
-  _createMethodInternal('mutation', '_system.initSession', async function(args, { session, user }) {
-    // TODO: mark or track app load somewhere
-
-    return {
-      session,
-      user,
-      configs: getPublicConfigs(),
-    };
-  });
-
-  _createMethodInternal('mutation', '_system.sessionHeartbeat', async function(args, { session }) {
-    await processSessionHeartbeat(session);
-  });
-}
+});
 
 export async function obtainSession(authToken: string | null): Promise<Session> {
   const existingSession = authToken ? await sessionsCollection.findOne({ authToken }) : null;
@@ -87,3 +71,21 @@ async function processSessionHeartbeat(session: Session) {
     }
   });
 }
+
+export default new Module('_system.session', {
+  stores: [sessionsCollection],
+  mutations: {
+    init: async function(args, { session, user }) {
+      // TODO: mark or track app load somewhere
+  
+      return {
+        session,
+        user,
+        configs: getPublicConfigs(),
+      };
+    },
+    heartbeat: async function(args, { session }) {
+      await processSessionHeartbeat(session);
+    }
+  },
+});

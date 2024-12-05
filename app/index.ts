@@ -9,21 +9,25 @@ import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { markAppStarted } from './state';
 import { startCronJobs, getCronJobsMetadata } from '../cron/jobs';
-import { initAuth } from '../auth';
+import userModule from '../auth/user';
+import sessionModule from '../auth/session';
 // import { createStsClient } from './aws';
 import { Module } from './module';
-import { createQuery, createMutation } from '../methods';
+import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
 import { Store } from '../data/store';
 
 export async function startApp({ configSchema, modules = [] }: { configSchema?: ConfigSchema, modules?: Module[] } = {}) {
+  // TODO: verify that user modules don't start with `_system.` prefix
+  const systemModules = [userModule, sessionModule];
   markAppStarted();
 
   dotenv.config();
 
-  initMethods(modules);
+  initSystemMethods(systemModules);
+  initCustomMethods(modules);
 
   setSchema(configSchema ?? {});
-  const stores = getStores(modules);
+  const stores = getStores([...systemModules, ...modules]);
   const { mongodbUri, configs } = await connectCloudBackend({
     configSchema,
     cronJobsMetadata: getCronJobsMetadata(),
@@ -34,7 +38,6 @@ export async function startApp({ configSchema, modules = [] }: { configSchema?: 
   await connect(mongodbUri);
   provisionStores(stores);
 
-  await initAuth();
   await initMetrics();
   startConfigSync();
 
@@ -45,13 +48,24 @@ export async function startApp({ configSchema, modules = [] }: { configSchema?: 
   await startServer();
 }
 
-function initMethods(modules: Module[]) {
+function initCustomMethods(modules: Module[]) {
   for (const module of modules) {
     for (const [key, handler] of Object.entries(module.queries)) {
       createQuery(`${module.name}.${key}`, handler);
     }
     for (const [key, handler] of Object.entries(module.mutations)) {
       createMutation(`${module.name}.${key}`, handler);
+    }
+  }
+}
+
+function initSystemMethods(modules: Module[]) {
+  for (const module of modules) {
+    for (const [key, handler] of Object.entries(module.queries)) {
+      _createSystemQuery(`${module.name}.${key}`, handler);
+    }
+    for (const [key, handler] of Object.entries(module.mutations)) {
+      _createSystemMutation(`${module.name}.${key}`, handler);
     }
   }
 }

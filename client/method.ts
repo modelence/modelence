@@ -49,7 +49,8 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Status: ${response.status}`);
+    const error = await response.text();
+    throw new Error(error);
   }
 
   const text = await response.text();

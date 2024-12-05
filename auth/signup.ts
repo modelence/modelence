@@ -4,7 +4,9 @@ import { Args, Context } from '../methods/types';
 
 export async function handleSignupWithPassword(args: Args, { user }: Context) {
   const email = z.string().email().parse(args.email);
-  const password = z.string().min(8).parse(args.password);
+  const password = z.string()
+    .min(8, { message: 'Password must contain at least 8 characters' })
+    .parse(args.password);
 
   if (user) {
     // TODO: handle cases where a user is already logged in
