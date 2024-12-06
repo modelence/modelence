@@ -12,6 +12,7 @@ import {
   WithId,
   OptionalUnlessRequiredId,
   FindOptions,
+  UpdateFilter,
 } from 'mongodb';
 
 import { ModelSchema } from './types';
@@ -81,19 +82,19 @@ export class Store<T extends object> {
     return await this.requireCollection().insertOne(document);
   }
 
-  async updateOne(selector: Filter<T>, update: Document): Promise<UpdateResult> {
+  async updateOne(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update);
   }
 
-  async upsertOne(selector: Filter<T>, update: Document): Promise<UpdateResult> {
+  async upsertOne(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update, { upsert: true });
   }
 
-  async updateMany(selector: Filter<T>, update: Document): Promise<UpdateResult> {
+  async updateMany(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update);
   }
 
-  async upsertMany(selector: Filter<T>, update: Document): Promise<UpdateResult> {
+  async upsertMany(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update, { upsert: true });
   }
 

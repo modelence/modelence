@@ -25,7 +25,7 @@ export async function startServer() {
     } catch (error) {
       // TODO: introduce error codes and handle them differently
       // TODO: support multiple errors
-      console.error(`Error in method ${methodName}:`, error);
+      // console.error(`Error in method ${methodName}:`, error);
       // res.status(500).json({ error: 'Internal server error' });
 
       if (error instanceof z.ZodError) {
