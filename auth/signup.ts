@@ -10,6 +10,10 @@ export async function handleSignupWithPassword(args: Args, { user }: Context) {
     .min(8, { message: 'Password must contain at least 8 characters' })
     .parse(args.password);
 
+  // TODO: block disposable email providers
+  // TODO: captcha check
+  // TODO: rate limiting
+
   if (user) {
     // TODO: handle cases where a user is already logged in
   }
@@ -26,8 +30,6 @@ export async function handleSignupWithPassword(args: Args, { user }: Context) {
 
   // Hash password with bcrypt (salt is automatically generated)
   const hash = await bcrypt.hash(password, 10);
-
-  // TODO: captcha, rate-limiting and other validations
 
   const result = await usersCollection.insertOne({
     handle: email,

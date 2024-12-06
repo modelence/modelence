@@ -5,12 +5,13 @@ import { getPublicConfigs } from '../config/server';
 import { Module } from '../app/module';
 import { Store } from '../data/store';
 import { SchemaTypes } from '../data/types';
+import { ObjectId } from 'mongodb';
 
 type DataType = {
   authToken: string;
   createdAt: Date;
   expiresAt: Date;
-  userId: string | null;
+  userId: ObjectId | null;
 };
 
 export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
@@ -18,7 +19,7 @@ export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
     authToken: SchemaTypes.String,
     createdAt: SchemaTypes.Date,
     expiresAt: SchemaTypes.Date,
-    userId: SchemaTypes.String,
+    userId: SchemaTypes.ObjectId,
   },
   indexes: [
     { key: { authToken: 1 }, unique: true },
@@ -34,11 +35,17 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
     return {
       authToken: String(existingSession.authToken),
       expiresAt: new Date(existingSession.expiresAt),
-      userId: existingSession.userId ? String(existingSession.userId) : null,
+      userId: existingSession.userId ?? null,
     }
   }
 
   return await createSession();
+}
+
+export async function setSessionUser(authToken: string, userId: ObjectId) {
+  await sessionsCollection.updateOne({ authToken }, {
+    $set: { userId }
+  });
 }
 
 async function createSession(): Promise<Session> {

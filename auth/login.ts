@@ -3,8 +3,9 @@ import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './user';
+import { setSessionUser } from './session';
 
-export async function handleLoginWithPassword(args: Args, { user }: Context) {
+export async function handleLoginWithPassword(args: Args, { user, session }: Context) {
   const email = z.string().email().parse(args.email);
   const password = z.string().parse(args.password);
 
@@ -29,7 +30,7 @@ export async function handleLoginWithPassword(args: Args, { user }: Context) {
     throw incorrectCredentialsError();
   }
 
-  // TODO: handle successful login, e.g., generate a session token
+  setSessionUser(session.authToken, userDoc._id);
 
   return userDoc._id;
 }
