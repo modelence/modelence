@@ -13,6 +13,15 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": "./dist/index.js",
+      "./client": "./dist/client.js",
+      "./server": "./dist/server.js"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/modelence/modelence.git"
@@ -29,10 +38,12 @@
     "@types/node": "^22.5.1",
     "@types/react": "^18.3.5",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
-    "@typescript-eslint/parser": "^8.17.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.1",
-    "vite-plugin-eslint": "^1.8.1"
+    "@typescript-eslint/parser": "^8.17.0"
+  },
+  "peerDependencies": {
+    "vite": "^6.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite-plugin-eslint": "^1.8.0"
   },
   "dependencies": {
     "@aws-sdk/client-amp": "^3.665.0",
