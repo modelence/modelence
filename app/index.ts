@@ -18,6 +18,8 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 
 export async function startApp({ configSchema, modules = [] }: { configSchema?: ConfigSchema, modules?: Module[] } = {}) {
+  const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule];
   markAppStarted();
@@ -29,18 +31,28 @@ export async function startApp({ configSchema, modules = [] }: { configSchema?: 
 
   setSchema(configSchema ?? {});
   const stores = getStores([...systemModules, ...modules]);
-  const { mongodbUri, configs } = await connectCloudBackend({
-    configSchema,
-    cronJobsMetadata: getCronJobsMetadata(),
-    stores
-  });
-  loadConfigs(configs);
 
-  await connect(mongodbUri);
-  provisionStores(stores);
+  if (hasRemoteBackend) {
+    const { mongodbUri, configs } = await connectCloudBackend({
+      configSchema,
+      cronJobsMetadata: getCronJobsMetadata(),
+      stores
+    });
+    loadConfigs(configs);
 
-  await initMetrics();
-  startConfigSync();
+    await connect(mongodbUri);
+  } else {
+    // TODO connect to local MongoDB
+  }
+
+  if (hasRemoteBackend) {
+    provisionStores(stores);
+  }
+
+  if (hasRemoteBackend) {
+    await initMetrics();
+    startConfigSync();
+  }
 
   if (Number(process.env.MODELENCE_CRON_INSTANCE)) {
     startCronJobs().catch(console.error);

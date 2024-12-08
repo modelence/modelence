@@ -49,7 +49,7 @@ export async function syncStatus() {
 
 async function callApi(endpoint: string, method: string, payload?: object) {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
-  
+
   if (!MODELENCE_SERVICE_ENDPOINT) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set');
   }

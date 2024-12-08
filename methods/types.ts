@@ -17,7 +17,7 @@ export type ConnectionInfo = {
 };
 
 export type Context = {
-  session: Session;
+  session: Session | null;
   user: User | null;
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
