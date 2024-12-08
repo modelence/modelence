@@ -93,9 +93,13 @@ async function getCallContext(req: Request) {
     referrer: req.get('referrer'),
   };
 
-  const { session, user } = await authenticate(authToken);
+  const hasDatabase = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  if (hasDatabase) {
+    const { session, user } = await authenticate(authToken);
+    return { clientInfo, connectionInfo, session, user };
+  }
 
-  return { clientInfo, connectionInfo, session, user };
+  return { clientInfo, connectionInfo, session: null, user: null };
 }
 
 // import passport from 'passport';
