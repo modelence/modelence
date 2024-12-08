@@ -88,7 +88,7 @@ async function getConfig() {
 function modelenceAssetPlugin() {
   return  {
     name: 'modelence-asset-handler',
-    async transform(code, id) {
+    async transform(code: string, id: string) {
       const assetRegex = /\.(png|jpe?g|gif|svg|mpwebm|ogg|mp3|wav|flac|aac)$/;
       if (assetRegex.test(id)) {
         if (process.env.NODE_ENV === 'development') {
@@ -99,7 +99,7 @@ function modelenceAssetPlugin() {
         return code;
       }
     },
-    async generateBundle(options, bundle) {
+    async generateBundle(options: any, bundle: any) {
       // Handle asset URLs in the final bundle
     }
   };
