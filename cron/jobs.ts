@@ -97,7 +97,7 @@ export async function startCronJobs() {
     {
       $set: {
         lock: {
-          containerId: process.env.MODELENCE_CONTAINER_ID,
+          containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
           acquireDate: new Date(),
         }
       }

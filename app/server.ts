@@ -5,7 +5,7 @@ import z from 'zod';
 import { runMethod } from '../methods';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
-import { initViteServer } from '../vite';
+import { initViteServer } from '../viteServer';
 
 const useNextJs = false;
 
@@ -32,7 +32,7 @@ export async function startServer() {
       if (error instanceof z.ZodError) {
         res.status(400).send(error.errors.map(e => e.message).join('; '));
       } else {
-        res.status(500).send(error.toString());
+        res.status(500).send(String(error));
       }
     }
   });

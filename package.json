@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Full-stack JavaScript platform for startups",
   "main": "index.ts",
   "types": "index.ts",
@@ -10,7 +10,12 @@
     "./client": "./client.ts",
     "./server": "./server.ts"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "publishConfig": {
@@ -37,8 +42,11 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
     "@types/react": "^18.3.5",
+    "@types/react-dom": "^19.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
-    "@typescript-eslint/parser": "^8.17.0"
+    "@typescript-eslint/parser": "^8.17.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
   },
   "dependencies": {
     "@aws-sdk/client-amp": "^3.665.0",

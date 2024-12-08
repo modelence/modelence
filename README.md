@@ -1,2 +1,3 @@
-# modelence
-Full-stack JavaScript platform for startups
+# Modelence
+
+Full-stack JavaScript framework for interactive applications
