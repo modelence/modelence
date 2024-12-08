@@ -5,6 +5,7 @@ import z from 'zod';
 import { runMethod } from '../methods';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
+import { initViteServer } from '../vite';
 
 const useNextJs = false;
 
@@ -42,6 +43,19 @@ export async function startServer() {
     await initViteServer(app, isDev);
   }
 
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Promise Rejection:');
+    console.error(reason instanceof Error ? reason.stack : reason);
+    console.error('Promise:', promise);
+  });
+  
+  // Global uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:');
+    console.error(error.stack);  // This gives you the full stack trace
+    console.trace('Full application stack:');  // Additional context
+  });
+
   const server = http.createServer(app);
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
@@ -58,55 +72,6 @@ async function initNextjsServer(app: express.Application, isDev: boolean) {
   // app.all('*', (req: Request, res: Response) => {
   //   return nextHandler(req, res);
   // });
-}
-
-async function initViteServer(app: express.Application, isDev: boolean) {
-  if (isDev) {
-    try {
-      const { createServer: createViteServer } = await import('vite');
-      const { defineViteConfig } = await import('../vite');
-      console.log('Starting Vite dev server...');
-      const vite = await createViteServer({
-        ...defineViteConfig(),
-        server: {
-          middlewareMode: true,
-        },
-        root: './src/client'
-      });
-      
-      app.use(vite.middlewares);
-      
-      app.use('*', async (req: Request, res: Response) => {
-        try {
-          res.sendFile('index.html', { root: './src/client' });
-        } catch (e) {
-          console.error('Error serving index.html:', e);
-          res.status(500).send('Internal Server Error');
-        }
-      });
-    } catch (error) {
-      console.error('Failed to start Vite server:', error);
-      throw error;
-    }
-  } else {
-    app.use(express.static('.modelence/client'));
-    app.get('*', (req, res) => {
-      res.sendFile('index.html', { root: '.modelence/client' });
-    });
-  }
-
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Promise Rejection:');
-    console.error(reason instanceof Error ? reason.stack : reason);
-    console.error('Promise:', promise);
-  });
-  
-  // Global uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:');
-    console.error(error.stack);  // This gives you the full stack trace
-    console.trace('Full application stack:');  // Additional context
-  });
 }
 
 async function getCallContext(req: Request) {
