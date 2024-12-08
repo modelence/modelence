@@ -3,29 +3,21 @@
   "name": "modelence",
   "version": "0.1.0",
   "description": "Full-stack JavaScript platform for startups",
-  "main": "index.ts",
-  "types": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./client": "./client.ts",
-    "./server": "./server.ts"
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./server": "./dist/server.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsup",
+    "dev": "tsup --watch",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "publishConfig": {
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "exports": {
-      ".": "./dist/index.js",
-      "./client": "./dist/client.js",
-      "./server": "./dist/server.js"
-    }
   },
   "repository": {
     "type": "git",
