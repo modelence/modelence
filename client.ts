@@ -9,8 +9,7 @@ export const AppProvider = 'useClient' in React
   ? React.useClient(OriginalAppProvider)
   : OriginalAppProvider;
 
-export { useNavigate } from 'react-router-dom';
-export { renderApp, Routes, Route } from './client/renderApp';
+export { renderApp } from './client/renderApp';
 export { useLoader } from './client/method';
 export { useSession } from './client/session';
 export { signupWithPassword, loginWithPassword } from './auth/client';

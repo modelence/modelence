@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { AppProvider } from 'modelence/client';
+import { AppProvider } from '../client';
 import { setErrorHandler, ErrorHandler } from './errorHandler';
 
 export function renderApp({ loadingElement, routesElement, favicon, errorHandler }: {
@@ -22,9 +21,7 @@ export function renderApp({ loadingElement, routesElement, favicon, errorHandler
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <AppProvider loadingElement={loadingElement}>
-        <BrowserRouter>
-          {routesElement}
-        </BrowserRouter>
+        {routesElement}
       </AppProvider>
     </React.StrictMode>
   );
@@ -41,5 +38,3 @@ export function renderApp({ loadingElement, routesElement, favicon, errorHandler
     }
   }
 }
-
-export { Routes, Route } from 'react-router-dom';

@@ -76,7 +76,17 @@ async function initElasticApm() {
   });
 }
 
+const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+
 export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
+  if (!isTelemetryEnabled) {
+    return {
+      end: () => {
+        // do nothing
+      }
+    };
+  }
+
   if (!apm) {
     throw new Error('startTransaction: Elastic APM is not initialized');
   }

@@ -94,7 +94,10 @@ export default new Module('_system.session', {
       };
     },
     heartbeat: async function(args, { session }) {
-      await processSessionHeartbeat(session);
+      // Session might not exist if there is no database/authentication setup
+      if (session) {
+        await processSessionHeartbeat(session);
+      }
     }
   },
 });
