@@ -6,6 +6,10 @@ import { usersCollection } from './user';
 import { setSessionUser } from './session';
 
 export async function handleLoginWithPassword(args: Args, { user, session }: Context) {
+  if (!session) {
+    throw new Error('Session is not initialized');
+  }
+
   const email = z.string().email().parse(args.email);
   const password = z.string().parse(args.password);
 
