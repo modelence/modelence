@@ -75,7 +75,7 @@ async function initNextjsServer(app: express.Application, isDev: boolean) {
 }
 
 async function getCallContext(req: Request) {
-  const authToken = z.string().nullable().parse(req.body.authToken);
+  const authToken = z.string().nullish().transform(val => val ?? null).parse(req.body.authToken);
 
   const clientInfo = z.object({
     screenWidth: z.number(),

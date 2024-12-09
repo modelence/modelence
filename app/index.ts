@@ -18,13 +18,13 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 
 export async function startApp({ configSchema, modules = [] }: { configSchema?: ConfigSchema, modules?: Module[] } = {}) {
+  dotenv.config();
+
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
 
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule];
   markAppStarted();
-
-  dotenv.config();
 
   initSystemMethods(systemModules);
   initCustomMethods(modules);
@@ -42,7 +42,10 @@ export async function startApp({ configSchema, modules = [] }: { configSchema?: 
 
     await connect(mongodbUri);
   } else {
-    // TODO connect to local MongoDB
+    // TODO: connect to local MongoDB
+
+    // TODO: allow loading configs from a JSON file 
+    loadConfigs([]);
   }
 
   if (hasRemoteBackend) {
