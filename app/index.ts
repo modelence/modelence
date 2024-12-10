@@ -17,20 +17,27 @@ import { Module } from './module';
 import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
 import { Store } from '../data/store';
 
-export async function startApp({ configSchema, modules = [] }: { configSchema?: ConfigSchema, modules?: Module[] } = {}) {
+export async function startApp(
+  { configSchema, modules = [] }: {
+    configSchema?: ConfigSchema,
+    modules?: Module[]
+  } = {}
+) {
   dotenv.config();
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
 
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule];
+  const combinedModules = [...systemModules, ...modules];
+
   markAppStarted();
 
   initSystemMethods(systemModules);
   initCustomMethods(modules);
 
   setSchema(configSchema ?? {});
-  const stores = getStores([...systemModules, ...modules]);
+  const stores = getStores(combinedModules);
 
   if (hasRemoteBackend) {
     const { mongodbUri, configs } = await connectCloudBackend({
@@ -61,7 +68,7 @@ export async function startApp({ configSchema, modules = [] }: { configSchema?: 
     startCronJobs().catch(console.error);
   }
 
-  await startServer();
+  await startServer({ combinedModules });
 }
 
 function initCustomMethods(modules: Module[]) {
