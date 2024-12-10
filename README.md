@@ -55,7 +55,7 @@ npm install --save-dev tailwindcss postcss autoprefixer
     ],
     "jsx": "react-jsx",
     "allowJs": true,
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "bundler",
     "strict": false,
     "noEmit": true,
     "incremental": true,
