@@ -6,10 +6,25 @@ import { runMethod } from '../methods';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
 import { initViteServer } from '../viteServer';
+import { Module } from './module';
+import { HttpMethod } from '../routes/types';
+import { createRouteHandler } from '../routes/handler';
 
 const useNextJs = false;
 
-export async function startServer() {
+function registerModuleRoutes(app: express.Application, modules: Module[]) {
+  for (const module of modules) {
+    for (const route of module.routes) {
+      const { path, handlers } = route;
+
+      Object.entries(handlers).forEach(([method, handler]) => {
+        app[method as HttpMethod](path, createRouteHandler(handler));
+      });
+    }
+  }
+}
+
+export async function startServer({ combinedModules }: { combinedModules: Module[] }) {
   const app = express();
   const isDev = process.env.NODE_ENV !== 'production';
 
@@ -36,6 +51,8 @@ export async function startServer() {
       }
     }
   });
+
+  registerModuleRoutes(app, combinedModules);
 
   if (useNextJs) {
     await initNextjsServer(app, isDev);
