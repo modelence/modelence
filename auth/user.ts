@@ -4,7 +4,7 @@ import { Module } from '../app/module';
 import { Store } from '../data/store';
 import { SchemaTypes } from '../data/types';
 import { handleSignupWithPassword } from './signup';
-import { handleLoginWithPassword } from './login';
+import { handleLoginWithPassword, handleLogout } from './login';
 
 // TODO: get rid of, directly infer from schema
 type DataType = {
@@ -64,6 +64,7 @@ export default new Module('_system.user', {
   mutations: {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
+    logout: handleLogout,
   }
 });
 

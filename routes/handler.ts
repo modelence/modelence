@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { RouteHandler, ExpressHandler } from './types';
 
+// TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
+
 export function createRouteHandler(handler: RouteHandler): ExpressHandler {
   return async (req: Request, res: Response) => {
     try {
