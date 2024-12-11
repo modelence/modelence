@@ -12,4 +12,4 @@ export const AppProvider = 'useClient' in React
 export { renderApp } from './client/renderApp';
 export { useLoader, callMethod } from './client/method';
 export { useSession } from './client/session';
-export { signupWithPassword, loginWithPassword } from './auth/client';
+export { signupWithPassword, loginWithPassword, logout } from './auth/client';

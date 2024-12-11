@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './user';
-import { setSessionUser } from './session';
+import { clearSessionUser, setSessionUser } from './session';
 
 export async function handleLoginWithPassword(args: Args, { user, session }: Context) {
   if (!session) {
@@ -34,9 +34,22 @@ export async function handleLoginWithPassword(args: Args, { user, session }: Con
     throw incorrectCredentialsError();
   }
 
-  setSessionUser(session.authToken, userDoc._id);
+  await setSessionUser(session.authToken, userDoc._id);
 
-  return userDoc._id;
+  return {
+    user: {
+      id: userDoc._id,
+      handle: userDoc.handle,
+    }
+  }
+}
+
+export async function handleLogout(args: Args, { user, session }: Context) {
+  if (!session) {
+    throw new Error('Session is not initialized');
+  }
+
+  await clearSessionUser(session.authToken);
 }
 
 /*

@@ -48,6 +48,12 @@ export async function setSessionUser(authToken: string, userId: ObjectId) {
   });
 }
 
+export async function clearSessionUser(authToken: string) {
+  await sessionsCollection.updateOne({ authToken }, {
+    $set: { userId: null }
+  });
+}
+
 async function createSession(): Promise<Session> {
   // TODO: add rate-limiting and captcha handling
 

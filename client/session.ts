@@ -1,22 +1,30 @@
 'use client';
 
+import { create } from 'zustand';
 import { z } from 'zod';
 import { callMethod } from './method';
-import { ConfigKey, AppConfig } from '../config/types';
 import { _setConfig } from '../config/client';
-import { useState, useEffect } from 'react';
 import { setLocalStorageSession } from './localStorage';
 import { time } from '../time';
+import { Configs } from '../config/types';
 
-type Configs = Record<ConfigKey, AppConfig>;
+type User = {
+  id: string;
+  handle: string;
+};
+
+type SessionStore = {
+  user: User | null;
+  setUser: (user: User | null) => void;
+};
+
+export const useSessionStore = create<SessionStore>((set) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+}));
 
 let isInitialized = false;
 const SESSION_HEARTBEAT_INTERVAL = time.seconds(30);
-
-let currentUser: {
-  id: string;
-  handle: string;
-} | null = null;
 
 export async function initSession() {
   if (isInitialized) {
@@ -28,10 +36,13 @@ export async function initSession() {
   const { configs, session, user } = await callMethod<{ configs: Configs, session: object, user: object }>('_system.session.init');
   _setConfig(configs);
   setLocalStorageSession(session);
-  currentUser = user ? Object.freeze(z.object({
+  
+  const parsedUser = user ? Object.freeze(z.object({
     id: z.string(),
     handle: z.string(),
   }).parse(user)) : null;
+
+  useSessionStore.getState().setUser(parsedUser);
 
   await loopSessionHeartbeat();
 }
@@ -41,13 +52,11 @@ async function loopSessionHeartbeat() {
   setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
+export function setCurrentUser(user: User | null) {
+  useSessionStore.getState().setUser(user);
+}
+
 export function useSession() {
-  const [user, setUser] = useState(currentUser);
-
-  // TODO: re-fetch the user on demand
-  useEffect(() => {
-    // Fetch and update currentUser
-  }, []);
-
+  const user = useSessionStore(state => state.user);
   return { user };
 }

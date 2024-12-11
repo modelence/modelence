@@ -57,7 +57,8 @@
     "vite-plugin-eslint": "^1.8.1",
     "winston": "^3.15.0",
     "winston-elasticsearch": "^0.19.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zustand": "^5.0.2"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

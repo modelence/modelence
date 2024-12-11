@@ -18,6 +18,8 @@ export type ConfigSchema = {
   [key: string]: ConfigParams;
 };
 
+export type Configs = Record<ConfigKey, AppConfig>;
+
 type ValueType<T> = T extends 'number' ? number :
   T extends 'string' ? string :
   T extends 'text' ? string :
