@@ -4,7 +4,7 @@
   "version": "0.1.8",
   "description": "Full-stack JavaScript platform for startups",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/global.d.ts",
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
