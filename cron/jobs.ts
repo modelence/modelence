@@ -2,7 +2,6 @@
 
 import { time } from '../time';
 import { CronJob, CronJobInputParams } from './types';
-import { isAppStarted } from '../app/state';
 import { startTransaction, captureError } from '../app/metrics';
 import { Module } from '../app/module';
 import { SchemaTypes } from '../data/types';
@@ -44,15 +43,10 @@ const cronJobsCollection = new Store<DataType>('_modelenceCronJobs', {
 // TODO: allow changing interval and timeout with cron jobconfigs
 export function defineCronJob(
   alias: CronJob['alias'],
-  { description = '', interval, timeout = DEFAULT_TIMEOUT }: CronJobInputParams,
-  handler: CronJob['handler'],
+  { description = '', interval, timeout = DEFAULT_TIMEOUT, handler }: CronJobInputParams,
 ) {
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
-  }
-
-  if (isAppStarted()) {
-    throw new Error(`Unable to add a cron job - app has already been started: [${alias}]`);
   }
 
   if (cronJobsInterval) {

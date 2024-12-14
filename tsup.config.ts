@@ -3,7 +3,14 @@ import { defineConfig } from 'tsup'
 export default defineConfig((options) => ({
   entry: ['index.ts', 'client.ts', 'server.ts'],
   format: ['esm'],
-  dts: true,
+  dts: {
+    resolve: true,
+    entry: {
+      index: 'index.ts',
+      client: 'client.ts',
+      server: 'server.ts'
+    }
+  },
   splitting: true,
   clean: true,
   outDir: 'dist',
@@ -16,8 +23,7 @@ export default defineConfig((options) => ({
     return options
   },
   external: [
-    'modelence',
-    'modelence/client',
-    'modelence/server'
+    'react',
+    'react-dom'
   ]
 }));

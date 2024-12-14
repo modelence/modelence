@@ -1,3 +1,5 @@
+type CronJobHandler = () => Promise<void>;
+
 export type CronJob = {
   alias: string;
   params: {
@@ -5,7 +7,7 @@ export type CronJob = {
     interval: number;
     timeout: number;
   },
-  handler: () => Promise<void>;
+  handler: CronJobHandler;
   state: {
     startTs?: number;
     scheduledRunTs?: number;
@@ -17,6 +19,7 @@ export type CronJobInputParams = {
   description?: string;
   interval: number;
   timeout?: number;
+  handler: CronJobHandler;
 }
 
 export type CronJobMetadata = {

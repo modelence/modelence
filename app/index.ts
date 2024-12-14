@@ -8,9 +8,9 @@ import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { markAppStarted } from './state';
-import { startCronJobs, getCronJobsMetadata } from '../cron/jobs';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
+import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
 // import { createStsClient } from './aws';
 import { Module } from './module';
@@ -26,6 +26,7 @@ export async function startApp(
   dotenv.config();
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  const isCronEnabled = Boolean(Number(process.env.MODELENCE_CRON_INSTANCE));
 
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule];
@@ -39,10 +40,18 @@ export async function startApp(
   setSchema(configSchema ?? {});
   const stores = getStores(combinedModules);
 
+  if (isCronEnabled) {
+    for (const module of combinedModules) {
+      for (const [cronAlias, cronJobParams] of Object.entries(module.cronJobs)) {
+        defineCronJob(`${module.name}.${cronAlias}`, cronJobParams);
+      }
+    }
+  }
+
   if (hasRemoteBackend) {
     const { mongodbUri, configs } = await connectCloudBackend({
       configSchema,
-      cronJobsMetadata: getCronJobsMetadata(),
+      cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
       stores
     });
     loadConfigs(configs);
@@ -64,7 +73,7 @@ export async function startApp(
     startConfigSync();
   }
 
-  if (Number(process.env.MODELENCE_CRON_INSTANCE)) {
+  if (isCronEnabled) {
     startCronJobs().catch(console.error);
   }
 

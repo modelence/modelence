@@ -7,6 +7,4 @@ export { createQuery } from './methods';
 export { SchemaTypes } from './data/types';
 export { Store } from './data/store';
 
-export { defineCronJob } from './cron/jobs';
-
 export { getConfig } from './config/server';
