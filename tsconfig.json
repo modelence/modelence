@@ -9,6 +9,10 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "jsx": "react-jsx",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationDir": "./dist",
+    "declarationMap": true,
+    "emitDeclarationOnly": false
   }
 }

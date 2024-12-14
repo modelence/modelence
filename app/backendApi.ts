@@ -3,7 +3,13 @@ import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { Store } from '../data/store';
 
-export async function connectCloudBackend({ configSchema, cronJobsMetadata, stores }: { configSchema?: ConfigSchema, cronJobsMetadata: CronJobMetadata[], stores: Store<any>[] }) {
+export async function connectCloudBackend(
+  { configSchema, cronJobsMetadata, stores }: { 
+    configSchema?: ConfigSchema, 
+    cronJobsMetadata?: CronJobMetadata[], 
+    stores: Store<any>[] 
+  }
+) {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
