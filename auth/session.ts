@@ -16,10 +16,10 @@ type DataType = {
 
 export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
   schema: {
-    authToken: SchemaTypes.String,
-    createdAt: SchemaTypes.Date,
-    expiresAt: SchemaTypes.Date,
-    userId: SchemaTypes.ObjectId,
+    authToken: SchemaTypes.String(),
+    createdAt: SchemaTypes.Date(),
+    expiresAt: SchemaTypes.Date(),
+    userId: SchemaTypes.UserId(),
   },
   indexes: [
     { key: { authToken: 1 }, unique: true },

@@ -31,9 +31,9 @@ type DataType = {
 
 const cronJobsCollection = new Store<DataType>('_modelenceCronJobs', {
   schema: {
-    alias: SchemaTypes.String,
-    lastStartDate: SchemaTypes.Date,
-    lock: SchemaTypes.Object,
+    alias: SchemaTypes.String(),
+    lastStartDate: SchemaTypes.Date(),
+    lock: SchemaTypes.Object(),
   },
   indexes: [
     { key: { alias: 1 }, unique: true, background: true },

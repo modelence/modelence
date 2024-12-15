@@ -26,10 +26,10 @@ type DataType = {
 
 export const usersCollection = new Store<DataType>('_modelenceUsers', {
   schema: {
-    handle: SchemaTypes.String,
-    emails: SchemaTypes.Array,
-    createdAt: SchemaTypes.Date,
-    authMethods: SchemaTypes.Object,
+    handle: SchemaTypes.String(),
+    emails: [SchemaTypes.Object()],
+    createdAt: SchemaTypes.Date(),
+    authMethods: SchemaTypes.Object(),
   },
   indexes: [
     {
