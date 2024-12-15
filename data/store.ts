@@ -17,16 +17,16 @@ import {
 
 import { ModelSchema } from './types';
 
-export class Store<T extends object> {
+export class Store<T extends Document = Document> {
   private readonly name: string;
   // TODO: have a single definition for types and schema (maybe zod?)
-  private readonly schema: ModelSchema<T>;
+  private readonly schema: ModelSchema;
   private readonly indexes: IndexDescription[];
   private collection?: Collection<T>;
 
   constructor(
     name: string,
-    { schema, indexes }: { schema: ModelSchema<T>, indexes: IndexDescription[] }
+    { schema, indexes }: { schema: ModelSchema, indexes: IndexDescription[] }
   ) {
     this.name = name;
     this.schema = schema;
@@ -46,7 +46,7 @@ export class Store<T extends object> {
       return;
     }
 
-    this.collection = client.db().collection(this.name);
+    this.collection = client.db().collection<T>(this.name);
     this.collection.createIndexes(this.indexes);
   }
 
