@@ -18,8 +18,7 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 
 export async function startApp(
-  { configSchema, modules = [] }: {
-    configSchema?: ConfigSchema,
+  { modules = [] }: {
     modules?: Module[]
   } = {}
 ) {
@@ -37,15 +36,12 @@ export async function startApp(
   initSystemMethods(systemModules);
   initCustomMethods(modules);
 
+  const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema ?? {});
   const stores = getStores(combinedModules);
 
   if (isCronEnabled) {
-    for (const module of combinedModules) {
-      for (const [cronAlias, cronJobParams] of Object.entries(module.cronJobs)) {
-        defineCronJob(`${module.name}.${cronAlias}`, cronJobParams);
-      }
-    }
+    defineCronJobs(combinedModules);
   }
 
   if (hasRemoteBackend) {
@@ -104,6 +100,33 @@ function initSystemMethods(modules: Module[]) {
 
 function getStores(modules: Module[]) {
   return modules.flatMap(module => module.stores);
+}
+
+function getConfigSchema(modules: Module[]): ConfigSchema {
+  const merged: ConfigSchema = {};
+
+  for (const module of modules) {
+    for (const [key, value] of Object.entries(module.configSchema)) {
+      const absoluteKey = `${module.name}.${key}`;
+      if (absoluteKey in merged) {
+        throw new Error(
+          `Duplicate config schema key: ${absoluteKey} (${module.name})`
+        );
+      }
+
+      merged[absoluteKey] = value;
+    }
+  }
+
+  return merged;
+}
+
+function defineCronJobs(modules: Module[]) {
+  for (const module of modules) {
+    for (const [cronAlias, cronJobParams] of Object.entries(module.cronJobs)) {
+      defineCronJob(`${module.name}.${cronAlias}`, cronJobParams);
+    }
+  }
 }
 
 async function provisionStores(stores: Store<any>[]) {

@@ -1,3 +1,4 @@
+import { ConfigSchema } from '../config/types';
 import { CronJobInputParams } from '../cron/types';
 import { Store } from '../data/store';
 import { Handler } from '../methods/types';
@@ -14,6 +15,7 @@ export class Module {
   public readonly mutations: Mutations;
   public readonly routes: RouteDefinition[];
   public readonly cronJobs: Record<string, CronJobInputParams>;
+  public readonly configSchema: ConfigSchema;
 
   constructor(
     name: string,
@@ -22,13 +24,15 @@ export class Module {
       queries = {}, 
       mutations = {},
       routes = [],
-      cronJobs = {}
+      cronJobs = {},
+      configSchema = {}
     }: { 
       stores?: Stores, 
       queries?: Queries, 
       mutations?: Mutations,
       routes?: RouteDefinition[],
-      cronJobs?: Record<string, CronJobInputParams>
+      cronJobs?: Record<string, CronJobInputParams>,
+      configSchema?: ConfigSchema
     }
   ) {
     this.name = name;
@@ -37,5 +41,6 @@ export class Module {
     this.mutations = mutations;
     this.routes = routes;
     this.cronJobs = cronJobs;
+    this.configSchema = configSchema;
   }
 }
