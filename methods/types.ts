@@ -29,8 +29,16 @@ export type Handler<T extends any> = (args: Args, context: Context) => Promise<T
 
 export type MethodType = 'query' | 'mutation';
 
+type Permission = string;
+
+export type MethodDefinition<T extends any> = {
+  permissions?: Permission[];
+  handler: Handler<T>;
+} | Handler<T>;
+
 export type Method<T extends any[]> = {
   type: MethodType;
   name: string;
+  permissions: Permission[];
   handler: Handler<T>;
 };
