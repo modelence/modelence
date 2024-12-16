@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
-type SingularSchemaTypeDefinition = ReturnType<typeof schema[keyof typeof schema]>;
+type SingularSchemaTypeDefinition = z.ZodTypeAny; // ReturnType<typeof schema[keyof typeof schema]>;
 
 type SchemaTypeDefinition = SingularSchemaTypeDefinition | [SingularSchemaTypeDefinition];
 
