@@ -4,7 +4,7 @@ import { time } from '../time';
 import { CronJob, CronJobInputParams } from './types';
 import { startTransaction, captureError } from '../app/metrics';
 import { Module } from '../app/module';
-import { SchemaTypes } from '../data/types';
+import { schema } from '../data/types';
 import { Store } from '../data/store';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
@@ -31,9 +31,9 @@ type DataType = {
 
 const cronJobsCollection = new Store<DataType>('_modelenceCronJobs', {
   schema: {
-    alias: SchemaTypes.String(),
-    lastStartDate: SchemaTypes.Date(),
-    lock: SchemaTypes.Object(),
+    alias: schema.string(),
+    lastStartDate: schema.date(),
+    lock: schema.object({}),
   },
   indexes: [
     { key: { alias: 1 }, unique: true, background: true },
