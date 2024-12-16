@@ -47,7 +47,9 @@ export class Store<T extends Document = Document> {
     }
 
     this.collection = client.db().collection<T>(this.name);
-    this.collection.createIndexes(this.indexes);
+    if (this.indexes.length > 0) {
+      this.collection.createIndexes(this.indexes);
+    }
   }
 
   requireCollection() {
