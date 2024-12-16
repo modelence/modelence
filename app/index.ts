@@ -10,6 +10,8 @@ import { initMetrics } from './metrics';
 import { markAppStarted } from './state';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
+import { RoleDefinition } from '../auth/types';
+import { initRoles } from '../auth/role';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
 // import { createStsClient } from './aws';
@@ -18,8 +20,10 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 
 export async function startApp(
-  { modules = [] }: {
+  { modules = [], roles = {}, defaultRoles = {} }: {
     modules?: Module[]
+    roles?: Record<string, RoleDefinition>
+    defaultRoles?: Record<string, string>
   } = {}
 ) {
   dotenv.config();
@@ -35,6 +39,8 @@ export async function startApp(
 
   initSystemMethods(systemModules);
   initCustomMethods(modules);
+
+  initRoles(roles, defaultRoles);
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema ?? {});

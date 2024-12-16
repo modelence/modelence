@@ -9,6 +9,7 @@ import { initViteServer } from '../viteServer';
 import { Module } from './module';
 import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';
+import { getUnauthenticatedRoles } from '../auth/role';
 
 const useNextJs = false;
 
@@ -112,11 +113,23 @@ async function getCallContext(req: Request) {
 
   const hasDatabase = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   if (hasDatabase) {
-    const { session, user } = await authenticate(authToken);
-    return { clientInfo, connectionInfo, session, user };
+    const { session, user, roles } = await authenticate(authToken);
+    return {
+      clientInfo,
+      connectionInfo,
+      session,
+      user,
+      roles,
+    };
   }
 
-  return { clientInfo, connectionInfo, session: null, user: null };
+  return {
+    clientInfo,
+    connectionInfo,
+    session: null,
+    user: null,
+    roles: getUnauthenticatedRoles(),
+  };
 }
 
 // import passport from 'passport';

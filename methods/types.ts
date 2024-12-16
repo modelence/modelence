@@ -1,4 +1,4 @@
-import { Session, User } from '../auth/types';
+import { Session, User, Permission } from '../auth/types';
 
 export type ClientInfo = {
   screenWidth: number;
@@ -19,6 +19,7 @@ export type ConnectionInfo = {
 export type Context = {
   session: Session | null;
   user: User | null;
+  roles: string[];
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
 };
@@ -28,8 +29,6 @@ export type Args = Record<string, unknown>;
 export type Handler<T extends any> = (args: Args, context: Context) => Promise<T> | T;
 
 export type MethodType = 'query' | 'mutation';
-
-type Permission = string;
 
 export type MethodDefinition<T extends any> = {
   permissions?: Permission[];

@@ -1,5 +1,6 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
+import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 
 const methods: Record<string, Method<any>> = {};
@@ -62,7 +63,17 @@ export async function runMethod(name: string, args: Args, context: Context) {
   const { type, handler } = method;
 
   const transaction = startTransaction('method', `method:${name}`, { type, args });
-  const response = await handler(args, context);
+
+  let response;
+  try {
+    requireAccess(context.roles, method.permissions);
+    response = await handler(args, context);
+  } catch (error) {
+    // TODO: log error and associate it with the transaction
+    transaction.end('error');
+    throw error;
+  }
+
   transaction.end();
 
   return response;
