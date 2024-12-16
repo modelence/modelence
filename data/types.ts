@@ -29,11 +29,7 @@ const schemaBoolean: typeof z.boolean = z.boolean.bind(z);
 
 const schemaObject: typeof z.object = z.object.bind(z);
 
-const schemaObjectId: () => z.ZodType<ObjectId> = () => z.instanceof(ObjectId);
-
-const schemaUserId: () => z.ZodType<ObjectId> = () => z.instanceof(ObjectId);
-
-const schemaRef: (c: string) => z.ZodType<ObjectId> = (collection: string) => z.instanceof(ObjectId);
+const schemaEnum: typeof z.enum = z.enum.bind(z);
 
 export const schema = {
   string: schemaString,
@@ -41,7 +37,14 @@ export const schema = {
   date: schemaDate,
   boolean: schemaBoolean,
   object: schemaObject,
-  objectId: schemaObjectId,
-  userId: schemaUserId,
-  ref: schemaRef,
+  enum: schemaEnum,
+  objectId(): z.ZodType<ObjectId> {
+    return z.instanceof(ObjectId);
+  },
+  userId(): z.ZodType<ObjectId> {
+    return z.instanceof(ObjectId);
+  },
+  ref(collection: string): z.ZodType<ObjectId> {
+    return z.instanceof(ObjectId);
+  },
 };
