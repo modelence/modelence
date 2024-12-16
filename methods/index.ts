@@ -1,31 +1,31 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '../app/metrics';
-import { Method, Handler, MethodType, Args, Context } from './types';
+import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 
 const methods: Record<string, Method<any>> = {};
 
-export function createQuery<T extends any[]>(name: string, handler: Handler<T>) {
+export function createQuery<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateMethodName(name);
-  return _createMethodInternal('query', name, handler);
+  return _createMethodInternal('query', name, methodDef);
 }
 
-export function createMutation<T extends any[]>(name: string, handler: Handler<T>) {
+export function createMutation<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateMethodName(name);
-  return _createMethodInternal('mutation', name, handler);
+  return _createMethodInternal('mutation', name, methodDef);
 }
 
-export function _createSystemQuery<T extends any[]>(name: string, handler: Handler<T>) {
+export function _createSystemQuery<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateSystemMethodName(name);
-  return _createMethodInternal('query', name, handler);
+  return _createMethodInternal('query', name, methodDef);
 }
 
-export function _createSystemMutation<T extends any[]>(name: string, handler: Handler<T>) {
+export function _createSystemMutation<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateSystemMethodName(name);
-  return _createMethodInternal('mutation', name, handler);
+  return _createMethodInternal('mutation', name, methodDef);
 }
 
 function validateMethodName(name: string) {
@@ -40,13 +40,16 @@ function validateSystemMethodName(name: string) {
   }
 }
 
-function _createMethodInternal<T extends any>(type: MethodType, name: string, handler: Handler<T>) {
+function _createMethodInternal<T extends any>(type: MethodType, name: string, methodDef: MethodDefinition<T>) {
   requireServer();
 
   if (methods[name]) {
     throw new Error(`Method with name '${name}' is already defined.`);
   }
-  methods[name] = { type, name, handler };
+
+  const handler = typeof methodDef === 'function' ? methodDef : methodDef.handler;
+  const permissions = typeof methodDef === 'function' ? [] : methodDef.permissions ?? [];
+  methods[name] = { type, name, handler, permissions };
 }
 
 export async function runMethod(name: string, args: Args, context: Context) {

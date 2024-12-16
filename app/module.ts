@@ -1,12 +1,12 @@
 import { ConfigSchema } from '../config/types';
 import { CronJobInputParams } from '../cron/types';
 import { Store } from '../data/store';
-import { Handler } from '../methods/types';
+import { MethodDefinition } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 
 type Stores = Store<any>[];
-type Queries = Record<string, Handler<any>>;
-type Mutations = Record<string, Handler<any>>;
+type Queries = Record<string, MethodDefinition<any>>;
+type Mutations = Record<string, MethodDefinition<any>>;
 
 export class Module {
   public readonly name: string;
