@@ -4,7 +4,7 @@ import { Session } from './types';
 import { getPublicConfigs } from '../config/server';
 import { Module } from '../app/module';
 import { Store } from '../data/store';
-import { SchemaTypes } from '../data/types';
+import { schema } from '../data/types';
 import { ObjectId } from 'mongodb';
 
 type DataType = {
@@ -16,10 +16,10 @@ type DataType = {
 
 export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
   schema: {
-    authToken: SchemaTypes.String(),
-    createdAt: SchemaTypes.Date(),
-    expiresAt: SchemaTypes.Date(),
-    userId: SchemaTypes.UserId(),
+    authToken: schema.string(),
+    createdAt: schema.date(),
+    expiresAt: schema.date(),
+    userId: schema.userId(),
   },
   indexes: [
     { key: { authToken: 1 }, unique: true },

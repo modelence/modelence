@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 
 import { Module } from '../app/module';
 import { Store } from '../data/store';
-import { SchemaTypes } from '../data/types';
+import { schema } from '../data/types';
 import { handleSignupWithPassword } from './signup';
 import { handleLoginWithPassword, handleLogout } from './login';
 
@@ -26,10 +26,10 @@ type DataType = {
 
 export const usersCollection = new Store<DataType>('_modelenceUsers', {
   schema: {
-    handle: SchemaTypes.String(),
-    emails: [SchemaTypes.Object()],
-    createdAt: SchemaTypes.Date(),
-    authMethods: SchemaTypes.Object(),
+    handle: schema.string(),
+    emails: [schema.object({})],
+    createdAt: schema.date(),
+    authMethods: schema.object({}),
   },
   indexes: [
     {
