@@ -45,8 +45,15 @@ export async function startServer({ combinedModules }: { combinedModules: Module
       // console.error(`Error in method ${methodName}:`, error);
       // res.status(500).json({ error: 'Internal server error' });
 
-      if (error instanceof z.ZodError) {
-        res.status(400).send(error.errors.map(e => e.message).join('; '));
+      if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
+        const zodError = error as z.ZodError;
+        const flattened = zodError.flatten();
+        const fieldMessages = Object.entries(flattened.fieldErrors)
+          .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
+          .join('; ');
+        const formMessages = flattened.formErrors.join('; ');
+        const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
+        res.status(400).send(`${methodName}: ${allMessages}`);
       } else {
         res.status(500).send(String(error));
       }
