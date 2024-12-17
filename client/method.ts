@@ -14,7 +14,7 @@ import { handleError } from './errorHandler';
 type Args = Record<string, unknown>;
 
 type MethodResult<T> = {
-  isLoading: boolean;
+  isFetching: boolean;
   error: Error | null;
   data: T | null;
 };
@@ -57,29 +57,50 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
   return text ? JSON.parse(text) : undefined;
 }
 
-export function useLoader<T>(methodName: string, args: Args = {}): MethodResult<T> {
+export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> {
+  const { result } = useMethod<T>(methodName, args, { enabled: true });
+  return result;
+}
+
+export function useMutation<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & { mutate: () => void, mutateAsync: () => Promise<T> } {
+  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: false });
+  return {
+    ...result,
+    mutate: () => triggerMethod(),
+    mutateAsync: triggerMethod,
+  };
+}
+
+export function useMethod<T>(methodName: string, args: Args = {}, options: { enabled: boolean }): { result: MethodResult<T>, triggerMethod: () => Promise<T> } {
   // Memoize the args object to maintain reference stability and prevent infinite re-renders
   const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
 
   const [result, setResult] = useState<MethodResult<T>>({
-    isLoading: true,
+    isFetching: options.enabled,
     error: null,
     data: null,
   });
 
+  const triggerMethod = async () => {
+    setResult({ isFetching: true, error: null, data: result.data });
+    try {
+      const data = await callMethod<T>(methodName, stableArgs);
+      setResult({ isFetching: false, error: null, data });
+      return data;
+    } catch (error) {
+      setResult({ isFetching: false, error: error as Error, data: null });
+      throw error;
+    }
+  };
+
   // TODO: switch to React Query (TanStack Query)
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await callMethod<T>(methodName, stableArgs);
-        setResult({ isLoading: false, error: null, data });
-      } catch (error) {
-        setResult({ isLoading: false, error: error as Error, data: null });
-      }
-    };
+    if (!options.enabled) {
+      return;
+    }
 
-    fetchData();
+    triggerMethod();
   }, [methodName, stableArgs]);
 
-  return result;
+  return { result, triggerMethod };
 }
