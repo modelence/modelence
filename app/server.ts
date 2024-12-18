@@ -55,7 +55,7 @@ export async function startServer({ combinedModules }: { combinedModules: Module
         const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
         res.status(400).send(`${methodName}: ${allMessages}`);
       } else {
-        res.status(500).send(String(error));
+        res.status(500).send(error instanceof Error ? error.message : String(error));
       }
     }
   });
