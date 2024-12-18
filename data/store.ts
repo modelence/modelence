@@ -14,19 +14,21 @@ import {
   FindOptions,
   UpdateFilter,
 } from 'mongodb';
+import { z } from 'zod';
 
 import { ModelSchema } from './types';
 
-export class Store<T extends Document = Document> {
+export class Store<TSchema extends ModelSchema> {
+  readonly _type!: z.infer<z.ZodObject<TSchema>>;
+
   private readonly name: string;
-  // TODO: have a single definition for types and schema (maybe zod?)
-  private readonly schema: ModelSchema;
+  private readonly schema: TSchema;
   private readonly indexes: IndexDescription[];
-  private collection?: Collection<T>;
+  private collection?: Collection<this['_type']>;
 
   constructor(
     name: string,
-    { schema, indexes }: { schema: ModelSchema, indexes: IndexDescription[] }
+    { schema, indexes }: { schema: TSchema, indexes: IndexDescription[] }
   ) {
     this.name = name;
     this.schema = schema;
@@ -46,7 +48,7 @@ export class Store<T extends Document = Document> {
       return;
     }
 
-    this.collection = client.db().collection<T>(this.name);
+    this.collection = client.db().collection<this['_type']>(this.name);
     if (this.indexes.length > 0) {
       this.collection.createIndexes(this.indexes);
     }
@@ -61,13 +63,13 @@ export class Store<T extends Document = Document> {
   }
 
   async findOne(
-    query: Filter<T>, 
+    query: Filter<this['_type']>, 
     options?: FindOptions
-  ): Promise<WithId<T> | null> {
+  ): Promise<WithId<this['_type']> | null> {
     return await this.requireCollection().findOne(query, options);
   }
 
-  find(query: Filter<T>, options?: { sort?: Document }) {
+  find(query: Filter<this['_type']>, options?: { sort?: Document }) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
@@ -75,36 +77,36 @@ export class Store<T extends Document = Document> {
     return cursor;
   }
 
-  async fetch(query: Filter<T>, options?: { sort?: Document }) {
+  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<WithId<this['_type']>[]> {
     const cursor = this.find(query, options)
     return await cursor.toArray();
   }
 
-  async insertOne(document: OptionalUnlessRequiredId<T>): Promise<InsertOneResult> {
+  async insertOne(document: OptionalUnlessRequiredId<this['_type']>): Promise<InsertOneResult> {
     return await this.requireCollection().insertOne(document);
   }
 
-  async updateOne(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
+  async updateOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update);
   }
 
-  async upsertOne(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
+  async upsertOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(selector, update, { upsert: true });
   }
 
-  async updateMany(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
+  async updateMany(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update);
   }
 
-  async upsertMany(selector: Filter<T>, update: UpdateFilter<T>): Promise<UpdateResult> {
+  async upsertMany(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update, { upsert: true });
   }
 
-  async deleteOne(selector: Filter<T>): Promise<DeleteResult> {
+  async deleteOne(selector: Filter<this['_type']>): Promise<DeleteResult> {
     return await this.requireCollection().deleteOne(selector);
   }
 
-  async deleteMany(selector: Filter<T>): Promise<DeleteResult> {
+  async deleteMany(selector: Filter<this['_type']>): Promise<DeleteResult> {
     return await this.requireCollection().deleteMany(selector);
   }
 

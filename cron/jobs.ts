@@ -19,21 +19,14 @@ const LOCK_TRANSFER_DELAY = time.seconds(10);
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout;
 
-// TODO: get rid of, directly infer from schema
-type DataType = {
-  alias: string;
-  lastStartDate?: Date;
-  lock?: {
-    containerId: string;
-    acquireDate: Date;
-  };
-};
-
-const cronJobsCollection = new Store<DataType>('_modelenceCronJobs', {
+const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
     alias: schema.string(),
-    lastStartDate: schema.date(),
-    lock: schema.object({}),
+    lastStartDate: schema.date().optional(),
+    lock: schema.object({
+      containerId: schema.string(),
+      acquireDate: schema.date(),
+    }).optional(),
   },
   indexes: [
     { key: { alias: 1 }, unique: true, background: true },

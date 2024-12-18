@@ -6,30 +6,22 @@ import { schema } from '../data/types';
 import { handleSignupWithPassword } from './signup';
 import { handleLoginWithPassword, handleLogout } from './login';
 
-// TODO: get rid of, directly infer from schema
-type DataType = {
-  handle: string;
-  emails?: Array<{
-    address: string;
-    verified: boolean;
-  }>;
-  createdAt: Date;
-  authMethods: {
-    password?: {
-      hash: string;
-    },
-    google?: {
-      id: string;
-    }
-  };
-};
-
-export const usersCollection = new Store<DataType>('_modelenceUsers', {
+export const usersCollection = new Store('_modelenceUsers', {
   schema: {
     handle: schema.string(),
-    emails: [schema.object({})],
+    emails: schema.array(schema.object({
+      address: schema.string(),
+      verified: schema.boolean(),
+    })).optional(),
     createdAt: schema.date(),
-    authMethods: schema.object({}),
+    authMethods: schema.object({
+      password: schema.object({
+        hash: schema.string(),
+      }).optional(),
+      google: schema.object({
+        id: schema.string(),
+      }).optional(),
+    }),
   },
   indexes: [
     {
