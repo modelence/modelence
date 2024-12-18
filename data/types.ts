@@ -1,11 +1,13 @@
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
-type SingularSchemaTypeDefinition = z.ZodTypeAny; // ReturnType<typeof schema[keyof typeof schema]>;
+type SingularSchemaTypeDefinition = z.ZodType; // ReturnType<typeof schema[keyof typeof schema]>;
 
-type SchemaTypeDefinition = SingularSchemaTypeDefinition | [SingularSchemaTypeDefinition];
+type SchemaTypeDefinition = SingularSchemaTypeDefinition; // | [SingularSchemaTypeDefinition];
 
-export type ModelSchema = Record<string, SchemaTypeDefinition>;
+export type ModelSchema = {
+  [key: string]: SchemaTypeDefinition;
+};
 
 export type InferSchemaType<T extends Record<string, SchemaTypeDefinition>> = {
   [K in keyof T]: T[K] extends { type: 'string'; enum: string[] } ? T[K]['enum'][number] :
@@ -27,6 +29,8 @@ const schemaDate: typeof z.date = z.date.bind(z);
 
 const schemaBoolean: typeof z.boolean = z.boolean.bind(z);
 
+const schemaArray: typeof z.array = z.array.bind(z);
+
 const schemaObject: typeof z.object = z.object.bind(z);
 
 const schemaEnum: typeof z.enum = z.enum.bind(z);
@@ -36,6 +40,7 @@ export const schema = {
   number: schemaNumber,
   date: schemaDate,
   boolean: schemaBoolean,
+  array: schemaArray,
   object: schemaObject,
   enum: schemaEnum,
   objectId(): z.ZodType<ObjectId> {

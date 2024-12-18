@@ -7,19 +7,12 @@ import { Store } from '../data/store';
 import { schema } from '../data/types';
 import { ObjectId } from 'mongodb';
 
-type DataType = {
-  authToken: string;
-  createdAt: Date;
-  expiresAt: Date;
-  userId: ObjectId | null;
-};
-
-export const sessionsCollection = new Store<DataType>('_modelenceSessions', {
+export const sessionsCollection = new Store('_modelenceSessions', {
   schema: {
     authToken: schema.string(),
     createdAt: schema.date(),
     expiresAt: schema.date(),
-    userId: schema.userId(),
+    userId: schema.userId().nullable(),
   },
   indexes: [
     { key: { authToken: 1 }, unique: true },
