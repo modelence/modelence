@@ -13,6 +13,7 @@ import {
   OptionalUnlessRequiredId,
   FindOptions,
   UpdateFilter,
+  ObjectId,
 } from 'mongodb';
 import { z } from 'zod';
 
@@ -69,12 +70,33 @@ export class Store<TSchema extends ModelSchema> {
     return await this.requireCollection().findOne(query, options);
   }
 
+  async requireOne(query: Filter<this['_type']>, options?: FindOptions): Promise<WithId<this['_type']>> {
+    
+    const result = await this.findOne(query, options);
+    if (!result) {
+      throw new Error(`Record not found in ${this.name}`);
+    }
+    return result;
+  }
+
   find(query: Filter<this['_type']>, options?: { sort?: Document }) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
     }
     return cursor;
+  }
+
+  async findById(id: string): Promise<WithId<this['_type']> | null> {
+    return await this.findOne({ _id: new ObjectId(id) } as Filter<this['_type']>);
+  }
+
+  async requireById(id: string): Promise<WithId<this['_type']>> {
+    const result = await this.findById(id);
+    if (!result) {
+      throw new Error(`Record with id ${id} not found in ${this.name}`);
+    }
+    return result;
   }
 
   async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<WithId<this['_type']>[]> {

@@ -31,7 +31,7 @@ export function requireAccess(roles: Role[], requiredPermissions: Permission[]) 
   const missingPermission = requiredPermissions.find(permission => !hasPermission(roles, permission));
 
   if (missingPermission) {
-    throw new Error(`Access denied because of missing permission: '${missingPermission}'`);
+    throw new Error(`Access denied - missing permission: '${missingPermission}'`);
   }
 }
 
