@@ -19,20 +19,35 @@ import { z } from 'zod';
 
 import { ModelSchema } from './types';
 
-export class Store<TSchema extends ModelSchema> {
+export class Store<
+  TSchema extends ModelSchema,
+  TMethods extends Record<string, (this: z.infer<z.ZodObject<TSchema>>, ...args: Parameters<any>) => any>
+> {
   readonly _type!: z.infer<z.ZodObject<TSchema>>;
+  readonly _doc!: WithId<this['_type']>;
+  readonly _model!: this['_doc'] & TMethods;
 
   private readonly name: string;
   private readonly schema: TSchema;
+  private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
   private collection?: Collection<this['_type']>;
 
   constructor(
     name: string,
-    { schema, indexes }: { schema: TSchema, indexes: IndexDescription[] }
+    {
+      schema,
+      methods,
+      indexes
+    }: {
+      schema: TSchema;
+      methods?: TMethods;
+      indexes: IndexDescription[];
+    }
   ) {
     this.name = name;
     this.schema = schema;
+    this.methods = methods;
     this.indexes = indexes;
   }
 
@@ -55,6 +70,13 @@ export class Store<TSchema extends ModelSchema> {
     }
   }
 
+  private wrapDocument(document: this['_doc']): this['_model'] {
+    if (this.methods) {
+      return Object.assign(document, this.methods);
+    }
+    return document as this['_model'];
+  }
+
   requireCollection() {
     if (!this.collection) {
       throw new Error(`Collection ${this.name} is not provisioned`);
@@ -66,15 +88,20 @@ export class Store<TSchema extends ModelSchema> {
   async findOne(
     query: Filter<this['_type']>, 
     options?: FindOptions
-  ): Promise<WithId<this['_type']> | null> {
-    return await this.requireCollection().findOne(query, options);
+  ) {
+    const document = await this.requireCollection().findOne<this['_doc']>(query, options);
+    return document ? this.wrapDocument(document) : null;
   }
 
-  async requireOne(query: Filter<this['_type']>, options?: FindOptions): Promise<WithId<this['_type']>> {
+  async requireOne(
+    query: Filter<this['_type']>, 
+    options?: FindOptions,
+    errorHandler?: () => Error
+  ): Promise<this['_doc']> {
     
     const result = await this.findOne(query, options);
     if (!result) {
-      throw new Error(`Record not found in ${this.name}`);
+      throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
     }
     return result;
   }
@@ -87,21 +114,21 @@ export class Store<TSchema extends ModelSchema> {
     return cursor;
   }
 
-  async findById(id: string): Promise<WithId<this['_type']> | null> {
+  async findById(id: string): Promise<this['_model'] | null> {
     return await this.findOne({ _id: new ObjectId(id) } as Filter<this['_type']>);
   }
 
-  async requireById(id: string): Promise<WithId<this['_type']>> {
+  async requireById(id: string, errorHandler?: () => Error): Promise<this['_model']> {
     const result = await this.findById(id);
     if (!result) {
-      throw new Error(`Record with id ${id} not found in ${this.name}`);
+      throw errorHandler ? errorHandler() : new Error(`Record with id ${id} not found in ${this.name}`);
     }
     return result;
   }
 
-  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<WithId<this['_type']>[]> {
+  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<this['_model'][]> {
     const cursor = this.find(query, options)
-    return await cursor.toArray();
+    return (await cursor.toArray()).map(this.wrapDocument.bind(this));
   }
 
   async insertOne(document: OptionalUnlessRequiredId<this['_type']>): Promise<InsertOneResult> {
