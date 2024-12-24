@@ -1,4 +1,4 @@
-import { Session, User, Permission } from '../auth/types';
+import { Session, UserInfo, Permission } from '../auth/types';
 
 export type ClientInfo = {
   screenWidth: number;
@@ -18,7 +18,7 @@ export type ConnectionInfo = {
 
 export type Context = {
   session: Session | null;
-  user: User | null;
+  user: UserInfo | null;
   roles: string[];
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
