@@ -48,7 +48,10 @@ export const schema = {
 };
 
 export type InferDocumentType<T extends SchemaTypeDefinition> = {
-  [K in keyof T]: T[K] extends z.ZodType ? z.infer<T[K]> :
+  [K in keyof T as T[K] extends z.ZodOptional<any> ? K : never]?: (T[K] extends z.ZodType ? z.infer<T[K]> : never);
+} & {
+  [K in keyof T as T[K] extends z.ZodOptional<any> ? never : K]:
+    T[K] extends z.ZodType ? z.infer<T[K]> :
     T[K] extends Array<infer ElementType extends SchemaTypeDefinition> ? Array<InferDocumentType<ElementType>> :
     T[K] extends ObjectTypeDefinition ? InferDocumentType<T[K]> :
     never;
