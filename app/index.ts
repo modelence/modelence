@@ -135,7 +135,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-async function provisionStores(stores: Store<any>[]) {
+async function provisionStores(stores: Store<any, any>[]) {
   const client = getClient();
   if (!client) {
     throw new Error('Failed to provision stores: MongoDB client not initialized');
