@@ -2,6 +2,11 @@ import { Document, ObjectId } from 'mongodb';
 
 export type User = Document;
 
+export type UserInfo = {
+  id: string;
+  handle: string;
+};
+
 export type Role = string;
 
 export type DefaultRoles = Record<'authenticated' | 'unauthenticated', Role | null>;
