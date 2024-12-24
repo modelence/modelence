@@ -4,7 +4,7 @@ import { Store } from '../data/store';
 import { MethodDefinition } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 
-type Stores = Store<any>[];
+type Stores = Store<any, any>[];
 type Queries = Record<string, MethodDefinition<any>>;
 type Mutations = Record<string, MethodDefinition<any>>;
 
