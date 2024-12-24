@@ -15,17 +15,16 @@ import {
   UpdateFilter,
   ObjectId,
 } from 'mongodb';
-import { z } from 'zod';
 
-import { ModelSchema } from './types';
+import { ModelSchema, InferDocumentType } from './types';
 
 export class Store<
   TSchema extends ModelSchema,
-  TMethods extends Record<string, (this: z.infer<z.ZodObject<TSchema>>, ...args: Parameters<any>) => any>
+  TMethods extends Record<string, (this: InferDocumentType<TSchema>, ...args: Parameters<any>) => any>
 > {
-  readonly _type!: z.infer<z.ZodObject<TSchema>>;
-  readonly _doc!: WithId<this['_type']>;
-  readonly _model!: this['_doc'] & TMethods;
+  readonly _type!: InferDocumentType<TSchema>;
+  readonly _rawDoc!: WithId<this['_type']>;
+  readonly _doc!: this['_rawDoc'] & TMethods;
 
   private readonly name: string;
   private readonly schema: TSchema;
@@ -70,11 +69,11 @@ export class Store<
     }
   }
 
-  private wrapDocument(document: this['_doc']): this['_model'] {
+  private wrapDocument(document: this['_rawDoc']): this['_doc'] {
     if (this.methods) {
       return Object.assign(document, this.methods);
     }
-    return document as this['_model'];
+    return document as this['_doc'];
   }
 
   requireCollection() {
@@ -89,7 +88,7 @@ export class Store<
     query: Filter<this['_type']>, 
     options?: FindOptions
   ) {
-    const document = await this.requireCollection().findOne<this['_doc']>(query, options);
+    const document = await this.requireCollection().findOne<this['_rawDoc']>(query, options);
     return document ? this.wrapDocument(document) : null;
   }
 
@@ -114,11 +113,12 @@ export class Store<
     return cursor;
   }
 
-  async findById(id: string): Promise<this['_model'] | null> {
-    return await this.findOne({ _id: new ObjectId(id) } as Filter<this['_type']>);
+  async findById(id: string | ObjectId): Promise<this['_doc'] | null> {
+    const idSelector = typeof id === 'string' ? { _id: new ObjectId(id) } : { _id: id };
+    return await this.findOne(idSelector as Filter<this['_type']>);
   }
 
-  async requireById(id: string, errorHandler?: () => Error): Promise<this['_model']> {
+  async requireById(id: string | ObjectId, errorHandler?: () => Error): Promise<this['_doc']> {
     const result = await this.findById(id);
     if (!result) {
       throw errorHandler ? errorHandler() : new Error(`Record with id ${id} not found in ${this.name}`);
@@ -126,7 +126,7 @@ export class Store<
     return result;
   }
 
-  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<this['_model'][]> {
+  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<this['_doc'][]> {
     const cursor = this.find(query, options)
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));
   }

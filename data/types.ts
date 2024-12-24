@@ -1,24 +1,17 @@
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
+import { Store } from './store';
 
-type SingularSchemaTypeDefinition = z.ZodType; // ReturnType<typeof schema[keyof typeof schema]>;
-
-type SchemaTypeDefinition = SingularSchemaTypeDefinition; // | [SingularSchemaTypeDefinition];
-
-export type ModelSchema = {
+type ObjectTypeDefinition = {
   [key: string]: SchemaTypeDefinition;
 };
 
-export type InferSchemaType<T extends Record<string, SchemaTypeDefinition>> = {
-  [K in keyof T]: T[K] extends { type: 'string'; enum: string[] } ? T[K]['enum'][number] :
-    T[K] extends { type: 'string' } ? string :
-    T[K] extends { type: 'number' } ? number :
-    T[K] extends { type: 'date' } ? Date :
-    T[K] extends { type: 'boolean' } ? boolean :
-    T[K] extends { type: 'ref' } ? ObjectId :
-    // T[K] extends { type: 'array' } ? Array<InferSchemaType<{ item: T[K]['items'] }>['item']> :
-    // T[K] extends { type: 'object' } ? InferSchemaType<T[K]['properties']> :
-    any;
+type SingularSchemaTypeDefinition = z.ZodType | ObjectTypeDefinition; // ReturnType<typeof schema[keyof typeof schema]>;
+
+type SchemaTypeDefinition = SingularSchemaTypeDefinition | [SingularSchemaTypeDefinition];
+
+export type ModelSchema = {
+  [key: string]: SchemaTypeDefinition;
 };
 
 const schemaString: typeof z.string = z.string.bind(z);
@@ -49,7 +42,14 @@ export const schema = {
   userId(): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
-  ref(collection: string): z.ZodType<ObjectId> {
+  ref(collection: string | Store<any, any>): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
+};
+
+export type InferDocumentType<T extends SchemaTypeDefinition> = {
+  [K in keyof T]: T[K] extends z.ZodType ? z.infer<T[K]> :
+    T[K] extends Array<infer ElementType extends SchemaTypeDefinition> ? Array<InferDocumentType<ElementType>> :
+    T[K] extends ObjectTypeDefinition ? InferDocumentType<T[K]> :
+    never;
 };
