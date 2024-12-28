@@ -105,7 +105,7 @@ export class Store<
     return result;
   }
 
-  find(query: Filter<this['_type']>, options?: { sort?: Document }) {
+  private find(query: Filter<this['_type']>, options?: { sort?: Document }) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
