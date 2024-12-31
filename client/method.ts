@@ -57,9 +57,12 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
   return text ? JSON.parse(text) : undefined;
 }
 
-export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> {
-  const { result } = useMethod<T>(methodName, args, { enabled: true });
-  return result;
+export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & { refetch: () => void } {
+  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: true });
+  return {
+    ...result,
+    refetch: () => triggerMethod(),
+  };
 }
 
 export function useMutation<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & { mutate: () => void, mutateAsync: () => Promise<T> } {
