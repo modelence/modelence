@@ -51,14 +51,14 @@ export async function startApp(
   }
 
   if (hasRemoteBackend) {
-    const { mongodbUri, configs } = await connectCloudBackend({
+    const { configs } = await connectCloudBackend({
       configSchema,
       cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
       stores
     });
     loadConfigs(configs);
 
-    await connect(mongodbUri);
+    await connect();
   } else {
     // TODO: connect to local MongoDB
 

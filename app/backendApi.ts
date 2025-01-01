@@ -7,7 +7,7 @@ export async function connectCloudBackend(
   { configSchema, cronJobsMetadata, stores }: { 
     configSchema?: ConfigSchema, 
     cronJobsMetadata?: CronJobMetadata[], 
-    stores: Store<any>[] 
+    stores: Store<any, any>[] 
   }
 ) {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
