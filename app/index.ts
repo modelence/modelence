@@ -1,8 +1,7 @@
 import dotenv from 'dotenv';
 
 import { startServer } from './server';
-import { connect, getClient } from '../db/client';
-import { ConfigSchema } from '../config/types';
+import { connect, getClient, getMongodbUri } from '../db/client';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
@@ -10,7 +9,6 @@ import { initMetrics } from './metrics';
 import { markAppStarted } from './state';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
-import { RoleDefinition } from '../auth/types';
 import { initRoles } from '../auth/role';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
@@ -18,6 +16,8 @@ import cronModule from '../cron/jobs';
 import { Module } from './module';
 import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
 import { Store } from '../data/store';
+import { AppConfig, ConfigSchema } from '../config/types';
+import { RoleDefinition } from '../auth/types';
 
 export async function startApp(
   { modules = [], roles = {}, defaultRoles = {} }: {
@@ -57,13 +57,13 @@ export async function startApp(
       stores
     });
     loadConfigs(configs);
-
-    await connect();
   } else {
-    // TODO: connect to local MongoDB
+    loadConfigs(getLocalConfigs());
+  }
 
-    // TODO: allow loading configs from a JSON file 
-    loadConfigs([]);
+  const mongodbUri = getMongodbUri();
+  if (mongodbUri) {
+    await connect();
   }
 
   if (hasRemoteBackend) {
@@ -144,4 +144,18 @@ async function provisionStores(stores: Store<any, any>[]) {
   for (const store of stores) {
     store.provision(client);
   }
+}
+
+function getLocalConfigs(): AppConfig[] {
+  const configs: AppConfig[] = [];
+
+  if (process.env.MONGODB_URI) {
+    configs.push({
+      key: '_system.mongodbUri',
+      type: 'string',
+      value: process.env.MONGODB_URI
+    });
+  }
+
+  return configs;
 }
