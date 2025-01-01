@@ -6,7 +6,10 @@ let client: MongoClient | null = null;
 export async function connect() {
   if (client) return client;
 
-  const mongodbUri = String(getConfig('_system.mongodbUri'));
+  const mongodbUri = getMongodbUri();
+  if (!mongodbUri) {
+    throw new Error('MongoDB URI is not set');
+  }
 
   client = new MongoClient(mongodbUri, {
     serverApi: {
@@ -28,6 +31,11 @@ export async function connect() {
     client = null;
     throw err;
   }
+}
+
+export function getMongodbUri() {
+  const value = getConfig('_system.mongodbUri');
+  return value ? String(value) : undefined;
 }
 
 export function getClient() {
