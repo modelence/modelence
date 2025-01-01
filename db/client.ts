@@ -1,9 +1,12 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
+import { getConfig } from '../config/server';
 
 let client: MongoClient | null = null;
 
-export async function connect(mongodbUri: string) {
+export async function connect() {
   if (client) return client;
+
+  const mongodbUri = String(getConfig('_system.mongodbUri'));
 
   client = new MongoClient(mongodbUri, {
     serverApi: {
