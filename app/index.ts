@@ -64,9 +64,6 @@ export async function startApp(
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-  }
-
-  if (hasRemoteBackend) {
     provisionStores(stores);
   }
 
