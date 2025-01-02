@@ -8,7 +8,7 @@ type ObjectTypeDefinition = {
 
 type SingularSchemaTypeDefinition = z.ZodType | ObjectTypeDefinition; // ReturnType<typeof schema[keyof typeof schema]>;
 
-type SchemaTypeDefinition = SingularSchemaTypeDefinition | [SingularSchemaTypeDefinition];
+type SchemaTypeDefinition = SingularSchemaTypeDefinition | Array<SingularSchemaTypeDefinition>;
 
 export type ModelSchema = {
   [key: string]: SchemaTypeDefinition;
@@ -45,7 +45,10 @@ export const schema = {
   ref(collection: string | Store<any, any>): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
-};
+  infer<T extends SchemaTypeDefinition>(schema: T): InferDocumentType<T> {
+    return {} as InferDocumentType<T>;
+  }
+} as const;
 
 export type InferDocumentType<T extends SchemaTypeDefinition> = {
   [K in keyof T as T[K] extends z.ZodOptional<any> ? K : never]?: (T[K] extends z.ZodType ? z.infer<T[K]> : never);
@@ -56,3 +59,7 @@ export type InferDocumentType<T extends SchemaTypeDefinition> = {
     T[K] extends ObjectTypeDefinition ? InferDocumentType<T[K]> :
     never;
 };
+
+export namespace schema {
+  export type infer<T extends SchemaTypeDefinition> = InferDocumentType<T>;
+}
