@@ -60,7 +60,7 @@ async function callApi(endpoint: string, method: string, payload?: object) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set');
   }
 
-  const response = await fetch(`${MODELENCE_SERVICE_ENDPOINT}/${endpoint}`, {
+  const response = await fetch(`${MODELENCE_SERVICE_ENDPOINT}${endpoint}`, {
     method,
     headers: {
       'Authorization': `Bearer ${MODELENCE_SERVICE_TOKEN}`,
