@@ -57,24 +57,32 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
   return text ? JSON.parse(text) : undefined;
 }
 
-export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & { refetch: () => void } {
+export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & {
+  refetch: (args?: Args) => void
+} {
   const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: true });
   return {
     ...result,
-    refetch: () => triggerMethod(),
+    refetch: (args?: Args) => triggerMethod(args),
   };
 }
 
-export function useMutation<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & { mutate: () => void, mutateAsync: () => Promise<T> } {
+export function useMutation<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & {
+  mutate: (args?: Args) => void,
+  mutateAsync: (args?: Args) => Promise<T>
+} {
   const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: false });
   return {
     ...result,
-    mutate: () => triggerMethod(),
+    mutate: (args?: Args) => triggerMethod(args),
     mutateAsync: triggerMethod,
   };
 }
 
-export function useMethod<T>(methodName: string, args: Args = {}, options: { enabled: boolean }): { result: MethodResult<T>, triggerMethod: () => Promise<T> } {
+export function useMethod<T>(methodName: string, args: Args = {}, options: { enabled: boolean }): {
+  result: MethodResult<T>,
+  triggerMethod: (args?: Args) => Promise<T>
+} {
   // Memoize the args object to maintain reference stability and prevent infinite re-renders
   const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
 
@@ -84,10 +92,10 @@ export function useMethod<T>(methodName: string, args: Args = {}, options: { ena
     data: null,
   });
 
-  const triggerMethod = async () => {
+  const triggerMethod = async (args: Args = stableArgs) => {
     setResult({ isFetching: true, error: null, data: result.data });
     try {
-      const data = await callMethod<T>(methodName, stableArgs);
+      const data = await callMethod<T>(methodName, args);
       setResult({ isFetching: false, error: null, data });
       return data;
     } catch (error) {
