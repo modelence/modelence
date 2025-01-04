@@ -14,6 +14,8 @@ import {
   FindOptions,
   UpdateFilter,
   ObjectId,
+  BulkWriteResult,
+  AnyBulkWriteOperation,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -25,6 +27,7 @@ export class Store<
   readonly _type!: InferDocumentType<TSchema>;
   readonly _rawDoc!: WithId<this['_type']>;
   readonly _doc!: this['_rawDoc'] & TMethods;
+  readonly Doc!: this['_doc'];
 
   private readonly name: string;
   private readonly schema: TSchema;
@@ -163,6 +166,7 @@ export class Store<
     return this.requireCollection().aggregate(pipeline, options);
   }
 
-  // TODO: Add more methods as needed:
-  // insertMany, updateMany, deleteMany, etc.
+  bulkWrite(operations: AnyBulkWriteOperation<this['_type']>[]): Promise<BulkWriteResult> {
+    return this.requireCollection().bulkWrite(operations);
+  }
 }

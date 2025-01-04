@@ -45,6 +45,7 @@ export const schema = {
   ref(collection: string | Store<any, any>): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
+  union: z.union.bind(z),
   infer<T extends SchemaTypeDefinition>(schema: T): InferDocumentType<T> {
     return {} as InferDocumentType<T>;
   }
