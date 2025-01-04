@@ -16,6 +16,7 @@ import {
   ObjectId,
   BulkWriteResult,
   AnyBulkWriteOperation,
+  InsertManyResult,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -136,6 +137,10 @@ export class Store<
 
   async insertOne(document: OptionalUnlessRequiredId<this['_type']>): Promise<InsertOneResult> {
     return await this.requireCollection().insertOne(document);
+  }
+
+  async insertMany(documents: OptionalUnlessRequiredId<this['_type']>[]): Promise<InsertManyResult> {
+    return await this.requireCollection().insertMany(documents);
   }
 
   async updateOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
