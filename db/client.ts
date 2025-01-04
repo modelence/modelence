@@ -16,7 +16,8 @@ export async function connect() {
       version: ServerApiVersion.v1,
       strict: true,
       deprecationErrors: true,
-    }
+    },
+    maxPoolSize: 20
   });
 
   try {
