@@ -10,6 +10,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
+import { reviveResponseTypes } from '../methods/serialize';
 
 type Args = Record<string, unknown>;
 
@@ -54,7 +55,12 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
   }
 
   const text = await response.text();
-  return text ? JSON.parse(text) : undefined;
+  const result = text ? JSON.parse(text) : undefined;
+  if (!result) {
+    throw new Error('Invalid response from server');
+  }
+
+  return reviveResponseTypes(result.data, result.typeMap);
 }
 
 export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & {

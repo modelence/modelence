@@ -1,8 +1,8 @@
 import http from 'http';
 import express, { Request, Response } from 'express';
-// import next from 'next';
 import z from 'zod';
 import { runMethod } from '../methods';
+import { getResponseTypeMap } from '../methods/serialize';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
 import { initViteServer } from '../viteServer';
@@ -10,8 +10,6 @@ import { Module } from './module';
 import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';
 import { getUnauthenticatedRoles } from '../auth/role';
-
-const useNextJs = false;
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -38,7 +36,10 @@ export async function startServer({ combinedModules }: { combinedModules: Module
 
     try {
       const result = await runMethod(methodName, req.body.args, context);
-      res.json(result);
+      res.json({
+        data: result,
+        typeMap: getResponseTypeMap(result),
+      });
     } catch (error) {
       // TODO: introduce error codes and handle them differently
       // TODO: support multiple errors
@@ -62,11 +63,7 @@ export async function startServer({ combinedModules }: { combinedModules: Module
 
   registerModuleRoutes(app, combinedModules);
 
-  if (useNextJs) {
-    await initNextjsServer(app, isDev);
-  } else {
-    await initViteServer(app, isDev);
-  }
+  await initViteServer(app, isDev);
 
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Promise Rejection:');
@@ -87,16 +84,6 @@ export async function startServer({ combinedModules }: { combinedModules: Module
     logInfo(`Application started`, { source: 'app' });
     console.log(`Application started on port ${port}`);
   });
-}
-
-async function initNextjsServer(app: express.Application, isDev: boolean) {
-  // const nextApp = next({ dev: isDev });
-  // const nextHandler = nextApp.getRequestHandler();
-  // await nextApp.prepare();
-  
-  // app.all('*', (req: Request, res: Response) => {
-  //   return nextHandler(req, res);
-  // });
 }
 
 async function getCallContext(req: Request) {
