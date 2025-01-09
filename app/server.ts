@@ -10,6 +10,7 @@ import { Module } from './module';
 import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';
 import { getUnauthenticatedRoles } from '../auth/role';
+import { getMongodbUri } from 'db/client';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -54,7 +55,7 @@ export async function startServer({ combinedModules }: { combinedModules: Module
           .join('; ');
         const formMessages = flattened.formErrors.join('; ');
         const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
-        res.status(400).send(`${methodName}: ${allMessages}`);
+        res.status(400).send(allMessages);
       } else {
         res.status(500).send(error instanceof Error ? error.message : String(error));
       }
@@ -105,7 +106,7 @@ async function getCallContext(req: Request) {
     referrer: req.get('referrer'),
   };
 
-  const hasDatabase = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  const hasDatabase = Boolean(getMongodbUri());
   if (hasDatabase) {
     const { session, user, roles } = await authenticate(authToken);
     return {

@@ -1,5 +1,3 @@
-'use client';
-
 import { create } from 'zustand';
 import { z } from 'zod';
 import { callMethod } from './method';
