@@ -15,11 +15,19 @@ interface AppProviderProps {
   loadingElement?: ReactNode;
 }
 
+let isInitialized = false;
+
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function initConfig() {
+      if (isInitialized) {
+        return;
+      }
+
+      isInitialized = true;
+
       await initSession();
       setIsLoading(false);
     }
