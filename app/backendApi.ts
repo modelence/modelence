@@ -70,8 +70,13 @@ async function callApi(endpoint: string, method: string, payload?: object) {
   });
 
   if (!response.ok) {
-    const data = await response.json();
-    throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data?.error}`);
+    const data = await response.text();
+    try {
+      const json = JSON.parse(data);
+      throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${json?.error}`);
+    } catch (error) {
+      throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`);
+    }
   }
 
   return await response.json();
