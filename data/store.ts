@@ -27,7 +27,7 @@ export class Store<
 > {
   readonly _type!: InferDocumentType<TSchema>;
   readonly _rawDoc!: WithId<this['_type']>;
-  readonly _doc!: this['_rawDoc'] & TMethods;
+  readonly _doc!: this['_rawDoc'] & TMethods & Record<string, never>;
   readonly Doc!: this['_doc'];
 
   private readonly name: string;
@@ -74,10 +74,10 @@ export class Store<
   }
 
   private wrapDocument(document: this['_rawDoc']): this['_doc'] {
-    if (this.methods) {
-      return Object.assign(document, this.methods);
-    }
-    return document as this['_doc'];
+    const result = this.methods
+      ? Object.assign(document, this.methods)
+      : document;
+    return result as this['_doc'] & Record<string, never>;
   }
 
   requireCollection() {
@@ -143,8 +143,11 @@ export class Store<
     return await this.requireCollection().insertMany(documents);
   }
 
-  async updateOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(selector, update);
+  async updateOne(selector: Filter<this['_type']> | string, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
+    const modifiedSelector = typeof selector === 'string' 
+      ? { _id: new ObjectId(selector) } as Filter<this['_type']>
+      : selector;
+    return await this.requireCollection().updateOne(modifiedSelector, update);
   }
 
   async upsertOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
