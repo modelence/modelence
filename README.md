@@ -2,6 +2,11 @@
 
 Full-stack JavaScript framework for interactive applications
 
+# Dev Setup
+Run `npm install` first to install packages.
+
+Use `npm run dev` to keep rebuilding the package on every change for linking in local dev mode.
+
 # App setup
 
 - Create the following folder structure in your Node project:
