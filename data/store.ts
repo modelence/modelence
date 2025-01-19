@@ -23,7 +23,7 @@ import { ModelSchema, InferDocumentType } from './types';
 
 export class Store<
   TSchema extends ModelSchema,
-  TMethods extends Record<string, (this: InferDocumentType<TSchema>, ...args: Parameters<any>) => any>
+  TMethods extends Record<string, (this: InferDocumentType<TSchema> & TMethods, ...args: Parameters<any>) => any>
 > {
   readonly _type!: InferDocumentType<TSchema>;
   readonly _rawDoc!: WithId<this['_type']>;
@@ -74,10 +74,19 @@ export class Store<
   }
 
   private wrapDocument(document: this['_rawDoc']): this['_doc'] {
-    const result = this.methods
-      ? Object.assign(document, this.methods)
-      : document;
-    return result as this['_doc'] & Record<string, never>;
+    if (!this.methods) {
+      return document as this['_doc'];
+    }
+
+    const result = Object.create(
+      null,
+      Object.getOwnPropertyDescriptors({
+        ...document,
+        ...this.methods
+      })
+    );
+
+    return result as this['_doc'];
   }
 
   requireCollection() {
