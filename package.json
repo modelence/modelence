@@ -8,11 +8,16 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./server": "./dist/server.js"
+    "./server": "./dist/server.js",
+    "./cli": "./dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "dist/cli"
   ],
+  "bin": {
+    "modelence-setup": "./dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
