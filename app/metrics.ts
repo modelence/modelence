@@ -17,7 +17,10 @@ export const initMetrics = async () => {
 
   isInitialized = true;
 
-  await initElasticApm();
+  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_TELEMETRY);
+  if (isTelemetryEnabled) {
+    await initElasticApm();
+  }
 };
 
 async function initElasticApm() {
@@ -77,7 +80,7 @@ async function initElasticApm() {
 }
 
 export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
-  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_TELEMETRY);
 
   if (!isTelemetryEnabled) {
     return {

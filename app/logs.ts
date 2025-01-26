@@ -1,7 +1,7 @@
 import { getLogger } from './metrics';
 
 export function logInfo(message: string, args: object) {
-  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_TELEMETRY);
 
   if (isTelemetryEnabled) {
     getLogger().info(message, args);
@@ -9,7 +9,7 @@ export function logInfo(message: string, args: object) {
 }
 
 export function logError(message: string, args: object) {
-  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
+  const isTelemetryEnabled = Boolean(process.env.MODELENCE_SERVICE_TELEMETRY);
 
   if (isTelemetryEnabled) {
     getLogger().error(message, args);
