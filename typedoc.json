@@ -1,0 +1,31 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "./data/store.ts",
+    // "./data/types.ts",
+    "./app/module.ts",
+    "./methods/index.ts"
+  ],
+  "plugin": ["typedoc-plugin-markdown"],
+  "out": "docs/docs/api-reference/generated",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "pretty": true,
+  "gitRevision": "main",
+  "categorizeByGroup": true,
+  "categoryOrder": ["Store", "Schema", "Module", "Methods", "*"],
+  "cleanOutputDir": true,
+  "entryPointStrategy": "expand",
+  "groupOrder": ["Classes", "Variables", "Interfaces", "*"],
+  "sort": ["source-order"],
+  "hideGenerator": true,
+  "readme": "none",
+  "treatWarningsAsErrors": true,
+  "validation": {
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "intentionallyNotExported": ["InferDocumentType"],
+  "preserveAnchorCasing": true,
+  "useCodeBlocks": true
+} 

@@ -65,7 +65,7 @@ console.log(todo.isOverdue());
 
 Stores provide a comprehensive set of methods for working with MongoDB documents, including finding, inserting, updating, and deleting records. All methods are fully typed with TypeScript.
 
-See the [Store API Reference](../../api-reference/store.md) for a complete list of available methods and their usage.
+See the [Store API Reference](../../api-reference/store) for a complete list of available methods and their usage.
 
 :::tip
 Stores automatically handle MongoDB connection management, collection provisioning and index creation (as you define in the `indexes` array). Just define your store and start using it - Modelence takes care of the rest.
