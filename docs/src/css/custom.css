@@ -1,0 +1,75 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  --ifm-color-primary: #9333ea;        /* purple-600 - Keep this for good contrast on buttons/links */
+  --ifm-color-primary-dark: #7e22ce;   /* purple-700 */
+  --ifm-color-primary-darker: #6b21a8; /* purple-800 */
+  --ifm-color-primary-darkest: #581c87;/* purple-900 */
+  --ifm-color-primary-light: #a855f7;  /* purple-500 */
+  --ifm-color-primary-lighter: #c084fc; /* purple-400 */
+  --ifm-color-primary-lightest: #d8b4fe; /* purple-300 */
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #f5f3ff; /* purple-50 */
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(147, 51, 234, 0.1); /* purple-600 at 0.1 opacity */
+  
+  /* Add this new variable for hero background */
+  --ifm-hero-background-color: #f5f3ff; /* purple-50 */
+  --ifm-navbar-background-color: #f9fafb; /* gray-50 to match hero */
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme='dark'] {
+  --ifm-color-primary: #c084fc;        /* purple-400 */
+  --ifm-color-primary-dark: #a855f7;   /* purple-500 */
+  --ifm-color-primary-darker: #9333ea; /* purple-600 */
+  --ifm-color-primary-darkest: #7e22ce;/* purple-700 */
+  --ifm-color-primary-light: #d8b4fe;  /* purple-300 */
+  --ifm-color-primary-lighter: #e9d5ff;/* purple-200 */
+  --ifm-color-primary-lightest: #f3e8ff;/* purple-100 */
+  --ifm-background-color: #1a1a1a;     /* Custom dark background */
+  --ifm-background-surface-color: #262626; /* Custom dark surface */
+  --docusaurus-highlighted-code-line-bg: rgba(192, 132, 252, 0.2); /* purple-400 at 0.2 opacity */
+  
+  /* Add hero background for dark mode */
+  --ifm-hero-background-color: #262626; /* Custom dark surface */
+  --ifm-navbar-background-color: #262626; /* match dark hero */
+}
+
+/* Update the hero styles with diagonal stripes */
+.hero.hero--primary {
+  --ifm-hero-text-color: #1a1a1a; /* Dark text for contrast */
+  background-color: #f9fafb !important; /* gray-50 - Force override */
+  background-image: repeating-linear-gradient(
+    60deg,
+    transparent,
+    transparent 40px,
+    rgba(255, 255, 255, 0.8) 40px,
+    rgba(255, 255, 255, 0.8) 80px
+  ), linear-gradient(
+    60deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.8)
+  ) !important;
+}
+
+[data-theme='dark'] .hero.hero--primary {
+  --ifm-hero-text-color: #ffffff; /* Light text for dark mode */
+  background-color: #262626 !important; /* Custom dark surface - Force override */
+  background-image: repeating-linear-gradient(
+    60deg,
+    transparent,
+    transparent 40px,
+    rgba(255, 255, 255, 0.1) 40px,
+    rgba(255, 255, 255, 0.1) 80px
+  ), linear-gradient(
+    60deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.1)
+  ) !important;
+}
