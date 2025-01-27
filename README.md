@@ -1,6 +1,6 @@
 # Modelence
 
-Full-stack JavaScript framework for interactive applications
+Full-stack JavaScript framework for interactive web applications
 
 # Dev Setup
 Run `npm install` first to install packages.
