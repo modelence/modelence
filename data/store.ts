@@ -21,13 +21,41 @@ import {
 
 import { ModelSchema, InferDocumentType } from './types';
 
+/**
+ * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
+ * 
+ * @category Store
+ * @typeParam TSchema - The document schema type
+ * @typeParam TMethods - Custom methods that will be added to documents
+ * 
+ * @example
+ * ```ts
+ * const dbTodos = new Store('todos', {
+ *   schema: {
+ *     title: schema.string(),
+ *     completed: schema.boolean(),
+ *     dueDate: schema.date().optional(),
+ *     userId: schema.userId(),
+ *   },
+ *   methods: {
+ *     isOverdue() {
+ *       return this.dueDate < new Date();
+ *     }
+ *   }
+ * });
+ * ```
+ */
 export class Store<
   TSchema extends ModelSchema,
   TMethods extends Record<string, (this: InferDocumentType<TSchema> & TMethods, ...args: Parameters<any>) => any>
 > {
+  /** @internal */
   readonly _type!: InferDocumentType<TSchema>;
+  /** @internal */
   readonly _rawDoc!: WithId<this['_type']>;
+  /** @internal */
   readonly _doc!: this['_rawDoc'] & TMethods & Record<string, never>;
+  
   readonly Doc!: this['_doc'];
 
   private readonly name: string;
@@ -36,22 +64,27 @@ export class Store<
   private readonly indexes: IndexDescription[];
   private collection?: Collection<this['_type']>;
 
+  /**
+   * Creates a new Store instance
+   * 
+   * @param name - The collection name in MongoDB
+   * @param options - Store configuration
+   */
   constructor(
     name: string,
-    {
-      schema,
-      methods,
-      indexes
-    }: {
+    options: {
+      /** Document schema using Modelence schema types */
       schema: TSchema;
+      /** Custom methods to add to documents */
       methods?: TMethods;
+      /** MongoDB indexes to create */
       indexes: IndexDescription[];
     }
   ) {
     this.name = name;
-    this.schema = schema;
-    this.methods = methods;
-    this.indexes = indexes;
+    this.schema = options.schema;
+    this.methods = options.methods;
+    this.indexes = options.indexes;
   }
 
   getName() {

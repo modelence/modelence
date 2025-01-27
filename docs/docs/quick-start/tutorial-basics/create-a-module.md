@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Create a Module
 
-Modules are the core building blocks of a Modelence application. They help you organize your application's functionality into cohesive units that can contain queries, mutations, and data stores.
+Modules are the core building blocks of a Modelence application. They help you organize your application's functionality into cohesive units that can contain queries, mutations, stores, cron jobs and configurations.
 
 ## Example
 
