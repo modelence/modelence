@@ -5,9 +5,9 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Modelence Documentation',
-  tagline: 'Full-stack JavaScript framework for interactive applications',
-  favicon: 'img/favicon.ico',
+  title: 'Modelence Docs',
+  tagline: 'Full-stack JavaScript framework for interactive web applications',
+  favicon: 'img/logo.png',
 
   // Set the production url of your site here
   url: 'https://your-docusaurus-site.example.com',
@@ -76,9 +76,9 @@ const config: Config = {
       items: [
         {
           type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
+          sidebarId: 'quickStartSidebar',
           position: 'left',
-          label: 'Tutorial',
+          label: 'Quick Start',
         },
         {to: '/blog', label: 'Blog', position: 'left'},
         {

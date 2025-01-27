@@ -2,46 +2,78 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# Quick Start
 
-Let's discover **Docusaurus in less than 5 minutes**.
+Modelence applications are primarily relying on [Modelence Studio](https://studio.modelence.com), which serves as an admin dashboard for managing your applications. However, you can also start with an offline setup with limited functionality such as static hardcoded configs.
 
 ## Getting Started
 
-Get started by **creating a new site**.
+Get started by **creating a new project**.
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+### Prerequisites
 
-### What you'll need
+- [Node.js](https://nodejs.org/en/download/) version 18.0 or above
+  - When installing Node.js, make sure to check all checkboxes related to dependencies
+  - Node.js installation includes NPM (Node Package Manager) which is required
+  - You can verify your installation by running:
+    ```bash
+    node --version
+    npm --version
+    ```
 
-- [Node.js](https://nodejs.org/en/download/) version 18.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+If you see version numbers displayed for both commands, you're ready to start building with Modelence!
 
-## Generate a new site
+## Creating a new project
 
-Generate a new Docusaurus site using the **classic template**.
-
-The classic template will automatically be added to your project after you run the command:
+You can create a new Modelence project using the `create-modelence-app` npx command.
 
 ```bash
-npm init docusaurus@latest my-website classic
+npx create-modelence-app my-app
 ```
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+This command will create a new directory named `my-app` with the necessary files and folders for your project.
 
-The command also installs all necessary dependencies you need to run Docusaurus.
+## Project structure
 
-## Start your site
+The project structure for a Modelence app is as follows:
+
+```
+my-app/
+├── src/
+│   ├── client/
+│   │   ├── index.html
+│   │   ├── index.css
+│   │   ├── index.tsx
+│   │   ├── routes.ts
+│   ├── server/
+│   │   ├── app.ts
+│   ├── .env
+```
+
+- `src/client/index.html`: The main HTML template for your application. You usually don't need to edit this file.
+- `src/client/index.css`: Global CSS styles, including Tailwind CSS configuration.
+- `src/client/index.tsx`: Entry point for your React frontend where you initialize the client app.
+- `src/client/routes.ts`: Define your client-side routes and their corresponding components.
+- `src/server/app.ts`: Server entry point where you configure your backend modules and start the server.
+- `.env`: Environment variables for your application (for example Modelence Studio tokens)
+
+:::tip
+All client-side code goes in the `src/client` directory, while server-side code belongs in `src/server`. Modelence uses a clear separation between client and server code to help maintain a clean architecture. You can also use any other directories at the same level as `src/client` and `src/server` for shared code between client and server.
+:::
+
+## Start your application
+
+Install the dependencies:
+
+```bash
+cd my-app
+npm install
+```
 
 Run the development server:
 
 ```bash
-cd my-website
-npm run start
+npm run dev
 ```
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+The `npm run dev` command builds your website locally and serves it through a Vite development server, ready for you to view at http://localhost:3000/ (or the port you specified in the `.env` file).

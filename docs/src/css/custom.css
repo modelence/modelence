@@ -73,3 +73,35 @@
     rgba(255, 255, 255, 0.1)
   ) !important;
 }
+
+/* Custom tip styling */
+.theme-admonition-tip {
+  background-color: var(--ifm-background-surface-color);
+  border-left: 4px solid var(--ifm-color-primary);
+}
+
+.theme-admonition-tip .admonition-icon svg {
+  fill: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .theme-admonition-tip {
+  background-color: var(--ifm-background-surface-color);
+  border-left: 4px solid var(--ifm-color-primary);
+}
+
+/* Inline code styling */
+code {
+  background-color: #f9fafb; /* gray-50 */
+  border: 1px solid #e5e7eb; /* gray-200 */
+  color: var(--ifm-color-primary-darker);
+  /* padding: 0.2rem 0.4rem; */
+  border-radius: 0.25rem; /* Reduced from default */
+}
+
+[data-theme='dark'] code {
+  background-color: #262626; /* neutral-800 */
+  border-color: #404040; /* neutral-700 */
+  color: var(--ifm-color-primary-lighter);
+  /* padding: 0.2rem 0.4rem; */
+  border-radius: 0.25rem; /* Reduced from default */
+}
