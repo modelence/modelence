@@ -66,7 +66,6 @@ export async function startApp(
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    console.log('MongoDB connected successfully');
     provisionStores(stores);
   }
 
