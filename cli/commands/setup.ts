@@ -1,43 +1,66 @@
+import { Command } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
+import * as readline from 'readline';
 
-export async function setupCommand(args: string[]) {
-  const tokenIndex = args.indexOf('--token');
-  if (tokenIndex === -1 || !args[tokenIndex + 1]) {
-    console.error('Error: --token parameter is required');
-    process.exit(1);
-  }
+const MODELENCE_ENV_FILE = '.modelence.env';
 
-  const token = args[tokenIndex + 1];
-  await updateEnvFile(token);
+async function confirmOverwrite(): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y');
+    });
+  });
 }
 
-async function updateEnvFile(token: string) {
-  try {
-    const envPath = path.join(process.cwd(), '.env');
-    let envContent = '';
-    
+export const setupCommand = new Command('setup')
+  .description('Setup Modelence environment variables')
+  .requiredOption('-t, --token <token>', 'Modelence service token')
+  .action(async (options) => {
     try {
-      envContent = await fs.readFile(envPath, 'utf8');
+      const envPath = path.join(process.cwd(), MODELENCE_ENV_FILE);
+      let existingEnv = {};
+
+      try {
+        // Check if .modelence.env exists
+        const envContent = await fs.readFile(envPath, 'utf8');
+        existingEnv = dotenv.parse(envContent);
+
+        // Ask for confirmation before overwriting
+        const shouldContinue = await confirmOverwrite();
+        if (!shouldContinue) {
+          console.log('Setup cancelled');
+          process.exit(0);
+        }
+      } catch (error) {
+        // File doesn't exist, we'll create it
+      }
+
+      // Update or add the variables
+      const newEnv = {
+        ...existingEnv,
+        MODELENCE_CRON_INSTANCE: 1,
+        MODELENCE_SERVICE_TOKEN: options.token
+      };
+
+      // Convert to .env format
+      const envContent = Object.entries(newEnv)
+        .map(([key, value]) => `${key}="${value}"`)
+        .join('\n');
+
+      // Write the file
+      await fs.writeFile(envPath, envContent.trim() + '\n');
+      console.log(`Successfully updated ${MODELENCE_ENV_FILE} file`);
+
     } catch (error) {
-      // If file doesn't exist, start with empty content
-      envContent = '';
+      console.error(`Failed to update ${MODELENCE_ENV_FILE} file:`, error);
+      process.exit(1);
     }
-
-    // Check if MODELENCE_SERVICE_TOKEN already exists
-    if (envContent.includes('MODELENCE_SERVICE_TOKEN=')) {
-      envContent = envContent.replace(
-        /MODELENCE_SERVICE_TOKEN=["']?[^"'\n]*["']?/,
-        `MODELENCE_SERVICE_TOKEN="${token}"`
-      );
-    } else {
-      envContent += `${envContent ? '\n' : ''}MODELENCE_SERVICE_TOKEN="${token}"`;
-    }
-
-    await fs.writeFile(envPath, envContent.trim() + '\n');
-    console.log('Successfully updated MODELENCE_SERVICE_TOKEN in .env file');
-  } catch (error) {
-    console.error('Failed to update .env file:', error);
-    throw error;
-  }
-} 
+  }); 

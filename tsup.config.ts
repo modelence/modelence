@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig((options) => ({
-  entry: ['index.ts', 'client.ts', 'server.ts', 'cli/index.ts'],
+  entry: ['index.ts', 'client.ts', 'server.ts', 'cli/setup.ts'],
   format: ['esm'],
   dts: {
     resolve: true,
@@ -9,7 +9,7 @@ export default defineConfig((options) => ({
       index: 'index.ts',
       client: 'client.ts',
       server: 'server.ts',
-      cli: 'cli/index.ts'
+      cli: 'cli/setup.ts'
     }
   },
   splitting: true,
