@@ -4,7 +4,7 @@
     "./data/store.ts",
     // "./data/types.ts",
     "./app/module.ts",
-    "./methods/index.ts"
+    "./client/method.ts"
   ],
   "exclude": ["**/README.md"],
   "plugin": ["typedoc-plugin-markdown"],
