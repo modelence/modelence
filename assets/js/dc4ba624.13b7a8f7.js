@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkmodelence_docs=self.webpackChunkmodelence_docs||[]).push([[5497],{5060:e=>{e.exports=JSON.parse('{"metadata":{"permalink":"/modelence/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":4,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
