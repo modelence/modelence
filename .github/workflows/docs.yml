@@ -11,8 +11,6 @@ on:
       - '!**/node_modules/**'
       - '!docs/build/**'
       - '!.git/**'
-      - '!.github/**'
-      - '!*.md'  # Optional: exclude markdown files if you don't want them to trigger builds
 
 jobs:
   deploy:
