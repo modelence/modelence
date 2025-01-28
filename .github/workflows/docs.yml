@@ -27,8 +27,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: yarn
-          cache-dependency-path: docs/yarn.lock
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Install root dependencies (for TypeDoc)
         run: npm ci
@@ -36,7 +36,7 @@ jobs:
       - name: Install docs dependencies
         run: |
           cd docs
-          yarn install --frozen-lockfile
+          npm install
 
       - name: Generate TypeDoc
         run: npm run docs
@@ -44,7 +44,7 @@ jobs:
       - name: Build website
         run: |
           cd docs
-          yarn build
+          npm run build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
