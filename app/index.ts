@@ -27,6 +27,8 @@ export async function startApp(
   } = {}
 ) {
   dotenv.config();
+  
+  dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   const isCronEnabled = Boolean(Number(process.env.MODELENCE_CRON_INSTANCE));
@@ -64,6 +66,7 @@ export async function startApp(
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
+    console.log('MongoDB connected successfully');
     provisionStores(stores);
   }
 
