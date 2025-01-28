@@ -88,10 +88,14 @@ const config: Config = {
           position: 'left',
           label: 'API Reference',
         },
-        {to: '/blog', label: 'Blog', position: 'left'},
         {
           href: 'https://github.com/modelence/modelence',
           label: 'GitHub',
+          position: 'right',
+        },
+        {
+          href: 'https://modelence.medium.com',
+          label: 'Blog',
           position: 'right',
         },
       ],
@@ -103,8 +107,12 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Tutorial',
-              to: '/docs/intro',
+              label: 'Quick Start',
+              to: '/docs/quick-start/intro',
+            },
+            {
+              label: 'API Reference',
+              to: '/docs/api-reference/intro',
             },
           ],
         },
@@ -113,25 +121,21 @@ const config: Config = {
           items: [
             {
               label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+              href: 'https://stackoverflow.com/questions/tagged/modelence',
             },
             {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
+              label: 'LinkedIn',
+              href: 'https://www.linkedin.com/company/modelence',
             },
             {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
+              label: 'Facebook',
+              href: 'https://www.facebook.com/modelence',
             },
           ],
         },
         {
           title: 'More',
           items: [
-            {
-              label: 'Blog',
-              to: '/blog',
-            },
             {
               label: 'GitHub',
               href: 'https://github.com/modelence/modelence',
