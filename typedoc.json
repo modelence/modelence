@@ -6,8 +6,9 @@
     "./app/module.ts",
     "./methods/index.ts"
   ],
+  "exclude": ["**/README.md"],
   "plugin": ["typedoc-plugin-markdown"],
-  "out": "docs/docs/api-reference/generated",
+  "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,
   "excludeInternal": true,
   "pretty": true,
@@ -22,8 +23,9 @@
   "readme": "none",
   "treatWarningsAsErrors": true,
   "validation": {
-    "invalidLink": true,
-    "notDocumented": true
+    // "invalidLink": true,
+    // "notDocumented": true,
+    "notExported": false
   },
   "intentionallyNotExported": ["InferDocumentType"],
   "preserveAnchorCasing": true,

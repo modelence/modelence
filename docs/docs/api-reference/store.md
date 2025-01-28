@@ -14,12 +14,12 @@ Stores allow you to:
 
 ## API Reference
 
-import StoreClass from './generated/data/store/classes/Store.md';
+import StoreClass from './_generated/data/store/classes/Store.md';
 
 <StoreClass />
 <!-- ## Schema Types -->
 
-<!-- import { schema } from './generated/variables/schema.md';
+<!-- import { schema } from './_generated/variables/schema.md';
 
 <schema />
 
