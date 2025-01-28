@@ -13,7 +13,7 @@ const config: Config = {
   url: 'https://docs.modelence.com',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/modelence/',
+  baseUrl: '/',
 
   // GitHub pages deployment config.
   organizationName: 'modelence',
