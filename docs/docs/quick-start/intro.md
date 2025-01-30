@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Quick Start
 
-Modelence applications are primarily relying on [Modelence Studio](https://studio.modelence.com), which serves as an admin dashboard for managing your applications. However, you can also start with an offline setup with limited functionality such as static hardcoded configs.
+Modelence applications are primarily relying on [Modelence Cloud](https://cloud.modelence.com), which provides an admin dashboard for managing your applications, even when running local dev environments. However, you can also use an offline setup with your own configuration.
 
 ## Getting Started
 
