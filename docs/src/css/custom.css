@@ -6,20 +6,20 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #9333ea;        /* purple-600 - Keep this for good contrast on buttons/links */
-  --ifm-color-primary-dark: #7e22ce;   /* purple-700 */
-  --ifm-color-primary-darker: #6b21a8; /* purple-800 */
-  --ifm-color-primary-darkest: #581c87;/* purple-900 */
-  --ifm-color-primary-light: #a855f7;  /* purple-500 */
-  --ifm-color-primary-lighter: #c084fc; /* purple-400 */
-  --ifm-color-primary-lightest: #d8b4fe; /* purple-300 */
+  --ifm-color-primary: #7c3aed;        /* violet-600 - Keep this for good contrast on buttons/links */
+  --ifm-color-primary-dark: #6d28d9;   /* violet-700 */
+  --ifm-color-primary-darker: #5b21b6; /* violet-800 */
+  --ifm-color-primary-darkest: #4c1d95;/* violet-900 */
+  --ifm-color-primary-light: #8b5cf6;  /* violet-500 */
+  --ifm-color-primary-lighter: #a78bfa; /* violet-400 */
+  --ifm-color-primary-lightest: #c4b5fd; /* violet-300 */
   --ifm-background-color: #ffffff;
-  --ifm-background-surface-color: #f5f3ff; /* purple-50 */
+  --ifm-background-surface-color: #f5f3ff; /* violet-50 */
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(147, 51, 234, 0.1); /* purple-600 at 0.1 opacity */
+  --docusaurus-highlighted-code-line-bg: rgba(124, 58, 237, 0.1); /* violet-600 at 0.1 opacity */
   
   /* Add this new variable for hero background */
-  --ifm-hero-background-color: #f5f3ff; /* purple-50 */
+  --ifm-hero-background-color: #f5f3ff; /* violet-50 */
   --ifm-navbar-background-color: #f9fafb; /* gray-50 to match hero */
 }
 
@@ -140,4 +140,27 @@ code {
 
 [data-theme='dark'] .dropdown__link--active {
   background-color: var(--ifm-color-gray-800) !important;
+}
+
+/* Add this after the existing button styles */
+.button--dark {
+  --ifm-button-background-color: #111827; /* gray-900 */
+  --ifm-button-border-color: #111827;
+  color: #ffffff;
+}
+
+[data-theme='dark'] .button--dark {
+  --ifm-button-background-color: #1f2937; /* gray-800 for dark mode */
+  --ifm-button-border-color: #1f2937;
+  color: #ffffff;
+}
+
+.button--dark:hover {
+  --ifm-button-background-color: #1f2937; /* gray-800 */
+  --ifm-button-border-color: #1f2937;
+}
+
+[data-theme='dark'] .button--dark:hover {
+  --ifm-button-background-color: #374151; /* gray-700 for dark mode hover */
+  --ifm-button-border-color: #374151;
 }
