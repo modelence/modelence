@@ -11,32 +11,30 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'What is Modelence?',
+    Svg: require('@site/static/img/undraw_questions_g2px.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Modelence is a full-stack JavaScript framework for building and deploying interactive and AI-powered applications.
+        And Modelence Cloud is the platform built for hosting Modelence applications with zero custom setup.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: 'Who is this for?',
+    Svg: require('@site/static/img/undraw_startup-life_7hl8.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Built for startups and scaleups, by ex-startup founders. Modelence aims to solve all of your platform challenges so you can focus on your product.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: 'Main Features',
+    Svg: require('@site/static/img/undraw_features-overview_uone.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Integrated MongoDB hosting, built in user system with authentication, built in cron jobs, out of the box monitoring and observability
       </>
     ),
   },
