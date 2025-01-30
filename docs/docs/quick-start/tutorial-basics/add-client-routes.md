@@ -2,7 +2,7 @@
 sidebar_position: 3
 ---
 
-# Create client routes
+# Add client routes
 
 Modelence is not opinionated about frontend, so you are free to use any routing library you like.
 We will use React Router for this example, which is what's included in the default Modelence starter.
