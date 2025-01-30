@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Using Stores
+# Using a Store
 
 Stores in Modelence are MongoDB collections with built-in TypeScript support, schema and helper methods. They help you:
 
@@ -15,7 +15,7 @@ Stores in Modelence are MongoDB collections with built-in TypeScript support, sc
 
 Create a new store in your module file:
 
-```typescript title="src/server/todos/db.ts"
+```typescript title="src/server/todo/db.ts"
 import { Store, schema } from 'modelence';
 
 export const dbTodos = new Store('todos', {
