@@ -2,33 +2,62 @@
 sidebar_position: 3
 ---
 
-# Create a Blog Post
+# Create client routes
 
-Docusaurus creates a **page for each blog post**, but also a **blog index page**, a **tag system**, an **RSS** feed...
+Modelence is not opinionated about frontend, so you are free to use any routing library you like.
+We will use React Router for this example, which is what's included in the default Modelence starter.
 
-## Create your first Post
+## Create a new client route
 
-Create a file at `blog/2021-02-28-greetings.md`:
+Edit `src/client/routes.ts` to add a new route for our todos:
 
-```md title="blog/2021-02-28-greetings.md"
----
-slug: greetings
-title: Greetings!
-authors:
-  - name: Joel Marcey
-    title: Co-creator of Docusaurus 1
-    url: https://github.com/JoelMarcey
-    image_url: https://github.com/JoelMarcey.png
-  - name: Sébastien Lorber
-    title: Docusaurus maintainer
-    url: https://sebastienlorber.com
-    image_url: https://github.com/slorber.png
-tags: [greetings]
----
+```tsx title="src/client/routes.ts"
+import { lazy } from 'react';
 
-Congratulations, you have made your first post!
-
-Feel free to play around and edit this post as much as you like.
+export const routes = [
+  ...
+  // Add this after the other routes
+  {
+    path: '/todos',
+    Component: lazy(() => import('./TodosPage'))
+  },
+  ...
+];
 ```
 
-A new blog post is now available at [http://localhost:3000/blog/greetings](http://localhost:3000/blog/greetings).
+## Create the TodosPage component
+
+Create a new component at `src/client/TodosPage.tsx`:
+
+```tsx title="src/client/TodosPage.tsx"
+import { useQuery } from 'modelence/client';
+
+export default function TodosPage() {
+  /*
+    Modelence provides a `useQuery` React hook that fetches data from a module query.
+    It will automatically re-fetch the data if/when the query changes and can also accept arguments.
+  */
+  const { data: todos, isFetching, error } = useQuery('todo.getAll');
+
+  if (isFetching) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error.message}</div>;
+  }
+
+  return (
+    <div>
+      <h1>Todos</h1>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.title}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+Now, once you add data to your `todos` MongoDB collection, you should be able to see it at http://localhost:3000/todos
