@@ -24,7 +24,7 @@ export const dbTodos = new Store('todos', {
     title: schema.string(),
     isCompleted: schema.boolean(), 
     dueDate: schema.date().optional(),
-    userId: schema.userId(), // Build-in Modelence type for user references
+    userId: schema.userId(), // Built-in Modelence type for user references
     createdAt: schema.date(),
   },
 
