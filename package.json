@@ -38,6 +38,8 @@
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
+    "@types/node-fetch": "^2.6.11",
+    "@types/fs-extra": "^11.0.4",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^19.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
@@ -64,7 +66,10 @@
     "winston": "^3.15.0",
     "winston-elasticsearch": "^0.19.0",
     "zod": "^3.23.8",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.2",
+    "node-fetch": "^3.3.0",
+    "@octokit/rest": "^20.0.2",
+    "fs-extra": "^11.2.0"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
