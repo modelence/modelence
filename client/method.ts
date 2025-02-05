@@ -1,3 +1,8 @@
+/**
+ * @group React Hooks
+ * Client-side React hooks for data fetching and mutations
+ */
+
 /*
   The "use client" directive is specifically for the Next.js layout component, which is rendered on the server by default.
   Because of this, we are explicitly marking it as a client component, so we can render this component on the client
