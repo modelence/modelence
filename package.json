@@ -1,8 +1,8 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.1.8",
-  "description": "Full-stack JavaScript platform for startups",
+  "version": "0.1.9",
+  "description": "Full-stack JavaScript framework for startups",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
   "exports": {
