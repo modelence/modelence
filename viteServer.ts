@@ -1,6 +1,5 @@
 import { createServer, defineConfig } from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
-import eslintPlugin from 'vite-plugin-eslint';
 import path from 'path';
 import fs from 'fs';
 import express from 'express';
@@ -49,6 +48,7 @@ async function getConfig() {
   const plugins = [reactPlugin(), modelenceAssetPlugin()];
 
   if (eslintConfigFile) {
+    const eslintPlugin = (await import('vite-plugin-eslint')).default;
     plugins.push(
       eslintPlugin({
         failOnError: false,
