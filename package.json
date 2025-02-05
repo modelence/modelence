@@ -46,11 +46,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@aws-sdk/client-amp": "^3.665.0",
-    "@aws-sdk/client-sts": "^3.665.0",
-    "@aws-sdk/types": "^3.664.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "aws-sigv4-fetch": "^4.0.1",
     "bcrypt": "^5.1.1",
     "dotenv": "^16.4.5",
     "elastic-apm-node": "^4.8.0",

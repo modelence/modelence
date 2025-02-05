@@ -12,7 +12,6 @@ import sessionModule from '../auth/session';
 import { initRoles } from '../auth/role';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
-// import { createStsClient } from './aws';
 import { Module } from './module';
 import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
 import { Store } from '../data/store';
