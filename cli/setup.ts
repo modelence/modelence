@@ -44,6 +44,11 @@ async function confirmOverwrite(): Promise<boolean> {
   });
 }
 
+function escapeEnvValue(value: string | number): string {
+  // Convert to string and escape quotes
+  return String(value).replace(/"/g, '\\"');
+}
+
 const program = new Command()
   .name('modelence-setup')
   .description('Setup Modelence environment variables')
@@ -84,9 +89,9 @@ const program = new Command()
         MODELENCE_CONTAINER_ID: config.containerId,
       };
 
-      // Convert to .env format
+      // Convert to .env format with escaped values
       const envContent = Object.entries(newEnv)
-        .map(([key, value]) => `${key}="${value}"`)
+        .map(([key, value]) => `${key}="${escapeEnvValue(value)}"`)
         .join('\n');
 
       // Write the file
