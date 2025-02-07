@@ -1,5 +1,4 @@
 import elasticApm from 'elastic-apm-node';
-import { Writable } from 'stream';
 import winston from 'winston';
 import { ElasticsearchTransport } from 'winston-elasticsearch';
 

@@ -1,13 +1,13 @@
 # Modelence
 
-Full-stack JavaScript framework for interactive applications
+Full-stack JavaScript framework for interactive web applications
 
-# Dev Setup
+## Dev Setup
 Run `npm install` first to install packages.
 
 Use `npm run dev` to keep rebuilding the package on every change for linking in local dev mode.
 
-# App setup
+## App setup
 
 - Create the following folder structure in your Node project:
 
@@ -107,3 +107,9 @@ export default {
   },
 };
 ```
+
+## Documentation
+
+[Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
+
+(For open-source contributors: To generate docs when developing locally, run `npm run docs`.)

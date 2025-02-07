@@ -1,0 +1,166 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+  --ifm-color-primary: #7c3aed;        /* violet-600 - Keep this for good contrast on buttons/links */
+  --ifm-color-primary-dark: #6d28d9;   /* violet-700 */
+  --ifm-color-primary-darker: #5b21b6; /* violet-800 */
+  --ifm-color-primary-darkest: #4c1d95;/* violet-900 */
+  --ifm-color-primary-light: #8b5cf6;  /* violet-500 */
+  --ifm-color-primary-lighter: #a78bfa; /* violet-400 */
+  --ifm-color-primary-lightest: #c4b5fd; /* violet-300 */
+  --ifm-background-color: #ffffff;
+  --ifm-background-surface-color: #f5f3ff; /* violet-50 */
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(124, 58, 237, 0.1); /* violet-600 at 0.1 opacity */
+  
+  /* Add this new variable for hero background */
+  --ifm-hero-background-color: #f5f3ff; /* violet-50 */
+  --ifm-navbar-background-color: #f9fafb; /* gray-50 to match hero */
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme='dark'] {
+  --ifm-color-primary: #c084fc;        /* purple-400 */
+  --ifm-color-primary-dark: #a855f7;   /* purple-500 */
+  --ifm-color-primary-darker: #9333ea; /* purple-600 */
+  --ifm-color-primary-darkest: #7e22ce;/* purple-700 */
+  --ifm-color-primary-light: #d8b4fe;  /* purple-300 */
+  --ifm-color-primary-lighter: #e9d5ff;/* purple-200 */
+  --ifm-color-primary-lightest: #f3e8ff;/* purple-100 */
+  --ifm-background-color: #1a1a1a;     /* Custom dark background */
+  --ifm-background-surface-color: #262626; /* Custom dark surface */
+  --docusaurus-highlighted-code-line-bg: rgba(192, 132, 252, 0.2); /* purple-400 at 0.2 opacity */
+  
+  /* Add hero background for dark mode */
+  --ifm-hero-background-color: #262626; /* Custom dark surface */
+  --ifm-navbar-background-color: #262626; /* match dark hero */
+}
+
+/* Update the hero styles with diagonal stripes */
+.hero.hero--primary {
+  --ifm-hero-text-color: #1a1a1a; /* Dark text for contrast */
+  background-color: #f9fafb !important; /* gray-50 - Force override */
+  background-image: repeating-linear-gradient(
+    60deg,
+    transparent,
+    transparent 40px,
+    rgba(255, 255, 255, 0.8) 40px,
+    rgba(255, 255, 255, 0.8) 80px
+  ), linear-gradient(
+    60deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.8)
+  ) !important;
+}
+
+[data-theme='dark'] .hero.hero--primary {
+  --ifm-hero-text-color: #ffffff; /* Light text for dark mode */
+  background-color: #262626 !important; /* Custom dark surface - Force override */
+  background-image: repeating-linear-gradient(
+    60deg,
+    transparent,
+    transparent 40px,
+    rgba(255, 255, 255, 0.1) 40px,
+    rgba(255, 255, 255, 0.1) 80px
+  ), linear-gradient(
+    60deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.1)
+  ) !important;
+}
+
+/* Custom tip styling */
+.theme-admonition-tip {
+  background-color: var(--ifm-background-surface-color);
+  border-left: 4px solid var(--ifm-color-primary);
+}
+
+.theme-admonition-tip .admonition-icon svg {
+  fill: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .theme-admonition-tip {
+  background-color: var(--ifm-background-surface-color);
+  border-left: 4px solid var(--ifm-color-primary);
+}
+
+/* Inline code styling */
+code {
+  background-color: #f9fafb; /* gray-50 */
+  border: 1px solid #e5e7eb; /* gray-200 */
+  color: var(--ifm-color-primary-darker);
+  /* padding: 0.2rem 0.4rem; */
+  border-radius: 0.25rem; /* Reduced from default */
+}
+
+[data-theme='dark'] code {
+  background-color: #262626; /* neutral-800 */
+  border-color: #404040; /* neutral-700 */
+  color: var(--ifm-color-primary-lighter);
+  /* padding: 0.2rem 0.4rem; */
+  border-radius: 0.25rem; /* Reduced from default */
+}
+
+/* Navbar active item styling */
+.navbar__link--active {
+  position: relative;
+  color: var(--ifm-color-primary) !important;
+}
+
+[data-theme='dark'] .navbar__link--active {
+  color: var(--ifm-color-gray-100) !important;
+}
+
+.navbar__link--active:after {
+  content: '';
+  color: var(--ifm-color-primary);
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: currentColor;
+}
+
+/* Remove purple background from active item */
+.navbar__link--active:not(.dropdown__link--active) {
+  background: none;
+}
+
+/* Style dropdown active items differently */
+.dropdown__link--active {
+  font-weight: 600;
+  background-color: var(--ifm-color-gray-100) !important;
+}
+
+[data-theme='dark'] .dropdown__link--active {
+  background-color: var(--ifm-color-gray-800) !important;
+}
+
+/* Add this after the existing button styles */
+.button--dark {
+  --ifm-button-background-color: #111827; /* gray-900 */
+  --ifm-button-border-color: #111827;
+  color: #ffffff;
+}
+
+[data-theme='dark'] .button--dark {
+  --ifm-button-background-color: #1f2937; /* gray-800 for dark mode */
+  --ifm-button-border-color: #1f2937;
+  color: #ffffff;
+}
+
+.button--dark:hover {
+  --ifm-button-background-color: #1f2937; /* gray-800 */
+  --ifm-button-border-color: #1f2937;
+}
+
+[data-theme='dark'] .button--dark:hover {
+  --ifm-button-background-color: #374151; /* gray-700 for dark mode hover */
+  --ifm-button-border-color: #374151;
+}

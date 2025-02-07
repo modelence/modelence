@@ -18,14 +18,14 @@ export function startLoggerProcess({ elasticCloudId, elasticApiKey }: { elasticC
   const originalStdoutWrite = process.stdout.write;
   const originalStderrWrite = process.stderr.write;
 
-  process.stdout.write = function(chunk: any, ...args: any[]) {
-    addToBuffer(chunk, buffer.stdout);
-    return originalStdoutWrite.apply(process.stdout, [chunk, ...args]);
+  process.stdout.write = function(chunk: string | Uint8Array, ...args: any[]) {
+    addToBuffer(chunk.toString(), buffer.stdout);
+    return originalStdoutWrite.call(process.stdout, chunk, ...args);
   };
 
-  process.stderr.write = function(chunk: any, ...args: any[]) {
-    addToBuffer(chunk, buffer.stderr);
-    return originalStderrWrite.apply(process.stderr, [chunk, ...args]);
+  process.stderr.write = function(chunk: string | Uint8Array, ...args: any[]) {
+    addToBuffer(chunk.toString(), buffer.stderr);
+    return originalStderrWrite.call(process.stderr, chunk, ...args);
   };
 
   loopSendLogs();

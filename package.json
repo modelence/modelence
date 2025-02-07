@@ -1,8 +1,8 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.1.8",
-  "description": "Full-stack JavaScript platform for startups",
+  "version": "0.1.11",
+  "description": "Full-stack JavaScript framework for startups",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
   "exports": {
@@ -22,7 +22,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "docs": "typedoc"
   },
   "repository": {
     "type": "git",
@@ -39,21 +40,19 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
     "@types/fs-extra": "^11.0.4",
-    "@types/react": "^18.3.5",
+    "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsup": "^8.3.5",
+    "typedoc": "^0.27.6",
+    "typedoc-plugin-markdown": "^4.4.1",
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@aws-sdk/client-amp": "^3.665.0",
-    "@aws-sdk/client-sts": "^3.665.0",
-    "@aws-sdk/types": "^3.664.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "aws-sigv4-fetch": "^4.0.1",
     "bcrypt": "^5.1.1",
     "commander": "^12.0.0",
     "dotenv": "^16.4.5",
