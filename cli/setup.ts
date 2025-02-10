@@ -14,9 +14,8 @@ interface SetupResponse {
   containerId: string;
 }
 
-async function fetchServiceConfig(setupToken: string, endpoint: string): Promise<SetupResponse> {
-  // Using global fetch (available in Node.js 18+)
-  const response = await globalThis.fetch(`${endpoint}/api/setup`, {
+async function fetchServiceConfig(setupToken: string, host: string): Promise<SetupResponse> {
+  const response = await fetch(`${host}/api/setup`, {
     method: 'GET',
     headers: {
       'X-Modelence-Setup-Token': setupToken,
@@ -24,7 +23,8 @@ async function fetchServiceConfig(setupToken: string, endpoint: string): Promise
   });
 
   if (!response.ok) {
-    throw new Error(`Setup failed: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(errorText || `Request failed with status ${response.status}`);
   }
 
   return response.json();
@@ -53,7 +53,7 @@ const program = new Command()
   .name('modelence-setup')
   .description('Setup Modelence environment variables')
   .requiredOption('-t, --token <token>', 'Modelence setup token')
-  .option('-e, --endpoint <endpoint>', 'Modelence endpoint', 'cloud.modelence.com')
+  .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     try {
       const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
@@ -76,15 +76,15 @@ const program = new Command()
 
       // Fetch service configuration using setup token
       console.log('Fetching service configuration...');
-      const config = await fetchServiceConfig(options.token, options.endpoint);
+      const config = await fetchServiceConfig(options.token, options.host);
 
       // Update environment variables
       const newEnv = {
         ...existingEnv,
-        MODELENCE_CRON_INSTANCE: 1,
-        MODELENCE_TELEMETRY_ENABLED: '',
+        MODELENCE_CRON_ENABLED: 'true',
+        MODELENCE_TELEMETRY_ENABLED: 'false',
         MODELENCE_DEPLOYMENT_ID: config.deploymentId,
-        MODELENCE_SERVICE_ENDPOINT: config.serviceEndpoint,
+        MODELENCE_SERVICE_ENDPOINT: options.host, // TODO: Replace with config.serviceEndpoint in the future
         MODELENCE_SERVICE_TOKEN: config.serviceToken,
         MODELENCE_CONTAINER_ID: config.containerId,
       };
@@ -104,4 +104,4 @@ const program = new Command()
     }
   });
 
-program.parse();
+program.parse(process.argv);
