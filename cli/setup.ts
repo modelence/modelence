@@ -49,6 +49,16 @@ function escapeEnvValue(value: string | number): string {
   return String(value).replace(/"/g, '\\"');
 }
 
+async function backupEnvFile(envPath: string): Promise<void> {
+  try {
+    const backupPath = envPath.replace('.env', '.backup.env');
+    await fs.copyFile(envPath, backupPath);
+    console.log(`Backup created at ${backupPath}`);
+  } catch (error) {
+    console.warn('Failed to create backup file:', error);
+  }
+}
+
 const program = new Command()
   .name('modelence-setup')
   .description('Setup Modelence environment variables')
@@ -63,6 +73,9 @@ const program = new Command()
         // Check if .modelence.env exists
         const envContent = await fs.readFile(envPath, 'utf8');
         existingEnv = parseEnv(envContent);
+
+        // Create backup before overwriting
+        await backupEnvFile(envPath);
 
         // Ask for confirmation before overwriting
         const shouldContinue = await confirmOverwrite();
