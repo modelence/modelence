@@ -8,11 +8,16 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./server": "./dist/server.js"
+    "./server": "./dist/server.js",
+    "./cli": "./dist/cli/setup.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "dist/cli"
   ],
+  "bin": {
+    "modelence-setup": "./dist/cli/setup.js"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -34,6 +39,7 @@
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
+    "@types/fs-extra": "^11.0.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
@@ -48,6 +54,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "bcrypt": "^5.1.1",
+    "commander": "^12.0.0",
     "dotenv": "^16.4.5",
     "elastic-apm-node": "^4.8.0",
     "express": "^4.21.0",
@@ -57,7 +64,9 @@
     "winston": "^3.15.0",
     "winston-elasticsearch": "^0.19.0",
     "zod": "^3.23.8",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.2",
+    "@octokit/rest": "^20.0.2",
+    "fs-extra": "^11.2.0"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
