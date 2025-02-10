@@ -30,7 +30,7 @@ export async function startApp(
   dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
-  const isCronEnabled = Boolean(Number(process.env.MODELENCE_CRON_INSTANCE));
+  const isCronEnabled = Boolean(Number(process.env.MODELENCE_CRON_ENABLED));
 
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule];
