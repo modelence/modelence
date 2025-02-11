@@ -4,6 +4,7 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
+import { getAppAlias, getDeploymentAlias, getDeploymentId, getTelemetryServiceName } from './state';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -27,13 +28,25 @@ async function initElasticApm() {
   const elasticCloudId = getConfig('_system.elastic.cloudId') as string;
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
+  const appAlias = getAppAlias() ?? 'unknown';
+  const deploymentAlias = getDeploymentAlias() ?? 'unknown';
+  const deploymentId = getDeploymentId() ?? 'unknown';
+  const serviceName = getTelemetryServiceName();
+
   apm = elasticApm.start({
-    serviceName: 'typesonic',
+    serviceName,
     apiKey: elasticApiKey,
     serverUrl: elasticApmEndpoint,
     // environment: 'dev',
     transactionSampleRate: 1.0,
     centralConfig: false,
+    globalLabels: {
+      modelenceEnv: 'dev',
+      appEnv: 'dev',
+      deploymentId,
+      appAlias,
+      deploymentAlias,
+    },
     // logLevel: 'debug'
   });
 
@@ -62,6 +75,9 @@ async function initElasticApm() {
 
   logger = winston.createLogger({
     level: 'debug',
+    defaultMeta: {
+      serviceName,
+    },
     format: winston.format.combine(
       winston.format.json(),
     ),
