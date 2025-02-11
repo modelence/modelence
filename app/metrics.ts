@@ -34,7 +34,6 @@ async function initElasticApm() {
     // environment: 'dev',
     transactionSampleRate: 1.0,
     centralConfig: false,
-    // namespace: `apm_${serviceName}`, // This will create traces-apm_typesonic, metrics-apm_typesonic, etc.
     // logLevel: 'debug'
   });
 
