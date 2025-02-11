@@ -6,7 +6,7 @@ import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
-import { markAppStarted } from './state';
+import { markAppStarted, setMetadata } from './state';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
 import { initRoles } from '../auth/role';
@@ -52,12 +52,13 @@ export async function startApp(
   }
 
   if (hasRemoteBackend) {
-    const { configs } = await connectCloudBackend({
+    const { configs, deploymentId, appAlias, deploymentAlias, telemetryServiceName } = await connectCloudBackend({
       configSchema,
       cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
       stores
     });
     loadConfigs(configs);
+    setMetadata({ deploymentId, appAlias, deploymentAlias, telemetryServiceName });
   } else {
     loadConfigs(getLocalConfigs());
   }
