@@ -24,17 +24,17 @@ export const initMetrics = async () => {
 
 async function initElasticApm() {
   const elasticApmEndpoint = getConfig('_system.elastic.apmEndpoint') as string;
-  const elasticSecretToken = getConfig('_system.elastic.secretToken') as string;
   const elasticCloudId = getConfig('_system.elastic.cloudId') as string;
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   apm = elasticApm.start({
     serviceName: 'typesonic',
-    secretToken: elasticSecretToken,
+    apiKey: elasticApiKey,
     serverUrl: elasticApmEndpoint,
-    environment: 'dev',
+    // environment: 'dev',
     transactionSampleRate: 1.0,
     centralConfig: false,
+    // namespace: `apm_${serviceName}`, // This will create traces-apm_typesonic, metrics-apm_typesonic, etc.
     // logLevel: 'debug'
   });
 
