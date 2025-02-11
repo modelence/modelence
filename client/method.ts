@@ -72,6 +72,8 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
  * @typeParam T - The expected return type of the query
  * @param methodName - The name of the method to query
  * @param args - Optional arguments to pass to the method
+ * @param options - Optional options object
+ * @param options.enabled - Boolean indicating if the query should be enabled
  * @returns {Object} An object containing the query state and a refetch function:
  * - `data` - The data returned by the query, or null if not yet loaded
  * - `isFetching` - Boolean indicating if the query is in progress
@@ -93,11 +95,11 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
  * }
  * ```
  */
-export function useQuery<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & {
+export function useQuery<T = unknown>(methodName: string, args: Args = {}, options?: { enabled?: boolean }): MethodResult<T> & {
   /** Function to manually trigger a refetch of the query with optional new arguments */
   refetch: (args?: Args) => void
 } {
-  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: true });
+  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: options?.enabled ?? true });
   return {
     ...result,
     refetch: (args?: Args) => triggerMethod(args),
@@ -151,6 +153,7 @@ export function useMethod<T>(methodName: string, args: Args = {}, options: { ena
 } {
   // Memoize the args object to maintain reference stability and prevent infinite re-renders
   const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
+  const stableOptions = useMemo(() => options, [JSON.stringify(options)]);
 
   const [result, setResult] = useState<MethodResult<T>>({
     isFetching: options.enabled,
@@ -177,7 +180,7 @@ export function useMethod<T>(methodName: string, args: Args = {}, options: { ena
     }
 
     triggerMethod();
-  }, [methodName, stableArgs]);
+  }, [methodName, stableArgs, stableOptions]);
 
   return { result, triggerMethod };
 }
