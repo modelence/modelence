@@ -1,5 +1,7 @@
 # Modelence
 
+![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
+
 Full-stack JavaScript framework for interactive web applications
 
 ## Dev Setup
