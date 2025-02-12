@@ -4,7 +4,7 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
-import { getAppAlias, getDeploymentAlias, getDeploymentId, getTelemetryServiceName } from './state';
+import { getAppAlias, getDeploymentAlias, getDeploymentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -17,8 +17,7 @@ export const initMetrics = async () => {
 
   isInitialized = true;
 
-  const isTelemetryEnabled = process.env.MODELENCE_TELEMETRY_ENABLED === 'true';
-  if (isTelemetryEnabled) {
+  if (isTelemetryEnabled()) {
     await initElasticApm();
   }
 };
@@ -94,9 +93,7 @@ async function initElasticApm() {
 }
 
 export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
-  const isTelemetryEnabled = process.env.MODELENCE_TELEMETRY_ENABLED === 'true';
-
-  if (!isTelemetryEnabled) {
+  if (!isTelemetryEnabled()) {
     return {
       end: () => {
         // do nothing

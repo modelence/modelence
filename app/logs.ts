@@ -1,17 +1,14 @@
 import { getLogger } from './metrics';
+import { isTelemetryEnabled } from './state';
 
 export function logInfo(message: string, args: object) {
-  const isTelemetryEnabled = process.env.MODELENCE_TELEMETRY_ENABLED === 'true';
-
-  if (isTelemetryEnabled) {
+  if (isTelemetryEnabled()) {
     getLogger().info(message, args);
   }
 }
 
 export function logError(message: string, args: object) {
-  const isTelemetryEnabled = process.env.MODELENCE_TELEMETRY_ENABLED === 'true';
-
-  if (isTelemetryEnabled) {
+  if (isTelemetryEnabled()) {
     getLogger().error(message, args);
   }
 }
