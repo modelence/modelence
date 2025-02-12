@@ -95,7 +95,7 @@ const program = new Command()
       const newEnv = {
         ...existingEnv,
         MODELENCE_CRON_ENABLED: 'true',
-        MODELENCE_TELEMETRY_ENABLED: 'false',
+        MODELENCE_TELEMETRY_ENABLED: 'false', // TODO: Remove after all usages are gone
         MODELENCE_DEPLOYMENT_ID: config.deploymentId,
         MODELENCE_SERVICE_ENDPOINT: options.host, // TODO: Replace with config.serviceEndpoint in the future
         MODELENCE_SERVICE_TOKEN: config.serviceToken,

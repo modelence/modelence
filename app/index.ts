@@ -52,13 +52,13 @@ export async function startApp(
   }
 
   if (hasRemoteBackend) {
-    const { configs, deploymentId, appAlias, deploymentAlias, telemetryServiceName } = await connectCloudBackend({
+    const { configs, deploymentId, appAlias, deploymentAlias, telemetry } = await connectCloudBackend({
       configSchema,
       cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
       stores
     });
     loadConfigs(configs);
-    setMetadata({ deploymentId, appAlias, deploymentAlias, telemetryServiceName });
+    setMetadata({ deploymentId, appAlias, deploymentAlias, telemetry });
   } else {
     loadConfigs(getLocalConfigs());
   }

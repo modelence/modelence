@@ -2,7 +2,10 @@ type AppMetadata = {
   deploymentId: string;
   appAlias: string;
   deploymentAlias: string;
-  telemetryServiceName: string;
+  telemetry: {
+    isEnabled: boolean;
+    serviceName: string;
+  };
 };
 
 let appStarted = false;
@@ -33,5 +36,9 @@ export function getDeploymentAlias() {
 }
 
 export function getTelemetryServiceName() {
-  return metadata?.telemetryServiceName;
+  return metadata?.telemetry?.serviceName;
+}
+
+export function isTelemetryEnabled() {
+  return Boolean(metadata?.telemetry?.isEnabled);
 }
