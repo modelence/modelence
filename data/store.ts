@@ -47,14 +47,14 @@ import { ModelSchema, InferDocumentType } from './types';
  */
 export class Store<
   TSchema extends ModelSchema,
-  TMethods extends Record<string, (this: InferDocumentType<TSchema> & TMethods, ...args: Parameters<any>) => any> = {}
+  TMethods extends Record<string, (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: Parameters<any>) => any>
 > {
   /** @internal */
   readonly _type!: InferDocumentType<TSchema>;
   /** @internal */
   readonly _rawDoc!: WithId<this['_type']>;
   /** @internal */
-  readonly _doc!: Omit<this['_rawDoc'] & TMethods, never>;
+  readonly _doc!: this['_rawDoc'] & TMethods;
   
   readonly Doc!: this['_doc'];
 
