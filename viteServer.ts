@@ -26,9 +26,9 @@ export async function initViteServer(app: express.Application, isDev: boolean) {
       }
     });
   } else {
-    app.use(express.static('.modelence/client'));
+    app.use(express.static('.modelence/build/client'));
     app.get('*', (req, res) => {
-      res.sendFile('index.html', { root: '.modelence/client' });
+      res.sendFile('index.html', { root: '.modelence/build/client' });
     });
   }
 }
@@ -63,7 +63,7 @@ async function getConfig() {
     plugins,
     root: appDir,
     build: {
-      outDir: '.modelence/client',
+      outDir: '.modelence/build/client',
       emptyOutDir: true
     },
     server: {

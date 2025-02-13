@@ -44,7 +44,7 @@ npm install --save-dev tailwindcss postcss autoprefixer
 ```json
 {
   "compilerOptions": {
-    "outDir": "./.modelence/",
+    "outDir": "./.modelence/build/",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
