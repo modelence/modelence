@@ -58,5 +58,30 @@ export async function deploy(options: {} = {}) {
 
   const stats = await fs.stat(outputFile);
   console.log(`Deployment bundle created at: ${outputFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
-  // TODO: Upload the bundle to Modelence Cloud
+
+  // TODO: Add authentication
+  const deploymentId = '677d93fe2cdf304863f3a0f6';
+  const response = await fetch(`http://localhost:3000/api/deployments/${deploymentId}/deploy`, {
+    method: 'POST',
+    headers: {
+    },
+  });
+  const { uploadUrl } = await response.json();
+
+  console.log('uploadUrl', uploadUrl);
+
+  const fileBuffer = await fs.readFile(outputFile);
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: fileBuffer,
+    headers: {
+      'Content-Type': 'application/zip',
+    },
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Failed to upload bundle: ${uploadResponse.statusText}`);
+  }
+
+  console.log('Successfully uploaded bundle to Modelence Cloud');
 }
