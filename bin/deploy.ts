@@ -6,6 +6,9 @@ import { parse as parseDotenv } from 'dotenv';
 
 let studioBaseUrl = '';
 
+// TODO: Determine dynamically
+const deploymentId = '677d93fe2cdf304863f3a0f6';
+
 export async function deploy(options: {} = {}) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
@@ -32,7 +35,9 @@ export async function deploy(options: {} = {}) {
 
   await createBundle(modelenceDir, outputFile);
 
-  await uploadBundle(outputFile);
+  const { bundleName } = await uploadBundle(outputFile);
+
+  await triggerDeployment(bundleName);
 }
 
 async function buildProject(modelenceDir: string) {
@@ -106,13 +111,12 @@ async function createBundle(modelenceDir: string, outputFile: string) {
 async function uploadBundle(outputFile: string) {
   // TODO: Add authentication
 
-  const deploymentId = '677d93fe2cdf304863f3a0f6';
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/upload`), {
     method: 'POST',
     headers: {
     },
   });
-  const { uploadUrl } = await response.json();
+  const { uploadUrl, bundleName } = await response.json();
 
   const fileBuffer = await fs.readFile(outputFile);
   const uploadResponse = await fetch(uploadUrl, {
@@ -128,6 +132,30 @@ async function uploadBundle(outputFile: string) {
   }
 
   console.log('Successfully uploaded bundle to Modelence Cloud');
+  console.log(`Bundle name: ${bundleName}`);
+
+  return { bundleName };
+}
+
+async function triggerDeployment(bundleName: string) {
+  // TODO: Add authentication
+  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/deploy`), {
+    method: 'POST',
+    headers: {
+    },
+    body: JSON.stringify({
+      bundleName,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to trigger deployment: ${response.statusText}`);
+  }
+
+  const { deploymentUrl } = await response.json();
+
+  console.log('Successfully triggered deployment');
+  console.log(`Follow your deployment progress at: ${deploymentUrl}`);
 }
 
 function getStudioUrl(path: string) {
