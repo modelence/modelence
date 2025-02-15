@@ -2,10 +2,29 @@ import { createWriteStream, promises as fs } from 'fs';
 import { execSync } from 'child_process';
 import { join } from 'path';
 import archiver from 'archiver';
+import { parse as parseDotenv } from 'dotenv';
+
+let studioBaseUrl = '';
 
 export async function deploy(options: {} = {}) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
+
+  try {
+    const envContent = await fs.readFile(join(process.cwd(), '.modelence.env'), 'utf-8');
+    const env = parseDotenv(envContent);
+    
+    studioBaseUrl = env.MODELENCE_SERVICE_ENDPOINT;
+    if (!studioBaseUrl) {
+      throw new Error('MODELENCE_SERVICE_ENDPOINT not found in .modelence.env');
+    }
+
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error('.modelence.env file not found in current directory');
+    }
+    throw error;
+  }
 
   const outputFile = join(modelenceDir, 'bundle.zip');
 
@@ -112,5 +131,5 @@ async function uploadBundle(outputFile: string) {
 }
 
 function getStudioUrl(path: string) {
-  return `http://localhost:3000${path}`;
+  return `${studioBaseUrl}${path}`;
 }
