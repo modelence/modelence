@@ -8,6 +8,7 @@ export type RouteParams = {
   params: Record<string, string>;
   headers: Record<string, string>;
   cookies: Record<string, string>;
+  req: Request;
 }
 
 export type RouteResponse<T = any> = {
