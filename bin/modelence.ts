@@ -3,6 +3,8 @@
 import { Command } from 'commander';
 import { setup } from './setup';
 import { deploy } from './deploy';
+import { loadEnv } from './config';
+
 const program = new Command()
   .name('modelence')
   .description('Modelence CLI tool')
@@ -25,5 +27,6 @@ program
     await deploy(options);
   });
 
-program.parse(process.argv);
-
+loadEnv().then(() => {
+  program.parse(process.argv);
+});

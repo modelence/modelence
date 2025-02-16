@@ -2,9 +2,8 @@ import { createWriteStream, promises as fs } from 'fs';
 import { execSync } from 'child_process';
 import { join } from 'path';
 import archiver from 'archiver';
-import { parse as parseDotenv } from 'dotenv';
-
-let studioBaseUrl = '';
+import { authenticateCli } from './auth';
+import { getStudioUrl } from './config';
 
 // TODO: Determine dynamically
 const deploymentId = '677d93fe2cdf304863f3a0f6';
@@ -12,22 +11,6 @@ const deploymentId = '677d93fe2cdf304863f3a0f6';
 export async function deploy(options: {} = {}) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
-
-  try {
-    const envContent = await fs.readFile(join(process.cwd(), '.modelence.env'), 'utf-8');
-    const env = parseDotenv(envContent);
-    
-    studioBaseUrl = env.MODELENCE_SERVICE_ENDPOINT;
-    if (!studioBaseUrl) {
-      throw new Error('MODELENCE_SERVICE_ENDPOINT not found in .modelence.env');
-    }
-
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('.modelence.env file not found in current directory');
-    }
-    throw error;
-  }
 
   const outputFile = join(modelenceDir, 'bundle.zip');
 
@@ -109,12 +92,13 @@ async function createBundle(modelenceDir: string, outputFile: string) {
 }
 
 async function uploadBundle(outputFile: string) {
-  // TODO: Add authentication
+  const { token } = await authenticateCli();
 
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/upload`), {
     method: 'POST',
     headers: {
-    },
+      'Authorization': `Bearer ${token}`
+    }
   });
   const { uploadUrl, bundleName } = await response.json();
 
@@ -138,11 +122,13 @@ async function uploadBundle(outputFile: string) {
 }
 
 async function triggerDeployment(bundleName: string) {
-  // TODO: Add authentication
+  const { token } = await authenticateCli();
+
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({
       bundleName,
@@ -157,8 +143,4 @@ async function triggerDeployment(bundleName: string) {
 
   console.log('Successfully triggered deployment');
   console.log(`Follow your deployment progress at: ${deploymentUrl}`);
-}
-
-function getStudioUrl(path: string) {
-  return `${studioBaseUrl}${path}`;
 }
