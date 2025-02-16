@@ -1,4 +1,7 @@
 import { getStudioUrl } from './config';
+import open from 'open';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
 
 export async function authenticateCli() {
   // TODO: check if a token already exists in .modelence/auth.json
@@ -15,7 +18,42 @@ export async function authenticateCli() {
 
   console.log(`Please visit ${verificationUrl} to authenticate`);
   console.log(`Code: ${code}`);
+  
+  await open(verificationUrl);
 
-  // TODO: Implement authentication
-  return { token: '1234567890' };
+  const token = await waitForAuth(code);
+
+  writeFileSync(join(process.cwd(), '.modelence', 'auth.json'), JSON.stringify({ token }));
+
+  return { token };
+}
+
+async function waitForAuth(code: string): Promise<string> {
+  const pollInterval = 5 * 1000; // 5 seconds
+  const pollTimeout = 10 * 60 * 1000; // 10 minutes
+  const pollExpireTs = Date.now() + pollTimeout;
+  while (Date.now() < pollExpireTs) {
+    const token = await pollForToken(code);
+    if (token) {
+      return token;
+    }
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  throw new Error('Unable to authenticate CLI - timed out. Please try again.');
+}
+
+async function pollForToken(code: string) {
+  const response = await fetch(getStudioUrl(`/api/cli/token?code=${code}`), {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    console.error('CLI token polling failed');
+    console.error(response.statusText);
+    return null;
+  }
+
+  const { token } = await response.json();
+  return token;
 }
