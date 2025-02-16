@@ -11,7 +11,8 @@ export function createRouteHandler(handler: RouteHandler): ExpressHandler {
         body: req.body,
         params: req.params,
         headers: req.headers as Record<string, string>,
-        cookies: req.cookies
+        cookies: req.cookies,
+        req,
       });
 
       res.status(response.status || 200);
