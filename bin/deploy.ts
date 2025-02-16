@@ -142,6 +142,7 @@ async function triggerDeployment(bundleName: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/deploy`), {
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       bundleName,
