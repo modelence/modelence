@@ -18,9 +18,11 @@ export async function deploy(options: {} = {}) {
 
   await createBundle(modelenceDir, outputFile);
 
-  const { bundleName } = await uploadBundle(outputFile);
+  const { token } = await authenticateCli();
 
-  await triggerDeployment(bundleName);
+  const { bundleName } = await uploadBundle(outputFile, token);
+
+  await triggerDeployment(bundleName, token);
 }
 
 async function buildProject(modelenceDir: string) {
@@ -91,9 +93,7 @@ async function createBundle(modelenceDir: string, outputFile: string) {
   console.log(`Deployment bundle created at: ${outputFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(outputFile: string) {
-  const { token } = await authenticateCli();
-
+async function uploadBundle(outputFile: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/upload`), {
     method: 'POST',
     headers: {
@@ -121,9 +121,7 @@ async function uploadBundle(outputFile: string) {
   return { bundleName };
 }
 
-async function triggerDeployment(bundleName: string) {
-  const { token } = await authenticateCli();
-
+async function triggerDeployment(bundleName: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/deploy`), {
     method: 'POST',
     headers: {

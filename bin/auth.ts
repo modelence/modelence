@@ -33,9 +33,13 @@ async function waitForAuth(code: string): Promise<string> {
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
   const pollExpireTs = Date.now() + pollTimeout;
   while (Date.now() < pollExpireTs) {
-    const token = await pollForToken(code);
-    if (token) {
-      return token;
+    try {
+      const token = await pollForToken(code);
+      if (token) {
+        return token;
+      }
+    } catch (error) {
+      console.error('Error polling for CLI token:', error);
     }
     await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
@@ -49,9 +53,7 @@ async function pollForToken(code: string) {
   });
 
   if (!response.ok) {
-    console.error('CLI token polling failed');
-    console.error(response.statusText);
-    return null;
+    throw new Error(`CLI token polling failed: ${response.statusText}`);
   }
 
   const { token } = await response.json();
