@@ -70,47 +70,49 @@ export async function startCronJobs() {
   }
 
   const aliasList = Object.keys(cronJobs);
-  const aliasSelector = { alias: { $in: aliasList } };
+  if (aliasList.length > 0) {
+    const aliasSelector = { alias: { $in: aliasList } };
 
-  const existingLockedRecord = await cronJobsCollection.findOne({
-    ...aliasSelector,
-    'lock.containerId': { $exists: true }
-  });
+    const existingLockedRecord = await cronJobsCollection.findOne({
+      ...aliasSelector,
+      'lock.containerId': { $exists: true }
+    });
 
-  // TODO: handle different application versions with different parameters for the same job alias
+    // TODO: handle different application versions with different parameters for the same job alias
 
-  await cronJobsCollection.upsertMany(
-    aliasSelector,
-    {
-      $set: {
-        lock: {
-          containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
-          acquireDate: new Date(),
+    await cronJobsCollection.upsertMany(
+      aliasSelector,
+      {
+        $set: {
+          lock: {
+            containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
+            acquireDate: new Date(),
+          }
         }
       }
-    }
-  );
+    );
 
-  if (existingLockedRecord) {
-    await sleep(LOCK_TRANSFER_DELAY);
+    if (existingLockedRecord) {
+      await sleep(LOCK_TRANSFER_DELAY);
+    }
+
+    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+    const now = Date.now();
+    cronJobRecords.forEach((record) => {
+      const job = cronJobs[record.alias];
+      if (!job) {
+        return;
+      }
+      job.state.scheduledRunTs = record.lastStartDate ? record.lastStartDate.getTime() + job.params.interval : now;
+    });
+    Object.values(cronJobs).forEach((job) => {
+      if (!job.state.scheduledRunTs) {
+        job.state.scheduledRunTs = now;
+      }
+    });
+
+    cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
-
-  const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-  const now = Date.now();
-  cronJobRecords.forEach((record) => {
-    const job = cronJobs[record.alias];
-    if (!job) {
-      return;
-    }
-    job.state.scheduledRunTs = record.lastStartDate ? record.lastStartDate.getTime() + job.params.interval : now;
-  });
-  Object.values(cronJobs).forEach((job) => {
-    if (!job.state.scheduledRunTs) {
-      job.state.scheduledRunTs = now;
-    }
-  });
-
-  cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
 }
 
 function sleep(ms: number) {
