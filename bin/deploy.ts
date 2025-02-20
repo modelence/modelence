@@ -14,9 +14,9 @@ export async function deploy(options: {} = {}) {
 
   const outputFile = join(modelenceDir, 'bundle.zip');
 
-  await buildProject(modelenceDir);
+  await buildProject();
 
-  await createBundle(modelenceDir, outputFile);
+  await createBundle(outputFile);
 
   const { token } = await authenticateCli();
 
@@ -25,7 +25,7 @@ export async function deploy(options: {} = {}) {
   await triggerDeployment(bundleName, token);
 }
 
-async function buildProject(modelenceDir: string) {
+async function buildProject() {
   console.log('Building project...');
   
   try {
@@ -33,20 +33,21 @@ async function buildProject(modelenceDir: string) {
       cwd: process.cwd(),
       stdio: 'inherit'
     });
+
+    await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
   } catch (error) {
     console.error(error);
     throw new Error('Build failed');
   }
 
-  // Verify .modelence directory exists
   try {
-    await fs.access(modelenceDir);
+    await fs.access(getModelencePath());
   } catch (error) {
-    throw new Error('Could not find .modelence directory. Looks like something went wrong during the build.');
+    throw new Error('Could not find the .modelence directory. Looks like something went wrong during the build.');
   }
 }
 
-async function createBundle(modelenceDir: string, outputFile: string) {
+async function createBundle(outputFile: string) {
   try {
     await fs.unlink(outputFile);
     console.log('Removed existing bundle');
@@ -84,7 +85,7 @@ async function createBundle(modelenceDir: string, outputFile: string) {
 
   archive.pipe(output);
 
-  archive.directory(join(modelenceDir, 'build'), 'bundle');
+  archive.directory(getBuildPath(), 'bundle');
 
   await archive.finalize();
   await archiveComplete;
@@ -141,4 +142,18 @@ async function triggerDeployment(bundleName: string, token: string) {
 
   console.log('Successfully triggered deployment');
   console.log(`Follow your deployment progress at: ${deploymentUrl}`);
+}
+
+function getBuildPath(subPath?: string) {
+  const buildDir = getModelencePath('build');
+  return subPath ? join(buildDir, subPath) : buildDir;
+}
+
+function getProjectPath(subPath: string) {
+  return join(process.cwd(), subPath);
+}
+
+function getModelencePath(subPath?: string) {
+  const modelenceDir = join(process.cwd(), '.modelence');
+  return subPath ? join(modelenceDir, subPath) : modelenceDir;
 }
