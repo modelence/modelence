@@ -13,7 +13,7 @@ const program = new Command()
 program
   .command('setup')
   .description('Setup Modelence environment variables')
-  .option('-t, --token <token>', 'Modelence setup token')
+  .requiredOption('-t, --token <token>', 'Modelence setup token')
   .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     await setup(options);
@@ -21,8 +21,8 @@ program
 
 program
   .command('deploy')
-  .description('Deploy your Modelence application')
-  // .option('-e, --environment <env>', 'Deployment environment', 'production')
+  .description('Deploy to Modelence Cloud')
+  .requiredOption('-e, --env <env>', 'Environment (deployment alias)')
   .action(async (options) => {
     await deploy(options);
   });

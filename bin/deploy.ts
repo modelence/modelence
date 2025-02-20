@@ -5,10 +5,7 @@ import archiver from 'archiver';
 import { authenticateCli } from './auth';
 import { getStudioUrl } from './config';
 
-// TODO: Determine dynamically
-const deploymentId = '677d93fe2cdf304863f3a0f6';
-
-export async function deploy(options: {} = {}) {
+export async function deploy(options: { env: string }) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
 
@@ -20,9 +17,9 @@ export async function deploy(options: {} = {}) {
 
   const { token } = await authenticateCli();
 
-  const { bundleName } = await uploadBundle(outputFile, token);
+  const { bundleName } = await uploadBundle(options.env, outputFile, token);
 
-  await triggerDeployment(bundleName, token);
+  await triggerDeployment(options.env, bundleName, token);
 }
 
 async function buildProject() {
@@ -97,13 +94,19 @@ async function createBundle(outputFile: string) {
   console.log(`Deployment bundle created at: ${outputFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(outputFile: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/upload`), {
+async function uploadBundle(deploymentAlias: string, outputFile: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/upload`), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`
     }
   });
+
+  if (!response.ok) {
+    console.error(await response.text());
+    throw new Error(`Failed to create upload URL: ${response.statusText}`);
+  }
+
   const { uploadUrl, bundleName } = await response.json();
 
   const fileBuffer = await fs.readFile(outputFile);
@@ -125,8 +128,8 @@ async function uploadBundle(outputFile: string, token: string) {
   return { bundleName };
 }
 
-async function triggerDeployment(bundleName: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentId}/deploy`), {
+async function triggerDeployment(deploymentAlias: string, bundleName: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
