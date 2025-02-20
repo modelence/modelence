@@ -29,6 +29,9 @@ async function buildProject() {
   console.log('Building project...');
   
   try {
+    const buildDir = getBuildPath();
+    await fs.rm(buildDir, { recursive: true, force: true });
+
     execSync('npm run build', {
       cwd: process.cwd(),
       stdio: 'inherit'
