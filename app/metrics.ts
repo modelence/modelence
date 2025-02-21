@@ -113,6 +113,11 @@ export function startTransaction(type: 'method' | 'cron', name: string, context?
 }
 
 export function captureError(error: Error) {
+  if (!isTelemetryEnabled()) {
+    console.error(error);
+    return;
+  }
+
   if (!apm) {
     throw new Error('captureError: Elastic APM is not initialized');
   }

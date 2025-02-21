@@ -31,7 +31,7 @@ export async function startServer({ combinedModules }: { combinedModules: Module
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  app.post('/api/_internal/method/:methodName', async (req: Request, res: Response) => {
+  app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
     const context = await getCallContext(req);
 

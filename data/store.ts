@@ -154,10 +154,16 @@ export class Store<
     return result;
   }
 
-  private find(query: Filter<this['_type']>, options?: { sort?: Document }) {
+  private find(query: Filter<this['_type']>, options?: { sort?: Document, limit?: number, skip?: number }) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
+    }
+    if (options?.limit) {
+      cursor.limit(options.limit);
+    }
+    if (options?.skip) {
+      cursor.skip(options.skip);
     }
     return cursor;
   }
@@ -195,7 +201,7 @@ export class Store<
    * @param options - Optional options
    * @returns The documents
    */
-  async fetch(query: Filter<this['_type']>, options?: { sort?: Document }): Promise<this['_doc'][]> {
+  async fetch(query: Filter<this['_type']>, options?: { sort?: Document, limit?: number, skip?: number }): Promise<this['_doc'][]> {
     const cursor = this.find(query, options)
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));
   }
