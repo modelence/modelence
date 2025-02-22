@@ -1,0 +1,23 @@
+# Source files
+*.ts
+*.tsx
+!*.d.ts
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.git
+.github
+.gitignore
+node_modules
+test
+tests
+__tests__
+coverage
+
+# Only allow dist folder
+*
+!dist/**/*
+!package.json
+!README.md
+!LICENSE

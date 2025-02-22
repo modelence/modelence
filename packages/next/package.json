@@ -1,14 +1,16 @@
 {
   "type": "module",
   "name": "@modelence/next",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Next.js server for Modelence",
   "exports": {
     ".": {
-      "index": "./dist/index.js",
+      "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
