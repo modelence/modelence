@@ -22,7 +22,7 @@ import { viteServer } from '../viteServer';
 
 type AppOptions = {
   modules?: Module[],
-  server: AppServer,
+  server?: AppServer,
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>
 };
