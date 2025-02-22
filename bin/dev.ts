@@ -6,7 +6,6 @@ import { build } from 'tsup';
 export function dev() {
   const { serverDir, serverEntry } = getConfig();
   const serverPath = join(serverDir, serverEntry);
-  // execSync(`tsx ${serverPath}`, { stdio: 'inherit' });
 
   build({
     entry: [serverPath],
@@ -14,12 +13,17 @@ export function dev() {
     outDir: '.modelence/dev',
     clean: true,
     watch: true,
+    bundle: false,
+    splitting: false,
+    treeshake: false,
+    skipNodeModulesBundle: true,
     onSuccess: async () => {
       // Restart the server on successful builds
       try {
-        execSync('node .modelence/dev/app.js', {
+        execSync('node .modelence/dev/app.mjs', {
           stdio: 'inherit',
           env: {
+            ...process.env,
             NODE_ENV: 'development' 
           }
         });
