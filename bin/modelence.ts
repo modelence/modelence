@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { setup } from './setup';
 import { deploy } from './deploy';
+import { dev } from './dev';
 import { loadEnv } from './config';
 
 const program = new Command()
@@ -25,6 +26,13 @@ program
   .requiredOption('-e, --env <env>', 'Environment (deployment alias)')
   .action(async (options) => {
     await deploy(options);
+  });
+
+program
+  .command('dev')
+  .description('Start development server')
+  .action(async () => {
+    dev();
   });
 
 loadEnv().then(() => {
