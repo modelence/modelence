@@ -1,7 +1,7 @@
 import { parse as parseDotenv } from 'dotenv';
 import { join } from 'path';
 import fs from 'fs/promises';
-import { ModelenceConfig } from '@/packages/types';
+import { ModelenceConfig } from '../packages/types';
 
 let env: Record<string, string> | null = null;
 let config: ModelenceConfig | null = null;

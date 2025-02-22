@@ -1,35 +1,49 @@
-import { createServer, defineConfig } from 'vite';
+import { createServer, defineConfig, ViteDevServer } from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
 import express from 'express';
+import { ExpressMiddleware } from './packages/types';
 
-export async function initViteServer(app: express.Application, isDev: boolean) {
-  if (isDev) {
-    console.log('Starting Vite dev server...');
-    const vite = await createServer({
-      ...defineConfig(await getConfig()),
-      server: {
-        middlewareMode: true,
-      },
-      root: './src/client'
-    });
+class ViteServer {
+  private viteServer?: ViteDevServer;
+
+  async init() {
+    if (this.isDev()) {
+      console.log('Starting Vite dev server...');
+      this.viteServer = await createServer({
+        ...defineConfig(await getConfig()),
+        server: {
+          middlewareMode: true,
+        },
+        root: './src/client'
+      }); 
+    }
+  }
+
+  middlewares(): ExpressMiddleware[] {
+    if (this.isDev()) {
+      return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
+    }
     
-    app.use(vite.middlewares);
-    
-    app.use('*', async (req: express.Request, res: express.Response) => {
+    return [express.static('.modelence/build/client')];
+  }
+
+  handler(req: express.Request, res: express.Response) {
+    if (this.isDev()) {
       try {
         res.sendFile('index.html', { root: './src/client' });
       } catch (e) {
         console.error('Error serving index.html:', e);
         res.status(500).send('Internal Server Error');
       }
-    });
-  } else {
-    app.use(express.static('.modelence/build/client'));
-    app.get('*', (req, res) => {
+    } else {
       res.sendFile('index.html', { root: '.modelence/build/client' });
-    });
+    }
+  }
+
+  private isDev() {
+    return process.env.NODE_ENV !== 'production';
   }
 }
 
@@ -107,3 +121,5 @@ function modelenceAssetPlugin() {
     }
   };
 }
+
+export const viteServer = new ViteServer();
