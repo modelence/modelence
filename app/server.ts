@@ -30,12 +30,6 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  await server.init();
-
-  if (server.middlewares) {
-    app.use(server.middlewares());
-  }
-
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
     const context = await getCallContext(req);
@@ -72,7 +66,12 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
 
   registerModuleRoutes(app, combinedModules);
 
-  // Handle all other requests with the provided server
+  await server.init();
+
+  if (server.middlewares) {
+    app.use(server.middlewares());
+  }
+
   app.all('*', (req: Request, res: Response) => {
     return server.handler(req, res);
   });
