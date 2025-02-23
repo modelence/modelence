@@ -1,38 +1,51 @@
-import { execSync } from 'child_process';
 import { getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
+import { build as viteBuild } from 'vite';
+import path from 'path';
 
-export function build() {
-  console.log('Building Modelence project...');
-
-  tsupBuild({
-    entry: [getServerPath()],
-    format: 'esm',
-    outDir: '.modelence/dev',
-    clean: true,
-    watch: true,
-    bundle: true,
-    treeshake: false,
-    skipNodeModulesBundle: true,
-    outExtension: ({ format }) => ({
-      js: '.mjs'
-    }),
-    onSuccess: async () => {
-      // Restart the server on successful builds
-      try {
-        execSync('node .modelence/dev/app.mjs', {
-          stdio: 'inherit',
-          env: {
-            ...process.env,
-            NODE_ENV: 'development' 
-          }
-        });
-      } catch (error) {
-        // Server crashed, waiting for next rebuild
-        console.error('Server crashed:', error);
-      }
+async function buildClient() {
+  console.log('Building client with Vite...');
+  await viteBuild({
+    root: './src/client',
+    build: {
+      outDir: path.resolve(process.cwd(), '.modelence/build/client'),
+      emptyOutDir: true
     }
   });
+}
+
+async function buildServer() {
+  console.log('Building server with tsup...');
+  return new Promise((resolve, reject) => {
+    tsupBuild({
+      entry: [getServerPath()],
+      format: 'esm',
+      outDir: '.modelence/build',
+      clean: true,
+      watch: false,
+      bundle: true,
+      treeshake: true,
+      skipNodeModulesBundle: false,
+      outExtension: ({ format }) => ({
+        js: '.mjs'
+      }),
+      onSuccess: async () => { resolve(undefined); }
+    });
+  });
+}
+
+export async function build() {
+  console.log('Building Modelence project...');
+  
+  try {
+    await buildServer();
+    await buildClient();
+    
+    console.log('Build completed successfully!');
+  } catch (error) {
+    console.error('Build failed:', error);
+    process.exit(1);
+  }
 }
 
 
