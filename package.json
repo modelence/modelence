@@ -8,8 +8,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./server": "./dist/server.js",
-    "./bin": "./dist/bin/modelence.js"
+    "./server": "./dist/server.js"
   },
   "files": [
     "dist",
