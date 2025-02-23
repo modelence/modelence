@@ -2,7 +2,9 @@ import { execSync } from 'child_process';
 import { getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
 
-export function dev() {
+export function build() {
+  console.log('Building Modelence project...');
+
   tsupBuild({
     entry: [getServerPath()],
     format: 'esm',
@@ -10,8 +12,6 @@ export function dev() {
     clean: true,
     watch: true,
     bundle: true,
-    minify: false,
-    sourcemap: true,
     treeshake: false,
     skipNodeModulesBundle: true,
     outExtension: ({ format }) => ({
@@ -34,3 +34,21 @@ export function dev() {
     }
   });
 }
+
+
+/*
+
+export default defineConfig({
+  root: 'src/client',
+  plugins: [react()],
+  build: {
+    outDir: path.resolve(__dirname, '.modelence/build/client'),
+    emptyOutDir: true
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  }
+});
+*/

@@ -33,6 +33,11 @@ export function getStudioUrl(path: string) {
   return `${studioBaseUrl}${path}`;
 }
 
+export function getServerPath() {
+  const { serverDir, serverEntry } = getConfig();
+  return join(serverDir, serverEntry);
+}
+
 export async function loadEnv() {
   try {
     const configPath = join(process.cwd(), 'modelence.config.ts');

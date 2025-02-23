@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import { setup } from './setup';
+import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
 import { loadEnv } from './config';
@@ -18,6 +19,13 @@ program
   .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     await setup(options);
+  });
+
+program
+  .command('build')
+  .description('Build the application')
+  .action(async () => {
+    await build();
   });
 
 program
