@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import { getBuildPath, getModelencePath, getPostBuildCommand, getProjectPath, getServerPath } from './config';
+import { getBuildPath, getModelencePath, getPostBuildCommand, getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
@@ -68,8 +68,6 @@ export async function build() {
     await buildServer();
     await buildClient();
 
-    await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
-    
     console.log('Build completed successfully!');
   } catch (error) {
     console.error(error);

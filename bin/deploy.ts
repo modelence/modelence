@@ -2,29 +2,31 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getStudioUrl, getBuildPath } from './config';
+import { getStudioUrl, getBuildPath, getProjectPath } from './config';
 import { build } from './build';
 
 export async function deploy(options: { env: string }) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
 
-  const outputFile = join(modelenceDir, 'bundle.zip');
+  const bundlePath = join(modelenceDir, 'tmp', 'bundle.zip');
 
   await build();
 
-  await createBundle(outputFile);
+  await createBundle(bundlePath);
 
   const { token } = await authenticateCli();
 
-  const { bundleName } = await uploadBundle(options.env, outputFile, token);
+  const { bundleName } = await uploadBundle(options.env, bundlePath, token);
+
+  await fs.unlink(bundlePath);
 
   await triggerDeployment(options.env, bundleName, token);
 }
 
-async function createBundle(outputFile: string) {
+async function createBundle(bundlePath: string) {
   try {
-    await fs.unlink(outputFile);
+    await fs.unlink(bundlePath);
     console.log('Removed existing bundle');
   } catch (error) {
     // Ignore error if file doesn't exist
@@ -35,7 +37,11 @@ async function createBundle(outputFile: string) {
 
   console.log('Creating deployment bundle...');
 
-  const output = createWriteStream(outputFile);
+  await fs.mkdir(join(bundlePath, '..'), { recursive: true });
+
+  await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
+
+  const output = createWriteStream(bundlePath);
   const archive = archiver('zip', {
     zlib: { level: 9 } // Maximum compression
   });
@@ -60,16 +66,16 @@ async function createBundle(outputFile: string) {
 
   archive.pipe(output);
 
-  archive.directory(getBuildPath(), 'bundle');
+  archive.directory(getBuildPath(), bundlePath);
 
   await archive.finalize();
   await archiveComplete;
 
-  const stats = await fs.stat(outputFile);
-  console.log(`Deployment bundle created at: ${outputFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+  const stats = await fs.stat(bundlePath);
+  console.log(`Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(deploymentAlias: string, outputFile: string, token: string) {
+async function uploadBundle(deploymentAlias: string, bundlePath: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/upload`), {
     method: 'POST',
     headers: {
@@ -84,7 +90,7 @@ async function uploadBundle(deploymentAlias: string, outputFile: string, token: 
 
   const { uploadUrl, bundleName } = await response.json();
 
-  const fileBuffer = await fs.readFile(outputFile);
+  const fileBuffer = await fs.readFile(bundlePath);
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
     body: fileBuffer,
