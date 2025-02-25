@@ -26,7 +26,7 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
     
-    return [express.static('.modelence/build/client')];
+    return [express.static('./client')];
   }
 
   handler(req: express.Request, res: express.Response) {
@@ -38,7 +38,7 @@ class ViteServer implements AppServer {
         res.status(500).send('Internal Server Error');
       }
     } else {
-      res.sendFile('index.html', { root: '.modelence/build/client' });
+      res.sendFile('index.html', { root: './client' });
     }
   }
 
