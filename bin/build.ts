@@ -1,6 +1,6 @@
 import { getPostBuildCommand, getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
-import { build as viteBuild } from 'vite';
+import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
 import { execSync } from 'child_process';
 
@@ -12,14 +12,29 @@ async function buildClient() {
     return;
   }
 
+  await buildVite();
+}
+
+async function buildVite() {
   console.log('Building client with Vite...');
-  await viteBuild({
-    root: './src/client',
+
+  const userConfig = await loadConfigFromFile({
+    command: 'build',
+    mode: process.env.NODE_ENV || 'production',
+  });
+
+  const modelenceConfig = {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client'),
       emptyOutDir: true
     }
-  });
+  };
+
+  await viteBuild(mergeConfig(
+    userConfig?.config || {},
+    modelenceConfig,
+    true
+  ));
 }
 
 async function buildServer() {
