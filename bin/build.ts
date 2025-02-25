@@ -1,4 +1,5 @@
-import { getPostBuildCommand, getServerPath } from './config';
+import fs from 'fs/promises';
+import { getBuildPath, getModelencePath, getPostBuildCommand, getProjectPath, getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
@@ -59,15 +60,27 @@ async function buildServer() {
 
 export async function build() {
   console.log('Building Modelence project...');
-  
+
   try {
+    const buildDir = getBuildPath();
+    await fs.rm(buildDir, { recursive: true, force: true });
+  
     await buildServer();
     await buildClient();
+
+    await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
     
     console.log('Build completed successfully!');
   } catch (error) {
-    console.error('Build failed:', error);
-    process.exit(1);
+    console.error(error);
+    throw new Error('Build failed');
+  }
+
+
+  try {
+    await fs.access(getModelencePath());
+  } catch (error) {
+    throw new Error('Could not find the .modelence directory. Looks like something went wrong during the build.');
   }
 }
 

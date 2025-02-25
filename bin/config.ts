@@ -42,6 +42,20 @@ export function getPostBuildCommand() {
   return getConfig().postBuildCommand;
 }
 
+export function getBuildPath(subPath?: string) {
+  const buildDir = getModelencePath('build');
+  return subPath ? join(buildDir, subPath) : buildDir;
+}
+
+export function getProjectPath(subPath: string) {
+  return join(process.cwd(), subPath);
+}
+
+export function getModelencePath(subPath?: string) {
+  const modelenceDir = join(process.cwd(), '.modelence');
+  return subPath ? join(modelenceDir, subPath) : modelenceDir;
+}
+
 export async function loadEnv() {
   try {
     const configPath = join(process.cwd(), 'modelence.config.ts');
