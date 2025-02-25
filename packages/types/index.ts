@@ -9,6 +9,7 @@ export type ExpressMiddleware = (
 export interface ModelenceConfig {
   serverDir: string;
   serverEntry: string;
+  postBuildCommand?: string;
 }
 
 // Base interface for different server options like NextServer and others

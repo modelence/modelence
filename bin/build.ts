@@ -1,9 +1,17 @@
-import { getServerPath } from './config';
+import { getPostBuildCommand, getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild } from 'vite';
 import path from 'path';
+import { execSync } from 'child_process';
 
 async function buildClient() {
+  const postBuildCommand = getPostBuildCommand();
+  if (postBuildCommand) {
+    console.log('Running post-build command...');
+    execSync(postBuildCommand);
+    return;
+  }
+
   console.log('Building client with Vite...');
   await viteBuild({
     root: './src/client',

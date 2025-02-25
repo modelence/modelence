@@ -38,6 +38,10 @@ export function getServerPath() {
   return join(serverDir, serverEntry);
 }
 
+export function getPostBuildCommand() {
+  return getConfig().postBuildCommand;
+}
+
 export async function loadEnv() {
   try {
     const configPath = join(process.cwd(), 'modelence.config.ts');
@@ -53,7 +57,8 @@ export async function loadEnv() {
     }
     config = z.object({
       serverDir: z.string(),
-      serverEntry: z.string()
+      serverEntry: z.string(),
+      postBuildCommand: z.string().optional()
     }).parse(configModule);
   } catch (error) {
     console.error(error);
