@@ -21,7 +21,7 @@ export async function deploy(options: { env: string }) {
 
   await fs.unlink(bundlePath);
 
-  await triggerDeployment(options.env, bundleName, token);
+  await triggerDeployment(options.env, bundleName, join('.modelence', 'build', 'app.mjs'), token);
 }
 
 async function createBundle(bundlePath: string) {
@@ -131,7 +131,7 @@ async function uploadBundle(deploymentAlias: string, bundlePath: string, token: 
   return { bundleName };
 }
 
-async function triggerDeployment(deploymentAlias: string, bundleName: string, token: string) {
+async function triggerDeployment(deploymentAlias: string, bundleName: string, entryPoint: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/deploy`), {
     method: 'POST',
     headers: {
@@ -140,6 +140,7 @@ async function triggerDeployment(deploymentAlias: string, bundleName: string, to
     },
     body: JSON.stringify({
       bundleName,
+      entryPoint,
     }),
   });
 
