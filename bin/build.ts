@@ -83,21 +83,3 @@ export async function build() {
     throw new Error('Could not find the .modelence directory. Looks like something went wrong during the build.');
   }
 }
-
-
-/*
-
-export default defineConfig({
-  root: 'src/client',
-  plugins: [react()],
-  build: {
-    outDir: path.resolve(__dirname, '.modelence/build/client'),
-    emptyOutDir: true
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  }
-});
-*/
