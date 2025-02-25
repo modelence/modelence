@@ -39,8 +39,6 @@ async function createBundle(bundlePath: string) {
 
   await fs.mkdir(join(bundlePath, '..'), { recursive: true });
 
-  await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
-
   const output = createWriteStream(bundlePath);
   const archive = archiver('zip', {
     zlib: { level: 9 } // Maximum compression
@@ -66,7 +64,31 @@ async function createBundle(bundlePath: string) {
 
   archive.pipe(output);
 
-  archive.directory(getBuildPath(), bundlePath);
+  const bundleFiles = [
+    'package.json',
+    'next.config.js',
+    'next.config.ts',
+    'modelence.config.ts',
+  ];
+
+  const bundleDirs = [
+    'public',
+    'server',
+    join('.modelence', 'build'),
+    '.next',
+  ];
+
+  for (const file of bundleFiles) {
+    if (await fs.access(getProjectPath(file)).then(() => true).catch(() => false)) {
+      archive.file(getProjectPath(file), { name: file });
+    }
+  }
+
+  for (const dir of bundleDirs) {
+    if (await fs.access(getProjectPath(dir)).then(() => true).catch(() => false)) {
+      archive.directory(getProjectPath(dir), dir);
+    }
+  }
 
   await archive.finalize();
   await archiveComplete;

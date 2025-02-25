@@ -52,7 +52,7 @@ export function getProjectPath(subPath: string) {
 }
 
 export function getModelencePath(subPath?: string) {
-  const modelenceDir = join(process.cwd(), '.modelence');
+  const modelenceDir = getProjectPath('.modelence');
   return subPath ? join(modelenceDir, subPath) : modelenceDir;
 }
 
