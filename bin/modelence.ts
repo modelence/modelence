@@ -2,7 +2,9 @@
 
 import { Command } from 'commander';
 import { setup } from './setup';
+import { build } from './build';
 import { deploy } from './deploy';
+import { dev } from './dev';
 import { loadEnv } from './config';
 
 const program = new Command()
@@ -20,11 +22,25 @@ program
   });
 
 program
+  .command('build')
+  .description('Build the application')
+  .action(async () => {
+    await build();
+  });
+
+program
   .command('deploy')
   .description('Deploy to Modelence Cloud')
   .requiredOption('-e, --env <env>', 'Environment (deployment alias)')
   .action(async (options) => {
     await deploy(options);
+  });
+
+program
+  .command('dev')
+  .description('Start development server')
+  .action(async () => {
+    dev();
   });
 
 loadEnv().then(() => {

@@ -1,55 +1,32 @@
 import { createWriteStream, promises as fs } from 'fs';
-import { execSync } from 'child_process';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getStudioUrl } from './config';
+import { getStudioUrl, getBuildPath, getProjectPath } from './config';
+import { build } from './build';
 
 export async function deploy(options: { env: string }) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
 
-  const outputFile = join(modelenceDir, 'bundle.zip');
+  const bundlePath = join(modelenceDir, 'tmp', 'bundle.zip');
 
-  await buildProject();
+  await build();
 
-  await createBundle(outputFile);
+  await createBundle(bundlePath);
 
   const { token } = await authenticateCli();
 
-  const { bundleName } = await uploadBundle(options.env, outputFile, token);
+  const { bundleName } = await uploadBundle(options.env, bundlePath, token);
 
-  await triggerDeployment(options.env, bundleName, token);
+  await fs.unlink(bundlePath);
+
+  await triggerDeployment(options.env, bundleName, join('.modelence', 'build', 'app.mjs'), token);
 }
 
-async function buildProject() {
-  console.log('Building project...');
-  
+async function createBundle(bundlePath: string) {
   try {
-    const buildDir = getBuildPath();
-    await fs.rm(buildDir, { recursive: true, force: true });
-
-    execSync('npm run build', {
-      cwd: process.cwd(),
-      stdio: 'inherit'
-    });
-
-    await fs.copyFile(getProjectPath('package.json'), getBuildPath('package.json'));
-  } catch (error) {
-    console.error(error);
-    throw new Error('Build failed');
-  }
-
-  try {
-    await fs.access(getModelencePath());
-  } catch (error) {
-    throw new Error('Could not find the .modelence directory. Looks like something went wrong during the build.');
-  }
-}
-
-async function createBundle(outputFile: string) {
-  try {
-    await fs.unlink(outputFile);
+    await fs.unlink(bundlePath);
     console.log('Removed existing bundle');
   } catch (error) {
     // Ignore error if file doesn't exist
@@ -60,7 +37,9 @@ async function createBundle(outputFile: string) {
 
   console.log('Creating deployment bundle...');
 
-  const output = createWriteStream(outputFile);
+  await fs.mkdir(join(bundlePath, '..'), { recursive: true });
+
+  const output = createWriteStream(bundlePath);
   const archive = archiver('zip', {
     zlib: { level: 9 } // Maximum compression
   });
@@ -85,16 +64,40 @@ async function createBundle(outputFile: string) {
 
   archive.pipe(output);
 
-  archive.directory(getBuildPath(), 'bundle');
+  const bundleFiles = [
+    'package.json',
+    'next.config.js',
+    'next.config.ts',
+    'modelence.config.ts',
+  ];
+
+  const bundleDirs = [
+    'public',
+    'server',
+    join('.modelence', 'build'),
+    '.next',
+  ];
+
+  for (const file of bundleFiles) {
+    if (await fs.access(getProjectPath(file)).then(() => true).catch(() => false)) {
+      archive.file(getProjectPath(file), { name: file });
+    }
+  }
+
+  for (const dir of bundleDirs) {
+    if (await fs.access(getProjectPath(dir)).then(() => true).catch(() => false)) {
+      archive.directory(getProjectPath(dir), dir);
+    }
+  }
 
   await archive.finalize();
   await archiveComplete;
 
-  const stats = await fs.stat(outputFile);
-  console.log(`Deployment bundle created at: ${outputFile} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+  const stats = await fs.stat(bundlePath);
+  console.log(`Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(deploymentAlias: string, outputFile: string, token: string) {
+async function uploadBundle(deploymentAlias: string, bundlePath: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/upload`), {
     method: 'POST',
     headers: {
@@ -109,7 +112,7 @@ async function uploadBundle(deploymentAlias: string, outputFile: string, token: 
 
   const { uploadUrl, bundleName } = await response.json();
 
-  const fileBuffer = await fs.readFile(outputFile);
+  const fileBuffer = await fs.readFile(bundlePath);
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
     body: fileBuffer,
@@ -128,7 +131,7 @@ async function uploadBundle(deploymentAlias: string, outputFile: string, token: 
   return { bundleName };
 }
 
-async function triggerDeployment(deploymentAlias: string, bundleName: string, token: string) {
+async function triggerDeployment(deploymentAlias: string, bundleName: string, entryPoint: string, token: string) {
   const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/deploy`), {
     method: 'POST',
     headers: {
@@ -137,6 +140,7 @@ async function triggerDeployment(deploymentAlias: string, bundleName: string, to
     },
     body: JSON.stringify({
       bundleName,
+      entryPoint,
     }),
   });
 
@@ -148,18 +152,4 @@ async function triggerDeployment(deploymentAlias: string, bundleName: string, to
 
   console.log('Successfully triggered deployment');
   console.log(`Follow your deployment progress at: ${deploymentUrl}`);
-}
-
-function getBuildPath(subPath?: string) {
-  const buildDir = getModelencePath('build');
-  return subPath ? join(buildDir, subPath) : buildDir;
-}
-
-function getProjectPath(subPath: string) {
-  return join(process.cwd(), subPath);
-}
-
-function getModelencePath(subPath?: string) {
-  const modelenceDir = join(process.cwd(), '.modelence');
-  return subPath ? join(modelenceDir, subPath) : modelenceDir;
 }
