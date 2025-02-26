@@ -8,8 +8,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./server": "./dist/server.js",
-    "./bin": "./dist/bin/modelence.js"
+    "./server": "./dist/server.js"
   },
   "files": [
     "dist",
@@ -47,7 +46,6 @@
     "@typescript-eslint/parser": "^8.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tsup": "^8.3.5",
     "typedoc": "^0.27.6",
     "typedoc-plugin-markdown": "^4.4.1",
     "typescript": "^5.7.2"
@@ -62,8 +60,10 @@
     "elastic-apm-node": "^4.8.0",
     "express": "^4.21.0",
     "fs-extra": "^11.2.0",
+    "jiti": "^2.4.2",
     "mongodb": "^6.8.1",
     "open": "^10.1.0",
+    "tsup": "^8.3.6",
     "vite": "^6.0.3",
     "vite-plugin-eslint": "^1.8.1",
     "winston": "^3.15.0",

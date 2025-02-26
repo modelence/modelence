@@ -5,12 +5,12 @@ import { runMethod } from '../methods';
 import { getResponseTypeMap } from '../methods/serialize';
 import { authenticate } from '../auth';
 import { logInfo } from './logs';
-import { initViteServer } from '../viteServer';
 import { Module } from './module';
 import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from 'db/client';
+import { AppServer } from '../packages/types';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -24,9 +24,8 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
   }
 }
 
-export async function startServer({ combinedModules }: { combinedModules: Module[] }) {
+export async function startServer(server: AppServer, { combinedModules }: { combinedModules: Module[] }) {
   const app = express();
-  const isDev = process.env.NODE_ENV !== 'production';
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -67,7 +66,15 @@ export async function startServer({ combinedModules }: { combinedModules: Module
 
   registerModuleRoutes(app, combinedModules);
 
-  await initViteServer(app, isDev);
+  await server.init();
+
+  if (server.middlewares) {
+    app.use(server.middlewares());
+  }
+
+  app.all('*', (req: Request, res: Response) => {
+    return server.handler(req, res);
+  });
 
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Promise Rejection:');
@@ -82,9 +89,9 @@ export async function startServer({ combinedModules }: { combinedModules: Module
     console.trace('Full application stack:');  // Additional context
   });
 
-  const server = http.createServer(app);
+  const httpServer = http.createServer(app);
   const port = process.env.PORT || 3000;
-  server.listen(port, () => {
+  httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
     console.log(`Application started on port ${port}`);
   });

@@ -8,6 +8,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+    },
     "jsx": "react-jsx",
     "resolveJsonModule": true,
     "declaration": true,

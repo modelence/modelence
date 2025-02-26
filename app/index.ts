@@ -17,13 +17,18 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 import { AppConfig, ConfigSchema } from '../config/types';
 import { RoleDefinition } from '../auth/types';
+import { AppServer } from '../packages/types';
+import { viteServer } from '../viteServer';
+
+type AppOptions = {
+  modules?: Module[],
+  server?: AppServer,
+  roles?: Record<string, RoleDefinition>,
+  defaultRoles?: Record<string, string>
+};
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {} }: {
-    modules?: Module[]
-    roles?: Record<string, RoleDefinition>
-    defaultRoles?: Record<string, string>
-  } = {}
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer }: AppOptions
 ) {
   dotenv.config();
   
@@ -78,7 +83,7 @@ export async function startApp(
     startCronJobs().catch(console.error);
   }
 
-  await startServer({ combinedModules });
+  await startServer(server, { combinedModules });
 }
 
 function initCustomMethods(modules: Module[]) {
