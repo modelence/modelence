@@ -99,14 +99,23 @@ export class Store<
   }
 
   /** @internal */
-  provision(client: MongoClient) {
+  init(client: MongoClient) {
     if (this.collection) {
-      return;
+      throw new Error(`Collection ${this.name} is already initialized`);
     }
 
-    this.collection = client.db().collection<this['_type']>(this.name);
+    this.database = client.db();
+    this.collection = this.database.collection<this['_type']>(this.name);
+  }
+
+  /** @internal */
+  async createIndexes() {
+    if (!this.collection) {
+      throw new Error(`Collection ${this.name} is not provisioned`);
+    }
+
     if (this.indexes.length > 0) {
-      this.collection.createIndexes(this.indexes);
+      await this.collection.createIndexes(this.indexes);
     }
   }
 
