@@ -18,6 +18,10 @@ export async function runMigrations(migrations: MigrationScript[]) {
   const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
   const pendingMigrations = migrations.filter(({ version }) => !existingVersionSet.has(version));
 
+  if (pendingMigrations.length === 0) {
+    return;
+  }
+
   console.log(`Running migrations (${pendingMigrations.length})...`);
   for (const { version, description, handler } of pendingMigrations) {
     console.log(`Running migration v${version}: ${description}`);

@@ -18,6 +18,7 @@ import {
   AnyBulkWriteOperation,
   InsertManyResult,
   Db,
+  ClientSession,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -64,7 +65,7 @@ export class Store<
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
   private collection?: Collection<this['_type']>;
-  private database?: Db;
+  private client?: MongoClient;
 
   /**
    * Creates a new Store instance
@@ -104,18 +105,14 @@ export class Store<
       throw new Error(`Collection ${this.name} is already initialized`);
     }
 
-    this.database = client.db();
-    this.collection = this.database.collection<this['_type']>(this.name);
+    this.client = client;
+    this.collection = this.client.db().collection<this['_type']>(this.name);
   }
 
   /** @internal */
   async createIndexes() {
-    if (!this.collection) {
-      throw new Error(`Collection ${this.name} is not provisioned`);
-    }
-
     if (this.indexes.length > 0) {
-      await this.collection.createIndexes(this.indexes);
+      await this.requireCollection().createIndexes(this.indexes);
     }
   }
 
@@ -142,6 +139,15 @@ export class Store<
     }
 
     return this.collection;
+  }
+
+  /** @internal */
+  requireClient() {
+    if (!this.client) {
+      throw new Error(`Database is not connected`);
+    }
+
+    return this.client;
   }
 
   async findOne(
@@ -269,8 +275,12 @@ export class Store<
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
    */
-  async updateMany(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    return await this.requireCollection().updateMany(selector, update);
+  async updateMany(
+    selector: Filter<this['_type']>, 
+    update: UpdateFilter<this['_type']>, 
+    options?: { session?: ClientSession }
+  ): Promise<UpdateResult> {
+    return await this.requireCollection().updateMany(selector, update, options);
   }
 
   /**
@@ -331,10 +341,7 @@ export class Store<
    * @throws Error if the store is not provisioned
    */
   getDatabase() {
-    if (!this.database) {
-      throw new Error(`Store ${this.name} is not provisioned`);
-    }
-    return this.database;
+    return this.requireClient().db();
   }
 
   /**
@@ -351,7 +358,7 @@ export class Store<
    * @param oldName - The previous name of the collection
    * @throws Error if the old collection doesn't exist or if this store's collection already exists
    */
-  async renameFrom(oldName: string) {
+  async renameFrom(oldName: string, options?: { session?: ClientSession }) {
     const db = this.getDatabase();
 
     if (!this.collection || !db) {
@@ -369,8 +376,7 @@ export class Store<
     }
 
     const existingCollection = db.collection<this['_type']>(oldName);
-    await existingCollection.rename(this.name);
-    
-    this.collection = existingCollection;
+
+    await existingCollection.rename(this.name, options);
   }
 }

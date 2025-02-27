@@ -12,11 +12,6 @@ export async function connect() {
   }
 
   client = new MongoClient(mongodbUri, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
     maxPoolSize: 20
   });
 

@@ -1,14 +1,15 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig((options) => ({
-  entry: ['index.ts', 'client.ts', 'server.ts', 'bin/modelence.ts'],
+  entry: ['index.ts', 'client.ts', 'server.ts', 'mongo.ts', 'bin/modelence.ts'],
   format: ['esm'],
   dts: {
     resolve: true,
     entry: {
       index: 'index.ts',
       client: 'client.ts',
-      server: 'server.ts'
+      server: 'server.ts',
+      mongo: 'mongo.ts'
     }
   },
   splitting: true,
