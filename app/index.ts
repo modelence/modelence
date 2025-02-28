@@ -76,7 +76,9 @@ export async function startApp(
     initStores(stores);
   }
 
-  await runMigrations(migrations);
+  if (isCronEnabled) {
+    await runMigrations(migrations);
+  }
 
   if (mongodbUri) {
     for (const store of stores) {
