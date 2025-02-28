@@ -17,6 +17,8 @@ import {
   BulkWriteResult,
   AnyBulkWriteOperation,
   InsertManyResult,
+  Db,
+  ClientSession,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -58,11 +60,12 @@ export class Store<
   
   readonly Doc!: this['_doc'];
 
-  private readonly name: string;
+  private name: string;
   private readonly schema: TSchema;
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
   private collection?: Collection<this['_type']>;
+  private client?: MongoClient;
 
   /**
    * Creates a new Store instance
@@ -97,14 +100,19 @@ export class Store<
   }
 
   /** @internal */
-  provision(client: MongoClient) {
+  init(client: MongoClient) {
     if (this.collection) {
-      return;
+      throw new Error(`Collection ${this.name} is already initialized`);
     }
 
-    this.collection = client.db().collection<this['_type']>(this.name);
+    this.client = client;
+    this.collection = this.client.db().collection<this['_type']>(this.name);
+  }
+
+  /** @internal */
+  async createIndexes() {
     if (this.indexes.length > 0) {
-      this.collection.createIndexes(this.indexes);
+      await this.requireCollection().createIndexes(this.indexes);
     }
   }
 
@@ -131,6 +139,15 @@ export class Store<
     }
 
     return this.collection;
+  }
+
+  /** @internal */
+  requireClient() {
+    if (!this.client) {
+      throw new Error(`Database is not connected`);
+    }
+
+    return this.client;
   }
 
   async findOne(
@@ -258,8 +275,12 @@ export class Store<
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
    */
-  async updateMany(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    return await this.requireCollection().updateMany(selector, update);
+  async updateMany(
+    selector: Filter<this['_type']>, 
+    update: UpdateFilter<this['_type']>, 
+    options?: { session?: ClientSession }
+  ): Promise<UpdateResult> {
+    return await this.requireCollection().updateMany(selector, update, options);
   }
 
   /**
@@ -312,5 +333,50 @@ export class Store<
    */
   bulkWrite(operations: AnyBulkWriteOperation<this['_type']>[]): Promise<BulkWriteResult> {
     return this.requireCollection().bulkWrite(operations);
+  }
+
+  /**
+   * Returns the raw MongoDB database instance for advanced operations
+   * @returns The MongoDB database instance
+   * @throws Error if the store is not provisioned
+   */
+  getDatabase() {
+    return this.requireClient().db();
+  }
+
+  /**
+   * Returns the raw MongoDB collection instance for advanced operations
+   * @returns The MongoDB collection instance
+   * @throws Error if the store is not provisioned
+   */
+  rawCollection() {
+    return this.requireCollection();
+  }
+
+  /**
+   * Renames an existing collection to this store's name, used for migrations
+   * @param oldName - The previous name of the collection
+   * @throws Error if the old collection doesn't exist or if this store's collection already exists
+   */
+  async renameFrom(oldName: string, options?: { session?: ClientSession }) {
+    const db = this.getDatabase();
+
+    if (!this.collection || !db) {
+      throw new Error(`Store ${this.name} is not provisioned`);
+    }
+
+    const oldCollections = await db.listCollections({ name: oldName }).toArray();
+    if (oldCollections.length === 0) {
+      throw new Error(`Collection ${oldName} not found`);
+    }
+
+    const newCollections = await db.listCollections({ name: this.name }).toArray();
+    if (newCollections.length > 0) {
+      throw new Error(`Collection ${this.name} already exists`);
+    }
+
+    const existingCollection = db.collection<this['_type']>(oldName);
+
+    await existingCollection.rename(this.name, options);
   }
 }

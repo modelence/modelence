@@ -8,7 +8,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
-    "./server": "./dist/server.js"
+    "./server": "./dist/server.js",
+    "./mongodb": "./dist/mongo.js"
   },
   "files": [
     "dist",
