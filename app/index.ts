@@ -9,6 +9,7 @@ import { initMetrics } from './metrics';
 import { markAppStarted, setMetadata } from './state';
 import userModule from '../auth/user';
 import sessionModule from '../auth/session';
+import { runMigrations, MigrationScript, default as migrationModule } from '../migration';
 import { initRoles } from '../auth/role';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
@@ -24,11 +25,12 @@ type AppOptions = {
   modules?: Module[],
   server?: AppServer,
   roles?: Record<string, RoleDefinition>,
-  defaultRoles?: Record<string, string>
-};
+  defaultRoles?: Record<string, string>,
+  migrations?: Array<MigrationScript>
+}
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer }: AppOptions
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [] }: AppOptions
 ) {
   dotenv.config();
   
@@ -38,7 +40,7 @@ export async function startApp(
   const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule];
+  const systemModules = [userModule, sessionModule, cronModule, migrationModule];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
@@ -71,7 +73,17 @@ export async function startApp(
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    provisionStores(stores);
+    initStores(stores);
+  }
+
+  if (isCronEnabled) {
+    await runMigrations(migrations);
+  }
+
+  if (mongodbUri) {
+    for (const store of stores) {
+      store.createIndexes();
+    }
   }
 
   if (hasRemoteBackend) {
@@ -139,14 +151,14 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-async function provisionStores(stores: Store<any, any>[]) {
+function initStores(stores: Store<any, any>[]) {
   const client = getClient();
   if (!client) {
-    throw new Error('Failed to provision stores: MongoDB client not initialized');
+    throw new Error('Failed to initialize stores: MongoDB client not initialized');
   }
 
   for (const store of stores) {
-    store.provision(client);
+    store.init(client);
   }
 }
 
