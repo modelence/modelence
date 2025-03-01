@@ -18,5 +18,5 @@
     "declarationMap": true,
     "emitDeclarationOnly": false
   },
-  "exclude": ["docs/**/*"]
+  "exclude": ["docs/**/*", "packages/**/*"]
 }
