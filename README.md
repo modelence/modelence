@@ -1,6 +1,16 @@
-# Modelence
+<div align="center">
+  <a href="https://nextjs.org">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/modelence.png">
+      <img alt="Modelence logo" src="assets/modelence.png" height="128">
+    </picture>
+  </a>
+  <h1>Modelence</h1>
 
 ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
+<a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg"></a>
+
+</div>
 
 Full-stack JavaScript framework for interactive web applications
 
