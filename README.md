@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://nextjs.org">
+  <a href="https://modelence.com">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="assets/modelence.png">
       <img alt="Modelence logo" src="assets/modelence.png" height="128">
