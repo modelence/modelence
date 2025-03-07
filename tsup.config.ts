@@ -23,6 +23,7 @@ export default defineConfig((options) => ({
     options.resolveExtensions = ['.ts', '.js', '.tsx', '.jsx']
     return options
   },
+  exclude: ['./node_modules/**/*', './dist/**/*'],
   external: [
     'react',
     'react-dom'
