@@ -38,7 +38,7 @@ class ViteServer implements AppServer {
         res.status(500).send('Internal Server Error');
       }
     } else {
-      res.sendFile('index.html', { root: './client' });
+      res.sendFile('index.html', { root: './.modelence/build/client' });
     }
   }
 

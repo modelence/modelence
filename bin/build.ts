@@ -44,6 +44,8 @@ async function buildServer() {
     tsupBuild({
       entry: [getServerPath()],
       format: 'esm',
+      sourcemap: true,
+      minify: process.env.NODE_ENV === 'production',
       outDir: '.modelence/build',
       clean: true,
       watch: false,
