@@ -12,7 +12,7 @@
 
 </div>
 
-Full-stack JavaScript framework for interactive web applications
+Full-stack JavaScript framework for AI startups
 
 ## Dev Setup
 Run `npm install` first to install packages.
