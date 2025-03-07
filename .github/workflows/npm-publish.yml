@@ -19,9 +19,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Build
-        run: npm run build
-      
       - name: Publish to NPM
         run: npm publish
         env:
