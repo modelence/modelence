@@ -6,7 +6,7 @@ import { createInterface } from 'readline';
 const MODELENCE_ENV_FILE = '.modelence.env';
 
 interface SetupResponse {
-  deploymentId: string;
+  environmentId: string;
   serviceEndpoint: string;
   serviceToken: string;
   containerId: string;
@@ -89,7 +89,7 @@ export async function setup(options: { token: string, host: string }) {
       ...existingEnv,
       MODELENCE_CRON_ENABLED: 'true',
       MODELENCE_TELEMETRY_ENABLED: 'false', // TODO: Remove after all usages are gone
-      MODELENCE_DEPLOYMENT_ID: config.deploymentId,
+      MODELENCE_ENVIRONMENT_ID: config.environmentId,
       MODELENCE_SERVICE_ENDPOINT: options.host, // TODO: Replace with config.serviceEndpoint in the future
       MODELENCE_SERVICE_TOKEN: config.serviceToken,
       MODELENCE_CONTAINER_ID: config.containerId,
