@@ -3,7 +3,7 @@
   "entryPoints": ["./server.ts", "./client.ts"],
   "exclude": ["**/README.md"],
   "plugin": ["typedoc-plugin-markdown"],
-  "out": "docs/docs/api-reference/generated",
+  "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,
   "excludeInternal": true,
   "pretty": true,

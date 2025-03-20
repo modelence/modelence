@@ -13,6 +13,6 @@ Modules allow you to:
 
 ## API Reference
 
-import ModuleClass from './generated/server/classes/Module.md';
+import ModuleClass from './_generated/server/classes/Module.md';
 
 <ModuleClass />

@@ -12,7 +12,7 @@ Stores allow you to:
 
 ## API Reference
 
-import StoreClass from './generated/server/classes/Store.md';
+import StoreClass from './_generated/server/classes/Store.md';
 
 <StoreClass />
 <!-- ## Schema Types -->
