@@ -33,6 +33,7 @@ export default modelenceConfig;
 ```
 
 Adjust your `package.json`
+- Add `"type": "module"` to the `package.json` file
 - Change the dev script from `next dev` to `modelence dev`
 - Change the build script from `next build` to `modelence build`
 - Add a new script called `build:next` (to match the `postBuildCommand` you used in modelence config) and set the value to `next build`
