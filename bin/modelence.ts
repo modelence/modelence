@@ -33,12 +33,7 @@ program
     await setup(options);
   });
 
-// Commands that need config
-const configCommands = program
-  .command('project')
-  .description('Project management commands');
-
-configCommands
+program
   .command('build')
   .description('Build the application')
   .action(async () => {
@@ -46,7 +41,7 @@ configCommands
     await build();
   });
 
-configCommands
+program
   .command('deploy')
   .description('Deploy to Modelence Cloud')
   .requiredOption('-e, --env <env>', 'Environment (deployment alias)')
@@ -55,7 +50,7 @@ configCommands
     await deploy(options);
   });
 
-configCommands
+program
   .command('dev')
   .description('Start development server')
   .action(async () => {
