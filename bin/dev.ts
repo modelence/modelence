@@ -8,7 +8,7 @@ export function dev() {
   const serverPath = getServerPath();    
   const tsxPath = path.resolve('./node_modules/.bin/tsx');
 
-  execSync(`"${tsxPath}" --no-cjs watch "${serverPath}"`, {
+  execSync(`"${tsxPath}" watch "${serverPath}"`, {
     stdio: 'inherit',
     env: { ...process.env, NODE_ENV: 'development' }
   });    
