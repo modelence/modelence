@@ -3,6 +3,6 @@
   "position": 3,
   "link": {
     "type": "generated-index",
-    "description": "Learn how to use Stores, Modules and how to define and call queries and mutations."
+    "description": "Let's build a simple Todo application with Modelence. We'll learn how to use Stores, Modules and how to define and call queries and mutations."
   }
 }

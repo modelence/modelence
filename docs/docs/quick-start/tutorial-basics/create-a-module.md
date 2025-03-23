@@ -6,8 +6,6 @@ sidebar_position: 2
 
 Modules are the core building blocks of a Modelence application. They help you organize your application's functionality into cohesive units that can contain queries, mutations, stores, cron jobs and configurations.
 
-## Example
-
 Create a new file at `src/server/todo/index.ts`:
 
 ```typescript title="src/server/todo/index.ts"
@@ -16,7 +14,7 @@ import { dbTodos } from './db';
 
 export default new Module('todo', {
   /*
-    Include the dbTodos store so it will be automatically
+    Include the store we created earlier so it will be automatically
     provisioned in MongoDB when the server starts.
   */
   stores: [dbTodos],
@@ -60,7 +58,7 @@ export default new Module('todo', {
 
 ## Using Modules
 
-To use your module, add it to the `modules` array in your main `app.ts` server file:
+Now, we need to add the Module we created into the `modules` array of the main `app.ts` server file:
 
 ```ts title="src/server/app.ts"
 import { startApp } from 'modelence/server';
@@ -70,3 +68,5 @@ startApp({
   modules: [todoModule]
 });
 ```
+
+By doing this we're making all of our Module's components available and initialized when the server starts. Modelence will provision the `dbTodos` store and make the queries and mutations we created available for calling.
