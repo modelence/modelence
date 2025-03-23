@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Quick Start
 
-Modelence applications are primarily relying on [Modelence Cloud](https://cloud.modelence.com), which provides an admin dashboard for managing your applications, even when running local dev environments. However, you can also use an offline setup with your own configuration.
+Modelence is a full-stack TypeScript framework designed for production Node.js applications, with built-in MongoDB support. It is available with its own Vite + React frontend, as well as with adapters for other frontend-focused frameworks like Next.js.
 
 ## Getting Started
 
@@ -47,7 +47,7 @@ my-app/
 │   │   ├── routes.ts
 │   ├── server/
 │   │   ├── app.ts
-│   ├── .env
+│   ├── .modelence.env
 ```
 
 - `src/client/index.html`: The main HTML template for your application. You usually don't need to edit this file.
@@ -55,7 +55,7 @@ my-app/
 - `src/client/index.tsx`: Entry point for your React frontend where you initialize the client app.
 - `src/client/routes.ts`: Define your client-side routes and their corresponding components.
 - `src/server/app.ts`: Server entry point where you configure your backend modules and start the server.
-- `.env`: Environment variables for your application (for example Modelence Studio tokens)
+- `.modelence.env`: Environment variables for your application (including API tokens for applications connected to Modelence Cloud)
 
 :::tip
 All client-side code goes in the `src/client` directory, while server-side code belongs in `src/server`. Modelence uses a clear separation between client and server code to help maintain a clean architecture. You can also use any other directories at the same level as `src/client` and `src/server` for shared code between client and server.
@@ -77,3 +77,9 @@ npm run dev
 ```
 
 The `npm run dev` command builds your website locally and serves it through a Vite development server, ready for you to view at http://localhost:3000/ (or the port you specified in the `.env` file).
+
+If everything is set up correctly, you should see the following empty project home page:
+
+<div align="center">
+  <img src="/img/modelence-empty-project.png" alt="Modelence new project home page" width="600" />
+</div>
