@@ -2,15 +2,13 @@
 sidebar_position: 1
 ---
 
-# Quick Start
+# Getting started
 
 Modelence is a full-stack TypeScript framework designed for production Node.js applications, with built-in MongoDB support. It is available with its own Vite + React frontend, as well as with adapters for other frontend-focused frameworks like Next.js.
 
-## Getting Started
-
 Get started by **creating a new project**.
 
-### Prerequisites
+## Prerequisites
 
 - [Node.js](https://nodejs.org/en/download/) version 18.0 or above
   - When installing Node.js, make sure to check all checkboxes related to dependencies
