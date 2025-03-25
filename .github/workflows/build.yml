@@ -29,10 +29,6 @@ jobs:
         working-directory: ./packages/modelence
         run: npm ci
 
-      - name: Build types
-        working-directory: ./packages/types
-        run: npm run build
-
       - name: Build modelence
         working-directory: ./packages/modelence
         run: npm run build 
