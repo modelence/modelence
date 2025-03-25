@@ -22,7 +22,9 @@ jobs:
           cache-dependency-path: '**/package-lock.json'
 
       - name: Install dependencies
+        working-directory: ./packages/modelence
         run: npm ci
 
       - name: Build
+        working-directory: ./packages/modelence
         run: npm run build 
