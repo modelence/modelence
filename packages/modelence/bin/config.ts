@@ -2,7 +2,7 @@ import { createJiti } from 'jiti';
 import { parse as parseDotenv } from 'dotenv';
 import { join } from 'path';
 import fs from 'fs/promises';
-import { ModelenceConfig } from '../../types';
+import { ModelenceConfig } from '../types';
 import { z } from 'zod';
 
 let env: Record<string, string> | null = null;
