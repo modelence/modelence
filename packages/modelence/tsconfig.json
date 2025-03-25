@@ -9,7 +9,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
+      "@/*": ["./src/*"]
     },
     "jsx": "react-jsx",
     "resolveJsonModule": true,
@@ -18,5 +18,5 @@
     "declarationMap": true,
     "emitDeclarationOnly": false
   },
-  "exclude": ["docs/**/*", "packages/**/*"]
+  "exclude": ["node_modules"]
 }

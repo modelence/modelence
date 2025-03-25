@@ -48,7 +48,7 @@
     "@typescript-eslint/parser": "^8.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "typedoc": "^0.27.6",
+    "typedoc": "^0.28.1",
     "typedoc-plugin-markdown": "^4.4.1",
     "typescript": "^5.7.2"
   },
