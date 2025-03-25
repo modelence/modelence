@@ -23,7 +23,6 @@
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "docs": "typedoc",
     "postversion": "git push && git push --tags"
   },
   "repository": {
@@ -48,8 +47,6 @@
     "@typescript-eslint/parser": "^8.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "typedoc": "^0.28.1",
-    "typedoc-plugin-markdown": "^4.4.1",
     "typescript": "^5.7.2"
   },
   "dependencies": {

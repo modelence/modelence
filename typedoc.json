@@ -1,12 +1,16 @@
 {
   "$schema": "https://typedoc.org/schema.json",
+  "tsconfig": "./packages/modelence/tsconfig.json",
   "entryPoints": [
-    "./data/store.ts",
-    // "./data/types.ts",
-    "./app/module.ts",
-    "./client/method.ts"
+    "./packages/modelence/src/server.ts",
+    "./packages/modelence/src/client.ts"
   ],
-  "exclude": ["**/README.md"],
+  "exclude": [
+    "**/node_modules/**",
+    "docs/**",
+    "**/dist/**",
+    "**/README.md"
+  ],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,
@@ -14,20 +18,19 @@
   "pretty": true,
   "gitRevision": "main",
   "categorizeByGroup": true,
-  "categoryOrder": ["Store", "Schema", "Module", "React Hooks", "Methods", "*"],
+  "categoryOrder": ["Store", "Schema", "Module", "Methods", "*"],
   "cleanOutputDir": true,
   "entryPointStrategy": "expand",
-  "groupOrder": ["Classes", "Variables", "Functions", "Interfaces", "*"],
+  "groupOrder": ["Classes", "Variables", "React Hooks", "Functions", "Interfaces", "*"],
   "sort": ["alphabetical"],
   "hideGenerator": true,
   "readme": "none",
   "treatWarningsAsErrors": true,
   "validation": {
-    // "invalidLink": true,
-    // "notDocumented": true,
     "notExported": false
   },
   "intentionallyNotExported": ["InferDocumentType"],
   "preserveAnchorCasing": true,
-  "useCodeBlocks": true
+  "useCodeBlocks": true,
+  "publicPath": "/docs/api-reference"
 } 
