@@ -6,122 +6,14 @@
     </picture>
   </a>
   <h1>Modelence</h1>
+  
+  [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg"></a>
-  <div>
-    The Node.js Framework for Real-Time MongoDB Apps
-  </div>
 </div>
 
-## Dev Setup
-Run `npm install` first to install packages.
+## Getting Started
+Modelence is a full-stack TypeScript Framework for real-time MongoDB applications, with the mission to eliminate all boilerplate for most standard features that modern web applications need, like database access, authentication, AI integration and more.
 
-Use `npm run dev` to keep rebuilding the package on every change for linking in local dev mode.
-
-## App setup
-
-- Create the following folder structure in your Node project:
-
-```
-src/
-src/client/index.html
-src/client/index.css
-src/client/index.tsx
-src/client/routes.ts
-src/server/app.ts
-```
-
-- Install dependencies:
-
-```
-npm install --save modelence
-npm install --save react react-dom react-router-dom
-npm install --save-dev @types/react @types/react-dom
-npm install --save-dev tsx nodemon
-npm install --save-dev tailwindcss postcss autoprefixer
-```
-
-- Add the following scripts to your `package.json`:
-
-```
-"scripts": {
-  "dev": "nodemon --exec tsx src/server/app.ts"
-}
-```
-
-- Create a `tsconfig.json` file in the root of your project with the following content:
-```json
-{
-  "compilerOptions": {
-    "outDir": "./.modelence/build/",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "sourceMap": true,
-    "noImplicitAny": true,
-    "module": "NodeNext",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "target": "ES2020",
-    "lib": [
-      "ES2020",
-      "DOM",
-      "WebWorker"
-    ],
-    "jsx": "react-jsx",
-    "allowJs": true,
-    "moduleResolution": "bundler",
-    "strict": false,
-    "noEmit": true,
-    "incremental": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.d.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
-}
-```
-
-Create a `tailwind.config.js` file in the root of your project with the following content:
-```js
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    "./src/client/**/*.{js,jsx,ts,tsx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-  darkMode: 'class',
-}
-```
-
-Create a `postcss.config.js` file in the root of your project with the following content:
-```js
-/** @type {import('postcss-load-config').Config} */
-export default {
-  plugins: {
-    tailwindcss: {},
-  },
-};
-```
-
-## Documentation
-
-[Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
-
-(For open-source contributors: To generate docs when developing locally, run `npm run docs`.)
+- Visit our [Quick Start Guide](https://docs.modelence.com/docs/quick-start/intro) to get started with Modelence.
