@@ -7,12 +7,12 @@
   </a>
   <h1>Modelence</h1>
 
-![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
-<a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg"></a>
-
+  ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
+  <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg"></a>
+  <div>
+    The Node.js Framework for Real-Time MongoDB Apps
+  </div>
 </div>
-
-Full-stack JavaScript framework for AI startups
 
 ## Dev Setup
 Run `npm install` first to install packages.
