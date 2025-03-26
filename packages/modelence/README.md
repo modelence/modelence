@@ -1,8 +1,8 @@
 <div align="center">
   <a href="https://modelence.com">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/modelence.png">
-      <img alt="Modelence logo" src="assets/modelence.png" height="128">
+      <source media="(prefers-color-scheme: dark)" srcset="static/modelence.png">
+      <img alt="Modelence logo" src="static/modelence.png" height="128">
     </picture>
   </a>
   <h1>Modelence</h1>
