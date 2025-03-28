@@ -98,7 +98,7 @@ async function createBundle(bundlePath: string) {
 }
 
 async function uploadBundle(deploymentAlias: string, bundlePath: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/upload`), {
+  const response = await fetch(getStudioUrl(`/api/environments/${deploymentAlias}/upload`), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -132,7 +132,7 @@ async function uploadBundle(deploymentAlias: string, bundlePath: string, token: 
 }
 
 async function triggerDeployment(deploymentAlias: string, bundleName: string, entryPoint: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/deployments/${deploymentAlias}/deploy`), {
+  const response = await fetch(getStudioUrl(`/api/environments/${deploymentAlias}/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
