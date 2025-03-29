@@ -7,7 +7,7 @@
   </a>
   <h1>Modelence</h1>
   
-  [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
+  [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/docs/api-reference/intro)
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg"></a>
