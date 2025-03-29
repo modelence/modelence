@@ -1,0 +1,78 @@
+{
+  "type": "module",
+  "name": "modelence",
+  "version": "0.4.8",
+  "description": "Full-stack JavaScript framework for startups",
+  "main": "dist/index.js",
+  "types": "dist/global.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./server": "./dist/server.js",
+    "./mongodb": "./dist/mongo.js"
+  },
+  "files": [
+    "dist",
+    "dist/bin"
+  ],
+  "bin": {
+    "modelence": "./dist/bin/modelence.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postversion": "git push && git push --tags"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/modelence/modelence/issues"
+  },
+  "homepage": "https://modelence.com",
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/bcrypt": "^5.0.2",
+    "@types/express": "^5.0.0",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.5.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "archiver": "^7.0.1",
+    "bcrypt": "^5.1.1",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.5",
+    "elastic-apm-node": "^4.8.0",
+    "express": "^4.21.0",
+    "fs-extra": "^11.2.0",
+    "jiti": "^2.4.2",
+    "mongodb": "^6.8.1",
+    "open": "^10.1.0",
+    "tsup": "^8.3.6",
+    "tsx": "^4.19.3",
+    "vite": "^6.0.3",
+    "vite-plugin-eslint": "^1.8.1",
+    "winston": "^3.15.0",
+    "winston-elasticsearch": "^0.19.0",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.2"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  }
+}

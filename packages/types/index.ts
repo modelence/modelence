@@ -6,12 +6,6 @@ export type ExpressMiddleware = (
   next: NextFunction
 ) => void | Promise<void>;
 
-export interface ModelenceConfig {
-  serverDir: string;
-  serverEntry: string;
-  postBuildCommand?: string;
-}
-
 // Base interface for different server options like NextServer and others
 export interface AppServer {
   init: () => Promise<void>;

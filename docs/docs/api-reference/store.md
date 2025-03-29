@@ -14,7 +14,7 @@ Stores allow you to:
 
 ## API Reference
 
-import StoreClass from './_generated/data/store/classes/Store.md';
+import StoreClass from './_generated/server/classes/Store.md';
 
 <StoreClass />
 <!-- ## Schema Types -->
