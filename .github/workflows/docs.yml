@@ -31,10 +31,15 @@ jobs:
       - name: Install root dependencies (for TypeDoc)
         run: npm ci
 
+      - name: Install Modelence package dependencies
+        run: |
+          cd packages/modelence
+          npm ci
+
       - name: Install docs dependencies
         run: |
           cd docs
-          npm install
+          npm ci
 
       - name: Generate TypeDoc
         run: npm run docs
