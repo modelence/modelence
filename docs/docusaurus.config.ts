@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Modelence Docs',
-  tagline: 'Full-stack JavaScript framework for AI startups',
+  tagline: 'The Node.js Framework for Real-Time MongoDB Apps',
   favicon: 'img/logo.png',
 
   // Set the production url of your site here

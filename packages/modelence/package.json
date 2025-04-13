@@ -2,7 +2,7 @@
   "type": "module",
   "name": "modelence",
   "version": "0.4.8",
-  "description": "Full-stack JavaScript framework for startups",
+  "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
   "exports": {
