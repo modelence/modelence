@@ -15,7 +15,11 @@ jobs:
         with:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
-      
+
+      - name: Install types dependencies
+        working-directory: ./packages/types
+        run: npm ci
+
       - name: Install dependencies
         working-directory: ./packages/modelence
         run: npm ci
