@@ -25,10 +25,10 @@ If you see version numbers displayed for both commands, you're ready to start bu
 
 ## Creating a new project
 
-You can create a new Modelence project using the `modelence create-app` npx command.
+You can create a new Modelence project using the `create-modelence-app` command.
 
 ```bash
-npx modelence create-app my-app
+npx create-modelence-app my-app
 ```
 
 This command will create a new directory named `my-app` with the necessary files and folders for your project.
