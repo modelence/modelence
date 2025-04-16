@@ -91,5 +91,3 @@ MONGODB_URI="<your_connection_string_here>"
 ```
 
 Make sure that your `.modelence.env` file is added to your `.gitignore` to keep your credentials secure.
-
-## Getting Started
