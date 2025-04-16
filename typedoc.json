@@ -1,7 +1,16 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["./server.ts", "./client.ts"],
-  "exclude": ["**/README.md"],
+  "tsconfig": "./packages/modelence/tsconfig.json",
+  "entryPoints": [
+    "./packages/modelence/src/server.ts",
+    "./packages/modelence/src/client.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "docs/**",
+    "**/dist/**",
+    "**/README.md"
+  ],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,

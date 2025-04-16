@@ -5,24 +5,12 @@ import { setup } from './setup';
 import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
-import { createApp } from './create-app';
 import { loadEnv } from './config';
 
 const program = new Command()
   .name('modelence')
   .description('Modelence CLI tool')
   .version('0.2.1');
-
-// Commands that don't need config
-program
-  .command('create-app <project-name>')
-  .description('Create a new Modelence application')
-  .option('-t, --template <template-name>', 'Template to use (from examples repository)')
-  .action(async (projectName, options) => {
-    await createApp(projectName, {
-      template: options.template
-    });
-  });
 
 program
   .command('setup')

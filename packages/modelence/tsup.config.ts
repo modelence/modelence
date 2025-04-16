@@ -1,15 +1,15 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig((options) => ({
-  entry: ['index.ts', 'client.ts', 'server.ts', 'mongo.ts', 'bin/modelence.ts'],
+  entry: ['src/index.ts', 'src/client.ts', 'src/server.ts', 'src/mongo.ts', 'src/bin/modelence.ts'],
   format: ['esm'],
   dts: {
     resolve: true,
     entry: {
-      index: 'index.ts',
-      client: 'client.ts',
-      server: 'server.ts',
-      mongo: 'mongo.ts'
+      index: 'src/index.ts',
+      client: 'src/client.ts',
+      server: 'src/server.ts',
+      mongo: 'src/mongo.ts'
     }
   },
   splitting: true,
@@ -23,7 +23,7 @@ export default defineConfig((options) => ({
     options.resolveExtensions = ['.ts', '.js', '.tsx', '.jsx']
     return options
   },
-  exclude: ['./node_modules/**/*', './dist/**/*'],
+  exclude: ['./src/node_modules/**/*', './dist/**/*'],
   external: [
     'react',
     'react-dom'
