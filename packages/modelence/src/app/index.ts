@@ -39,6 +39,12 @@ export async function startApp(
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
+  trackAppStart().then(() => {
+    // Do nothing
+  }).catch(() => {
+    // Silently ignore tracking errors to not disrupt app startup
+  });
+
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule, migrationModule];
   const combinedModules = [...systemModules, ...modules];
@@ -174,4 +180,24 @@ function getLocalConfigs(): AppConfig[] {
   }
 
   return configs;
+}
+
+async function trackAppStart() {
+  const isTrackingEnabled = process.env.MODELENCE_TRACKING_ENABLED !== 'false';
+
+  if (isTrackingEnabled) {
+    const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
+    
+    const packageJson = await import('../../package.json');
+    
+    await fetch(`${serviceEndpoint}/api/track/app-start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        version: packageJson.default.version
+      })
+    });
+  }
 }
