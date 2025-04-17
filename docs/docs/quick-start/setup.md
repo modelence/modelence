@@ -19,7 +19,7 @@ After you've created an application, create a new environment. Name your environ
 After you've created a new environment, you will be redirected to the environment's dashboard and should see a setup card with a `Go to Setup` button, redirecting you to your environment's Setup page. In this page, you'll see a `Setup Local Environment` button, which will show commands for either creating a new project or connecting an existing one. Since you've already created a project, go with `Connect Existing Modelence Project` and copy the corresponding shell command displayed in the popup. It should look like this:
 
 ```bash
-modelence setup --token <token>
+npx modelence setup --token <token>
 ```
 
 Once you run this command in your project's root directory, it will automatically create a `.modelence.env` file with the necessary environment variables.
