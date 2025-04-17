@@ -4,8 +4,6 @@ sidebar_position: 4
 
 # Store
 
-The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
-
 Stores allow you to:
 - Define type-safe schemas for your data
 - Handle CRUD operations with MongoDB

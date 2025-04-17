@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Using a Store
 
-Stores in Modelence are MongoDB collections with built-in TypeScript support, schema and helper methods. They help you:
+Stores in Modelence are MongoDB collections with built-in TypeScript support, schema and helper methods. They help you to:
 
 - Define **type-safe schemas** for your data
 - Handle **CRUD operations** with MongoDB
@@ -13,7 +13,7 @@ Stores in Modelence are MongoDB collections with built-in TypeScript support, sc
 
 ## Create a Store
 
-Create a new store in your module file:
+You can define a store anywhere in your project, as long as it is imported and passed into a Module (we will cover Modules in the next tutorial). While you can define everything in a single file, the recommended approach in Modelence is to group code by modules / domains into separate directories. For our Todo app, we'll just put everything into a single `todo` directory on the server side. Create an `src/server/todo` directory and add a `db.ts` file to it which we'll use to define our store for todo items:
 
 ```typescript title="src/server/todo/db.ts"
 import { Store, schema } from 'modelence';
@@ -46,6 +46,7 @@ export const dbTodos = new Store('todos', {
 ## Using the Store
 
 Once defined, you can use your Store object to perform any operations on your collection.
+For example:
 
 ```typescript
 const { insertedId } = await dbTodos.insertOne({
@@ -68,5 +69,5 @@ Stores provide a comprehensive set of methods for working with MongoDB documents
 See the [Store API Reference](../../api-reference/store) for a complete list of available methods and their usage.
 
 :::tip
-Stores automatically handle MongoDB connection management, collection provisioning and index creation (as you define in the `indexes` array). Just define your store and start using it - Modelence takes care of the rest.
+Stores automatically handle MongoDB connection management, collection provisioning and index creation (as you define in the `indexes` array). Just define your Store and start using it - Modelence takes care of the rest.
 :::

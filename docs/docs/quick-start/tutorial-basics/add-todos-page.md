@@ -2,9 +2,9 @@
 sidebar_position: 3
 ---
 
-# Add client routes
+# Add Todos page
 
-Modelence is not opinionated about frontend, so you are free to use any routing library you like.
+Modelence is mostly frontend-agnostic, so you are free to use any routing library you like.
 We will use React Router for this example, which is what's included in the default Modelence starter.
 
 ## Create a new client route
@@ -38,6 +38,7 @@ export default function TodosPage() {
     It will automatically re-fetch the data if/when the query changes and can also accept arguments.
   */
   const { data: todos, isFetching, error } = useQuery('todo.getAll');
+  // TODO: add a mutation to add a new todo
 
   if (isFetching) {
     return <div>Loading...</div>;
@@ -60,4 +61,4 @@ export default function TodosPage() {
 }
 ```
 
-Now, once you add data to your `todos` MongoDB collection, you should be able to see it at http://localhost:3000/todos
+Now, you should be able to see your page at http://localhost:3000/todos
