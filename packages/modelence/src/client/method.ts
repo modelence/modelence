@@ -12,7 +12,7 @@
 */
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useQuery as useTanQuery, useMutation as useTanMutation } from '@tanstack/react-query';
 import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
 import { reviveResponseTypes } from '../methods/serialize';
@@ -23,6 +23,13 @@ type MethodResult<T> = {
   isFetching: boolean;
   error: Error | null;
   data: T | null;
+};
+
+type PlaceholderData<T> = T | ((prev: T | null) => T);
+
+type QueryOptions<T> = {
+  enabled?: boolean;
+  placeholderData?: PlaceholderData<T>;
 };
 
 export async function callMethod<T = unknown>(methodName: string, args: Args = {}): Promise<T> {
@@ -100,14 +107,28 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
  * }
  * ```
  */
-export function useQuery<T = unknown>(methodName: string, args: Args = {}, options?: { enabled?: boolean }): MethodResult<T> & {
+export function useQuery<T = unknown>(
+  methodName: string, 
+  args: Args = {}, 
+  options?: QueryOptions<T>
+): MethodResult<T> & {
   /** Function to manually trigger a refetch of the query with optional new arguments */
   refetch: (args?: Args) => void
 } {
-  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: options?.enabled ?? true });
+  type QueryKey = [string, Args];
+  
+  const query = useTanQuery<T, Error, T, QueryKey>({
+    queryKey: [methodName, args],
+    queryFn: () => callMethod<T>(methodName, args),
+    enabled: options?.enabled ?? true,
+    placeholderData: options?.placeholderData as any
+  });
+
   return {
-    ...result,
-    refetch: (args?: Args) => triggerMethod(args),
+    data: query.data ?? null,
+    error: query.error as Error | null,
+    isFetching: query.isFetching,
+    refetch: () => query.refetch(),
   };
 }
 
@@ -135,57 +156,17 @@ export function useQuery<T = unknown>(methodName: string, args: Args = {}, optio
  * updateTodo({ id: '123', name: 'New Name' });
  * ```
  */
-export function useMutation<T = unknown>(methodName: string, args: Args = {}): MethodResult<T> & {
-  /** Function to trigger the mutation with optional arguments */
-  mutate: (args?: Args) => void,
-  /** 
-   * Async version of mutate that returns a promise with the result.
-   * Useful when you need to wait for the mutation to complete.
-   */
-  mutateAsync: (args?: Args) => Promise<T>
-} {
-  const { result, triggerMethod } = useMethod<T>(methodName, args, { enabled: false });
-  return {
-    ...result,
-    mutate: (args?: Args) => triggerMethod(args),
-    mutateAsync: triggerMethod,
-  };
-}
-
-export function useMethod<T>(methodName: string, args: Args = {}, options: { enabled: boolean }): {
-  result: MethodResult<T>,
-  triggerMethod: (args?: Args) => Promise<T>
-} {
-  // Memoize the args object to maintain reference stability and prevent infinite re-renders
-  const stableArgs = useMemo(() => args, [JSON.stringify(args)]);
-  const stableOptions = useMemo(() => options, [JSON.stringify(options)]);
-
-  const [result, setResult] = useState<MethodResult<T>>({
-    isFetching: options.enabled,
-    error: null,
-    data: null,
+export function useMutation<T = unknown>(methodName: string, args: Args = {}) {
+  const mutation = useTanMutation({
+    mutationFn: (newArgs: Args = {}) => callMethod<T>(methodName, { ...args, ...newArgs }),
   });
 
-  const triggerMethod = async (args: Args = stableArgs) => {
-    setResult({ isFetching: true, error: null, data: result.data });
-    try {
-      const data = await callMethod<T>(methodName, args);
-      setResult({ isFetching: false, error: null, data });
-      return data;
-    } catch (error) {
-      setResult({ isFetching: false, error: error as Error, data: null });
-      throw error;
-    }
+  return {
+    data: mutation.data ?? null,
+    error: mutation.error as Error | null,
+    isFetching: mutation.isPending, // Legacy
+    isPending: mutation.isPending,
+    mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync,
   };
-
-  // TODO: switch to React Query (TanStack Query)
-  useEffect(() => {
-    if (!options.enabled) {
-      return;
-    }
-
-    triggerMethod();
-  }, [methodName, stableArgs, stableOptions]);
-
-  return { result, triggerMethod };
 }

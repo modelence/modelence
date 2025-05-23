@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, ReactNode } from 'react';
 import { initSession } from './session';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -16,6 +17,8 @@ interface AppProviderProps {
 }
 
 let isInitialized = false;
+
+export const queryClient = new QueryClient();
 
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
@@ -39,5 +42,9 @@ export function AppProvider({ children, loadingElement }: AppProviderProps) {
     return loadingElement ?? <div>Loading...</div>;
   }
 
-  return <>{children}</>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
 }
