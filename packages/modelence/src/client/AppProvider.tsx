@@ -18,7 +18,13 @@ interface AppProviderProps {
 
 let isInitialized = false;
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
