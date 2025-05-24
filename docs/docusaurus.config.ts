@@ -38,7 +38,9 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          // routeBasePath: 'docs',
+          routeBasePath: '/',
+          // Set the default document that will load at the root
+          path: 'docs',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
@@ -67,6 +69,12 @@ const config: Config = {
   ],
 
   themeConfig: {
+    defaultDocsSidebar: 'quickStartSidebar',
+    docs: {
+      sidebar: {
+        autoCollapseCategories: true,
+      },
+    },
     image: 'img/modelence-social-card.jpg',
     navbar: {
       title: 'Modelence Docs',
@@ -107,11 +115,11 @@ const config: Config = {
           items: [
             {
               label: 'Quick Start',
-              to: '/docs/quick-start/intro',
+              to: '/quick-start/intro',
             },
             {
               label: 'API Reference',
-              to: '/docs/api-reference/intro',
+              to: '/api-reference/intro',
             },
           ],
         },

@@ -6,17 +6,17 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #7c3aed;        /* violet-600 - Keep this for good contrast on buttons/links */
-  --ifm-color-primary-dark: #6d28d9;   /* violet-700 */
-  --ifm-color-primary-darker: #5b21b6; /* violet-800 */
-  --ifm-color-primary-darkest: #4c1d95;/* violet-900 */
-  --ifm-color-primary-light: #8b5cf6;  /* violet-500 */
-  --ifm-color-primary-lighter: #a78bfa; /* violet-400 */
-  --ifm-color-primary-lightest: #c4b5fd; /* violet-300 */
+  --ifm-color-primary: #5509D9;        /* Main color as requested */
+  --ifm-color-primary-dark: #4B08C2;   /* 10% darker */
+  --ifm-color-primary-darker: #4107AB; /* 20% darker */
+  --ifm-color-primary-darkest: #370694;/* 30% darker */
+  --ifm-color-primary-light: #621FE2;  /* 10% lighter */
+  --ifm-color-primary-lighter: #7742E8; /* 20% lighter */
+  --ifm-color-primary-lightest: #9370EE; /* 30% lighter */
   --ifm-background-color: #ffffff;
-  --ifm-background-surface-color: #f5f3ff; /* violet-50 */
+  --ifm-background-surface-color: #f4f0ff; /* Lighter shade of main color */
   --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(124, 58, 237, 0.1); /* violet-600 at 0.1 opacity */
+  --docusaurus-highlighted-code-line-bg: rgba(85, 9, 217, 0.1); /* Main color at 0.1 opacity */
   
   /* Add this new variable for hero background */
   --ifm-hero-background-color: #f5f3ff; /* violet-50 */
@@ -25,16 +25,16 @@
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #c084fc;        /* purple-400 */
-  --ifm-color-primary-dark: #a855f7;   /* purple-500 */
-  --ifm-color-primary-darker: #9333ea; /* purple-600 */
-  --ifm-color-primary-darkest: #7e22ce;/* purple-700 */
-  --ifm-color-primary-light: #d8b4fe;  /* purple-300 */
-  --ifm-color-primary-lighter: #e9d5ff;/* purple-200 */
-  --ifm-color-primary-lightest: #f3e8ff;/* purple-100 */
+  --ifm-color-primary: #818CF8;        /* Indigo-400 - More indigo, less purple */
+  --ifm-color-primary-dark: #6366F1;   /* Indigo-500 */
+  --ifm-color-primary-darker: #4F46E5; /* Indigo-600 */
+  --ifm-color-primary-darkest: #4338CA;/* Indigo-700 */
+  --ifm-color-primary-light: #A5B4FC;  /* Indigo-300 */
+  --ifm-color-primary-lighter: #C7D2FE;/* Indigo-200 */
+  --ifm-color-primary-lightest: #E0E7FF;/* Indigo-100 */
   --ifm-background-color: #1a1a1a;     /* Custom dark background */
   --ifm-background-surface-color: #262626; /* Custom dark surface */
-  --docusaurus-highlighted-code-line-bg: rgba(192, 132, 252, 0.2); /* purple-400 at 0.2 opacity */
+  --docusaurus-highlighted-code-line-bg: rgba(129, 140, 248, 0.2); /* Updated indigo dark mode primary at 0.2 opacity */
   
   /* Add hero background for dark mode */
   --ifm-hero-background-color: #262626; /* Custom dark surface */
@@ -59,18 +59,18 @@
 }
 
 [data-theme='dark'] .hero.hero--primary {
-  --ifm-hero-text-color: #ffffff; /* Light text for dark mode */
+  --ifm-hero-text-color: #ffffff; /* White text for better readability */
   background-color: #262626 !important; /* Custom dark surface - Force override */
   background-image: repeating-linear-gradient(
     60deg,
     transparent,
     transparent 40px,
-    rgba(255, 255, 255, 0.1) 40px,
-    rgba(255, 255, 255, 0.1) 80px
+    rgba(64, 64, 64, 0.6) 40px, /* Dark gray stripes */
+    rgba(64, 64, 64, 0.6) 80px
   ), linear-gradient(
     60deg,
-    rgba(255, 255, 255, 0),
-    rgba(255, 255, 255, 0.1)
+    rgba(38, 38, 38, 0.8),
+    rgba(64, 64, 64, 0.4)
   ) !important;
 }
 
@@ -101,7 +101,7 @@ code {
 [data-theme='dark'] code {
   background-color: #262626; /* neutral-800 */
   border-color: #404040; /* neutral-700 */
-  color: var(--ifm-color-primary-lighter);
+  color: #C7D2FE; /* Indigo-200 for better contrast */
   /* padding: 0.2rem 0.4rem; */
   border-radius: 0.25rem; /* Reduced from default */
 }
@@ -113,7 +113,7 @@ code {
 }
 
 [data-theme='dark'] .navbar__link--active {
-  color: var(--ifm-color-gray-100) !important;
+  color: #E0E7FF !important; /* Indigo-100 for better visibility */
 }
 
 .navbar__link--active:after {
@@ -127,7 +127,7 @@ code {
   background-color: currentColor;
 }
 
-/* Remove purple background from active item */
+/* Remove background from active item */
 .navbar__link--active:not(.dropdown__link--active) {
   background: none;
 }
@@ -163,4 +163,9 @@ code {
 [data-theme='dark'] .button--dark:hover {
   --ifm-button-background-color: #374151; /* gray-700 for dark mode hover */
   --ifm-button-border-color: #374151;
+}
+
+/* Make primary button text white in dark mode */
+[data-theme='dark'] .button--primary {
+  color: #ffffff !important; /* Force white text for better contrast */
 }
