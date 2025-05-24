@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkmodelence_docs=self.webpackChunkmodelence_docs||[]).push([[583],{6107:(e,s,t)=>{t.r(s),t.d(s,{default:()=>r});var c=t(6347),n=t(797),o=t(4848);function r(){const{siteConfig:e}=(0,n.A)();return(0,o.jsx)(c.rd,{to:"/quick-start/intro"})}}}]);
