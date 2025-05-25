@@ -39,11 +39,11 @@ export function LoginForm({
   };
 
   return (
-    <div className={`w-full max-w-md mx-auto bg-white rounded-2xl shadow-sm border border-gray-200 p-8 ${cardClassName}`}>
+    <div className={`w-full max-w-md mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-8 ${cardClassName}`}>
       <div className="space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="text-xl font-semibold text-gray-900">
             Sign in to your account
           </h1>
         </div>
@@ -61,7 +61,7 @@ export function LoginForm({
           
           <Button 
             variant="outline" 
-            className="w-full h-12 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
+            className="w-full h-10 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
             type="button"
           >
             <GoogleIcon className="w-5 h-5" />
@@ -90,7 +90,7 @@ export function LoginForm({
               name="email" 
               id="email" 
               placeholder="m@example.com"
-              className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
               required
             />
           </div>
@@ -108,13 +108,13 @@ export function LoginForm({
               type="password" 
               name="password" 
               id="password" 
-              className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
               required
             />
           </div>
 
           <Button
-            className={`w-full h-12 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-lg ${buttonClassName}`}
+            className={`w-full h-10 bg-gray-900 hover:bg-gray-800 text-white font-medium ${buttonClassName}`}
             type="submit"
           >
             Login
