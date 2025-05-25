@@ -50,10 +50,10 @@ export function SignupForm({
   };
 
   return (
-    <div className={`w-full max-w-md mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-8 ${cardClassName}`}>
+    <div className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 ${cardClassName}`}>
       <div className="space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-xl font-semibold text-gray-900">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
             Create an account
           </h1>
         </div>
@@ -61,7 +61,7 @@ export function SignupForm({
         <div className="space-y-3">
           <Button 
             variant="outline" 
-            className="w-full h-10 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
+            className="w-full flex items-center justify-center gap-3"
             type="button"
           >
             <GoogleIcon className="w-5 h-5" />
@@ -71,49 +71,49 @@ export function SignupForm({
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200"></div>
+            <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white text-gray-500">or</span>
+            <span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">or</span>
           </div>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className={`block text-sm font-medium text-gray-900 mb-2 ${labelClassName}`}>
+            <label htmlFor="email" className={`block text-sm font-medium text-gray-900 dark:text-white mb-2 ${labelClassName}`}>
               Email
             </label>
             <input 
               type="email" 
               name="email" 
               id="email" 
-              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${inputClassName}`}
               required
             />
           </div>
           
           <div>
-            <label htmlFor="password" className={`block text-sm font-medium text-gray-900 mb-2 ${labelClassName}`}>
+            <label htmlFor="password" className={`block text-sm font-medium text-gray-900 dark:text-white mb-2 ${labelClassName}`}>
               Password
             </label>
             <input 
               type="password" 
               name="password" 
               id="password" 
-              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${inputClassName}`}
               required
             />
           </div>
 
           <div>
-            <label htmlFor="confirm-password" className={`block text-sm font-medium text-gray-900 mb-2 ${labelClassName}`}>
+            <label htmlFor="confirm-password" className={`block text-sm font-medium text-gray-900 dark:text-white mb-2 ${labelClassName}`}>
               Confirm password
             </label>
             <input 
               type="password" 
               name="confirmPassword" 
               id="confirm-password" 
-              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${inputClassName}`}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${inputClassName}`}
               required
             />
           </div>
@@ -125,19 +125,21 @@ export function SignupForm({
                 aria-describedby="terms"
                 type="checkbox"
                 name="terms"
-                className="w-4 h-4 border border-gray-300 rounded bg-gray-50 focus:ring-3 focus:ring-blue-300"
+                className="w-4 h-4 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-800 focus:ring-3 focus:ring-blue-300 dark:focus:ring-blue-600"
                 required
               />
             </div>
             <div className="ml-3 text-sm">
-              <label htmlFor="terms" className="text-gray-500">
-                I accept the <a className="font-medium text-blue-600 hover:underline" href="#">Terms and Conditions</a>
+              <label htmlFor="terms" className="text-gray-500 dark:text-gray-400">
+                I accept the <a className="font-medium text-blue-600 dark:text-blue-400 hover:underline" href="#">Terms and Conditions</a>
               </label>
             </div>
           </div>
 
           <Button
-            className={`w-full h-10 bg-gray-900 hover:bg-gray-800 text-white font-medium ${buttonClassName}`}
+            className={`w-full ${buttonClassName}`}
+            variant={buttonVariant}
+            size={buttonSize}
             type="submit"
           >
             Create account
@@ -145,10 +147,10 @@ export function SignupForm({
         </form>
 
         {renderLoginLink && (
-          <p className="text-center text-sm text-gray-600">
+          <p className="text-center text-sm text-gray-600 dark:text-gray-400">
             Already have an account?{' '}
             {renderLoginLink({ 
-              className: 'text-gray-900 underline hover:no-underline font-medium', 
+              className: 'text-gray-900 dark:text-white underline hover:no-underline font-medium', 
               children: 'Login here' 
             })}
           </p>
