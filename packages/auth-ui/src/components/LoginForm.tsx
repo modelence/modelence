@@ -41,14 +41,12 @@ export function LoginForm({
   return (
     <div className={`w-full max-w-md mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-8 ${cardClassName}`}>
       <div className="space-y-6">
-        {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-xl font-semibold text-gray-900">
             Sign in to your account
           </h1>
         </div>
 
-        {/* Social Login Buttons */}
         <div className="space-y-3">
           {/* <Button 
             variant="outline" 
@@ -79,7 +77,6 @@ export function LoginForm({
           </div>
         </div>
 
-        {/* Email/Password Form */}
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="email" className={`block text-sm font-medium text-gray-900 mb-2 ${labelClassName}`}>
@@ -121,7 +118,6 @@ export function LoginForm({
           </Button>
         </form>
 
-        {/* Sign up link */}
         {renderSignupLink && (
           <p className="text-center text-sm text-gray-600">
             Don't have an account?{' '}
