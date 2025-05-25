@@ -1,6 +1,9 @@
 import React from 'react';
 import { loginWithPassword } from 'modelence/client';
-import { Button } from './Button';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Label } from './ui/Label';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { AppleIcon } from './icons/AppleIcon';
 
@@ -39,14 +42,14 @@ export function LoginForm({
   };
 
   return (
-    <div className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 ${cardClassName}`}>
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Sign in to your account
-          </h1>
-        </div>
-
+    <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
+      <CardHeader className="text-center">
+        <CardTitle className="text-xl">
+          Sign in to your account
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent className="space-y-6">
         <div className="space-y-3">
           {/* <Button 
             variant="outline" 
@@ -73,39 +76,39 @@ export function LoginForm({
             <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">Or continue with</span>
+            <span className="px-4 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">Or continue with</span>
           </div>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className={`block text-sm font-medium text-gray-900 dark:text-white mb-2 ${labelClassName}`}>
+            <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
               Email
-            </label>
-            <input 
+            </Label>
+            <Input 
               type="email" 
               name="email" 
               id="email" 
               placeholder="m@example.com"
-              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 ${inputClassName}`}
+              className={inputClassName}
               required
             />
           </div>
           
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="password" className={`text-sm font-medium text-gray-900 dark:text-white ${labelClassName}`}>
+              <Label htmlFor="password" className={labelClassName}>
                 Password
-              </label>
+              </Label>
               <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                 Forgot your password?
               </a>
             </div>
-            <input 
+            <Input 
               type="password" 
               name="password" 
               id="password" 
-              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white ${inputClassName}`}
+              className={inputClassName}
               required
             />
           </div>
@@ -119,8 +122,10 @@ export function LoginForm({
             Login
           </Button>
         </form>
+      </CardContent>
 
-        {renderSignupLink && (
+      {renderSignupLink && (
+        <CardFooter className="justify-center">
           <p className="text-center text-sm text-gray-600 dark:text-gray-400">
             Don't have an account?{' '}
             {renderSignupLink({ 
@@ -128,8 +133,8 @@ export function LoginForm({
               children: 'Sign up' 
             })}
           </p>
-        )}
-      </div>
-    </div>
+        </CardFooter>
+      )}
+    </Card>
   );
 }
