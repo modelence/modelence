@@ -19,9 +19,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@radix-ui/react-label": "^2.1.7",
-    "@radix-ui/react-slot": "^1.0.2",
-    "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "modelence": "^0.4.13",
     "react": "^18.0.0",

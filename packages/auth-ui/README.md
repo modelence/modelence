@@ -4,8 +4,6 @@ Authentication UI components for Modelence.
 
 ## Installation
 
-
-
 ```sh
 npm install @modelence/auth-ui
 ```
@@ -28,7 +26,7 @@ module.exports = {
 }
 ```
 
-That's it! The components will automatically work with your existing Tailwind setup.
+That's it! The components use standard Tailwind classes and will work with your existing Tailwind setup.
 
 ## Usage
 
