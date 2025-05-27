@@ -5,7 +5,7 @@ export { ObjectId } from 'mongodb';
 
 export { createQuery } from './methods';
 
-export { usersCollection as dbUsers } from './auth/user';
+export { usersCollection as dbUsers } from './auth/db';
 export type { UserInfo } from './auth/types';
 
 export { schema } from './data/types';

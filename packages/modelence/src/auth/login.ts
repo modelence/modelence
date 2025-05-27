@@ -2,7 +2,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
-import { usersCollection } from './user';
+import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
 
 export async function handleLoginWithPassword(args: Args, { user, session }: Context) {

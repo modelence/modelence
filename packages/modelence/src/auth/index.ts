@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 
 import { obtainSession } from './session';
-import { usersCollection } from './user';
+import { usersCollection } from './db';
 import { getDefaultAuthenticatedRoles, getUnauthenticatedRoles } from './role';
 import { Role, Session, UserInfo } from './types';
 

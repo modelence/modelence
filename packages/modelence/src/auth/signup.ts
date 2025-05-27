@@ -2,7 +2,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
-import { usersCollection } from './user';
+import { usersCollection } from './db';
 
 export async function handleSignupWithPassword(args: Args, { user }: Context) {
   const email = z.string().email().parse(args.email);
