@@ -1,3 +1,4 @@
 export { LoginForm } from './components/LoginForm';
-export { SignupForm } from './components/SignupForm'; 
-export { UserMenu } from './components/UserMenu'; 
+export { SignupForm } from './components/SignupForm';
+export { UserMenu } from './components/UserMenu';
+export { UserProfile } from './components/UserProfile';

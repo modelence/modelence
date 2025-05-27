@@ -7,10 +7,17 @@ type MenuItemRenderer = (props: {
   to: string;
 }) => React.ReactElement;
 
+type LinkRenderer = (props: { 
+  href: string; 
+  className: string; 
+  children: React.ReactNode; 
+}) => React.ReactElement;
+
 type LogoutHandler = () => void | Promise<void>;
 
 export interface UserMenuProps {
   renderMenuItem?: MenuItemRenderer;
+  renderLink?: LinkRenderer;
   onLogout?: LogoutHandler;
   // Styling overrides
   className?: string;
@@ -23,6 +30,7 @@ export interface UserMenuProps {
 
 export function UserMenu({
   renderMenuItem,
+  renderLink,
   onLogout,
   className = "",
   avatarClassName = "",
@@ -45,15 +53,18 @@ export function UserMenu({
     }
   };
 
-  const defaultMenuItemRenderer = ({ children, to, className }: { children: React.ReactNode, to: string, className: string }) => (
-    <a href={to} className={className}>{children}</a>
-  );
+  const defaultMenuItemRenderer = ({ children, to, className }: { children: React.ReactNode, to: string, className: string }) => {
+    if (renderLink) {
+      return renderLink({ href: to, className, children });
+    }
+    return <a href={to} className={className}>{children}</a>;
+  };
 
   const MenuItemComponent = renderMenuItem || defaultMenuItemRenderer;
 
   return (
     <div className={`relative group ${className}`}>
-      <div className={`w-8 h-8 rounded-full bg-orange-200 flex items-center justify-center cursor-pointer ${avatarClassName}`}>
+      <div className={`w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center cursor-pointer ${avatarClassName}`}>
         {user.handle[0].toUpperCase()}
       </div>
       
