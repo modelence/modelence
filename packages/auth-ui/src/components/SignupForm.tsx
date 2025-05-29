@@ -8,10 +8,22 @@ import { GoogleIcon } from './icons/GoogleIcon';
 
 type LoginLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
+interface TermsConsent {
+  type: 'terms';
+  url: string;
+}
+
+interface CustomConsent {
+  type: 'custom';
+  content: string | React.ReactElement;
+  optional?: boolean;
+}
+
+type ConsentItem = TermsConsent | CustomConsent;
+
 export interface SignupFormProps {
   renderLoginLink?: LoginLinkRenderer;
-  onPasswordMismatch?: (message: string) => void;
-  // Styling overrides
+  onError?: (error: Error) => void;
   className?: string;
   cardClassName?: string;
   buttonClassName?: string;
@@ -19,18 +31,57 @@ export interface SignupFormProps {
   buttonSize?: "default" | "sm" | "lg" | "icon";
   inputClassName?: string;
   labelClassName?: string;
+  consents?: ConsentItem[];
+}
+
+function ConsentCheckbox({ 
+  consent, 
+  index,
+  labelClassName
+}: { 
+  consent: ConsentItem; 
+  index: number; 
+  labelClassName: string;
+}) {
+  const checkboxId = `consent-${index}`;
+  const isRequired = consent.type === 'terms' || consent.optional !== true;
+  
+  const content = consent.type === 'terms' 
+    ? <span>I accept the <a className="font-medium text-blue-600 dark:text-blue-400 hover:underline" href={consent.url} target="_blank">Terms and Conditions</a></span>
+    : <span>{consent.content}</span>;
+
+  return (
+    <div className="flex items-start">
+      <div className="flex items-center h-5">
+        <input
+          id={checkboxId}
+          aria-describedby={checkboxId}
+          type="checkbox"
+          name={checkboxId}
+          className="w-4 h-4 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-800 focus:ring-3 focus:ring-blue-300 dark:focus:ring-blue-600"
+          required={isRequired}
+        />
+      </div>
+      <div className="ml-3 text-sm">
+        <Label htmlFor={checkboxId} className="text-gray-600 dark:text-gray-400">
+          {content}
+        </Label>
+      </div>
+    </div>
+  );
 }
 
 export function SignupForm({ 
   renderLoginLink,
-  onPasswordMismatch,
+  onError = (error: Error) => { console.error(error); },
   className = "",
   cardClassName = "",
   buttonClassName = "",
   buttonVariant = "default",
   buttonSize = "default",
   inputClassName = "",
-  labelClassName = ""
+  labelClassName = "",
+  consents
 }: SignupFormProps) {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -41,11 +92,7 @@ export function SignupForm({
     const confirmPassword = String(formData.get('confirmPassword'));
     
     if (password !== confirmPassword) {
-      if (onPasswordMismatch) {
-        onPasswordMismatch('Passwords do not match');
-      } else {
-        alert('Passwords do not match');
-      }
+      onError(new Error('Passwords do not match'));
       return;
     }
     
@@ -121,23 +168,9 @@ export function SignupForm({
             />
           </div>
 
-          <div className="flex items-start">
-            <div className="flex items-center h-5">
-              <input
-                id="terms"
-                aria-describedby="terms"
-                type="checkbox"
-                name="terms"
-                className="w-4 h-4 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-800 focus:ring-3 focus:ring-blue-300 dark:focus:ring-blue-600"
-                required
-              />
-            </div>
-            <div className="ml-3 text-sm">
-              <Label htmlFor="terms" className="text-gray-600 dark:text-gray-400">
-                I accept the <a className="font-medium text-blue-600 dark:text-blue-400 hover:underline" href="#">Terms and Conditions</a>
-              </Label>
-            </div>
-          </div>
+          {consents?.map((consent, index) => {
+            return <ConsentCheckbox key={index} consent={consent} index={index} labelClassName={labelClassName} />;
+          })}
 
           <Button
             className={`w-full ${buttonClassName}`}
@@ -156,7 +189,7 @@ export function SignupForm({
             Already have an account?{' '}
             {renderLoginLink({ 
               className: 'text-gray-900 dark:text-white underline hover:no-underline font-medium', 
-              children: 'Login here' 
+              children: 'Sign in here' 
             })}
           </p>
         </CardFooter>

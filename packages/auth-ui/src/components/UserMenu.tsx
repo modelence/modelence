@@ -15,10 +15,16 @@ type LinkRenderer = (props: {
 
 type LogoutHandler = () => void | Promise<void>;
 
+interface MenuItem {
+  href: string;
+  label: string;
+}
+
 export interface UserMenuProps {
   renderMenuItem?: MenuItemRenderer;
   renderLink?: LinkRenderer;
   onLogout?: LogoutHandler;
+  menuItems?: MenuItem[];
   // Styling overrides
   className?: string;
   avatarClassName?: string;
@@ -32,6 +38,7 @@ export function UserMenu({
   renderMenuItem,
   renderLink,
   onLogout,
+  menuItems = [],
   className = "",
   avatarClassName = "",
   dropdownClassName = "",
@@ -74,24 +81,20 @@ export function UserMenu({
           <div className="truncate text-gray-500 dark:text-gray-400">{user.handle}</div>
         </div>
 
-        <ul className="py-2 text-sm text-gray-700 dark:text-gray-200">
-          <li>
-            <MenuItemComponent 
-              to="/profile" 
-              className={`block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${menuItemClassName}`}
-            >
-              Profile
-            </MenuItemComponent>
-          </li>
-          <li>
-            <MenuItemComponent 
-              to="/preferences" 
-              className={`block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${menuItemClassName}`}
-            >
-              Preferences
-            </MenuItemComponent>
-          </li>
-        </ul>
+        {menuItems.length > 0 && (
+          <ul className="py-2 text-sm text-gray-700 dark:text-gray-200">
+            {menuItems.map((item, index) => (
+              <li key={index}>
+                <MenuItemComponent 
+                  to={item.href} 
+                  className={`block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${menuItemClassName}`}
+                >
+                  {item.label}
+                </MenuItemComponent>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="py-1">
           <button
