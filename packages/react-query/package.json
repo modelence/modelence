@@ -1,0 +1,35 @@
+{
+  "type": "module",
+  "name": "@modelence/react-query",
+  "version": "1.0.0",
+  "description": "React Query utilities for Modelence",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "modelence": "^0.4.14"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.76.2",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.7.2",
+    "tsup": "^8.3.6"
+  }
+} 
