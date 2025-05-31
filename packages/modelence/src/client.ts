@@ -10,6 +10,6 @@ export const AppProvider = 'useClient' in React
   : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
-export { useQuery, useMutation, callMethod } from './client/method';
+export { modelenceQuery, modelenceMutation, callMethod } from './client/method';
 export { useSession } from './client/session';
 export { signupWithPassword, loginWithPassword, logout } from './auth/client';

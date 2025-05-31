@@ -12,25 +12,11 @@
 */
 "use client";
 
-import { useQuery as useTanQuery, useMutation as useTanMutation } from '@tanstack/react-query';
 import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
 import { reviveResponseTypes } from '../methods/serialize';
 
 type Args = Record<string, unknown>;
-
-type MethodResult<T> = {
-  isFetching: boolean;
-  error: Error | null;
-  data: T | null;
-};
-
-type PlaceholderData<T> = T | ((prev: T | null) => T);
-
-type QueryOptions<T> = {
-  enabled?: boolean;
-  placeholderData?: PlaceholderData<T>;
-};
 
 export async function callMethod<T = unknown>(methodName: string, args: Args = {}): Promise<T> {
   try {
@@ -76,97 +62,79 @@ async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
 }
 
 /**
- * React hook for executing a query method.
- * 
- * This hook automatically executes the query on mount and provides a refetch capability.
- * Similar to React Query's useQuery hook.
+ * Creates query options for use with TanStack Query's useQuery hook.
  * 
  * @typeParam T - The expected return type of the query
  * @param methodName - The name of the method to query
  * @param args - Optional arguments to pass to the method
- * @param options - Optional options object
- * @param options.enabled - Boolean indicating if the query should be enabled
- * @returns {Object} An object containing the query state and a refetch function:
- * - `data` - The data returned by the query, or null if not yet loaded
- * - `isFetching` - Boolean indicating if the query is in progress
- * - `error` - Any error that occurred during the query, or null
- * - `refetch` - Function to manually trigger a refetch with optional new arguments
+ * @returns Query options object for TanStack Query's useQuery
  * 
  * @example
  * ```tsx
+ * import { useQuery } from '@tanstack/react-query';
+ * import { modelenceQuery } from 'modelence/client';
+ * 
  * function MyComponent() {
- *   // This is assuming you have a Module named "todo" with a query named "getItem"
- *   const { data, isFetching, error } = useQuery<Todo>('todo.getItem', { id: '123' });
- *   if (isFetching) {
- *     return <div>Loading...</div>;
- *   }
- *   if (error) {
- *     return <div>Error: {error.message}</div>;
- *   }
+ *   // Basic usage
+ *   const { data } = useQuery(modelenceQuery('todo.getAll'));
+ * 
+ *   // With additional options
+ *   const { data: todo } = useQuery({
+ *     ...modelenceQuery('todo.getById', { id: '123' }),
+ *     enabled: !!id,
+ *     staleTime: 5 * 60 * 1000,
+ *   });
+ * 
  *   return <div>{data?.name}</div>;
  * }
  * ```
  */
-export function useQuery<T = unknown>(
+export function modelenceQuery<T = unknown>(
   methodName: string, 
-  args: Args = {}, 
-  options?: QueryOptions<T>
-): MethodResult<T> & {
-  /** Function to manually trigger a refetch of the query with optional new arguments */
-  refetch: (args?: Args) => void
-} {
-  type QueryKey = [string, Args];
-  
-  const query = useTanQuery<T, Error, T, QueryKey>({
+  args: Args = {}
+) {
+  return {
     queryKey: [methodName, args],
     queryFn: () => callMethod<T>(methodName, args),
-    enabled: options?.enabled ?? true,
-    placeholderData: options?.placeholderData as any
-  });
-
-  return {
-    data: query.data ?? null,
-    error: query.error as Error | null,
-    isFetching: query.isFetching,
-    refetch: () => query.refetch(),
   };
 }
 
 /**
- * React hook for executing a mutation method.
- * 
- * This hook provides functions to trigger the mutation manually and handles loading/error states.
- * Similar to React Query's useMutation hook.
+ * Creates mutation options for use with TanStack Query's useMutation hook.
  * 
  * @typeParam T - The expected return type of the mutation
  * @param methodName - The name of the method to mutate
- * @param args - Optional default arguments to pass to the method
- * @returns {Object} An object containing the mutation state and trigger functions:
- * - `data` - The data returned by the last successful mutation, or null
- * - `isFetching` - Boolean indicating if the mutation is in progress
- * - `error` - Any error that occurred during the last mutation, or null
- * - `mutate` - Function to trigger the mutation with optional arguments
- * - `mutateAsync` - Promise-returning version of mutate, useful for awaiting the result
+ * @param defaultArgs - Optional default arguments to merge with mutation variables
+ * @returns Mutation options object for TanStack Query's useMutation
  * 
  * @example
  * ```tsx
- * const { mutate: updateTodo, isFetching, error } = useMutation<User>('todos.update');
+ * import { useMutation, useQueryClient } from '@tanstack/react-query';
+ * import { modelenceMutation } from 'modelence/client';
  * 
- * // Later in your code:
- * updateTodo({ id: '123', name: 'New Name' });
+ * function MyComponent() {
+ *   const queryClient = useQueryClient();
+ *   
+ *   // Basic usage
+ *   const { mutate } = useMutation(modelenceMutation('todos.create'));
+ * 
+ *   // With additional options
+ *   const { mutate: updateTodo } = useMutation({
+ *     ...modelenceMutation('todos.update'),
+ *     onSuccess: () => {
+ *       queryClient.invalidateQueries({ queryKey: ['todos.getAll'] });
+ *     },
+ *   });
+ * 
+ *   return <button onClick={() => mutate({ title: 'New Todo' })}>Create</button>;
+ * }
  * ```
  */
-export function useMutation<T = unknown>(methodName: string, args: Args = {}) {
-  const mutation = useTanMutation({
-    mutationFn: (newArgs: Args = {}) => callMethod<T>(methodName, { ...args, ...newArgs }),
-  });
-
+export function modelenceMutation<T = unknown>(
+  methodName: string, 
+  defaultArgs: Args = {}
+) {
   return {
-    data: mutation.data ?? null,
-    error: mutation.error as Error | null,
-    isFetching: mutation.isPending, // Legacy
-    isPending: mutation.isPending,
-    mutate: mutation.mutate,
-    mutateAsync: mutation.mutateAsync,
+    mutationFn: (variables: Args = {}) => callMethod<T>(methodName, { ...defaultArgs, ...variables }),
   };
 }
