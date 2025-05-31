@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getQueryOptions, getMutationOptions, createQueryKey } from '@modelence/react-query';
+import { modelenceQuery, modelenceMutation, createQueryKey } from '@modelence/react-query';
 
 interface Todo {
   id: string;
@@ -11,7 +11,7 @@ interface Todo {
 // Example 1: Basic query usage
 function TodoList() {
   const { data: todos, isPending, error } = useQuery<Todo[]>(
-    getQueryOptions('todo.getAll', { limit: 10 })
+    modelenceQuery('todo.getAll', { limit: 10 })
   );
 
   if (isPending) return <div>Loading todos...</div>;
@@ -33,7 +33,7 @@ function TodoList() {
 // Example 2: Query with options and enabled condition
 function TodoDetail({ todoId }: { todoId: string | null }) {
   const { data: todo, isPending } = useQuery<Todo>({
-    ...getQueryOptions('todo.getById', { id: todoId }),
+    ...modelenceQuery('todo.getById', { id: todoId }),
     enabled: !!todoId, // Only run when todoId exists
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 3,
@@ -55,7 +55,7 @@ function CreateTodo() {
   const queryClient = useQueryClient();
 
   const { mutate: createTodo, isPending, error } = useMutation<Todo, Error, { title: string; completed: boolean }>({
-    ...getMutationOptions('todo.create'),
+    ...modelenceMutation('todo.create'),
     onSuccess: () => {
       // Invalidate and refetch all todo queries
       queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
@@ -95,7 +95,7 @@ function UpdateTodo({ todoId }: { todoId: string }) {
   const queryClient = useQueryClient();
 
   const { mutate: updateTodo, isPending } = useMutation<Todo, Error, { completed: boolean }>({
-    ...getMutationOptions('todo.update', { id: todoId }), // Default id
+    ...modelenceMutation('todo.update', { id: todoId }), // Default id
     onSuccess: () => {
       // Invalidate specific todo and list
       queryClient.invalidateQueries({ queryKey: ['todo.getById'] });
@@ -127,7 +127,7 @@ function TodoActions() {
 
   const prefetchTodo = (id: string) => {
     queryClient.prefetchQuery<Todo>({
-      ...getQueryOptions('todo.getById', { id }),
+      ...modelenceQuery('todo.getById', { id }),
       staleTime: 10 * 60 * 1000, // 10 minutes
     });
   };
@@ -160,7 +160,7 @@ function OptimisticTodo({ todoId }: { todoId: string }) {
     { id: string; completed: boolean },
     { previousTodo: Todo | undefined }
   >({
-    ...getMutationOptions('todo.update'),
+    ...modelenceMutation('todo.update'),
     onMutate: async (variables) => {
       // Cancel outgoing refetches (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({ 

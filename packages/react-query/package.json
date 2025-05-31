@@ -23,13 +23,13 @@
     "react": ">=18.0.0"
   },
   "dependencies": {
-    "modelence": "^0.4.14"
+    "modelence": "^0.5.0"
   },
   "devDependencies": {
     "@tanstack/react-query": "^5.76.2",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
-    "typescript": "^5.7.2",
-    "tsup": "^8.3.6"
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2"
   }
-} 
+}

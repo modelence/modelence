@@ -3,91 +3,80 @@ import { callMethod } from 'modelence/client';
 type Args = Record<string, unknown>;
 
 /**
- * Creates a query configuration object that can be passed to TanStack Query's useQuery hook.
+ * Creates query options for use with TanStack Query's useQuery hook.
  * 
- * This follows the Convex pattern where instead of wrapping useQuery, we provide a factory
- * function that generates the query configuration.
- * 
- * @param methodName - The name of the Modelence query method to call
- * @param args - Arguments to pass to the method
- * @returns Query configuration object for use with TanStack Query's useQuery
+ * @typeParam T - The expected return type of the query
+ * @param methodName - The name of the method to query
+ * @param args - Optional arguments to pass to the method
+ * @returns Query options object for TanStack Query's useQuery
  * 
  * @example
  * ```tsx
  * import { useQuery } from '@tanstack/react-query';
- * import { getQueryOptions } from '@modelence/react-query';
+ * import { modelenceQuery } from '@modelence/react-query';
  * 
- * function TodoList() {
- *   const { data, isPending, error } = useQuery(
- *     getQueryOptions('todo.getAll', { limit: 10 })
- *   );
- *   
- *   if (isPending) return <div>Loading...</div>;
- *   if (error) return <div>Error: {error.message}</div>;
- *   return <div>{data?.map(todo => <div key={todo.id}>{todo.title}</div>)}</div>;
+ * function MyComponent() {
+ *   // Basic usage
+ *   const { data } = useQuery(modelenceQuery('todo.getAll'));
+ * 
+ *   // With additional options
+ *   const { data: todo } = useQuery({
+ *     ...modelenceQuery('todo.getById', { id: '123' }),
+ *     enabled: !!id,
+ *     staleTime: 5 * 60 * 1000,
+ *   });
+ * 
+ *   return <div>{data?.name}</div>;
  * }
  * ```
  */
-export function getQueryOptions<T = unknown>(
-  methodName: string,
+export function modelenceQuery<T = unknown>(
+  methodName: string, 
   args: Args = {}
-): {
-  queryKey: readonly [string, Args];
-  queryFn: () => Promise<T>;
-} {
+) {
   return {
-    queryKey: [methodName, args] as const,
+    queryKey: [methodName, args],
     queryFn: () => callMethod<T>(methodName, args),
   };
 }
 
 /**
- * Creates a mutation configuration object that can be passed to TanStack Query's useMutation hook.
+ * Creates mutation options for use with TanStack Query's useMutation hook.
  * 
- * This follows the Convex pattern where instead of wrapping useMutation, we provide a factory
- * function that generates the mutation configuration.
- * 
- * @param methodName - The name of the Modelence mutation method to call
- * @param defaultArgs - Default arguments to merge with mutation variables (optional)
- * @returns Mutation configuration object for use with TanStack Query's useMutation
+ * @typeParam T - The expected return type of the mutation
+ * @param methodName - The name of the method to mutate
+ * @param defaultArgs - Optional default arguments to merge with mutation variables
+ * @returns Mutation options object for TanStack Query's useMutation
  * 
  * @example
  * ```tsx
  * import { useMutation, useQueryClient } from '@tanstack/react-query';
- * import { getMutationOptions } from '@modelence/react-query';
+ * import { modelenceMutation } from '@modelence/react-query';
  * 
- * function CreateTodo() {
+ * function MyComponent() {
  *   const queryClient = useQueryClient();
  *   
- *   const { mutate: createTodo, isPending } = useMutation({
- *     ...getMutationOptions('todo.create'),
+ *   // Basic usage
+ *   const { mutate } = useMutation(modelenceMutation('todos.create'));
+ * 
+ *   // With additional options
+ *   const { mutate: updateTodo } = useMutation({
+ *     ...modelenceMutation('todos.update'),
  *     onSuccess: () => {
- *       queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+ *       queryClient.invalidateQueries({ queryKey: ['todos.getAll'] });
  *     },
  *   });
- *   
- *   return (
- *     <button 
- *       onClick={() => createTodo({ title: 'New Todo' })}
- *       disabled={isPending}
- *     >
- *       {isPending ? 'Creating...' : 'Create Todo'}
- *     </button>
- *   );
+ * 
+ *   return <button onClick={() => mutate({ title: 'New Todo' })}>Create</button>;
  * }
  * ```
  */
-export function getMutationOptions<T = unknown, TVariables = Args>(
-  methodName: string,
+export function modelenceMutation<T = unknown>(
+  methodName: string, 
   defaultArgs: Args = {}
-): {
-  mutationFn: (variables: TVariables) => Promise<T>;
-} {
+) {
   return {
-    mutationFn: (variables: TVariables) => {
-      const mergedArgs = { ...defaultArgs, ...variables };
-      return callMethod<T>(methodName, mergedArgs);
-    },
+    mutationFn: (variables: Args = {}) => callMethod<T>(methodName, { ...defaultArgs, ...variables }),
   };
 }
 
