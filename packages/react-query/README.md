@@ -10,7 +10,7 @@ npm i @modelence/react-query @tanstack/react-query
 
 ## Overview
 
-This package provides `getQueryOptions` and `getMutationOptions` factory functions that can be used with TanStack Query's native `useQuery` and `useMutation` hooks. This approach, recommended by TanStack, gives you direct access to TanStack Query's full API while providing Modelence-specific query configurations.
+This package provides `modelenceQuery` and `modelenceMutation` factory functions that can be used with TanStack Query's native `useQuery` and `useMutation` hooks. This approach, recommended by TanStack, gives you direct access to TanStack Query's full API while providing Modelence-specific query configurations.
 
 ## Usage
 
@@ -18,11 +18,11 @@ This package provides `getQueryOptions` and `getMutationOptions` factory functio
 
 ```tsx
 import { useQuery } from '@tanstack/react-query';
-import { getQueryOptions } from '@modelence/react-query';
+import { modelenceQuery } from '@modelence/react-query';
 
 function TodoList() {
   const { data, isPending, error } = useQuery(
-    getQueryOptions('todo.getAll', { limit: 10 })
+    modelenceQuery('todo.getAll', { limit: 10 })
   );
   
   if (isPending) return <div>Loading...</div>;
@@ -42,13 +42,13 @@ function TodoList() {
 
 ```tsx
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMutationOptions } from '@modelence/react-query';
+import { modelenceMutation } from '@modelence/react-query';
 
 function CreateTodo() {
   const queryClient = useQueryClient();
   
   const { mutate: createTodo, isPending } = useMutation({
-    ...getMutationOptions('todo.create'),
+    ...modelenceMutation('todo.create'),
     onSuccess: () => {
       // Invalidate and refetch todos
       queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
@@ -72,11 +72,11 @@ function CreateTodo() {
 
 ```tsx
 import { useQuery } from '@tanstack/react-query';
-import { getQueryOptions } from '@modelence/react-query';
+import { modelenceQuery } from '@modelence/react-query';
 
 function TodoDetail({ id }: { id: string }) {
   const { data: todo } = useQuery({
-    ...getQueryOptions('todo.getById', { id }),
+    ...modelenceQuery('todo.getById', { id }),
     enabled: !!id, // Only run query if id exists
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -90,11 +90,11 @@ function TodoDetail({ id }: { id: string }) {
 
 ```tsx
 import { useMutation } from '@tanstack/react-query';
-import { getMutationOptions } from '@modelence/react-query';
+import { modelenceMutation } from '@modelence/react-query';
 
 function UpdateTodo({ todoId }: { todoId: string }) {
   const { mutate: updateTodo } = useMutation({
-    ...getMutationOptions('todo.update', { id: todoId }), // Default args
+    ...modelenceMutation('todo.update', { id: todoId }), // Default args
     onSuccess: (data) => {
       console.log('Todo updated:', data);
     },
@@ -112,7 +112,7 @@ function UpdateTodo({ todoId }: { todoId: string }) {
 
 ```tsx
 import { useQueryClient } from '@tanstack/react-query';
-import { createQueryKey, getQueryOptions } from '@modelence/react-query';
+import { createQueryKey, modelenceQuery } from '@modelence/react-query';
 
 function TodoActions() {
   const queryClient = useQueryClient();
@@ -125,7 +125,7 @@ function TodoActions() {
   
   const prefetchTodo = (id: string) => {
     queryClient.prefetchQuery({
-      ...getQueryOptions('todo.getById', { id }),
+      ...modelenceQuery('todo.getById', { id }),
       staleTime: 10 * 60 * 1000, // 10 minutes
     });
   };
@@ -141,7 +141,7 @@ function TodoActions() {
 
 ## API Reference
 
-### `getQueryOptions<T>(methodName, args?)`
+### `modelenceQuery<T>(methodName, args?)`
 
 Creates a query configuration object for use with TanStack Query's `useQuery`.
 
@@ -151,7 +151,7 @@ Creates a query configuration object for use with TanStack Query's `useQuery`.
 
 **Returns:** Query configuration object with `queryKey` and `queryFn`
 
-### `getMutationOptions<T, TVariables>(methodName, defaultArgs?)`
+### `modelenceMutation<T, TVariables>(methodName, defaultArgs?)`
 
 Creates a mutation configuration object for use with TanStack Query's `useMutation`.
 
@@ -190,14 +190,14 @@ function TodoComponent() {
 
 ```tsx
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getQueryOptions, getMutationOptions } from '@modelence/react-query';
+import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
 
 function TodoComponent() {
   const { data, isPending: isFetching, error } = useQuery(
-    getQueryOptions('todo.getAll')
+    modelenceQuery('todo.getAll')
   );
   const { mutate: createTodo } = useMutation(
-    getMutationOptions('todo.create')
+    modelenceMutation('todo.create')
   );
   
   // ...
