@@ -31,7 +31,7 @@ Create a new component at `src/client/TodosPage.tsx`:
 
 ```tsx title="src/client/TodosPage.tsx"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { modelenceQuery, modelenceMutation } from 'modelence/client';
+import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
 
 export default function TodosPage() {
   const queryClient = useQueryClient();
