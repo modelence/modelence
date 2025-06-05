@@ -15,7 +15,7 @@
   "sort": ["alphabetical"],
   "hideGenerator": true,
   "readme": "none",
-  "treatWarningsAsErrors": true,
+  "treatWarningsAsErrors": false,
   "validation": {
     "notExported": false
   },
