@@ -39,6 +39,10 @@ jobs:
         working-directory: ./packages/modelence
         run: npm ci
 
+      - name: Install React Query dependencies
+        working-directory: ./packages/react-query
+        run: npm ci
+
       - name: Install docs dependencies
         run: |
           cd docs
