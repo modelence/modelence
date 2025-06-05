@@ -1,8 +1,3 @@
-/**
- * @group React Hooks
- * Client-side React hooks for data fetching and mutations
- */
-
 /*
   The "use client" directive is specifically for the Next.js layout component, which is rendered on the server by default.
   Because of this, we are explicitly marking it as a client component, so we can render this component on the client
@@ -16,9 +11,9 @@ import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
 import { reviveResponseTypes } from '../methods/serialize';
 
-type Args = Record<string, unknown>;
+export type MethodArgs = Record<string, unknown>;
 
-export async function callMethod<T = unknown>(methodName: string, args: Args = {}): Promise<T> {
+export async function callMethod<T = unknown>(methodName: string, args: MethodArgs = {}): Promise<T> {
   try {
     return await call<T>(`/api/_internal/method/${methodName}`, args);
   } catch (error) {
@@ -27,7 +22,7 @@ export async function callMethod<T = unknown>(methodName: string, args: Args = {
   }
 }
 
-async function call<T = unknown>(endpoint: string, args: Args): Promise<T> {
+async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T> {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {

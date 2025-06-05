@@ -1,16 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "tsconfig": "./packages/modelence/tsconfig.json",
-  "entryPoints": [
-    "./packages/modelence/src/server.ts",
-    "./packages/modelence/src/client.ts"
-  ],
-  "exclude": [
-    "**/node_modules/**",
-    "docs/**",
-    "**/dist/**",
-    "**/README.md"
-  ],
+  "entryPointStrategy": "packages",
+  "entryPoints": ["packages/modelence", "packages/react-query"],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,
@@ -18,10 +9,9 @@
   "pretty": true,
   "gitRevision": "main",
   "categorizeByGroup": true,
-  "categoryOrder": ["Store", "Schema", "Module", "Methods", "*"],
+  "categoryOrder": ["Store", "Schema", "Module", "Methods", "React Query", "*"],
   "cleanOutputDir": true,
-  "entryPointStrategy": "expand",
-  "groupOrder": ["Classes", "Variables", "React Hooks", "Functions", "Interfaces", "*"],
+  "groupOrder": ["Classes", "Variables", "React Query", "Functions", "Interfaces", "*"],
   "sort": ["alphabetical"],
   "hideGenerator": true,
   "readme": "none",

@@ -171,39 +171,6 @@ Utility function to create typed query keys for manual cache operations.
 
 **Returns:** Typed query key array
 
-## Migration from Modelence's useQuery/useMutation
-
-### Before
-
-```tsx
-import { useQuery, useMutation } from 'modelence/client';
-
-function TodoComponent() {
-  const { data, isFetching, error } = useQuery('todo.getAll');
-  const { mutate: createTodo } = useMutation('todo.create');
-  
-  // ...
-}
-```
-
-### After
-
-```tsx
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
-
-function TodoComponent() {
-  const { data, isPending: isFetching, error } = useQuery(
-    modelenceQuery('todo.getAll')
-  );
-  const { mutate: createTodo } = useMutation(
-    modelenceMutation('todo.create')
-  );
-  
-  // ...
-}
-```
-
 ## Benefits
 
 1. **Full TanStack Query API**: Access to all TanStack Query features and options

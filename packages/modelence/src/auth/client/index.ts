@@ -1,7 +1,7 @@
 import { setCurrentUser } from '../../client/session';
 import { callMethod } from '../../client/method';
 
-type User = {
+export type UserInfo = {
   id: string;
   handle: string;
 };
@@ -14,7 +14,7 @@ export async function signupWithPassword({ email, password }: { email: string, p
 }
 
 export async function loginWithPassword({ email, password }: { email: string, password: string }) {
-  const { user } = await callMethod<{ user: User }>('_system.user.loginWithPassword', { email, password });
+  const { user } = await callMethod<{ user: UserInfo }>('_system.user.loginWithPassword', { email, password });
   setCurrentUser(user);
   return user;
 }
