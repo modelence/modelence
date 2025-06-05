@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useSession, useQuery } from 'modelence/client';
+import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { modelenceQuery } from '@modelence/react-query';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { GoogleIcon } from './icons/GoogleIcon';
@@ -160,17 +161,20 @@ function SettingsContent() {
 
 type TabType = 'profile' | 'security' | 'settings';
 
-export function UserProfile() {
-  const { user } = useSession();
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
-  const { data: profile, isFetching, error } = useQuery<{
-    handle: string;
-    emails: { address: string; verified: boolean }[];
-    authMethods: string[];
-  }>('_system.user.getOwnProfile', {}, { enabled: !!user });
+type ProfileData = {
+  handle: string;
+  emails: { address: string; verified: boolean }[];
+  authMethods: string[];
+};
 
-  if (!user) return null;
-  if (isFetching) return <div>Loading profile...</div>;
+function UserProfileContent() {
+  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  
+  const { data: profile, isLoading, error } = useQuery({
+    ...modelenceQuery<ProfileData>('_system.user.getOwnProfile'),
+  });
+
+  if (isLoading) return <div>Loading profile...</div>;
   if (error) return <div>Error loading profile: {error.message}</div>;
   if (!profile) return null;
 
@@ -240,5 +244,22 @@ export function UserProfile() {
         {renderContent()}
       </main>
     </Card>
+  );
+}
+
+// Create a QueryClient instance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+export function UserProfile() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <UserProfileContent />
+    </QueryClientProvider>
   );
 }

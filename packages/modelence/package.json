@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.4.14",
+  "version": "0.5.0",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -51,7 +51,6 @@
   },
   "dependencies": {
     "@octokit/rest": "^20.0.2",
-    "@tanstack/react-query": "^5.76.2",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",

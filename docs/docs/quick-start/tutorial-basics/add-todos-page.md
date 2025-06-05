@@ -30,17 +30,44 @@ export const routes = [
 Create a new component at `src/client/TodosPage.tsx`:
 
 ```tsx title="src/client/TodosPage.tsx"
-import { useQuery } from 'modelence/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
 
 export default function TodosPage() {
+  const queryClient = useQueryClient();
+  
   /*
-    Modelence provides a `useQuery` React hook that fetches data from a module query.
-    It will automatically re-fetch the data if/when the query changes and can also accept arguments.
+    Modelence provides `modelenceQuery` and `modelenceMutation` functions that return
+    options for TanStack Query's useQuery and useMutation hooks.
+    This gives you full access to TanStack Query's features while integrating with Modelence.
   */
-  const { data: todos, isFetching, error } = useQuery('todo.getAll');
-  // TODO: add a mutation to add a new todo
+  
+  // Basic query
+  const { data: todos, isLoading, error } = useQuery(
+    modelenceQuery('todo.getAll')
+  );
+  
+  // Query with additional TanStack Query options
+  const { data: featuredTodo } = useQuery({
+    ...modelenceQuery('todo.getFeatured'),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: todos && todos.length > 0, // Only run if we have todos
+  });
+  
+  // Basic mutation
+  const { mutate: createTodo, isPending } = useMutation({
+    ...modelenceMutation('todo.create'),
+    onSuccess: () => {
+      // Invalidate and refetch todos after creating a new one
+      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+    },
+  });
 
-  if (isFetching) {
+  const handleCreateTodo = () => {
+    createTodo({ title: 'New Todo', completed: false });
+  };
+
+  if (isLoading) {
     return <div>Loading...</div>;
   }
 
@@ -51,8 +78,17 @@ export default function TodosPage() {
   return (
     <div>
       <h1>Todos</h1>
+      <button onClick={handleCreateTodo} disabled={isPending}>
+        {isPending ? 'Creating...' : 'Create Todo'}
+      </button>
+      {featuredTodo && (
+        <div>
+          <h2>Featured Todo</h2>
+          <p>{featuredTodo.title}</p>
+        </div>
+      )}
       <ul>
-        {todos.map((todo) => (
+        {todos?.map((todo) => (
           <li key={todo.id}>{todo.title}</li>
         ))}
       </ul>

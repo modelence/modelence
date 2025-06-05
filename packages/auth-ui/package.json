@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/auth-ui",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Authentication UI components for Modelence",
   "exports": {
     ".": {
@@ -19,18 +19,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@modelence/react-query": "^1.0.0",
     "clsx": "^2.0.0",
-    "modelence": "^0.4.14",
-    "react": "^18.0.0",
+    "modelence": "^0.5.0",
     "tailwind-merge": "^2.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
-  },
-  "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
   }
 }
