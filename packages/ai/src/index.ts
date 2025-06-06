@@ -1,4 +1,4 @@
-import { getConfig } from '../config/server';
+import { getConfig } from 'modelence/server';
 
 export function getOpenAIConfig() {
   return {

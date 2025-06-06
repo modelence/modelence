@@ -1,0 +1,28 @@
+{
+  "type": "module",
+  "name": "@modelence/ai",
+  "version": "0.1.0",
+  "description": "Modelence AI engine",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "modelence": "^0.5.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2"
+  }
+} 
