@@ -1,7 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "entryPointStrategy": "packages",
-  "entryPoints": ["packages/modelence", "packages/react-query"],
+  "entryPoints": ["packages/modelence", "packages/react-query", "packages/ai"],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,

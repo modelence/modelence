@@ -1,6 +1,6 @@
 # @modelence/ai
 
-AI engine for Modelence applications.
+AI engine for Modelence applications with built-in telemetry, based on https://ai-sdk.dev
 
 ## Installation
 
@@ -10,19 +10,35 @@ npm install @modelence/ai
 
 ## Usage
 
-```typescript
-import { getOpenAIConfig } from '@modelence/ai';
+### generateText
 
-const config = getOpenAIConfig();
-// Returns: { apiKey: string }
+A wrapper around [AI SDK](https://ai-sdk.dev)'s `generateText` with built-in Modelence configuration and telemetry.
+
+```typescript
+import { generateText } from '@modelence/ai';
+
+const response = await generateText({
+  provider: 'openai',
+  model: 'gpt-4o',
+  messages: [
+    { role: 'user', content: 'Hello, world!' }
+  ],
+});
+
+console.log(response.text);
 ```
 
-## Functions
+#### Supported Providers
 
-### `getOpenAIConfig()`
+- **OpenAI**: `provider: 'openai'`, models: `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo`
+- **Anthropic**: `provider: 'anthropic'`, models: `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307`
+- **Google**: `provider: 'google'`, models: `gemini-1.5-pro`, `gemini-1.5-flash`
 
-Returns the OpenAI configuration from Modelence server config.
+#### Configuration
 
-**Returns:** `{ apiKey: string }`
+The function automatically uses API keys from Modelence configuration:
+- OpenAI: `_system.openai.apiKey`
+- Anthropic: `_system.anthropic.apiKey`
+- Google: `_system.google.apiKey`
 
-The API key is retrieved from the `_system.openai.apiKey` configuration key using Modelence's server-side config system.
+You don't need to manually set any of these configs as long as your application is using a [Modelence Cloud](https://modelence.com/cloud) backend - simply use the AI > Integrations tab in your Modelence Cloud dashboard to configure keys, and it will be automatically used and recognized by this package.
