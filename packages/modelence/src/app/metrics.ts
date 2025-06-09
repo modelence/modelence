@@ -92,37 +92,13 @@ async function initElasticApm() {
   });
 }
 
-export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
-  if (!isTelemetryEnabled()) {
-    return {
-      end: () => {
-        // do nothing
-      }
-    };
-  }
 
+
+export function getApm() {
   if (!apm) {
-    throw new Error('startTransaction: Elastic APM is not initialized');
+    throw new Error('APM is not initialized');
   }
-
-  const transaction = apm.startTransaction(name, type);
-  if (context) {
-    apm.setCustomContext(context);
-  }
-  return transaction;
-}
-
-export function captureError(error: Error) {
-  if (!isTelemetryEnabled()) {
-    console.error(error);
-    return;
-  }
-
-  if (!apm) {
-    throw new Error('captureError: Elastic APM is not initialized');
-  }
-
-  apm.captureError(error);
+  return apm;
 }
 
 export function getLogger() {

@@ -1,5 +1,5 @@
 import { requireServer } from '../utils';
-import { startTransaction } from '../app/metrics';
+import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 
