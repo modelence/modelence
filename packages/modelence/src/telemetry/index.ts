@@ -13,7 +13,7 @@ export function logError(message: string, args: object) {
   }
 }
 
-export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
+export function startTransaction(type: 'method' | 'cron' | 'ai' | 'custom', name: string, context?: Record<string, any>) {
   if (!isTelemetryEnabled()) {
     return {
       end: () => {

@@ -2,6 +2,19 @@ import os from 'os';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { Store } from '../data/store';
+import { AppConfig } from '../config/types';
+
+export interface CloudBackendConnectResponse {
+  status: 'ok' | 'error';
+  configs: AppConfig[];
+  environmentId: string;
+  appAlias: string;
+  environmentAlias: string;
+  telemetry: {
+    isEnabled: boolean;
+    serviceName: string;
+  };
+}
 
 export async function connectCloudBackend(
   { configSchema, cronJobsMetadata, stores }: { 
@@ -9,7 +22,7 @@ export async function connectCloudBackend(
     cronJobsMetadata?: CronJobMetadata[], 
     stores: Store<any, any>[] 
   }
-) {
+): Promise<CloudBackendConnectResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');

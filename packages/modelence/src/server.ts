@@ -12,3 +12,4 @@ export { schema } from './data/types';
 export { Store } from './data/store';
 
 export { getConfig } from './config/server';
+export type { CloudBackendConnectResponse } from './app/backendApi';

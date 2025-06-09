@@ -4,7 +4,7 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
-import { getAppAlias, getDeploymentAlias, getDeploymentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
+import { getAppAlias, getEnvironmentAlias, getEnvironmentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -28,8 +28,8 @@ async function initElasticApm() {
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   const appAlias = getAppAlias() ?? 'unknown';
-  const deploymentAlias = getDeploymentAlias() ?? 'unknown';
-  const deploymentId = getDeploymentId() ?? 'unknown';
+  const environmentAlias = getEnvironmentAlias() ?? 'unknown';
+  const environmentId = getEnvironmentId() ?? 'unknown';
   const serviceName = getTelemetryServiceName();
 
   apm = elasticApm.start({
@@ -42,9 +42,9 @@ async function initElasticApm() {
     globalLabels: {
       modelenceEnv: 'dev',
       appEnv: 'dev',
-      deploymentId,
+      environmentId,
       appAlias,
-      deploymentAlias,
+      environmentAlias,
     },
     // logLevel: 'debug'
   });
