@@ -1,4 +1,5 @@
 import { getConfig } from 'modelence/server';
+import { startTransaction, captureError } from 'modelence/telemetry';
 import { generateText as originalGenerateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -75,12 +76,24 @@ function getProviderModel(provider: Provider, model: string) {
 export async function generateText(options: GenerateTextOptions) {
   const { provider, model, ...restOptions } = options;
   
-  // Convert provider and model to actual provider model instance
-  const providerModel = getProviderModel(provider, model);
-  
-  // Call the original generateText with the resolved model
-  return originalGenerateText({
-    model: providerModel,
-    ...restOptions,
+  const transaction = startTransaction('ai', 'ai:generateText', {
+    provider, 
+    model,
+    messageCount: Array.isArray(options.messages) ? options.messages.length : 0,
+    temperature: options.temperature
   });
+
+  try {
+    const result = await originalGenerateText({
+      model: getProviderModel(provider, model),
+      ...restOptions,
+    });
+    
+    transaction.end();
+    return result;
+  } catch (error) {
+    captureError(error as Error);
+    transaction.end('error');
+    throw error;
+  }
 }
