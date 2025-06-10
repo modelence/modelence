@@ -1,16 +1,12 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig((options) => ({
-  entry: ['src/index.ts', 'src/client.ts', 'src/server.ts', 'src/telemetry.ts', 'src/mongo.ts', 'src/bin/modelence.ts'],
+  entry: ['src/index.ts'],
   format: ['esm'],
   dts: {
     resolve: true,
     entry: {
-      index: 'src/index.ts',
-      client: 'src/client.ts',
-      server: 'src/server.ts',
-      telemetry: 'src/telemetry.ts',
-      mongo: 'src/mongo.ts'
+      index: 'src/index.ts'
     }
   },
   splitting: true,
@@ -24,9 +20,7 @@ export default defineConfig((options) => ({
     options.resolveExtensions = ['.ts', '.js', '.tsx', '.jsx']
     return options
   },
-  exclude: ['./src/node_modules/**/*', './dist/**/*'],
   external: [
-    'react',
-    'react-dom'
+    'modelence'
   ]
 }));

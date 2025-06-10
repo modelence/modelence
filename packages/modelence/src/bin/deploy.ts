@@ -97,8 +97,8 @@ async function createBundle(bundlePath: string) {
   console.log(`Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(deploymentAlias: string, bundlePath: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/environments/${deploymentAlias}/upload`), {
+async function uploadBundle(environmentAlias: string, bundlePath: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/environments/${environmentAlias}/upload`), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -131,8 +131,8 @@ async function uploadBundle(deploymentAlias: string, bundlePath: string, token: 
   return { bundleName };
 }
 
-async function triggerDeployment(deploymentAlias: string, bundleName: string, entryPoint: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/environments/${deploymentAlias}/deploy`), {
+async function triggerDeployment(environmentAlias: string, bundleName: string, entryPoint: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/environments/${environmentAlias}/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -4,7 +4,7 @@ import z from 'zod';
 import { runMethod } from '../methods';
 import { getResponseTypeMap } from '../methods/serialize';
 import { authenticate } from '../auth';
-import { logInfo } from './logs';
+import { logInfo } from '@/telemetry';
 import { Module } from './module';
 import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';

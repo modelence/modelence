@@ -1,7 +1,7 @@
 type AppMetadata = {
-  deploymentId: string;
+  environmentId: string;
   appAlias: string;
-  deploymentAlias: string;
+  environmentAlias: string;
   telemetry: {
     isEnabled: boolean;
     serviceName: string;
@@ -23,16 +23,16 @@ export function setMetadata(_metadata: AppMetadata) {
   metadata = Object.assign({}, metadata, _metadata);
 }
 
-export function getDeploymentId() {
-  return metadata?.deploymentId;
+export function getEnvironmentId() {
+  return metadata?.environmentId;
 }
 
 export function getAppAlias() {
   return metadata?.appAlias;
 }
 
-export function getDeploymentAlias() {
-  return metadata?.deploymentAlias;
+export function getEnvironmentAlias() {
+  return metadata?.environmentAlias;
 }
 
 export function getTelemetryServiceName() {
