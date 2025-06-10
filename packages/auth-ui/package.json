@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/auth-ui",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Authentication UI components for Modelence",
   "exports": {
     ".": {
@@ -21,11 +21,14 @@
   "dependencies": {
     "@modelence/react-query": "^1.0.0",
     "clsx": "^2.0.0",
-    "modelence": "^0.5.0",
     "tailwind-merge": "^2.0.0"
+  },
+  "peerDependencies": {
+    "modelence": ">=0.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
+    "modelence": "^0.5.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   }
