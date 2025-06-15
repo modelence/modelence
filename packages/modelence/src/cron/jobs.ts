@@ -2,7 +2,7 @@
 
 import { time } from '../time';
 import { CronJob, CronJobInputParams } from './types';
-import { startTransaction, captureError } from '../app/metrics';
+import { startTransaction, captureError } from '@/telemetry';
 import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';

@@ -1,7 +1,7 @@
 // import { spawn } from 'child_process';
 // import { fileURLToPath } from 'url';
 // import { dirname, join } from 'path';
-import { logInfo, logError } from './logs';
+import { logInfo, logError } from '@/telemetry';
 import process from 'process';
 
 type LogEntry = { log: string, timestamp: Date | null, sequenceId?: number };

@@ -4,7 +4,7 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
-import { getAppAlias, getDeploymentAlias, getDeploymentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
+import { getAppAlias, getEnvironmentAlias, getEnvironmentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -28,8 +28,8 @@ async function initElasticApm() {
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   const appAlias = getAppAlias() ?? 'unknown';
-  const deploymentAlias = getDeploymentAlias() ?? 'unknown';
-  const deploymentId = getDeploymentId() ?? 'unknown';
+  const environmentAlias = getEnvironmentAlias() ?? 'unknown';
+  const environmentId = getEnvironmentId() ?? 'unknown';
   const serviceName = getTelemetryServiceName();
 
   apm = elasticApm.start({
@@ -42,9 +42,9 @@ async function initElasticApm() {
     globalLabels: {
       modelenceEnv: 'dev',
       appEnv: 'dev',
-      deploymentId,
+      environmentId,
       appAlias,
-      deploymentAlias,
+      environmentAlias,
     },
     // logLevel: 'debug'
   });
@@ -92,37 +92,13 @@ async function initElasticApm() {
   });
 }
 
-export function startTransaction(type: 'method' | 'cron', name: string, context?: Record<string, any>) {
-  if (!isTelemetryEnabled()) {
-    return {
-      end: () => {
-        // do nothing
-      }
-    };
-  }
 
+
+export function getApm() {
   if (!apm) {
-    throw new Error('startTransaction: Elastic APM is not initialized');
+    throw new Error('APM is not initialized');
   }
-
-  const transaction = apm.startTransaction(name, type);
-  if (context) {
-    apm.setCustomContext(context);
-  }
-  return transaction;
-}
-
-export function captureError(error: Error) {
-  if (!isTelemetryEnabled()) {
-    console.error(error);
-    return;
-  }
-
-  if (!apm) {
-    throw new Error('captureError: Elastic APM is not initialized');
-  }
-
-  apm.captureError(error);
+  return apm;
 }
 
 export function getLogger() {
