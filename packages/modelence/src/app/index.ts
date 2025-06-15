@@ -187,6 +187,7 @@ async function trackAppStart() {
 
   if (isTrackingEnabled) {
     const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
+    const environmentId = process.env.MODELENCE_ENVIRONMENT_ID;
     
     const packageJson = await import('../../package.json');
     
@@ -196,7 +197,8 @@ async function trackAppStart() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        version: packageJson.default.version
+        version: packageJson.default.version,
+        environmentId
       })
     });
   }
