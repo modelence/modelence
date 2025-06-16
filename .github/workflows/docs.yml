@@ -43,6 +43,10 @@ jobs:
         working-directory: ./packages/react-query
         run: npm ci
 
+      - name: Install AI dependencies
+        working-directory: ./packages/ai
+        run: npm ci
+
       - name: Install docs dependencies
         run: |
           cd docs
