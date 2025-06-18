@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Modelence",
   "colors": {
     "primary": "#5509D9",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "light": "#7666F5",
+    "dark": "#5509D9"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -18,7 +18,13 @@
             "pages": [
               "index",
               "quickstart",
-              "development"
+              "setup"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorial"
             ]
           },
           {
@@ -58,18 +64,18 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
+          "anchor": "GitHub",
+          "href": "https://github.com/modelence/modelence",
+          "icon": "github"
         },
         {
           "anchor": "Community",
-          "href": "https://mintlify.com/community",
-          "icon": "slack"
+          "href": "https://discord.gg/modelence",
+          "icon": "discord"
         },
         {
           "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
+          "href": "https://modelence.medium.com",
           "icon": "newspaper"
         }
       ]
@@ -98,9 +104,9 @@
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "x": "https://x.com/modelence",
+      "github": "https://github.com/modelence/modelence",
+      "linkedin": "https://linkedin.com/company/modelence"
     }
   }
 }
