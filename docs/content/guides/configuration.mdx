@@ -1,0 +1,48 @@
+---
+title: 'Configuration'
+description: 'How to configure Modelence'
+---
+
+# Configuration
+
+Configure Modelence for your specific needs.
+
+## Basic Configuration
+
+```typescript
+import { Modelence } from 'modelence'
+
+const app = new Modelence({
+  port: 3000,
+  host: 'localhost',
+  database: {
+    url: 'postgresql://localhost:5432/mydb'
+  }
+})
+```
+
+## Environment Variables
+
+You can also use environment variables:
+
+```bash
+MODELENCE_PORT=3000
+MODELENCE_HOST=localhost
+DATABASE_URL=postgresql://localhost:5432/mydb
+```
+
+## Advanced Options
+
+```typescript
+const app = new Modelence({
+  port: process.env.MODELENCE_PORT || 3000,
+  cors: {
+    origin: ['http://localhost:3000'],
+    credentials: true
+  },
+  rateLimit: {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100 // limit each IP to 100 requests per windowMs
+  }
+})
+``` 

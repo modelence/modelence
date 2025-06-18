@@ -48,3 +48,10 @@ API keys are automatically loaded from your Modelence Cloud configuration:
 
 No manual setup is required - just configure your keys in the Modelence Cloud dashboard (AI > Integrations tab).
 
+## Interfaces
+
+- [GenerateTextOptions](/docs/api-reference/@modelence/ai/interfaces/GenerateTextOptions.md)
+
+## Functions
+
+- [generateText](/docs/api-reference/@modelence/ai/functions/generateText.md)

@@ -7,12 +7,13 @@
     "doc": "docs"
   },
   "scripts": {
-    "docs": "typedoc"
+    "docs": "typedoc --plugin typedoc-plugin-markdown --out docs/content/api"
   },
   "author": "",
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "typedoc": "^0.28.1",
+    "typedoc-docusaurus-theme": "^1.4.0",
     "typedoc-plugin-markdown": "^4.6.0"
   }
 }

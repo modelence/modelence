@@ -1,0 +1,48 @@
+---
+title: 'API Reference'
+description: 'Complete API reference for Modelence'
+---
+
+# API Reference
+
+Comprehensive documentation for the Modelence API.
+
+## Core Classes
+
+### Modelence
+
+The main Modelence class.
+
+```typescript
+class Modelence {
+  constructor(config: ModelenceConfig)
+  start(): Promise<void>
+  stop(): Promise<void>
+}
+```
+
+### Configuration
+
+Configuration options for Modelence.
+
+```typescript
+interface ModelenceConfig {
+  port?: number
+  host?: string
+  database?: DatabaseConfig
+}
+```
+
+## Methods
+
+### `start()`
+
+Starts the Modelence server.
+
+**Returns:** `Promise<void>`
+
+### `stop()`
+
+Stops the Modelence server.
+
+**Returns:** `Promise<void>` 
