@@ -40,7 +40,7 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
           // Set the default document that will load at the root
-          path: 'docs',
+          path: 'content',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:

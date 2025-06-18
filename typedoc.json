@@ -3,7 +3,7 @@
   "entryPointStrategy": "packages",
   "entryPoints": ["packages/modelence", "packages/react-query", "packages/ai"],
   "plugin": ["typedoc-plugin-markdown"],
-  "out": "docs/docs/api-reference/_generated",
+  "out": "docs/content/api-reference/_generated",
   "excludePrivate": true,
   "excludeInternal": true,
   "pretty": true,
@@ -22,5 +22,5 @@
   "intentionallyNotExported": ["InferDocumentType"],
   "preserveAnchorCasing": true,
   "useCodeBlocks": true,
-  "publicPath": "/docs/api-reference"
+  "publicPath": "/content/api-reference"
 } 

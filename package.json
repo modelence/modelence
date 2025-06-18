@@ -4,7 +4,7 @@
   "description": "",
   "main": " ",
   "directories": {
-    "doc": "docs"
+    "doc": "content"
   },
   "scripts": {
     "docs": "typedoc"
