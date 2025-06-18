@@ -2,11 +2,10 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPointStrategy": "packages",
   "entryPoints": ["packages/modelence", "packages/react-query", "packages/ai"],
+  "out": "docs/api-reference/markdown",
   "plugin": ["typedoc-plugin-markdown"],
-  "out": "docs/docs/api-reference/_generated",
   "excludePrivate": true,
   "excludeInternal": true,
-  "pretty": true,
   "gitRevision": "main",
   "categorizeByGroup": true,
   "categoryOrder": ["Store", "Schema", "Module", "Methods", "React Query", "*"],
@@ -20,7 +19,9 @@
     "notExported": false
   },
   "intentionallyNotExported": ["InferDocumentType"],
-  "preserveAnchorCasing": true,
-  "useCodeBlocks": true,
-  "publicPath": "/docs/api-reference"
-} 
+  "name": "Modelence API Reference",
+  "includeVersion": true,
+  "githubPages": false,
+  "hideInPageTOC": false,
+  "hideBreadcrumbs": false
+}

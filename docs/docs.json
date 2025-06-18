@@ -44,9 +44,15 @@
         "tab": "API Reference",
         "groups": [
           {
-            "group": "API Documentation",
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "API Documentation",
+            "pages": [
+              "api-reference/full-reference"
             ]
           },
           {
@@ -102,5 +108,11 @@
       "github": "https://github.com/modelence/modelence",
       "linkedin": "https://linkedin.com/company/modelence"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/api-reference/store",
+      "destination": "/api-reference/_generated/modelence/server/classes/Store"
+    }
+  ]
 }
