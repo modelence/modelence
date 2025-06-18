@@ -3,7 +3,7 @@
   "theme": "mint",
   "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
+    "primary": "#5509D9",
     "light": "#07C983",
     "dark": "#15803D"
   },
@@ -83,13 +83,17 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "href": "mailto:support@modelence.com"
+      },
+      {
+        "label": "Blog",
+        "href": "https://modelence.medium.com"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "GitHub",
+      "href": "https://github.com/modelence/modelence"
     }
   },
   "footer": {
