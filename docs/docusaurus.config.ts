@@ -4,6 +4,47 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
+// Shared TypeDoc configuration
+const sharedTypeDocConfig = {
+  excludePrivate: true,
+  excludeInternal: true,
+  categorizeByGroup: true,
+  sort: ["alphabetical"],
+  hideGenerator: true,
+  readme: 'none',
+  gitRevision: 'main',
+  treatWarningsAsErrors: false,
+  useCodeBlocks: true,
+  fileExtension: '.mdx',
+  hideInPageTOC: false,
+  sourceLinkTemplate: 'https://github.com/modelence/modelence/blob/{gitRevision}/{path}#L{line}',
+  // flattenOutputFiles: true,
+} as const;
+
+// Helper function to create TypeDoc plugin configuration
+const createTypeDocPlugin = ({
+  id,
+  packagePath,
+  outputDir,
+  ...options
+}: {
+  id: string;
+  packagePath: string;
+  outputDir: string;
+  [key: string]: any;
+}) => [
+  'docusaurus-plugin-typedoc',
+  {
+    id,
+    entryPointStrategy: 'packages',
+    entryPoints: [packagePath],
+    out: `content/api-reference/${outputDir}`,
+    cleanOutputDir: id === 'core', // Only clean for the first plugin
+    ...sharedTypeDocConfig,
+    ...options,
+  },
+];
+
 const config: Config = {
   title: 'Modelence Docs',
   tagline: 'The Node.js Framework for Real-Time MongoDB Apps',
@@ -31,6 +72,30 @@ const config: Config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  plugins: [
+    createTypeDocPlugin({
+      id: 'core',
+      packagePath: '../packages/modelence',
+      outputDir: 'core',
+      categoryOrder: ["Store", "Schema", "Module", "Methods", "*"],
+      groupOrder: ["Classes", "Functions", "Interfaces", "Type Aliases", "Variables", "*"],
+      intentionallyNotExported: ["InferDocumentType"],
+      validation: { notExported: false },
+    }),
+    createTypeDocPlugin({
+      id: 'react-query',
+      packagePath: '../packages/react-query',
+      outputDir: 'react-query',
+      groupOrder: ["Functions", "Type Aliases", "Interfaces", "*"],
+    }),
+    createTypeDocPlugin({
+      id: 'ai',
+      packagePath: '../packages/ai',
+      outputDir: 'ai',
+      groupOrder: ["Functions", "Interfaces", "Type Aliases", "*"],
+    }),
+  ],
 
   presets: [
     [
