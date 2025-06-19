@@ -2,7 +2,7 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPointStrategy": "packages",
   "entryPoints": ["../../packages/modelence", "../../packages/react-query", "../../packages/ai"],
-  "out": "../web/api-reference/markdown",
+  "out": "../web/api-reference",
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
   "excludePrivate": true,
   "excludeInternal": true,
