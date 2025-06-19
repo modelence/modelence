@@ -16,6 +16,7 @@
   "groupOrder": ["Classes", "Variables", "React Query", "Functions", "Interfaces", "*"],
   "sort": ["alphabetical"],
   "hideGenerator": true,
+  "hidePageTitle": true,
   "readme": "none",
   "mergeReadme": false,
   "treatWarningsAsErrors": false,
