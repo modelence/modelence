@@ -8,7 +8,7 @@
     "create-modelence-app": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm",
+    "build": "tsup src/index.ts --format esm --bundle",
     "dev": "tsup src/index.ts --format esm --watch",
     "prepublishOnly": "npm run build"
   },
