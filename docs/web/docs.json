@@ -46,13 +46,15 @@
           {
             "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "api-reference/markdown/modelence/README",
+              "api-reference/markdown/@modelence/react-query/README",
+              "api-reference/markdown/@modelence/ai/README"
             ]
           },
           {
             "group": "Classes",
             "pages": [
-              "api-reference/Store"
+              "api-reference/markdown/modelence/server/classes/Store"
             ]
           },
           {

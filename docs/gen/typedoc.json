@@ -6,6 +6,7 @@
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
   "excludePrivate": true,
   "excludeInternal": true,
+  "fileExtension": ".mdx",
   "gitRevision": "main",
   "categorizeByGroup": true,
   "categoryOrder": ["Store", "Schema", "Module", "Methods", "React Query", "*"],
@@ -23,7 +24,7 @@
     "notExported": false
   },
   "intentionallyNotExported": ["InferDocumentType"],
-  "name": "Modelence API Reference",
+  "name": "API Reference",
   "includeVersion": true,
   "githubPages": false,
   "hideBreadcrumbs": false
