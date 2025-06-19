@@ -50,9 +50,9 @@
             ]
           },
           {
-            "group": "API Documentation",
+            "group": "Classes",
             "pages": [
-              "api-reference/full-reference"
+              "api-reference/Store"
             ]
           },
           {

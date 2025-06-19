@@ -1,9 +1,9 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "entryPointStrategy": "packages",
-  "entryPoints": ["packages/modelence", "packages/react-query", "packages/ai"],
-  "out": "docs/api-reference/markdown",
-  "plugin": ["typedoc-plugin-markdown"],
+  "entryPoints": ["../../packages/modelence", "../../packages/react-query", "../../packages/ai"],
+  "out": "../web/api-reference/markdown",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
   "excludePrivate": true,
   "excludeInternal": true,
   "gitRevision": "main",
@@ -15,6 +15,10 @@
   "hideGenerator": true,
   "readme": "none",
   "treatWarningsAsErrors": false,
+  "frontmatterGlobals": {
+    "sidebar_position": 1
+  },
+  "frontmatterCommentTags": ["title", "description"],
   "validation": {
     "notExported": false
   },
@@ -22,6 +26,5 @@
   "name": "Modelence API Reference",
   "includeVersion": true,
   "githubPages": false,
-  "hideInPageTOC": false,
   "hideBreadcrumbs": false
 }
