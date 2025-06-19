@@ -2,6 +2,7 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts", "src/server.ts", "src/client.ts"],
   "tsconfig": "./tsconfig.json",
+  "readme": "none",
   "excludePrivate": true,
   "excludeInternal": true,
   "exclude": [
