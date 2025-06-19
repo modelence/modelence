@@ -17,6 +17,7 @@
   "sort": ["alphabetical"],
   "hideGenerator": true,
   "hidePageTitle": true,
+  "hidePageHeader": true,
   "readme": "none",
   "mergeReadme": false,
   "treatWarningsAsErrors": false,
