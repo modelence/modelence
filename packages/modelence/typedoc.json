@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/server.ts", "src/client.ts"],
+  "entryPoints": ["src/index.ts", "src/server.ts", "src/client.ts"],
   "tsconfig": "./tsconfig.json",
   "excludePrivate": true,
   "excludeInternal": true,
