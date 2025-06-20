@@ -5,6 +5,8 @@ let config: Record<ConfigKey, AppConfig> = {};
 let isInitialized = false;
 
 /**
+ * @sidebarTitle getConfig (server)
+ * 
  * @param key
  * @returns 
  */

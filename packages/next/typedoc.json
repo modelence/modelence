@@ -1,0 +1,9 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**"
+  ]
+}

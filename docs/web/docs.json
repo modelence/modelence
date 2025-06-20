@@ -48,7 +48,8 @@
             "pages": [
               "api-reference/modelence/index",
               "api-reference/@modelence/react-query/index",
-              "api-reference/@modelence/ai/index"
+              "api-reference/@modelence/ai/index",
+              "api-reference/@modelence/next/index"
             ]
           },
           {
@@ -70,7 +71,8 @@
           {
             "group": "Config",
             "pages": [
-              "api-reference/modelence/server/functions/getConfig"
+              "api-reference/modelence/server/functions/getConfig",
+              "api-reference/modelence/client/functions/getConfig"
             ]
           }
         ]

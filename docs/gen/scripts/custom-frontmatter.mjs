@@ -4,13 +4,33 @@ import { MarkdownPageEvent } from "typedoc-plugin-markdown";
 /** @param {import('typedoc-plugin-markdown').MarkdownApplication} app */
 export function load(app) {
   app.renderer.on(MarkdownPageEvent.BEGIN, page => {    
-    // Only add a title if one isn't already set (e.g. by @title)
-    if (!page.frontmatter?.title && page.model?.name) {
-      page.frontmatter = {
-        title: page.model.name,
-        ...page.frontmatter       // keep globals such as sidebar_position
-      };
+    // Extract custom title from JSDoc @sidebarTitle tag
+    let customSidebarTitle = null;
+    
+    if (page.model && 'signatures' in page.model && Array.isArray(page.model.signatures)) {
+      for (const signature of page.model.signatures) {
+        if ('comment' in signature && signature.comment && 'blockTags' in signature.comment) {
+          const blockTags = signature.comment.blockTags;
+          if (Array.isArray(blockTags)) {
+            const sidebarTitleTag = blockTags.find(tag => tag.tag === '@sidebarTitle');
+            if (sidebarTitleTag && 'content' in sidebarTitleTag && Array.isArray(sidebarTitleTag.content)) {
+              customSidebarTitle = sidebarTitleTag.content.map(item => item.text || '').join(' ').trim();
+              // Prevent this tag from being rendered in the content
+              sidebarTitleTag.skipRendering = true;
+              break;
+            }
+          }
+        }
+      }
     }
+    
+    const frontmatter = {
+      ...page.frontmatter,
+      sidebarTitle: customSidebarTitle || undefined,
+      title: page.frontmatter?.title || page.model?.name
+    };
+    
+    page.frontmatter = frontmatter;
   });
 
   // Remove `.mdx` extension from internal markdown links
@@ -19,11 +39,11 @@ export function load(app) {
       // Replace occurrences like "(path.mdx" or "path.mdx#" but keep anchors and closing characters
       page.contents = page.contents.replace(/\.mdx(?=[)#])/g, "");
 
-      const baseUrl = page.url.split('/').slice(0, -1).join('/');
+      const baseUrl = ['api-reference', ...page.url.split('/').slice(0, -1).filter(Boolean)].join('/');
 
       // Add a leading dot to internal links to avoid target="_blank"
       page.contents = page.contents.replace(/\]\(([^/)][^)#]*[^/])\)/g, (match, linkPath) => {
-        return `](/api-reference/${baseUrl}/${linkPath})`;
+        return `](/${baseUrl}/${linkPath})`;
       });
     }
   });
