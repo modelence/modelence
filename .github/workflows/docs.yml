@@ -54,17 +54,11 @@ jobs:
       - name: Generate TypeDoc
         run: npm run docs
 
-      # - name: Build website
-      #   run: |
-      #     cd docs
-      #     npm run build
+      - name: Install Mintlify CLI
+        run: npm install -g mintlify
 
-      # - name: Deploy to GitHub Pages
-      #   uses: peaceiris/actions-gh-pages@v3
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_dir: ./docs/build
-      #     publish_branch: gh-pages
-      #     user_name: github-actions[bot]
-      #     user_email: 41898282+github-actions[bot]@users.noreply.github.com
-      #     cname: docs.modelence.com
+      - name: Deploy to Mintlify
+        working-directory: ./docs/web
+        run: mintlify deploy
+        env:
+          MINTLIFY_TOKEN: ${{ secrets.MINTLIFY_TOKEN }}
