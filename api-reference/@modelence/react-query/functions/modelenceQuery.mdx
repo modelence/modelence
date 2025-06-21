@@ -1,0 +1,57 @@
+---
+sidebar_position: 1
+title: modelenceQuery
+---
+
+[API Reference](/api-reference/@modelence/react-query/functions/../../../index) / [@modelence/react-query](/api-reference/@modelence/react-query/functions/../index) / modelenceQuery
+
+> **modelenceQuery**\<`T`\>(`methodName`, `args`): `object`
+
+Defined in: [index.ts:34](https://github.com/modelence/modelence/blob/97bc424e385e6893aeebb42dc6a72bd4812fd999/packages/react-query/src/index.ts#L34)
+
+Creates query options for use with TanStack Query's useQuery hook.
+
+## Example
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { modelenceQuery } from '@modelence/react-query';
+
+function MyComponent() {
+  // Basic usage
+  const { data } = useQuery(modelenceQuery('todo.getAll'));
+
+  // With additional options
+  const { data: todo } = useQuery({
+    ...modelenceQuery('todo.getById', { id: '123' }),
+    enabled: !!id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return <div>{data?.name}</div>;
+}
+```
+
+## Type Parameters
+
+| Type Parameter | Default type | Description |
+| ------ | ------ | ------ |
+| `T` | `unknown` | The expected return type of the query |
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `methodName` | `string` | The name of the method to query |
+| `args` | `Args` | Optional arguments to pass to the method |
+
+## Returns
+
+`object`
+
+Query options object for TanStack Query's useQuery
+
+| Name | Type | Defined in |
+| ------ | ------ | ------ |
+| `queryFn()` | () => `Promise`\<`T`\> | [index.ts:40](https://github.com/modelence/modelence/blob/97bc424e385e6893aeebb42dc6a72bd4812fd999/packages/react-query/src/index.ts#L40) |
+| `queryKey` | (`string` \| `Args`)[] | [index.ts:39](https://github.com/modelence/modelence/blob/97bc424e385e6893aeebb42dc6a72bd4812fd999/packages/react-query/src/index.ts#L39) |

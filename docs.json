@@ -1,0 +1,112 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Modelence",
+  "colors": {
+    "primary": "#5509D9",
+    "light": "#7666F5",
+    "dark": "#5509D9"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "index",
+              "quickstart",
+              "setup"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": [
+              "tutorial"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/modelence/index",
+              "api-reference/@modelence/react-query/index",
+              "api-reference/@modelence/ai/index",
+              "api-reference/@modelence/next/index"
+            ]
+          },
+          {
+            "group": "Core",
+            "pages": [
+              "api-reference/modelence/server/functions/startApp",
+              "api-reference/modelence/server/classes/Module",
+              "api-reference/modelence/client/functions/callMethod"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "api-reference/modelence/server/classes/Store",
+              "api-reference/modelence/server/variables/schema",
+              "api-reference/modelence/server/variables/dbUsers"
+            ]
+          },
+          {
+            "group": "Config",
+            "pages": [
+              "api-reference/modelence/server/functions/getConfig",
+              "api-reference/modelence/client/functions/getConfig"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/modelence/modelence",
+          "icon": "github"
+        },
+        {
+          "anchor": "Blog",
+          "href": "https://modelence.medium.com",
+          "icon": "newspaper"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@modelence.com"
+      },
+      {
+        "label": "Blog",
+        "href": "https://modelence.medium.com"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/modelence/modelence"
+    }
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/modelencecom",
+      "github": "https://github.com/modelence/modelence",
+      "linkedin": "https://linkedin.com/company/modelence"
+    }
+  }
+}

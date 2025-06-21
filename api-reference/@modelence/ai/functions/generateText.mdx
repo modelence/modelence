@@ -1,0 +1,44 @@
+---
+sidebar_position: 1
+title: generateText
+---
+
+[API Reference](/api-reference/@modelence/ai/functions/../../../index) / [@modelence/ai](/api-reference/@modelence/ai/functions/../index) / generateText
+
+> **generateText**(`options`): `Promise`\<`GenerateTextResult`\<`ToolSet`, `unknown`\>\>
+
+Defined in: [index.ts:76](https://github.com/modelence/modelence/blob/97bc424e385e6893aeebb42dc6a72bd4812fd999/packages/ai/src/index.ts#L76)
+
+Generates text using AI models with built-in Modelence configuration and telemetry.
+
+This is a wrapper around the AI SDK's generateText function that automatically
+configures providers using Modelence's server-side configuration system.
+
+## Example
+
+```typescript
+import { generateText } from '@modelence/ai';
+
+const response = await generateText({
+  provider: 'openai',
+  model: 'gpt-4o',
+  messages: [
+    { role: 'user', content: 'Write a haiku about programming' }
+  ],
+  temperature: 0.7
+});
+
+console.log(response.text);
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | [`GenerateTextOptions`](/api-reference/@modelence/ai/functions/../interfaces/GenerateTextOptions) | Configuration options for text generation |
+
+## Returns
+
+`Promise`\<`GenerateTextResult`\<`ToolSet`, `unknown`\>\>
+
+A promise that resolves to the generated text result
