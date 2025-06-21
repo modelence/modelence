@@ -4,12 +4,13 @@ on:
   push:
     branches:
       - main
+      - mintlify
     paths:
       - '**'
       - '!dist/**'
       - '!.modelence/**'
       - '!**/node_modules/**'
-      - '!docs/build/**'
+      - '!docs/web/api-reference/**'
       - '!.git/**'
 
 jobs:
@@ -51,5 +52,28 @@ jobs:
         working-directory: ./packages/next
         run: npm ci
 
+      - name: Build all packages
+        run: |
+          cd packages/types && npm run build
+          cd ../modelence && npm run build
+          cd ../react-query && npm run build
+          cd ../ai && npm run build
+          cd ../next && npm run build
+
+      - name: Install docs generation dependencies
+        working-directory: ./docs/gen
+        run: npm ci
+
       - name: Generate TypeDoc
+        working-directory: ./docs/gen
         run: npm run docs
+
+      - name: Deploy to docs branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/web
+          publish_branch: _docs
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: 'Deploy documentation from ${{ github.sha }}'
