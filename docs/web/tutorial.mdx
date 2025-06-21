@@ -1,0 +1,313 @@
+---
+title: 'Todo App Tutorial'
+description: 'Build a simple Todo app with Modelence'
+icon: 'list-check'
+---
+
+In this tutorial, we'll build a complete Todo app using Modelence. You'll learn how to:
+
+- Create **MongoDB stores** with TypeScript schemas
+- Build **modules** with queries and mutations  
+- Create **React components** that interact with your backend
+
+<Note>
+This tutorial assumes you've already [created a Modelence project](/quickstart) and [completed the setup](/setup). If you haven't done so, please complete those steps first.
+</Note>
+
+## Step 1: Create a Todo Store
+
+Stores in Modelence are MongoDB collections with built-in TypeScript support, schema and helper methods. They help you to:
+
+- Define **type-safe schemas** for your data
+- Handle **CRUD operations** with MongoDB
+- Add **custom methods** to your documents
+- Configure **indexes** for better performance
+
+### Set up the project structure
+
+The recommended approach in Modelence is to group code by modules/domains into separate directories. For our Todo app, create an `src/server/todo` directory and add a `db.ts` file:
+
+```typescript title="src/server/todo/db.ts"
+import { Store, schema } from 'modelence';
+
+export const dbTodos = new Store('todos', {
+  // Define the schema for your documents. Modelence schema is based on and closely resembles Zod types.
+  schema: {
+    title: schema.string(),
+    isCompleted: schema.boolean(), 
+    dueDate: schema.date().optional(),
+    userId: schema.userId(), // Built-in Modelence type for user references
+    createdAt: schema.date(),
+  },
+
+  // Configure MongoDB indexes
+  indexes: [
+    { key: { userId: 1 } },
+    { key: { dueDate: 1 } },
+  ],
+
+  // Add custom methods to documents
+  methods: {
+    isOverdue() {
+      return this.dueDate < new Date();
+    }
+  }
+});
+```
+
+### Using the Store
+
+Once defined, you can use your Store object to perform operations on your collection:
+
+```typescript
+const { insertedId } = await dbTodos.insertOne({
+  title: 'Buy groceries', 
+  isCompleted: false, 
+  dueDate: new Date('2023-01-31'),
+  userId: '123',
+  createdAt: new Date()
+});
+
+const todo = await dbTodos.findById(insertedId);
+
+console.log(todo.isOverdue());
+```
+
+### Working with Documents
+
+Stores provide a comprehensive set of methods for working with MongoDB documents, including finding, inserting, updating, and deleting records. All methods are fully typed with TypeScript.
+
+See the [Store API Reference](../../api-reference/store) for a complete list of available methods and their usage.
+
+<Tip>
+Stores automatically handle MongoDB connection management, collection provisioning and index creation. Just define your Store and start using it - Modelence takes care of the rest.
+</Tip>
+
+## Step 2: Create a Todo Module
+
+Modules are the core building blocks of a Modelence application. They help you organize your application's functionality into cohesive units that can contain queries, mutations, stores, cron jobs and configurations.
+
+Create a new file at `src/server/todo/index.ts`:
+
+```typescript title="src/server/todo/index.ts"
+import { Module } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  /*
+    Include the store we created earlier so it will be automatically
+    provisioned in MongoDB when the server starts.
+  */
+  stores: [dbTodos],
+
+  /*
+    Module queries and mutations are similar to the corresponding
+    concepts from GraphQL.
+  */
+  queries: {
+    async getOne({ id }) {
+      return await dbTodos.findById(id);
+    },
+    async getAll() {
+      return await dbTodos.fetch({});
+    }
+  },
+
+  mutations: {
+    async create({ title, dueDate }, { user }) {
+      const { insertedId } = await dbTodos.insertOne({
+        title,
+        dueDate,
+        userId: user.id,
+        isCompleted: false,
+        createdAt: new Date()
+      });
+      return insertedId;
+    },
+    async update({ id, title, dueDate, isCompleted }) {
+      return await dbTodos.updateOne({ id }, {
+        $set: {
+          title,
+          dueDate,
+          isCompleted
+        }
+      });
+    },
+    async delete({ id }) {
+      return await dbTodos.deleteOne({ id });
+    }
+  },
+});
+```
+
+### Include the Module
+
+Now, add the Module to your main server file at `src/server/app.ts`:
+
+```typescript title="src/server/app.ts"
+import { startApp } from 'modelence/server';
+import todoModule from './todo';
+
+startApp({
+  modules: [todoModule]
+});
+```
+
+As soon as your app starts, Modelence will:
+- Provision the `dbTodos` store in MongoDB
+- Make the queries and mutations available for calling
+
+## Step 3: Create the Frontend
+
+Modelence is frontend-agnostic, so you are free to use any routing library you like.
+We will use React Router for this example, which is what's included in the default Modelence starter.
+
+### Add a new route
+
+Edit `src/client/routes.ts` to add a new route for our todos:
+
+```typescript title="src/client/routes.ts"
+import { lazy } from 'react';
+
+export const routes = [
+  // ... your existing routes
+  {
+    path: '/todos',
+    Component: lazy(() => import('./TodosPage'))
+  },
+];
+```
+
+### Create the TodosPage component
+
+Create a new component at `src/client/TodosPage.tsx`:
+
+```tsx title="src/client/TodosPage.tsx"
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
+
+export default function TodosPage() {
+  const [newTodoTitle, setNewTodoTitle] = useState('');
+  const queryClient = useQueryClient();
+  
+  const { data: todos, isPending: isLoading, error } = useQuery(
+    modelenceQuery('todo.getAll')
+  );
+
+  const { mutate: updateTodo } = useMutation({
+    ...modelenceMutation('todo.update'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+    },
+  });
+
+  const handleToggleComplete = (todo: any) => {
+    updateTodo({
+      id: todo.id,
+      title: todo.title,
+      dueDate: todo.dueDate,
+      isCompleted: !todo.isCompleted
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-lg">Loading todos...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-red-500">Error: {error.message}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">My Todos</h1>
+      
+      {/* Add new todo form */}
+      <form onSubmit={handleCreateTodo} className="mb-6">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newTodoTitle}
+            onChange={(e) => setNewTodoTitle(e.target.value)}
+            placeholder="Add a new todo..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={isCreating || !newTodoTitle.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCreating ? 'Adding...' : 'Add Todo'}
+          </button>
+        </div>
+      </form>
+
+      {/* Todos list */}
+      <div className="space-y-2">
+        {todos?.length === 0 ? (
+          <p className="text-gray-500">No todos yet. Add one above!</p>
+        ) : (
+          todos?.map((todo) => (
+            <div
+              key={todo.id}
+              className="flex items-center gap-3 p-3 border border-gray-200 rounded-md"
+            >
+              <input
+                type="checkbox"
+                checked={todo.isCompleted}
+                onChange={() => handleToggleComplete(todo)}
+                className="w-5 h-5 text-blue-600"
+              />
+              <span
+                className={`flex-1 ${
+                  todo.isCompleted 
+                    ? 'line-through text-gray-500' 
+                    : 'text-gray-900'
+                }`}
+              >
+                {todo.title}
+              </span>
+              {todo.dueDate && (
+                <span className={`text-sm px-2 py-1 rounded ${
+                  todo.isOverdue() 
+                    ? 'bg-red-100 text-red-700' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  Due: {new Date(todo.dueDate).toLocaleDateString()}
+                </span>
+              )}
+              <button
+                onClick={() => handleDeleteTodo(todo.id)}
+                className="px-3 py-1 text-red-600 hover:bg-red-50 rounded"
+              >
+                Delete
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Complete Example
+
+Want to see the full working code? Check it out on GitHub, along with other examples:
+
+<Card
+  title="Complete Todo App Example"
+  icon="github"
+  href="https://github.com/modelence/examples/tree/main/todo-app"
+>
+  See the complete source code for this tutorial on GitHub, including all files and additional features.
+</Card>

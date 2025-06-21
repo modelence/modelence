@@ -1,0 +1,46 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "../../packages/modelence",
+    "../../packages/react-query",
+    "../../packages/ai",
+    "../../packages/next"
+  ],
+  "out": "../web/api-reference",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "exclude": ["**/README.md"],
+  "fileExtension": ".mdx",
+  "entryFileName": "index",
+  "gitRevision": "main",
+  "categorizeByGroup": true,
+  "categoryOrder": ["Store", "Schema", "Module", "Methods", "React Query", "*"],
+  "cleanOutputDir": true,
+  "groupOrder": ["Classes", "Variables", "React Query", "Functions", "Interfaces", "*"],
+  "sort": ["alphabetical"],
+  "hideGenerator": true,
+  "hidePageTitle": true,
+  "hidePageHeader": true,
+  "propertiesFormat": "table",
+  "parametersFormat": "table",
+  "typeDeclarationFormat": "table",
+  "enumMembersFormat": "table",
+  "blockTagsPreserveOrder": ["@example"],
+  "readme": "none",
+  "mergeReadme": false,
+  "treatWarningsAsErrors": false,
+  "frontmatterGlobals": {
+    "sidebar_position": 1
+  },
+  "frontmatterCommentTags": ["title", "description"],
+  "intentionallyNotExported": ["InferDocumentType"],
+  "name": "API Reference",
+  "includeVersion": true,
+  "githubPages": false,
+  "hideBreadcrumbs": false,
+  "validation": {
+    "notExported": false
+  }
+}

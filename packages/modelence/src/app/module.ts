@@ -77,7 +77,7 @@ export class Module {
       cronJobs = {},
       configSchema = {}
     }: { 
-      stores?: Stores,
+      stores?: Store<any, any>[],
       queries?: Queries,
       mutations?: Mutations,
       routes?: RouteDefinition[],

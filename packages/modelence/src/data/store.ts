@@ -215,7 +215,7 @@ export class Store<
    * Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
    * 
    * @param query - The query to filter documents
-   * @param options - Optional options
+   * @param options - Options
    * @returns The documents
    */
   async fetch(query: Filter<this['_type']>, options?: { sort?: Document, limit?: number, skip?: number }): Promise<this['_doc'][]> {

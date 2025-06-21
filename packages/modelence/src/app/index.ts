@@ -21,7 +21,7 @@ import { RoleDefinition } from '../auth/types';
 import { AppServer } from '../../../types';
 import { viteServer } from '../viteServer';
 
-type AppOptions = {
+export type AppOptions = {
   modules?: Module[],
   server?: AppServer,
   roles?: Record<string, RoleDefinition>,
