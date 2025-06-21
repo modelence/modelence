@@ -49,14 +49,6 @@ jobs:
         working-directory: ./packages/next
         run: npm ci
 
-      - name: Build all packages
-        run: |
-          cd packages/types && npm run build
-          cd ../modelence && npm run build
-          cd ../react-query && npm run build
-          cd ../ai && npm run build
-          cd ../next && npm run build
-
       - name: Install docs generation dependencies
         working-directory: ./docs/gen
         run: npm ci
