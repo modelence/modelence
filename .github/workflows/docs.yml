@@ -53,12 +53,3 @@ jobs:
 
       - name: Generate TypeDoc
         run: npm run docs
-
-      - name: Install Mintlify CLI
-        run: npm install -g mintlify
-
-      - name: Deploy to Mintlify
-        working-directory: ./docs/web
-        run: mintlify deploy
-        env:
-          MINTLIFY_TOKEN: ${{ secrets.MINTLIFY_TOKEN }}
