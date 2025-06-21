@@ -29,9 +29,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Install root dependencies (for TypeDoc)
-        run: npm ci
-
       - name: Install types dependencies
         working-directory: ./packages/types
         run: npm ci
