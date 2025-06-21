@@ -4,6 +4,12 @@ let configSchema: ConfigSchema = {};
 let config: Record<ConfigKey, AppConfig> = {};
 let isInitialized = false;
 
+/**
+ * @sidebarTitle getConfig (server)
+ * 
+ * @param key
+ * @returns 
+ */
 export function getConfig(key: ConfigKey) {
   return config[key]?.value;
 }

@@ -9,7 +9,7 @@ on:
       - '!dist/**'
       - '!.modelence/**'
       - '!**/node_modules/**'
-      - '!docs/build/**'
+      - '!docs/web/api-reference/**'
       - '!.git/**'
 
 jobs:
@@ -28,9 +28,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Install root dependencies (for TypeDoc)
-        run: npm ci
-
       - name: Install types dependencies
         working-directory: ./packages/types
         run: npm ci
@@ -47,25 +44,24 @@ jobs:
         working-directory: ./packages/ai
         run: npm ci
 
-      - name: Install docs dependencies
-        run: |
-          cd docs
-          npm ci
+      - name: Install Next dependencies
+        working-directory: ./packages/next
+        run: npm ci
+
+      - name: Install docs generation dependencies
+        working-directory: ./docs/gen
+        run: npm ci
 
       - name: Generate TypeDoc
+        working-directory: ./docs/gen
         run: npm run docs
 
-      - name: Build website
-        run: |
-          cd docs
-          npm run build
-
-      - name: Deploy to GitHub Pages
+      - name: Deploy to docs branch
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build
-          publish_branch: gh-pages
+          publish_dir: ./docs/web
+          publish_branch: _docs
           user_name: github-actions[bot]
           user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          cname: docs.modelence.com
+          commit_message: 'Deploy documentation from ${{ github.sha }}'

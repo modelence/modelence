@@ -1,4 +1,4 @@
-export { startApp } from './app';
+export { startApp, type AppOptions } from './app';
 export { Module } from './app/module';
 export { RouteHandler, RouteParams, RouteResponse, RouteDefinition, HttpMethod } from './routes/types';
 export { ObjectId } from 'mongodb';

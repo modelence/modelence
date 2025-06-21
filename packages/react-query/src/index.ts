@@ -5,11 +5,6 @@ type Args = Record<string, unknown>;
 /**
  * Creates query options for use with TanStack Query's useQuery hook.
  * 
- * @typeParam T - The expected return type of the query
- * @param methodName - The name of the method to query
- * @param args - Optional arguments to pass to the method
- * @returns Query options object for TanStack Query's useQuery
- * 
  * @example
  * ```tsx
  * import { useQuery } from '@tanstack/react-query';
@@ -29,6 +24,12 @@ type Args = Record<string, unknown>;
  *   return <div>{data?.name}</div>;
  * }
  * ```
+ * 
+ * @typeParam T - The expected return type of the query
+ * @param methodName - The name of the method to query
+ * @param args - Optional arguments to pass to the method
+ * @returns Query options object for TanStack Query's useQuery
+ * 
  */
 export function modelenceQuery<T = unknown>(
   methodName: string, 
