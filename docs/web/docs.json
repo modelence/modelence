@@ -108,5 +108,15 @@
       "github": "https://github.com/modelence/modelence",
       "linkedin": "https://linkedin.com/company/modelence"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/api-reference/intro",
+      "destination": "/api-reference"
+    },
+    {
+      "source": "/quick-start/intro",
+      "destination": "/quickstart"
+    }
+  ]
 }
