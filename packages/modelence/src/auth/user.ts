@@ -4,7 +4,7 @@ import { Module } from '../app/module';
 import { handleSignupWithPassword } from './signup';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
-import { usersCollection } from './db';
+import { dbDisposableEmailDomains, usersCollection } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
 
 async function createGuestUser() {
@@ -27,7 +27,7 @@ async function createGuestUser() {
 }
 
 export default new Module('_system.user', {
-  stores: [usersCollection],
+  stores: [usersCollection, dbDisposableEmailDomains],
   queries: {
     getOwnProfile,
   },
