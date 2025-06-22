@@ -47,8 +47,6 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
       // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
       console.error(`Error in method ${methodName}:`, error);
 
-      // res.status(500).json({ error: 'Internal server error' });
-
       if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
         const zodError = error as z.ZodError;
         const flattened = zodError.flatten();
@@ -110,7 +108,7 @@ async function getCallContext(req: Request) {
   }).parse(req.body.clientInfo);
 
   const connectionInfo = {
-    ip: req.ip || req.socket.remoteAddress, // TODO: handle cases with Proxy
+    ip: getClientIp(req),
     userAgent: req.get('user-agent'),
     acceptLanguage: req.get('accept-language'),
     referrer: req.get('referrer'),
@@ -118,7 +116,7 @@ async function getCallContext(req: Request) {
 
   const hasDatabase = Boolean(getMongodbUri());
   if (hasDatabase) {
-    const { session, user, roles } = await authenticate(authToken);
+    const { session, user, roles } = await authenticate(authToken, connectionInfo);
     return {
       clientInfo,
       connectionInfo,
@@ -137,76 +135,19 @@ async function getCallContext(req: Request) {
   };
 }
 
-// import passport from 'passport';
-// import session from 'express-session';
-// import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+function getClientIp(req: Request): string | undefined {
+  // On Heroku and other proxies, X-Forwarded-For contains the real client IP
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    const firstIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0];
+    return firstIp.trim();
+  }
 
-// Session middleware
-// app.use(session({
-//   secret: process.env.SESSION_SECRET || 'default_secret',
-//   resave: false,
-//   saveUninitialized: false
-// }));
-
-// Passport middleware
-// app.use(passport.initialize());
-// app.use(passport.session());
-
-// // Passport Google strategy setup
-// passport.use(new GoogleStrategy({
-//   clientID: process.env.GOOGLE_CLIENT_ID || '',
-//   clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-//   callbackURL: "/auth/google/callback"
-// },
-// function(accessToken: string, refreshToken: string, profile: any, cb: (error: any, user?: any) => void) {
-//   // Here you would typically find or create a user in your database
-//   // For now, we'll just pass the profile info
-//   return cb(null, profile);
-// }));
-
-// passport.serializeUser((user: Express.User, done: (err: any, id?: unknown) => void) => {
-//   done(null, user);
-// });
-
-// passport.deserializeUser((user: Express.User, done: (err: any, user?: Express.User | false | null) => void) => {
-//   done(null, user);
-// });
-
-// // Google Auth routes
-// app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-// app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login' }),
-//   function(req: Request, res: Response) {
-//     // Successful authentication, redirect home.
-//     res.redirect('/');
-//   }
-// );
-
-// // Logout route
-// app.get('/logout', (req: Request, res: Response, next: NextFunction) => {
-//   req.logout(function(err) {
-//     if (err) { return next(err); }
-//     res.redirect('/');
-//   });
-// });
-
-// // Middleware to check if user is authenticated
-// function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
-//   if (req.isAuthenticated()) {
-//     return next();
-//   }
-//   res.redirect('/login');
-// }
-
-
-// app.get('/bundle.js', function (req: Request, res: Response) {
-//   res.sendFile('.modelence/client/bundle.js', { root: '.' });
-// });
-
-
-// // Update your catch-all route
-// app.get('/', function (req: Request, res: Response) {
-//   res.sendFile(path.join('client', 'index.html'), { root: path.join(__dirname, '..') });
-// });
-
-
+  const directIp = req.ip || req.socket?.remoteAddress;
+  if (directIp) {
+    // Remove IPv6-to-IPv4 mapping prefix
+    return directIp.startsWith('::ffff:') ? directIp.substring(7) : directIp;
+  }
+  
+  return undefined;
+}
