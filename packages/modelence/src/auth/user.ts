@@ -5,6 +5,7 @@ import { handleSignupWithPassword } from './signup';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { usersCollection } from './db';
+import { updateDisposableEmailListCron } from './disposableEmails';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -34,5 +35,8 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
+  },
+  cronJobs: {
+    updateDisposableEmailList: updateDisposableEmailListCron
   }
 });
