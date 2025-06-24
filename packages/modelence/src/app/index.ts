@@ -11,6 +11,7 @@ import userModule from '../auth/user';
 import sessionModule from '../auth/session';
 import { runMigrations, MigrationScript, default as migrationModule } from '../migration';
 import { initRoles } from '../auth/role';
+import rateLimitModule from '../rate-limit';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
 import { Module } from './module';
@@ -46,7 +47,7 @@ export async function startApp(
   });
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule, migrationModule];
+  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
