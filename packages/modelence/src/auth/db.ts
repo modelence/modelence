@@ -50,3 +50,16 @@ export const usersCollection = new Store('_modelenceUsers', {
     },
   ]
 });
+
+export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDomains', {
+  schema: {
+    domain: schema.string(),
+    addedAt: schema.date(),
+  },
+  indexes: [
+    {
+      key: { domain: 1 },
+      unique: true
+    }
+  ]
+});

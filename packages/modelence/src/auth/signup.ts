@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
+import { isDisposableEmail } from './disposableEmails';
 
 export async function handleSignupWithPassword(args: Args, { user }: Context) {
   const email = z.string().email().parse(args.email);
@@ -10,7 +11,10 @@ export async function handleSignupWithPassword(args: Args, { user }: Context) {
     .min(8, { message: 'Password must contain at least 8 characters' })
     .parse(args.password);
 
-  // TODO: block disposable email providers
+  if (await isDisposableEmail(email)) {
+    throw new Error('Please use a permanent email address');
+  }
+
   // TODO: captcha check
   // TODO: rate limiting
 
