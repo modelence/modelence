@@ -4,8 +4,9 @@ import bcrypt from 'bcrypt';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
+import { consumeRateLimit } from '../rate-limit/rules';
 
-export async function handleSignupWithPassword(args: Args, { user }: Context) {
+export async function handleSignupWithPassword(args: Args, { user, connectionInfo }: Context) {
   const email = z.string().email().parse(args.email);
   const password = z.string()
     .min(8, { message: 'Password must contain at least 8 characters' })
@@ -16,7 +17,6 @@ export async function handleSignupWithPassword(args: Args, { user }: Context) {
   }
 
   // TODO: captcha check
-  // TODO: rate limiting
 
   if (user) {
     // TODO: handle cases where a user is already logged in
@@ -30,6 +30,15 @@ export async function handleSignupWithPassword(args: Args, { user }: Context) {
   if (existingUser) {
     const existingEmail = existingUser.emails?.find(e => e.address === email);
     throw new Error(`User with email already exists: ${existingEmail?.address}`);
+  }
+
+  const ip = connectionInfo?.ip;
+  if (ip) {
+    consumeRateLimit({
+      bucket: 'signup',
+      type: 'ip',
+      value: ip,
+    });
   }
 
   // Hash password with bcrypt (salt is automatically generated)

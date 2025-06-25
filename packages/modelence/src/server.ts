@@ -16,5 +16,8 @@ export { Store } from './data/store';
 // Cron jobs
 export { CronJobInputParams } from './cron/types';
 
+// Rate limits
+export type { RateLimitRule } from './rate-limit/types';
+
 export { getConfig } from './config/server';
 export type { CloudBackendConnectResponse } from './app/backendApi';

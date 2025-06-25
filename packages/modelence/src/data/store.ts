@@ -212,6 +212,16 @@ export class Store<
   }
 
   /**
+   * Counts the number of documents that match a query
+   * 
+   * @param query - The query to filter documents
+   * @returns The number of documents that match the query
+   */
+  countDocuments(query: Filter<this['_type']>): Promise<number> {
+    return this.requireCollection().countDocuments(query);
+  }
+
+  /**
    * Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
    * 
    * @param query - The query to filter documents
