@@ -37,30 +37,32 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
   const now = Date.now();
   const currentWindowStart = Math.floor(now / rule.window) * rule.window;
 
-  if (record) {
-    const { count, modifier } = getCount(record, currentWindowStart, now);
-    if (count >= rule.limit) {
-      throw createRateLimitError();
-    }
+  const { count, modifier } = record
+    ? getCount(record, currentWindowStart, now)
+    : {
+      count: 0,
+      modifier: {
+        $setOnInsert: {
+          windowStart: new Date(currentWindowStart),
+          windowCount: 1,
+          prevWindowCount: 0,
+          expiresAt: new Date(currentWindowStart + rule.window + rule.window),
+        }
+      }
+    };
 
-    await dbRateLimits.updateOne(record._id.toString(), modifier);
-  } else {
-    if (rule.limit < 1) {
-      throw createRateLimitError();
-    }
-
-    await dbRateLimits.insertOne({
-      bucket: rule.bucket,
-      type: rule.type,
-      value,
-      windowMs: rule.window,
-
-      windowStart: new Date(currentWindowStart),
-      windowCount: 1,
-      prevWindowCount: 0,
-      expiresAt: new Date(currentWindowStart + rule.window + rule.window),
-    });
+  if (count >= rule.limit) {
+    throw createRateLimitError();
   }
+
+  /*
+    Always use upsert, because there is a small chance the document might be auto-removed
+    based on the expiration TTL index in between the check and the update
+  */
+  await dbRateLimits.upsertOne(
+    { bucket: rule.bucket, type: rule.type, value, windowMs: rule.window }, 
+    modifier
+  );
 }
 
 function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number, now: number) {
@@ -71,9 +73,14 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
     const prevWindowCount = record.prevWindowCount;
     const prevWindowWeight = 1 - (now - currentWindowStart) / record.windowMs;
     return {
-      count: currentWindowCount + prevWindowCount * prevWindowWeight,
+      count: Math.round(currentWindowCount + prevWindowCount * prevWindowWeight),
       modifier: {
         $inc: { windowCount: 1 },
+        $setOnInsert: {
+          windowStart: new Date(currentWindowStart),
+          prevWindowCount: 0,
+          expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
+        }
       }
     };
   }
@@ -81,7 +88,7 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
   if (record.windowStart.getTime() === prevWindowStart) {
     const weight = 1 - (now - currentWindowStart) / record.windowMs;
     return {
-      count: record.windowCount * weight,
+      count: Math.round(record.windowCount * weight),
       modifier: {
         $set: {
           windowStart: new Date(currentWindowStart),

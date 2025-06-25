@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.5.3-dev.8",
+  "version": "0.5.3-dev.16",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
