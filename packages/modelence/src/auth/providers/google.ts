@@ -1,10 +1,9 @@
-import { randomBytes } from "crypto";
 import { Router, type Request, type Response } from "express";
 import { ObjectId } from "mongodb";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { usersCollection } from "../db";
-import { setSessionUser } from "../session";
+import { createSession } from "../session";
 
 interface GoogleUser {
   id: string;
@@ -14,8 +13,7 @@ interface GoogleUser {
 }
 
 async function authenticateUser(res: Response, userId: ObjectId) {
-  const authToken = randomBytes(32).toString("base64url");
-  await setSessionUser(authToken, userId);
+  const { authToken } = await createSession(userId);
 
   res.cookie("authToken", authToken, {
     httpOnly: true,

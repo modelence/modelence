@@ -1,11 +1,11 @@
 import { randomBytes } from 'crypto';
-import { time } from '../time';
-import { Session } from './types';
-import { getPublicConfigs } from '../config/server';
+import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
+import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
-import { ObjectId } from 'mongodb';
+import { time } from '../time';
+import { Session } from './types';
 
 export const sessionsCollection = new Store('_modelenceSessions', {
   schema: {
@@ -47,7 +47,7 @@ export async function clearSessionUser(authToken: string) {
   });
 }
 
-async function createSession(): Promise<Session> {
+export async function createSession(userId: ObjectId | null = null): Promise<Session> {
   // TODO: add rate-limiting and captcha handling
 
   const authToken = randomBytes(32).toString('base64url');
@@ -58,13 +58,13 @@ async function createSession(): Promise<Session> {
     authToken,
     createdAt: new Date(now),
     expiresAt,
-    userId: null,
+    userId,
   });
 
   return {
     authToken,
     expiresAt,
-    userId: null,
+    userId,
   };
 }
 
