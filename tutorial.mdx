@@ -49,7 +49,7 @@ export const dbTodos = new Store('todos', {
   // Add custom methods to documents
   methods: {
     isOverdue() {
-      return this.dueDate < new Date();
+      return this.dueDate ? this.dueDate < new Date() : false;
     }
   }
 });
