@@ -1,5 +1,6 @@
 import { RateLimitRule, RateLimitType } from './types';
 import { dbRateLimits } from './db';
+import { RateLimitError } from '../error';
 
 let allRules: Array<RateLimitRule> = [];
 
@@ -24,7 +25,7 @@ export async function consumeRateLimit(
 // Two-bucket sliding window approximation to track rate limits.
 async function checkRateLimitRule(rule: RateLimitRule, value: string, createError?: () => Error) {
   const createRateLimitError = () => {
-    return createError ? createError() : new Error(`Rate limit exceeded for ${rule.bucket}`);
+    return createError ? createError() : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
   };
 
   const record = await dbRateLimits.findOne({
