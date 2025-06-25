@@ -34,7 +34,7 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
 
   const ip = connectionInfo?.ip;
   if (ip) {
-    consumeRateLimit({
+    await consumeRateLimit({
       bucket: 'signup',
       type: 'ip',
       value: ip,

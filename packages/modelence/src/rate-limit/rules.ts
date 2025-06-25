@@ -22,13 +22,9 @@ export async function consumeRateLimit(
 }
 
 // Two-bucket sliding window approximation to track rate limits.
-async function checkRateLimitRule(rule: RateLimitRule, value: string, errorHandler?: () => Error) {
-  const throwRateLimitError = () => {
-    if (errorHandler) {
-      errorHandler();
-    } else {
-      throw new Error(`Rate limit exceeded for ${rule.bucket}`);
-    }
+async function checkRateLimitRule(rule: RateLimitRule, value: string, createError?: () => Error) {
+  const createRateLimitError = () => {
+    return createError ? createError() : new Error(`Rate limit exceeded for ${rule.bucket}`);
   };
 
   const record = await dbRateLimits.findOne({
@@ -44,14 +40,13 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, errorHandl
   if (record) {
     const { count, modifier } = getCount(record, currentWindowStart, now);
     if (count >= rule.limit) {
-      throwRateLimitError();
+      throw createRateLimitError();
     }
 
     await dbRateLimits.updateOne(record._id.toString(), modifier);
   } else {
     if (rule.limit < 1) {
-      throwRateLimitError();
-      return;
+      throw createRateLimitError();
     }
 
     await dbRateLimits.insertOne({
@@ -74,7 +69,7 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
   if (record.windowStart.getTime() === currentWindowStart) {
     const currentWindowCount = record.windowCount;
     const prevWindowCount = record.prevWindowCount;
-    const prevWindowWeight = (1 - (now - currentWindowStart)) / record.windowMs;
+    const prevWindowWeight = 1 - (now - currentWindowStart) / record.windowMs;
     return {
       count: currentWindowCount + prevWindowCount * prevWindowWeight,
       modifier: {
@@ -84,7 +79,7 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
   }
   
   if (record.windowStart.getTime() === prevWindowStart) {
-    const weight = (1 - (now - currentWindowStart)) / record.windowMs;
+    const weight = 1 - (now - currentWindowStart) / record.windowMs;
     return {
       count: record.windowCount * weight,
       modifier: {
