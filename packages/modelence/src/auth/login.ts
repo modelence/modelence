@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import bcrypt from 'bcrypt';
+import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
@@ -19,6 +19,7 @@ export async function handleLoginWithPassword(args: Args, { user, session }: Con
     // TODO: handle cases where a user is already logged in
   }
 
+  // TODO: check if the email is verified
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email },
     { collation: { locale: 'en', strength: 2 } }

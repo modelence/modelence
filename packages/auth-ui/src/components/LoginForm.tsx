@@ -1,11 +1,10 @@
-import React from 'react';
 import { loginWithPassword } from 'modelence/client';
+import React, { useCallback } from 'react';
+import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
-import { AppleIcon } from './icons/AppleIcon';
 
 type SignupLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
@@ -31,7 +30,7 @@ export function LoginForm({
   inputClassName = "",
   labelClassName = ""
 }: LoginFormProps) {
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
@@ -39,7 +38,11 @@ export function LoginForm({
     const password = formData.get('password') as string;
     
     await loginWithPassword({ email, password });
-  };
+  }, []);
+
+  const openGoogleLogin = useCallback(() => {
+    window.location.href = '/api/_internal/auth/google';
+  }, []);
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
@@ -64,6 +67,7 @@ export function LoginForm({
             variant="outline" 
             className="w-full flex items-center justify-center gap-3"
             type="button"
+            onClick={openGoogleLogin}
           >
             <GoogleIcon className="w-5 h-5" />
             <span className="font-medium">Sign in with Google</span>
