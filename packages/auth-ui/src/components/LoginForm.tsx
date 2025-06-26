@@ -64,6 +64,7 @@ export function LoginForm({
             variant="outline" 
             className="w-full flex items-center justify-center gap-3"
             type="button"
+            disabled={true}
           >
             <GoogleIcon className="w-5 h-5" />
             <span className="font-medium">Sign in with Google</span>
