@@ -11,6 +11,7 @@ type SignupLinkRenderer = (props: { className: string; children: React.ReactNode
 
 export interface LoginFormProps {
   renderSignupLink?: SignupLinkRenderer;
+  onForgotPassword?: () => void;
   // Styling overrides
   className?: string;
   cardClassName?: string;
@@ -23,6 +24,7 @@ export interface LoginFormProps {
 
 export function LoginForm({ 
   renderSignupLink,
+  onForgotPassword,
   className = "",
   cardClassName = "",
   buttonClassName = "",
@@ -39,6 +41,13 @@ export function LoginForm({
     const password = formData.get('password') as string;
     
     await loginWithPassword({ email, password });
+  };
+
+  const handleForgotPassword = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    if (onForgotPassword) {
+      onForgotPassword();
+    }
   };
 
   const socialButtons = getSocialButtons();
@@ -92,7 +101,7 @@ export function LoginForm({
               <Label htmlFor="password" className={labelClassName}>
                 Password
               </Label>
-              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleForgotPassword}>
                 Forgot your password?
               </a>
             </div>
