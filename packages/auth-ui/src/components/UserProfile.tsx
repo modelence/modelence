@@ -84,18 +84,22 @@ function SecurityContent() {
   );
 }
 
-function SettingsContent() {
-  const handleDownloadData = () => {
-    // TODO: Implement data download
-    console.log('Download data requested');
-  };
+function SettingsContent({
+  onDeleteAccount,
+}: {
+  onDeleteAccount?: () => void;
+}) {
+  // const handleDownloadData = () => {
+  //   // TODO: Implement data download
+  //   console.log('Download data requested');
+  // };
 
-  const handleDeleteAccount = () => {
-    // TODO: Implement account deletion with confirmation
-    if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      console.log('Account deletion requested');
-    }
-  };
+  // const handleDeleteAccount = () => {
+  //   // TODO: Implement account deletion with confirmation
+  //   if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+  //     console.log('Account deletion requested');
+  //   }
+  // };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -146,7 +150,7 @@ function SettingsContent() {
             <Button 
               variant="destructive" 
               size="sm" 
-              onClick={handleDeleteAccount}
+              onClick={onDeleteAccount}
               className="font-medium"
             >
               Delete account
@@ -166,7 +170,9 @@ type ProfileData = {
   authMethods: string[];
 };
 
-function UserProfileContent() {
+function UserProfileContent({
+  onDeleteAccount,
+}: { onDeleteAccount?: () => void }) {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   
   const { data: profile, isLoading, error } = useQuery({
@@ -177,7 +183,11 @@ function UserProfileContent() {
   if (error) return <div>Error loading profile: {error.message}</div>;
   if (!profile) return null;
 
-  const tabs = [
+  const tabs: {
+    id: TabType;
+    label: string;
+    icon: React.ReactNode;
+  }[] = [
     { id: 'profile' as const, label: 'Profile', icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
         <circle cx="10" cy="6" r="4" stroke="currentColor" strokeWidth="1.5"/>
@@ -190,13 +200,17 @@ function UserProfileContent() {
     //     <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     //   </svg>
     // )},
+  ];
+
+  if (onDeleteAccount) {
+    tabs.push(
     { id: 'settings' as const, label: 'Settings', icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
         <circle cx="10" cy="10" r="2.8" stroke="currentColor" strokeWidth="1.5"/>
         <path d="M11.08 17.6h-2.16l-.6-1.84c-.4-.12-.8-.28-1.16-.48l-1.76.88-1.52-1.52.88-1.76c-.2-.36-.36-.76-.48-1.16L2.4 11.08v-2.16l1.84-.6c.12-.4.28-.8.48-1.16l-.88-1.76 1.52-1.52 1.76.88c.36-.2.76-.36 1.16-.48L8.92 2.4h2.16l.6 1.84c.4.12.8.28 1.16.48l1.76-.88 1.52 1.52-.88 1.76c.2.36.36.76.48 1.16l1.84.6v2.16l-1.84.6c-.12.4-.28.8-.48 1.16l.88 1.76-1.52 1.52-1.76-.88c-.36.2-.76.36-1.16.48l-.6 1.84z" stroke="currentColor" strokeWidth="1.5"/>
       </svg>
-    )}
-  ];
+    )});
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -205,7 +219,7 @@ function UserProfileContent() {
       case 'security':
         return <SecurityContent />;
       case 'settings':
-        return <SettingsContent />;
+        return <SettingsContent onDeleteAccount={onDeleteAccount} />;
       default:
         return <ProfileContent profile={profile} />;
     }
@@ -255,10 +269,14 @@ const queryClient = new QueryClient({
   },
 });
 
-export function UserProfile() {
+export function UserProfile({
+  onDeleteAccount,
+}: {
+  onDeleteAccount?: () => void;
+}) {
   return (
     <QueryClientProvider client={queryClient}>
-      <UserProfileContent />
+      <UserProfileContent onDeleteAccount={onDeleteAccount} />
     </QueryClientProvider>
   );
 }
