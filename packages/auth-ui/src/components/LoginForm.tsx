@@ -90,7 +90,6 @@ export function LoginForm({
               type="email" 
               name="email" 
               id="email" 
-              placeholder="m@example.com"
               className={inputClassName}
               required
             />
