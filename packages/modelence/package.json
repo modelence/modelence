@@ -51,6 +51,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@modelence/types": "^1.0.2",
     "@octokit/rest": "^20.0.2",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
