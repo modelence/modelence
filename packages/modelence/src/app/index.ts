@@ -20,7 +20,7 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 import { AppConfig, ConfigSchema } from '../config/types';
 import { RoleDefinition } from '../auth/types';
-import { AppServer } from '../../../types';
+import { AppServer } from '@modelence/types';
 import { viteServer } from '../viteServer';
 
 export type AppOptions = {

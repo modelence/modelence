@@ -10,7 +10,7 @@ import { HttpMethod } from '../routes/types';
 import { createRouteHandler } from '../routes/handler';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
-import { AppServer } from '../../../types';
+import { AppServer } from '@modelence/types';
 import { ModelenceError } from '../error';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
