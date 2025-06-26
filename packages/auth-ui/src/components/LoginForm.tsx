@@ -1,11 +1,9 @@
-import React from 'react';
 import { loginWithPassword } from 'modelence/client';
+import React from 'react';
 import { Button } from './ui/Button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
-import { AppleIcon } from './icons/AppleIcon';
 
 type SignupLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
@@ -60,25 +58,25 @@ export function LoginForm({
             <span className="font-medium">Sign in with Apple</span>
           </Button> */}
           
-          <Button 
+          {/* <Button 
             variant="outline" 
             className="w-full flex items-center justify-center gap-3"
             type="button"
           >
             <GoogleIcon className="w-5 h-5" />
             <span className="font-medium">Sign in with Google</span>
-          </Button>
+          </Button> */}
         </div>
 
         {/* Divider */}
-        <div className="relative">
+        {/* <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
           </div>
           <div className="relative flex justify-center text-sm">
             <span className="px-4 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">or</span>
           </div>
-        </div>
+        </div> */}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
@@ -89,7 +87,7 @@ export function LoginForm({
               type="email" 
               name="email" 
               id="email" 
-              placeholder="m@example.com"
+              placeholder=""
               className={inputClassName}
               required
             />
@@ -100,9 +98,9 @@ export function LoginForm({
               <Label htmlFor="password" className={labelClassName}>
                 Password
               </Label>
-              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+              {/* <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                 Forgot your password?
-              </a>
+              </a> */}
             </div>
             <Input 
               type="password" 

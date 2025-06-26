@@ -1,10 +1,9 @@
-import React from 'react';
 import { signupWithPassword } from 'modelence/client';
+import React from 'react';
 import { Button } from './ui/Button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
 
 type LoginLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
@@ -108,7 +107,7 @@ export function SignupForm({
       </CardHeader>
       
       <CardContent className="space-y-6">
-        <div className="space-y-3">
+        {/* <div className="space-y-3">
           <Button 
             variant="outline" 
             className="w-full flex items-center justify-center gap-3"
@@ -117,16 +116,16 @@ export function SignupForm({
             <GoogleIcon className="w-5 h-5" />
             <span className="font-medium">Sign up with Google</span>
           </Button>
-        </div>
+        </div> */}
 
-        <div className="relative">
+        {/* <div className="relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
           </div>
           <div className="relative flex justify-center text-sm">
             <span className="px-4 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">or</span>
           </div>
-        </div>
+        </div> */}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
