@@ -60,6 +60,13 @@ jobs:
             exit 1
           fi
           
+          ACTUAL_VERSION=$(node -p "require('./packages/$PACKAGE_DIR/package.json').version")
+          if [ "$ACTUAL_VERSION" != "$VERSION" ]; then
+            echo "Package version mismatch. Expected: $VERSION, Found: $ACTUAL_VERSION"
+            echo "The version in ./packages/$PACKAGE_DIR/package.json must match the release tag"
+            exit 1
+          fi
+          
           echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
           echo "package-dir=$PACKAGE_DIR" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
