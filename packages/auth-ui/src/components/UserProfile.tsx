@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { modelenceQuery } from '@modelence/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
 
 function SectionRow({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -31,11 +30,11 @@ function ProfileContent({ profile }: { profile: { handle: string; emails: { addr
             <div className="text-sm text-gray-500 dark:text-gray-400">Profile</div>
           </div>
         </div>
-        <Button size="sm" className="font-medium">Edit profile</Button>
+        {/* <Button size="sm" className="font-medium">Edit profile</Button> */}
       </div>
 
       <SectionRow label="Email addresses">
-        <div className="flex flex-col gap-1 mb-2">
+        <div className="flex flex-col gap-1">
           {profile.emails.map((email, index) => (
             <div key={email.address} className="flex items-center gap-2">
               <span>{email.address}</span>
@@ -48,17 +47,17 @@ function ProfileContent({ profile }: { profile: { handle: string; emails: { addr
             </div>
           ))}
         </div>
-        <Button variant="link" size="sm" className="pl-0 text-blue-600 dark:text-blue-400 font-medium">+ Add email address</Button>
+        {/* <Button variant="link" size="sm" className="pl-0 text-blue-600 dark:text-blue-400 font-medium">+ Add email address</Button> */}
       </SectionRow>
 
-      <SectionRow label="Phone number">
+      {/* <SectionRow label="Phone number">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-gray-400">No phone</span>
         </div>
         <Button variant="link" size="sm" className="pl-0 text-blue-600 dark:text-blue-400 font-medium">+ Add phone number</Button>
-      </SectionRow>
+      </SectionRow> */}
 
-      <SectionRow label="Login methods" className="border-b-0">
+      {/* <SectionRow label="Login methods" className="border-b-0">
         <div className="flex flex-col gap-2 mb-2">
           {profile.authMethods.map((method) => (
             <div key={method} className="flex items-center gap-2">
@@ -71,7 +70,7 @@ function ProfileContent({ profile }: { profile: { handle: string; emails: { addr
           )}
         </div>
         <Button variant="link" size="sm" className="pl-0 text-blue-600 dark:text-blue-400 font-medium">+ Connect account</Button>
-      </SectionRow>
+      </SectionRow> */}
     </div>
   );
 }
@@ -103,7 +102,7 @@ function SettingsContent() {
       <div className="text-xl font-semibold mb-8">Settings</div>
       
       {/* Data Privacy */}
-      <SectionRow label="Data Privacy">
+      {/* <SectionRow label="Data Privacy">
         <div className="space-y-4">
           <div>
             <div className="font-medium text-gray-900 dark:text-white mb-2">Download your data</div>
@@ -134,7 +133,7 @@ function SettingsContent() {
             </Button>
           </div>
         </div>
-      </SectionRow>
+      </SectionRow> */}
 
       {/* Account Management */}
       <SectionRow label="Account Management" className="border-b-0">
@@ -185,12 +184,12 @@ function UserProfileContent() {
         <path d="M2.5 17c0-2.485 3.358-4.5 7.5-4.5s7.5 2.015 7.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     )},
-    { id: 'security' as const, label: 'Security', icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-        <rect x="5" y="8" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    )},
+    // { id: 'security' as const, label: 'Security', icon: (
+    //   <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+    //     <rect x="5" y="8" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+    //     <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    //   </svg>
+    // )},
     { id: 'settings' as const, label: 'Settings', icon: (
       <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
         <circle cx="10" cy="10" r="2.8" stroke="currentColor" strokeWidth="1.5"/>
