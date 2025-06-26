@@ -3,6 +3,7 @@ import { CronJobInputParams } from '../cron/types';
 import { Store } from '../data/store';
 import { MethodDefinition } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
+import { RateLimitRule } from '../rate-limit/types';
 
 /** Array of Store instances that will be provisioned when the module is loaded */
 type Stores = Store<any, any>[];
@@ -58,6 +59,9 @@ export class Module {
   /** @internal */
   public readonly configSchema: ConfigSchema;
 
+  /** @internal */
+  public readonly rateLimits: RateLimitRule[];
+
   /**
    * Creates a new Module instance
    * 
@@ -75,14 +79,16 @@ export class Module {
       mutations = {},
       routes = [],
       cronJobs = {},
-      configSchema = {}
+      configSchema = {},
+      rateLimits = []
     }: { 
       stores?: Store<any, any>[],
       queries?: Queries,
       mutations?: Mutations,
       routes?: RouteDefinition[],
       cronJobs?: Record<string, CronJobInputParams>,
-      configSchema?: ConfigSchema
+      configSchema?: ConfigSchema,
+      rateLimits?: RateLimitRule[]
     }
   ) {
     this.name = name;
@@ -92,5 +98,6 @@ export class Module {
     this.routes = routes;
     this.cronJobs = cronJobs;
     this.configSchema = configSchema;
+    this.rateLimits = rateLimits;
   }
 }

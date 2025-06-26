@@ -132,6 +132,21 @@ export class Store<
     return result as this['_doc'];
   }
 
+  /**
+   * For convenience, to also allow directy passing a string or ObjectId as the selector
+  */
+  private getSelector(selector: Filter<this['_type']> | string | ObjectId) {
+    if (typeof selector === 'string') {
+      return { _id: new ObjectId(selector) } as Filter<this['_type']>;
+    }
+
+    if (selector instanceof ObjectId) {
+      return { _id: selector } as Filter<this['_type']>;
+    }
+
+    return selector;
+  }
+
   /** @internal */
   requireCollection() {
     if (!this.collection) {
@@ -212,6 +227,16 @@ export class Store<
   }
 
   /**
+   * Counts the number of documents that match a query
+   * 
+   * @param query - The query to filter documents
+   * @returns The number of documents that match the query
+   */
+  countDocuments(query: Filter<this['_type']>): Promise<number> {
+    return this.requireCollection().countDocuments(query);
+  }
+
+  /**
    * Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
    * 
    * @param query - The query to filter documents
@@ -250,11 +275,8 @@ export class Store<
    * @param update - The update to apply to the document
    * @returns The result of the update operation
    */
-  async updateOne(selector: Filter<this['_type']> | string, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    const modifiedSelector = typeof selector === 'string' 
-      ? { _id: new ObjectId(selector) } as Filter<this['_type']>
-      : selector;
-    return await this.requireCollection().updateOne(modifiedSelector, update);
+  async updateOne(selector: Filter<this['_type']> | string | ObjectId, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
+    return await this.requireCollection().updateOne(this.getSelector(selector), update);
   }
 
   /**
@@ -264,8 +286,8 @@ export class Store<
    * @param update - The MongoDB modifier to apply to the document
    * @returns The result of the update operation
    */
-  async upsertOne(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(selector, update, { upsert: true });
+  async upsertOne(selector: Filter<this['_type']> | string | ObjectId, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
+    return await this.requireCollection().updateOne(this.getSelector(selector), update, { upsert: true });
   }
 
   /**

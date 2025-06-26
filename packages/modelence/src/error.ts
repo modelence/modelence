@@ -1,19 +1,30 @@
-export class AuthError extends Error {
-  status: number;
+export abstract class ModelenceError extends Error {
+  abstract status: number;
+}
+
+export class AuthError extends ModelenceError {
+  status = 401;
 
   constructor(message: string) {
     super(message);
     this.name = 'AuthError';
-    this.status = 401;
   }
 }
 
-export class ValidationError extends Error {
-  status: number;
+export class ValidationError extends ModelenceError {
+  status = 400;
 
   constructor(message: string) {
     super(message);
     this.name = 'ValidationError';
-    this.status = 400;
+  }
+}
+
+export class RateLimitError extends ModelenceError {
+  status = 429;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitError';
   }
 }
