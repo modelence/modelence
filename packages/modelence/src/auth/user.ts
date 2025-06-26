@@ -6,6 +6,7 @@ import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { dbDisposableEmailDomains, usersCollection } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
+import { time } from '../time';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -38,5 +39,16 @@ export default new Module('_system.user', {
   },
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron
-  }
+  },
+  rateLimits: [{
+    bucket: 'signup',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 20,
+  }, {
+    bucket: 'signup',
+    type: 'ip',
+    window: time.days(1),
+    limit: 200,
+  }],
 });
