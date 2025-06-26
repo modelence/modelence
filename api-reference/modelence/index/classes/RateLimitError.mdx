@@ -1,0 +1,40 @@
+---
+sidebar_position: 1
+title: RateLimitError
+---
+
+[API Reference](/api-reference/modelence/index/classes/../../../index) / [modelence](/api-reference/modelence/index/classes/../../index) / [index](/api-reference/modelence/index/classes/../index) / RateLimitError
+
+Defined in: [src/error.ts:23](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L23)
+
+## Extends
+
+- `ModelenceError`
+
+## Constructors
+
+### Constructor
+
+> **new RateLimitError**(`message`): `RateLimitError`
+
+Defined in: [src/error.ts:26](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L26)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `message` | `string` |
+
+#### Returns
+
+`RateLimitError`
+
+#### Overrides
+
+`ModelenceError.constructor`
+
+## Properties
+
+| Property | Type | Default value | Overrides | Defined in |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="status"></a> `status` | `number` | `429` | `ModelenceError.status` | [src/error.ts:24](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L24) |

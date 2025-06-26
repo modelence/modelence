@@ -1,0 +1,19 @@
+---
+sidebar_position: 1
+title: RateLimitRule
+---
+
+[API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / RateLimitRule
+
+> **RateLimitRule** = `object`
+
+Defined in: [src/rate-limit/types.ts:3](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/rate-limit/types.ts#L3)
+
+## Properties
+
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="bucket"></a> `bucket` | `string` | Logical action being limited, e.g. "signup" | [src/rate-limit/types.ts:5](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/rate-limit/types.ts#L5) |
+| <a id="limit"></a> `limit` | `number` | Maximum allowed hits within the window | [src/rate-limit/types.ts:14](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/rate-limit/types.ts#L14) |
+| <a id="type"></a> `type` | `RateLimitType` | Identifier type of the actor this rule applies to | [src/rate-limit/types.ts:8](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/rate-limit/types.ts#L8) |
+| <a id="window"></a> `window` | `number` | Time window size in milliseconds | [src/rate-limit/types.ts:11](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/rate-limit/types.ts#L11) |

@@ -5,11 +5,11 @@ title: ValidationError
 
 [API Reference](/api-reference/modelence/index/classes/../../../index) / [modelence](/api-reference/modelence/index/classes/../../index) / [index](/api-reference/modelence/index/classes/../index) / ValidationError
 
-Defined in: [src/error.ts:11](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L11)
+Defined in: [src/error.ts:14](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L14)
 
 ## Extends
 
-- `Error`
+- `ModelenceError`
 
 ## Constructors
 
@@ -17,7 +17,7 @@ Defined in: [src/error.ts:11](https://github.com/modelence/modelence/blob/0b6a6b
 
 > **new ValidationError**(`message`): `ValidationError`
 
-Defined in: [src/error.ts:14](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L14)
+Defined in: [src/error.ts:17](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L17)
 
 #### Parameters
 
@@ -31,10 +31,10 @@ Defined in: [src/error.ts:14](https://github.com/modelence/modelence/blob/0b6a6b
 
 #### Overrides
 
-`Error.constructor`
+`ModelenceError.constructor`
 
 ## Properties
 
-| Property | Type | Defined in |
-| ------ | ------ | ------ |
-| <a id="status"></a> `status` | `number` | [src/error.ts:12](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L12) |
+| Property | Type | Default value | Overrides | Defined in |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="status"></a> `status` | `number` | `400` | `ModelenceError.status` | [src/error.ts:15](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L15) |

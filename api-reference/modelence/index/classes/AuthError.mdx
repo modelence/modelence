@@ -5,11 +5,11 @@ title: AuthError
 
 [API Reference](/api-reference/modelence/index/classes/../../../index) / [modelence](/api-reference/modelence/index/classes/../../index) / [index](/api-reference/modelence/index/classes/../index) / AuthError
 
-Defined in: [src/error.ts:1](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L1)
+Defined in: [src/error.ts:5](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L5)
 
 ## Extends
 
-- `Error`
+- `ModelenceError`
 
 ## Constructors
 
@@ -17,7 +17,7 @@ Defined in: [src/error.ts:1](https://github.com/modelence/modelence/blob/0b6a6bf
 
 > **new AuthError**(`message`): `AuthError`
 
-Defined in: [src/error.ts:4](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L4)
+Defined in: [src/error.ts:8](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L8)
 
 #### Parameters
 
@@ -31,10 +31,10 @@ Defined in: [src/error.ts:4](https://github.com/modelence/modelence/blob/0b6a6bf
 
 #### Overrides
 
-`Error.constructor`
+`ModelenceError.constructor`
 
 ## Properties
 
-| Property | Type | Defined in |
-| ------ | ------ | ------ |
-| <a id="status"></a> `status` | `number` | [src/error.ts:2](https://github.com/modelence/modelence/blob/0b6a6bfbe8060e61c18c99827e9c6d3ed4ea2590/packages/modelence/src/error.ts#L2) |
+| Property | Type | Default value | Overrides | Defined in |
+| ------ | ------ | ------ | ------ | ------ |
+| <a id="status"></a> `status` | `number` | `401` | `ModelenceError.status` | [src/error.ts:6](https://github.com/modelence/modelence/blob/c775b2b22ffc1dd208683cc19fbe0a7a4325fad4/packages/modelence/src/error.ts#L6) |
