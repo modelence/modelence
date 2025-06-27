@@ -12,9 +12,24 @@ export function initRateLimits(rateLimits: RateLimitRule[]) {
   allRules = rateLimits;
 }
 
+/**
+ * This function will check all rate limit rules on the specified bucket and type,
+ * throw an error if any of them are exceeded and increase the count of the rate limit record.
+ * 
+ * @category Rate Limits
+ * 
+ * @example
+ * ```ts
+ * await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+ * ```
+ * @param options.bucket - The bucket for the rate limit.
+ * @param options.type - The type of the rate limit.
+ * @param options.value - The value for the rate limit.
+ */
 export async function consumeRateLimit(
-  { bucket, type, value }: { bucket: string, type: RateLimitType, value: string }
+  options: { bucket: string, type: RateLimitType, value: string }
 ) {
+  const { bucket, type, value } = options;
   const rules = allRules.filter(rule => rule.bucket === bucket && rule.type === type);
 
   for (const rule of rules) {
