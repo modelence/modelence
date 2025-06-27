@@ -1,4 +1,6 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs/promises';
 import os from 'os';
 
 import { startServer } from './server';
@@ -199,7 +201,8 @@ async function trackAppStart() {
     const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
     const environmentId = process.env.MODELENCE_ENVIRONMENT_ID;
     
-    const packageJson = await import('../../package.json');
+    const appDetails = await getAppDetails();
+    const modelencePackageJson = await import('../../package.json');
     
     await fetch(`${serviceEndpoint}/api/track/app-start`, {
       method: 'POST',
@@ -207,11 +210,27 @@ async function trackAppStart() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        projectName: packageJson.default.name,
-        version: packageJson.default.version,
+        projectName: appDetails.name,
+        version: modelencePackageJson.default.version,
         localHostname: os.hostname(),
         environmentId
       })
     });
+  }
+}
+
+async function getAppDetails() {
+  try {
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageJsonContent);
+    
+    return {
+      name: packageJson.name || 'unknown'
+    };
+  } catch (error) {
+    return {
+      name: 'unknown'
+    };
   }
 }
