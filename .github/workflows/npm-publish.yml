@@ -75,10 +75,6 @@ jobs:
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         run: npm ci
       
-      - name: Build package
-        working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
-        run: npm run build
-      
       - name: Publish to NPM
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         run: npm publish
