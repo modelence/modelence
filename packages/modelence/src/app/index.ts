@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import os from 'os';
 
 import { startServer } from './server';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -206,7 +207,9 @@ async function trackAppStart() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        projectName: packageJson.default.name,
         version: packageJson.default.version,
+        localHostname: os.hostname(),
         environmentId
       })
     });
