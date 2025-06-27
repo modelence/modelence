@@ -6,19 +6,45 @@ export type UserInfo = {
   handle: string;
 };
 
-export async function signupWithPassword({ email, password }: { email: string, password: string }) {
+/**
+ * Sign up a new user with an email and password.
+ * 
+ * @example
+ * ```ts
+ * await signupWithPassword({ email: 'test@example.com', password: '12345678' });
+ * ```
+ * @param options.email - The email of the user.
+ * @param options.password - The password of the user.
+ */
+export async function signupWithPassword(options: { email: string, password: string }) {
+  const { email, password } = options;
   await callMethod('_system.user.signupWithPassword', { email, password });
 
   // TODO: handle auto-login from the signup method itself to avoid a second method call
   await loginWithPassword({ email, password });
 }
 
-export async function loginWithPassword({ email, password }: { email: string, password: string }) {
+/**
+ * Login a user with an email and password.
+ * 
+ * @example
+ * ```ts
+ * await loginWithPassword({ email: 'test@example.com', password: '12345678' });
+ * ```
+ * @param options.email - The email of the user.
+ * @param options.password - The password of the user.
+ */
+export async function loginWithPassword(options: { email: string, password: string }) {
+  const { email, password } = options;
   const { user } = await callMethod<{ user: UserInfo }>('_system.user.loginWithPassword', { email, password });
   setCurrentUser(user);
   return user;
 }
 
+/**
+ * Logout the current user.
+ * 
+ */
 export async function logout() {
   await callMethod('_system.user.logout');
   setCurrentUser(null);

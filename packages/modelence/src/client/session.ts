@@ -54,6 +54,19 @@ export function setCurrentUser(user: User | null) {
   useSessionStore.getState().setUser(user);
 }
 
+/**
+ * `useSession` is a hook that returns the current user, and in the future will also return other details about the current session.
+ * 
+ * @example
+ * ```ts
+ * import { useSession } from 'modelence/client';
+ * 
+ * function MyComponent() {
+ *   const { user } = useSession();
+ *   return <div>{user?.handle}</div>;
+ * }
+ * ```
+ */
 export function useSession() {
   const user = useSessionStore(state => state.user);
   return { user };

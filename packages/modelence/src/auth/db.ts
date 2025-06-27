@@ -8,16 +8,6 @@ import { Store } from '../data/store';
  * 
  * @example
  * ```typescript
- * // Create a new user
- * const result = await dbUsers.insertOne({
- *   handle: 'john_doe',
- *   emails: [{ address: 'john@example.com', verified: false }],
- *   createdAt: new Date(),
- *   authMethods: {
- *     password: { hash: 'hashed_password' }
- *   }
- * });
- * 
  * // Find user by email
  * const user = await dbUsers.findOne(
  *   { 'emails.address': 'john@example.com' }

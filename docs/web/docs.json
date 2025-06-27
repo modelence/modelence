@@ -50,11 +50,20 @@
             ]
           },
           {
+            "group": "Authentication",
+            "pages": [
+              "api-reference/modelence/client/functions/signupWithPassword",
+              "api-reference/modelence/client/functions/loginWithPassword",
+              "api-reference/modelence/client/functions/logout",
+              "api-reference/modelence/client/functions/useSession",
+              "api-reference/modelence/server/variables/dbUsers"
+            ]
+          },
+          {
             "group": "Database",
             "pages": [
               "api-reference/modelence/server/classes/Store",
-              "api-reference/modelence/server/variables/schema",
-              "api-reference/modelence/server/variables/dbUsers"
+              "api-reference/modelence/server/variables/schema"
             ]
           },
           {
@@ -62,6 +71,13 @@
             "pages": [
               "api-reference/modelence/server/functions/getConfig",
               "api-reference/modelence/client/functions/getConfig"
+            ]
+          },
+          {
+            "group": "Rate Limits",
+            "pages": [
+              "api-reference/modelence/server/type-aliases/RateLimitRule",
+              "api-reference/modelence/server/functions/consumeRateLimit"
             ]
           }
         ]
