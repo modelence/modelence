@@ -9,11 +9,7 @@ import { AppServer } from '../../../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
-import { runMethod } from '../methods';
-import { getResponseTypeMap } from '../methods/serialize';
-import { createRouteHandler } from '../routes/handler';
-import { HttpMethod } from '../routes/types';
-import { Module } from './module';
+import { ModelenceError } from '../error';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -55,7 +51,9 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
       // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
       console.error(`Error in method ${methodName}:`, error);
 
-      if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
+      if (error instanceof ModelenceError) {
+        res.status(error.status).send(error.message);
+      } else if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
         const zodError = error as z.ZodError;
         const flattened = zodError.flatten();
         const fieldMessages = Object.entries(flattened.fieldErrors)

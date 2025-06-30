@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { RouteHandler, ExpressHandler } from './types';
-import { AuthError, ValidationError } from '../error';
+import { ModelenceError } from '../error';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
 
@@ -26,7 +26,7 @@ export function createRouteHandler(handler: RouteHandler): ExpressHandler {
 
       res.send(response.data);
     } catch (error) {
-      if (error instanceof AuthError || error instanceof ValidationError) {
+      if (error instanceof ModelenceError) {
         res.status(error.status).send(error.message);
       } else {
         console.error(`Error in route handler: ${req.path}`);

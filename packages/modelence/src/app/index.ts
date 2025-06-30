@@ -1,4 +1,7 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs/promises';
+import os from 'os';
 
 import { startServer } from './server';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -11,6 +14,8 @@ import userModule from '../auth/user';
 import sessionModule from '../auth/session';
 import { runMigrations, MigrationScript, default as migrationModule } from '../migration';
 import { initRoles } from '../auth/role';
+import rateLimitModule from '../rate-limit';
+import { initRateLimits } from '../rate-limit/rules';
 import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
 import cronModule from '../cron/jobs';
 import { Module } from './module';
@@ -18,7 +23,7 @@ import { createQuery, createMutation, _createSystemQuery, _createSystemMutation 
 import { Store } from '../data/store';
 import { AppConfig, ConfigSchema } from '../config/types';
 import { RoleDefinition } from '../auth/types';
-import { AppServer } from '../../../types';
+import { AppServer } from '@modelence/types';
 import { viteServer } from '../viteServer';
 
 export type AppOptions = {
@@ -46,7 +51,7 @@ export async function startApp(
   });
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule, migrationModule];
+  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
@@ -63,6 +68,9 @@ export async function startApp(
   if (isCronEnabled) {
     defineCronJobs(combinedModules);
   }
+
+  const rateLimits = getRateLimits(combinedModules);
+  initRateLimits(rateLimits);
 
   if (hasRemoteBackend) {
     const { configs, environmentId, appAlias, environmentAlias, telemetry } = await connectCloudBackend({
@@ -130,6 +138,10 @@ function getStores(modules: Module[]) {
   return modules.flatMap(module => module.stores);
 }
 
+function getRateLimits(modules: Module[]) {
+  return modules.flatMap(module => module.rateLimits);
+}
+
 function getConfigSchema(modules: Module[]): ConfigSchema {
   const merged: ConfigSchema = {};
 
@@ -189,7 +201,8 @@ async function trackAppStart() {
     const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
     const environmentId = process.env.MODELENCE_ENVIRONMENT_ID;
     
-    const packageJson = await import('../../package.json');
+    const appDetails = await getAppDetails();
+    const modelencePackageJson = await import('../../package.json');
     
     await fetch(`${serviceEndpoint}/api/track/app-start`, {
       method: 'POST',
@@ -197,9 +210,27 @@ async function trackAppStart() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        version: packageJson.default.version,
+        projectName: appDetails.name,
+        version: modelencePackageJson.default.version,
+        localHostname: os.hostname(),
         environmentId
       })
     });
+  }
+}
+
+async function getAppDetails() {
+  try {
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageJsonContent);
+    
+    return {
+      name: packageJson.name || 'unknown'
+    };
+  } catch (error) {
+    return {
+      name: 'unknown'
+    };
   }
 }

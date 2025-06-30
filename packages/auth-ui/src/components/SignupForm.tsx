@@ -99,6 +99,8 @@ export function SignupForm({
     await signupWithPassword({ email, password });
   };
 
+  const socialButtons = getSocialButtons();
+
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
       <CardHeader className="text-center">
@@ -108,25 +110,23 @@ export function SignupForm({
       </CardHeader>
       
       <CardContent className="space-y-6">
-        <div className="space-y-3">
-          <Button 
-            variant="outline" 
-            className="w-full flex items-center justify-center gap-3"
-            type="button"
-          >
-            <GoogleIcon className="w-5 h-5" />
-            <span className="font-medium">Sign up with Google</span>
-          </Button>
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">or</span>
-          </div>
-        </div>
+        {socialButtons.length > 0 && (
+          <>
+            <div className="space-y-3">
+              {socialButtons.map((button, index) => (
+                button
+              ))}
+            </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">or</span>
+              </div>
+            </div>
+          </>
+        )}
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
@@ -196,4 +196,20 @@ export function SignupForm({
       )}
     </Card>
   );
+}
+
+function getSocialButtons() {
+  return [];
+
+  // return [
+  //   <Button 
+  //     variant="outline" 
+  //     className="w-full flex items-center justify-center gap-3"
+  //     type="button"
+  //     disabled={true}
+  //   >
+  //     <GoogleIcon className="w-5 h-5" />
+  //     <span className="font-medium">Sign up with Google</span>
+  //   </Button>
+  // ];
 }

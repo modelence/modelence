@@ -16,16 +16,67 @@ jobs:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install types dependencies
-        working-directory: ./packages/types
-        run: npm ci
+      - name: Extract package info from tag
+        id: package-info
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          echo "Full tag: $TAG_NAME"
+          
+          if [[ "$TAG_NAME" == *"@"* ]]; then
+            PACKAGE_NAME="${TAG_NAME%@*}"
+            VERSION="${TAG_NAME##*@}"
+          else
+            echo "Invalid tag format. Expected format: package-name@version"
+            exit 1
+          fi
+          
+          echo "Package name: $PACKAGE_NAME"
+          echo "Version: $VERSION"
+          
+          # Determine package directory
+          if [[ "$PACKAGE_NAME" == @modelence/* ]]; then
+            # Remove @modelence/ prefix to get directory name
+            PACKAGE_DIR="${PACKAGE_NAME#@modelence/}"
+          else
+            # Use the whole package name as directory name
+            PACKAGE_DIR="$PACKAGE_NAME"
+          fi
+          
+          echo "Package directory: $PACKAGE_DIR"
+          
+          if [ ! -d "./packages/$PACKAGE_DIR" ]; then
+            echo "Package directory ./packages/$PACKAGE_DIR does not exist"
+            exit 1
+          fi
+          
+          if [ ! -f "./packages/$PACKAGE_DIR/package.json" ]; then
+            echo "package.json not found in ./packages/$PACKAGE_DIR/"
+            exit 1
+          fi
+          
+          ACTUAL_NAME=$(node -p "require('./packages/$PACKAGE_DIR/package.json').name")
+          if [ "$ACTUAL_NAME" != "$PACKAGE_NAME" ]; then
+            echo "Package name mismatch. Expected: $PACKAGE_NAME, Found: $ACTUAL_NAME"
+            exit 1
+          fi
+          
+          ACTUAL_VERSION=$(node -p "require('./packages/$PACKAGE_DIR/package.json').version")
+          if [ "$ACTUAL_VERSION" != "$VERSION" ]; then
+            echo "Package version mismatch. Expected: $VERSION, Found: $ACTUAL_VERSION"
+            echo "The version in ./packages/$PACKAGE_DIR/package.json must match the release tag"
+            exit 1
+          fi
+          
+          echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "package-dir=$PACKAGE_DIR" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Install dependencies
-        working-directory: ./packages/modelence
+      - name: Install package dependencies
+        working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         run: npm ci
       
       - name: Publish to NPM
-        working-directory: ./packages/modelence
+        working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
