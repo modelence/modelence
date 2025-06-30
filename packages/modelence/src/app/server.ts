@@ -1,4 +1,8 @@
 import googleAuthRouter from '@/auth/providers/google';
+import { runMethod } from '@/methods';
+import { getResponseTypeMap } from '@/methods/serialize';
+import { createRouteHandler } from '@/routes/handler';
+import { HttpMethod } from '@/server';
 import { logInfo } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
@@ -10,6 +14,7 @@ import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
 import { ModelenceError } from '../error';
+import { Module } from './module';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
