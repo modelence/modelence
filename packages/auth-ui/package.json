@@ -19,7 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@modelence/react-query": "^1.0.0",
+    "@modelence/react-query": "^1.0.2",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0"
   },
