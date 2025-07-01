@@ -102,3 +102,18 @@ dist
 .pnp.*
 
 .DS_Store
+
+# Turborepo
+.turbo
+
+# Build outputs
+dist/
+build/
+.next/
+
+# Package manager files
+.pnpm-debug.log*
+pnpm-lock.yaml
+
+# Changesets
+.changeset/pre.json

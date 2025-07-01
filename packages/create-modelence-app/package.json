@@ -10,6 +10,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm",
     "dev": "tsup src/index.ts --format esm --watch",
+    "lint": "echo 'Add linting here'",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

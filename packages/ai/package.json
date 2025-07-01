@@ -14,6 +14,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "echo 'Add linting here'",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
     "prepublishOnly": "npm run build"
   },
   "author": "Modelence",
