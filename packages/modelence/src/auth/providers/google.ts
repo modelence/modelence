@@ -1,3 +1,4 @@
+import { getConfig } from "@/server";
 import { Router, type Request, type Response } from "express";
 import { ObjectId } from "mongodb";
 import passport from "passport";
@@ -29,7 +30,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const googleUser = req.user as GoogleUser;
 
   const existingUser = await usersCollection.findOne(
-    { 'google.id': googleUser.id },
+    { 'authMethods.google.id': googleUser.id },
   );
 
   if (existingUser) {
@@ -45,18 +46,16 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
   // TODO: check if the email is verified
   if (existingUserByEmail) {
-    // If the user exists but has a different Google ID, we can link the Google account
-    await usersCollection.updateOne(
-      { _id: existingUserByEmail._id },
-      { $set: { google: { id: googleUser.id } } }
-    );
-    await authenticateUser(res, existingUserByEmail._id);
+    // TODO: handle case with an HTML page
+    res.status(400).json({
+      error: "User with this email already exists. Please log in instead.",
+    });
     return;
   }
 
   // If the user does not exist, create a new user
   const newUser = await usersCollection.insertOne({
-    handle: googleUser.displayName,
+    handle: googleUser.email,
     emails: [{
       address: googleUser.email,
       verified: true, // Google email is considered verified
@@ -74,13 +73,15 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
 function getRouter() {
   const googleAuthRouter = Router();
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+  const googleClientId = String(getConfig('_system.googleClientId'));
+  const googleClientSecret = String(getConfig('_system.googleClientSecret'));
+  if (!googleClientId || !googleClientSecret) {
     return googleAuthRouter;
   }
 
   passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID ?? '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    clientID: googleClientId,
+    clientSecret: googleClientSecret,
     callbackURL: '/api/_internal/auth/google/callback',
   }, (accessToken, refreshToken, profile, done) => {
     return done(null, profile);

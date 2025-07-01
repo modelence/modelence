@@ -42,7 +42,7 @@ export function LoginForm({
     await loginWithPassword({ email, password });
   }, []);
 
-  const openGoogleLogin = useCallback(() => {
+  const openGoogleAuth = useCallback(() => {
     window.location.href = '/api/_internal/auth/google';
   }, []);
 
@@ -55,19 +55,12 @@ export function LoginForm({
 
   const socialButtons = useMemo(() => {
     return [
-      /* <Button 
-        variant="outline" 
-        className="w-full h-12 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
-        type="button"
-      >
-        <AppleIcon className="w-5 h-5" />
-        <span className="font-medium">Sign in with Apple</span>
-      </Button> */
       <Button 
         variant="outline" 
         className="w-full flex items-center justify-center gap-3"
         type="button"
-        onClick={openGoogleLogin}
+        key="google"
+        onClick={openGoogleAuth}
       >
         <GoogleIcon className="w-5 h-5" />
         <span className="font-medium">Sign in with Google</span>
@@ -87,9 +80,7 @@ export function LoginForm({
         {socialButtons.length > 0 && (
           <>
             <div className="space-y-3">
-              {socialButtons.map((button, index) => (
-                button
-              ))}
+              {socialButtons}
             </div>
 
             {/* Divider */}

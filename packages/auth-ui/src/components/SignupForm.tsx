@@ -1,10 +1,10 @@
-import React from 'react';
 import { signupWithPassword } from 'modelence/client';
+import React, { useCallback, useMemo } from 'react';
+import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
 
 type LoginLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
@@ -83,7 +83,7 @@ export function SignupForm({
   labelClassName = "",
   consents
 }: SignupFormProps) {
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
@@ -97,9 +97,33 @@ export function SignupForm({
     }
     
     await signupWithPassword({ email, password });
-  };
+  }, []);
 
-  const socialButtons = getSocialButtons();
+  const openGoogleAuth = useCallback(() => {
+    window.location.href = '/api/_internal/auth/google';
+  }, []);
+
+  const socialButtons = useMemo(() => {
+    return [
+      /* <Button 
+        variant="outline" 
+        className="w-full h-12 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
+        type="button"
+      >
+        <AppleIcon className="w-5 h-5" />
+        <span className="font-medium">Sign in with Apple</span>
+      </Button> */
+      <Button 
+        variant="outline" 
+        className="w-full flex items-center justify-center gap-3"
+        type="button"
+        onClick={openGoogleAuth}
+      >
+        <GoogleIcon className="w-5 h-5" />
+        <span className="font-medium">Sign in with Google</span>
+      </Button>
+    ];
+  }, []);
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
@@ -113,9 +137,7 @@ export function SignupForm({
         {socialButtons.length > 0 && (
           <>
             <div className="space-y-3">
-              {socialButtons.map((button, index) => (
-                button
-              ))}
+              {socialButtons}
             </div>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -196,20 +218,4 @@ export function SignupForm({
       )}
     </Card>
   );
-}
-
-function getSocialButtons() {
-  return [];
-
-  // return [
-  //   <Button 
-  //     variant="outline" 
-  //     className="w-full flex items-center justify-center gap-3"
-  //     type="button"
-  //     disabled={true}
-  //   >
-  //     <GoogleIcon className="w-5 h-5" />
-  //     <span className="font-medium">Sign up with Google</span>
-  //   </Button>
-  // ];
 }
