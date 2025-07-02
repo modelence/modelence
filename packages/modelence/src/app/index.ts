@@ -24,6 +24,7 @@ import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import systemConfigSchema from './systemConfigSchema';
 
 export type AppOptions = {
   modules?: Module[],
@@ -144,6 +145,10 @@ function getRateLimits(modules: Module[]) {
 function getConfigSchema(modules: Module[]): ConfigSchema {
   const merged: ConfigSchema = {};
 
+  for (const [key, value] of Object.entries(systemConfigSchema)) {
+    merged[key] = value;
+  }
+
   for (const module of modules) {
     for (const [key, value] of Object.entries(module.configSchema)) {
       const absoluteKey = `${module.name}.${key}`;
@@ -151,6 +156,10 @@ function getConfigSchema(modules: Module[]): ConfigSchema {
         throw new Error(
           `Duplicate config schema key: ${absoluteKey} (${module.name})`
         );
+      }
+
+      if (key.toLowerCase().startsWith('_system.')) {
+        throw new Error(`Config key cannot start with a reserved prefix: '_system.' (${key})`);
       }
 
       merged[absoluteKey] = value;
@@ -181,8 +190,9 @@ function initStores(stores: Store<any, any>[]) {
 
 const localConfigMap = {
   MONGODB_URI: '_system.mongodbUri',
-  GOOGLE_CLIENT_ID: '_system.googleClientId',
-  GOOGLE_CLIENT_SECRET: '_system.googleClientSecret',
+  GOOGLE_AUTH_ENABLED: '_system.auth.google.enabled',
+  GOOGLE_AUTH_CLIENT_ID: '_system.auth.googleAuth.clientId',
+  GOOGLE_AUTH_CLIENT_SECRET: '_system.auth.google.clientSecret',
 };
 
 function getLocalConfigs(): AppConfig[] {

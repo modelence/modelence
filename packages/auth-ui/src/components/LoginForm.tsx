@@ -1,4 +1,4 @@
-import { loginWithPassword } from 'modelence/client';
+import { getConfig, loginWithPassword } from 'modelence/client';
 import React, { useCallback, useMemo } from 'react';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
@@ -32,6 +32,8 @@ export function LoginForm({
   inputClassName = "",
   labelClassName = ""
 }: LoginFormProps) {
+  const isGoogleAuthEnabled = getConfig('_system.auth.google.enabled');
+
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -54,18 +56,22 @@ export function LoginForm({
   };
 
   const socialButtons = useMemo(() => {
-    return [
-      <Button 
-        variant="outline" 
-        className="w-full flex items-center justify-center gap-3"
-        type="button"
-        key="google"
-        onClick={openGoogleAuth}
-      >
-        <GoogleIcon className="w-5 h-5" />
-        <span className="font-medium">Sign in with Google</span>
-      </Button>
-    ];
+    const buttons: JSX.Element[] = [];
+    if (isGoogleAuthEnabled) {
+      buttons.push(
+        <Button 
+          variant="outline" 
+          className="w-full flex items-center justify-center gap-3"
+          type="button"
+          key="google"
+          onClick={openGoogleAuth}
+        >
+          <GoogleIcon className="w-5 h-5" />
+          <span className="font-medium">Sign in with Google</span>
+        </Button>
+      );
+    }
+    return buttons;
   }, []);
 
   return (
