@@ -7,7 +7,20 @@ title: useSession
 
 > **useSession**(): `object`
 
-Defined in: [src/client/session.ts:57](https://github.com/modelence/modelence/blob/b7933212665d40e3624c94a9f0c768239245cfa3/packages/modelence/src/client/session.ts#L57)
+Defined in: [src/client/session.ts:70](https://github.com/modelence/modelence/blob/3d38d399776fc82b65c57ffd240ca33361f43e84/packages/modelence/src/client/session.ts#L70)
+
+`useSession` is a hook that returns the current user, and in the future will also return other details about the current session.
+
+## Example
+
+```ts
+import { useSession } from 'modelence/client';
+
+function MyComponent() {
+  const { user } = useSession();
+  return <div>{user?.handle}</div>;
+}
+```
 
 ## Returns
 
@@ -15,4 +28,4 @@ Defined in: [src/client/session.ts:57](https://github.com/modelence/modelence/bl
 
 | Name | Type | Defined in |
 | ------ | ------ | ------ |
-| `user` | `null` \| `User` | [src/client/session.ts:59](https://github.com/modelence/modelence/blob/b7933212665d40e3624c94a9f0c768239245cfa3/packages/modelence/src/client/session.ts#L59) |
+| `user` | `null` \| `User` | [src/client/session.ts:72](https://github.com/modelence/modelence/blob/3d38d399776fc82b65c57ffd240ca33361f43e84/packages/modelence/src/client/session.ts#L72) |

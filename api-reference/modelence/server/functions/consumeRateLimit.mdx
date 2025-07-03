@@ -5,18 +5,27 @@ title: consumeRateLimit
 
 [API Reference](/api-reference/modelence/server/functions/../../../index) / [modelence](/api-reference/modelence/server/functions/../../index) / [server](/api-reference/modelence/server/functions/../index) / consumeRateLimit
 
-> **consumeRateLimit**(`__namedParameters`): `Promise`\<`void`\>
+> **consumeRateLimit**(`options`): `Promise`\<`void`\>
 
-Defined in: [src/rate-limit/rules.ts:15](https://github.com/modelence/modelence/blob/b7933212665d40e3624c94a9f0c768239245cfa3/packages/modelence/src/rate-limit/rules.ts#L15)
+Defined in: [src/rate-limit/rules.ts:29](https://github.com/modelence/modelence/blob/3d38d399776fc82b65c57ffd240ca33361f43e84/packages/modelence/src/rate-limit/rules.ts#L29)
+
+This function will check all rate limit rules on the specified bucket and type,
+throw an error if any of them are exceeded and increase the count of the rate limit record.
+
+## Example
+
+```ts
+await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+```
 
 ## Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `__namedParameters` | \{ `bucket`: `string`; `type`: `RateLimitType`; `value`: `string`; \} |
-| `__namedParameters.bucket` | `string` |
-| `__namedParameters.type` | `RateLimitType` |
-| `__namedParameters.value` | `string` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `bucket`: `string`; `type`: [`RateLimitType`](/api-reference/modelence/server/functions/../type-aliases/RateLimitType); `value`: `string`; \} | - |
+| `options.bucket` | `string` | The bucket for the rate limit. |
+| `options.type` | [`RateLimitType`](/api-reference/modelence/server/functions/../type-aliases/RateLimitType) | The type of the rate limit. |
+| `options.value` | `string` | The value for the rate limit. |
 
 ## Returns
 
