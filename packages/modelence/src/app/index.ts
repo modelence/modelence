@@ -200,7 +200,6 @@ function getLocalConfigs(): AppConfig[] {
 
   for (const [envVar, configKey] of Object.entries(localConfigMap)) {
     const value = process.env[envVar];
-    console.log(configKey, value);
     if (value) {
       configs.push({
         key: configKey,
