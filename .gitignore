@@ -102,7 +102,3 @@ dist
 .pnp.*
 
 .DS_Store
-
-# pnpm 
-pnpm-lock.yaml
-pnpm-workspace.yaml
