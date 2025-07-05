@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/auth-ui",
-  "version": "0.1.12",
+  "version": "0.1.13-dev.1",
   "description": "Authentication UI components for Modelence",
   "exports": {
     ".": {
