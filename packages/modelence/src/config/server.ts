@@ -1,4 +1,4 @@
-import { ConfigKey, AppConfig, ConfigSchema } from './types';
+import { AppConfig, ConfigKey, ConfigSchema } from './types';
 
 let configSchema: ConfigSchema = {};
 let config: Record<ConfigKey, AppConfig> = {};
@@ -20,7 +20,13 @@ export function getPublicConfigs() {
   }
 
   return Object.fromEntries(
-    Object.entries(config).filter(([key]) => configSchema[key]?.isPublic)
+    Object.entries(configSchema).filter(([_, schema]) => schema.isPublic).map(([key, schema]) => {
+      return [key, {
+        key,
+        type: schema.type,
+        value: config[key]?.value ?? schema.default,
+      }];
+    })
   );
 }
 
@@ -47,10 +53,6 @@ export function setSchema(schema: ConfigSchema) {
   // TODO: more validation on the schema structure
   Object.entries(schema).forEach(([key, value]) => {
     const { type, isPublic } = value;
-
-    if (key.toLowerCase().startsWith('_system.')) {
-      throw new Error(`Config key cannot start with a reserved prefix: '_system.' (${key})`);
-    }
 
     if (type === 'secret' && isPublic) {
       throw new Error(`Config ${key} with type "secret" cannot be public`);

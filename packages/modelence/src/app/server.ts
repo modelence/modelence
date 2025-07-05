@@ -1,17 +1,20 @@
-import http from 'http';
-import express, { Request, Response } from 'express';
-import z from 'zod';
-import { runMethod } from '../methods';
-import { getResponseTypeMap } from '../methods/serialize';
-import { authenticate } from '../auth';
+import googleAuthRouter from '@/auth/providers/google';
+import { runMethod } from '@/methods';
+import { getResponseTypeMap } from '@/methods/serialize';
+import { createRouteHandler } from '@/routes/handler';
+import { HttpMethod } from '@/server';
 import { logInfo } from '@/telemetry';
-import { Module } from './module';
-import { HttpMethod } from '../routes/types';
-import { createRouteHandler } from '../routes/handler';
+import cookieParser from 'cookie-parser';
+import express, { Request, Response } from 'express';
+import http from 'http';
+import passport from 'passport';
+import z from 'zod';
+import { AppServer } from '../../../types';
+import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
-import { AppServer } from '@modelence/types';
 import { ModelenceError } from '../error';
+import { Module } from './module';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -30,6 +33,11 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
+
+  app.use(passport.initialize());
+
+  app.use(googleAuthRouter());
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
@@ -99,7 +107,7 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
 }
 
 async function getCallContext(req: Request) {
-  const authToken = z.string().nullish().transform(val => val ?? null).parse(req.body.authToken);
+  const authToken = z.string().nullish().transform(val => val ?? null).parse(req.cookies.authToken || req.body.authToken);
 
   const clientInfo = z.object({
     screenWidth: z.number(),

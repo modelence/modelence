@@ -1,30 +1,29 @@
 import dotenv from 'dotenv';
-import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
+import path from 'path';
 
-import { startServer } from './server';
-import { connect, getClient, getMongodbUri } from '../db/client';
+import { AppServer } from '@modelence/types';
+import { initRoles } from '../auth/role';
+import sessionModule from '../auth/session';
+import { RoleDefinition } from '../auth/types';
+import userModule from '../auth/user';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
-import { connectCloudBackend } from './backendApi';
-import { initMetrics } from './metrics';
-import { markAppStarted, setMetadata } from './state';
-import userModule from '../auth/user';
-import sessionModule from '../auth/session';
-import { runMigrations, MigrationScript, default as migrationModule } from '../migration';
-import { initRoles } from '../auth/role';
+import { AppConfig, ConfigSchema } from '../config/types';
+import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
+import { Store } from '../data/store';
+import { connect, getClient, getMongodbUri } from '../db/client';
+import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
+import { MigrationScript, default as migrationModule, runMigrations } from '../migration';
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
-import { startCronJobs, getCronJobsMetadata, defineCronJob } from '../cron/jobs';
-import cronModule from '../cron/jobs';
-import { Module } from './module';
-import { createQuery, createMutation, _createSystemQuery, _createSystemMutation } from '../methods';
-import { Store } from '../data/store';
-import { AppConfig, ConfigSchema } from '../config/types';
-import { RoleDefinition } from '../auth/types';
-import { AppServer } from '@modelence/types';
 import { viteServer } from '../viteServer';
+import { connectCloudBackend } from './backendApi';
+import { initMetrics } from './metrics';
+import { Module } from './module';
+import { startServer } from './server';
+import { markAppStarted, setMetadata } from './state';
 
 export type AppOptions = {
   modules?: Module[],
@@ -180,15 +179,25 @@ function initStores(stores: Store<any, any>[]) {
   }
 }
 
+const localConfigMap = {
+  MONGODB_URI: '_system.mongodbUri',
+  GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
+  GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
+  GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
+};
+
 function getLocalConfigs(): AppConfig[] {
   const configs: AppConfig[] = [];
 
-  if (process.env.MONGODB_URI) {
-    configs.push({
-      key: '_system.mongodbUri',
-      type: 'string',
-      value: process.env.MONGODB_URI
-    });
+  for (const [envVar, configKey] of Object.entries(localConfigMap)) {
+    const value = process.env[envVar];
+    if (value) {
+      configs.push({
+        key: configKey,
+        type: 'string',
+        value,
+      });
+    }
   }
 
   return configs;

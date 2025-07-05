@@ -1,12 +1,12 @@
 import { randomBytes } from 'crypto';
 
 import { Module } from '../app/module';
-import { handleSignupWithPassword } from './signup';
-import { handleLoginWithPassword, handleLogout } from './login';
-import { getOwnProfile } from './profile';
+import { time } from '../time';
 import { dbDisposableEmailDomains, usersCollection } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
-import { time } from '../time';
+import { handleLoginWithPassword, handleLogout } from './login';
+import { getOwnProfile } from './profile';
+import { handleSignupWithPassword } from './signup';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -51,4 +51,21 @@ export default new Module('_system.user', {
     window: time.days(1),
     limit: 200,
   }],
+  configSchema: {
+    'auth.google.enabled': {
+      type: 'boolean',
+      isPublic: true,
+      default: false,
+    },
+    'auth.google.clientId': {
+      type: 'string',
+      isPublic: false,
+      default: '',
+    },
+    'auth.google.clientSecret': {
+      type: 'secret',
+      isPublic: false,
+      default: '',
+    },
+  },
 });

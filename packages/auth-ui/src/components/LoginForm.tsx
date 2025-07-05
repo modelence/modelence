@@ -1,11 +1,10 @@
-import React from 'react';
-import { loginWithPassword } from 'modelence/client';
+import { getConfig, loginWithPassword } from 'modelence/client';
+import React, { useCallback, useMemo } from 'react';
+import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
-import { GoogleIcon } from './icons/GoogleIcon';
-import { AppleIcon } from './icons/AppleIcon';
 
 type SignupLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
 
@@ -33,7 +32,9 @@ export function LoginForm({
   inputClassName = "",
   labelClassName = ""
 }: LoginFormProps) {
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
+
+  const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
@@ -41,7 +42,11 @@ export function LoginForm({
     const password = formData.get('password') as string;
     
     await loginWithPassword({ email, password });
-  };
+  }, []);
+
+  const openGoogleAuth = useCallback(() => {
+    window.location.href = '/api/_internal/auth/google';
+  }, []);
 
   const handleForgotPassword = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -50,7 +55,24 @@ export function LoginForm({
     }
   };
 
-  const socialButtons = getSocialButtons();
+  const socialButtons = useMemo(() => {
+    const buttons: JSX.Element[] = [];
+    if (isGoogleAuthEnabled) {
+      buttons.push(
+        <Button 
+          variant="outline" 
+          className="w-full flex items-center justify-center gap-3"
+          type="button"
+          key="google"
+          onClick={openGoogleAuth}
+        >
+          <GoogleIcon className="w-5 h-5" />
+          <span className="font-medium">Sign in with Google</span>
+        </Button>
+      );
+    }
+    return buttons;
+  }, []);
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
@@ -64,9 +86,7 @@ export function LoginForm({
         {socialButtons.length > 0 && (
           <>
             <div className="space-y-3">
-              {socialButtons.map((button, index) => (
-                button
-              ))}
+              {socialButtons}
             </div>
 
             {/* Divider */}
@@ -137,28 +157,4 @@ export function LoginForm({
       )}
     </Card>
   );
-}
-
-function getSocialButtons() {
-  return [];
-
-  // return [
-  //   /* <Button 
-  //     variant="outline" 
-  //     className="w-full h-12 flex items-center justify-center gap-3 border-gray-300 hover:bg-gray-50"
-  //     type="button"
-  //   >
-  //     <AppleIcon className="w-5 h-5" />
-  //     <span className="font-medium">Sign in with Apple</span>
-  //   </Button> */
-  //   <Button 
-  //     variant="outline" 
-  //     className="w-full flex items-center justify-center gap-3"
-  //     type="button"
-  //     disabled={true}
-  //   >
-  //     <GoogleIcon className="w-5 h-5" />
-  //     <span className="font-medium">Sign in with Google</span>
-  //   </Button>
-  // ];
 }
