@@ -9,7 +9,7 @@ import { createSession } from "../session";
 interface GoogleUser {
   id: string;
   displayName: string;
-  email: string;
+  emails: { value: string; }[];
   photos: { value: string }[];
 }
 
@@ -39,8 +39,16 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
+  const googleEmail = googleUser.emails[0] && googleUser.emails[0]?.value;
+
+  if (!googleEmail) {
+    res.status(400).json({
+      error: "Email address is required for Google authentication.",
+    });
+  }
+
   const existingUserByEmail = await usersCollection.findOne(
-    { 'emails.address': googleUser.email, },
+    { 'emails.address': googleEmail, },
     { collation: { locale: 'en', strength: 2 } },
   );
 
@@ -55,9 +63,9 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
   // If the user does not exist, create a new user
   const newUser = await usersCollection.insertOne({
-    handle: googleUser.email,
+    handle: googleEmail,
     emails: [{
-      address: googleUser.email,
+      address: googleEmail,
       verified: true, // Google email is considered verified
     }],
     createdAt: new Date(),

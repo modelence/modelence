@@ -191,7 +191,7 @@ function initStores(stores: Store<any, any>[]) {
 const localConfigMap = {
   MONGODB_URI: '_system.mongodbUri',
   GOOGLE_AUTH_ENABLED: '_system.auth.google.enabled',
-  GOOGLE_AUTH_CLIENT_ID: '_system.auth.googleAuth.clientId',
+  GOOGLE_AUTH_CLIENT_ID: '_system.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.auth.google.clientSecret',
 };
 
