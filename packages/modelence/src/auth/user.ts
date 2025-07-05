@@ -52,17 +52,17 @@ export default new Module('_system.user', {
     limit: 200,
   }],
   configSchema: {
-    '_system.auth.google.enabled': {
+    'auth.google.enabled': {
       type: 'boolean',
       isPublic: true,
       default: false,
     },
-    '_system.auth.google.clientId': {
+    'auth.google.clientId': {
       type: 'string',
       isPublic: false,
       default: '',
     },
-    '_system.auth.google.clientSecret': {
+    'auth.google.clientSecret': {
       type: 'secret',
       isPublic: false,
       default: '',

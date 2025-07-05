@@ -32,7 +32,7 @@ export function LoginForm({
   inputClassName = "",
   labelClassName = ""
 }: LoginFormProps) {
-  const isGoogleAuthEnabled = getConfig('_system.auth.google.enabled');
+  const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
