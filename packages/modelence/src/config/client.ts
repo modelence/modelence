@@ -1,4 +1,4 @@
-import { ConfigKey, AppConfig, Configs } from './types';
+import { AppConfig, ConfigKey, Configs } from './types';
 
 let config: Record<ConfigKey, AppConfig> = {};
 
@@ -9,10 +9,6 @@ let config: Record<ConfigKey, AppConfig> = {};
  * @returns 
  */
 export function getConfig(key: ConfigKey) {
-  if (!(key in config)) {
-    throw new Error(`Unknown config: ${key}`);
-  }
-
   return config[key]?.value;
 }
 
