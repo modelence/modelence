@@ -6,8 +6,7 @@
     </picture>
   </a>
   <h1>
-    Modelence
-      
+    Modelence<br />
   <img alt="Y Combinator S25" src="https://img.shields.io/badge/Combinator-S25-orange?logo=ycombinator&labelColor=white" />
   </h1>
   
