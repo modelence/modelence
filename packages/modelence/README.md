@@ -5,7 +5,11 @@
       <img alt="Modelence logo" src="/packages/modelence/static/modelence.png" height="128" />
     </picture>
   </a>
-  <h1>Modelence</h1>
+  <h1>
+    Modelence
+      
+  <img alt="Y Combinator S25" src="https://img.shields.io/badge/Combinator-S25-orange?logo=ycombinator&labelColor=white" />
+  </h1>
   
   [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference/intro)
 
