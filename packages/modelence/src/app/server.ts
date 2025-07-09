@@ -102,7 +102,7 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
   const port = process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
-    console.log(`Application started on port ${port}`);
+    console.log(`\nApplication started on http://localhost:${port}\n`);
   });
 }
 
