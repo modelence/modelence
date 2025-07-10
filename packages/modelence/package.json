@@ -37,19 +37,23 @@
   },
   "homepage": "https://modelence.com",
   "devDependencies": {
+    "@aws-sdk/client-ses": "^3.840.0",
     "@types/archiver": "^6.0.3",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.5.1",
+    "@types/nodemailer": "^6.4.17",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
+    "nodemailer": "^7.0.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "resend": "^4.6.0",
     "typescript": "^5.7.2"
   },
   "dependencies": {
@@ -79,7 +83,10 @@
     "zustand": "^5.0.2"
   },
   "peerDependencies": {
+    "@aws-sdk/client-ses": ">=3.0.0",
+    "nodemailer": ">=7.0.0",
     "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react-dom": ">=18.0.0",
+    "resend": ">=4.0.0"
   }
 }
