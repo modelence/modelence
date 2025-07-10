@@ -18,10 +18,10 @@ export class AmazonSesProvider implements EmailProvider {
     }
 
     this.client = new SESClient({
-      region: region,
+      region,
       credentials: {
-        accessKeyId: accessKeyId,
-        secretAccessKey: secretAccessKey,
+        accessKeyId,
+        secretAccessKey,
       },
     });
   }

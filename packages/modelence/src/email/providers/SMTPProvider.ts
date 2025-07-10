@@ -8,7 +8,6 @@ export class SMTPProvider implements EmailProvider {
   constructor() {
     const host = String(getConfig('_system.email.smtp.host'));
     const port = Number(getConfig('_system.email.smtp.port'));
-    const secure = getConfig('_system.email.smtp.secure') === "true" || false;
     const user = String(getConfig('_system.email.smtp.user'));
     const pass = String(getConfig('_system.email.smtp.pass'));
 
@@ -19,7 +18,7 @@ export class SMTPProvider implements EmailProvider {
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure,
+      secure: true,
       auth: {
         user,
         pass,
