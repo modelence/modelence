@@ -8,3 +8,5 @@ export interface EmailData {
 export interface EmailProvider {
   sendEmail(data: EmailData): Promise<void>;
 }
+
+export type EmailProviderName = 'resend' | 'ses' | 'smtp';

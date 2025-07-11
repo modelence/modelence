@@ -192,7 +192,6 @@ const localConfigMap = {
   SMTP_PORT: '_system.email.smtp.port',
   SMTP_USER: '_system.email.smtp.user',
   SMTP_PASS: '_system.email.smtp.pass',
-  EMAIL_PROVIDER: '_system.email.provider',
 };
 
 function getLocalConfigs(): AppConfig[] {

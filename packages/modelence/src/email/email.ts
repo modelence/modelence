@@ -1,10 +1,8 @@
-import { getConfig } from '@/server';
 import { loadProvider } from './loadProvider';
-import { EmailData } from './types';
+import { EmailData, EmailProviderName } from './types';
 
-export async function sendEmail(data: EmailData) {
-  const emailProviderName = String(getConfig('_system.email.provider')) || 'resend';
-  const emailProvider = await loadProvider(emailProviderName);
+export async function sendEmail(providerName: EmailProviderName, data: EmailData) {
+  const emailProvider = await loadProvider(providerName);
 
   await emailProvider.sendEmail(data);
 }

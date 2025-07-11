@@ -1,8 +1,8 @@
-import { EmailProvider } from './types';
+import { EmailProvider, EmailProviderName } from './types';
 
-export async function loadProvider(type: string): Promise<EmailProvider> {
+export async function loadProvider(name: EmailProviderName): Promise<EmailProvider> {
   try {
-    switch (type) {
+    switch (name) {
       case 'resend': {
         try {
           const { ResendProvider } = await import('./providers/ResendProvider');
@@ -41,5 +41,5 @@ export async function loadProvider(type: string): Promise<EmailProvider> {
       throw new Error(`Failed to load email provider: ${err.message}`);
     }
   }
-  throw new Error(`Unsupported email provider: "${type}"`);
+  throw new Error(`Unsupported email provider: "${name}"`);
 }
