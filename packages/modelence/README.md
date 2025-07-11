@@ -17,6 +17,6 @@
 </div>
 
 ## Getting Started
-Modelence is a full-stack TypeScript Framework for real-time MongoDB applications, with the mission to eliminate all boilerplate for most standard features that modern web applications need, like database access, authentication, AI integration and more.
+Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
 - Visit our [Quick Start Guide](https://docs.modelence.com/quick-start/intro) to get started with Modelence.
