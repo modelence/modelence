@@ -184,14 +184,14 @@ const localConfigMap = {
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
-  RESEND_API_KEY: '_system.email.resend.apiKey',
-  SES_REGION: '_system.email.ses.region',
-  SES_ACCESS_KEY_ID: '_system.email.ses.accessKeyId',
-  SES_SECRET_ACCESS_KEY: '_system.email.ses.secretAccessKey',
-  SMTP_HOST: '_system.email.smtp.host',
-  SMTP_PORT: '_system.email.smtp.port',
-  SMTP_USER: '_system.email.smtp.user',
-  SMTP_PASS: '_system.email.smtp.pass',
+  MODELENCE_EMAIL_RESEND_API_KEY: '_system.email.resend.apiKey',
+  MODELENCE_EMAIL_SES_REGION: '_system.email.ses.region',
+  MODELENCE_EMAIL_SES_ACCESS_KEY_ID: '_system.email.ses.accessKeyId',
+  MODELENCE_EMAIL_SES_SECRET_ACCESS_KEY: '_system.email.ses.secretAccessKey',
+  MODELENCE_EMAIL_SMTP_HOST: '_system.email.smtp.host',
+  MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
+  MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
+  MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
 };
 
 function getLocalConfigs(): AppConfig[] {
