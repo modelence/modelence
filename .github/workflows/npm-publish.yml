@@ -80,10 +80,10 @@ jobs:
         run: |
           if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
             echo "Publishing dev version without latest tag"
-            npm publish --tag dev
+            npm publish --tag dev --access public
           else
             echo "Publishing with latest tag"
-            npm publish
+            npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

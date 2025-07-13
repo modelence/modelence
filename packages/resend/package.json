@@ -29,6 +29,5 @@
   "dependencies": {
     "@modelence/types": "^1.0.3-dev.1",
     "resend": "^4.6.0"
-  },
-  "private": false
+  }
 }
