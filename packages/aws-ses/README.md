@@ -10,7 +10,7 @@ npm i @modelence/aws-ses
 
 ## Overview
 
-This package provides `sendEmail` function that utilizes resend under the hood. The configuration can be set via Modelence Cloud or MODELENCE_EMAIL_RESEND_API_KEY environment variable.
+This package provides `sendEmail` function that utilizes resend under the hood. The configuration can be set via Modelence Cloud or MODELENCE_EMAIL_SES_REGION, MODELENCE_EMAIL_SES_ACCESS_KEY_ID and MODELENCE_EMAIL_SES_SECRET_ACCESS_KEY environment variable.
 
 ## Usage
 
