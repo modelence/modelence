@@ -1,11 +1,11 @@
-# @modelence/resend
+# @modelence/aws-ses
 
-Resend Adapter for modelence
+AWS SES Adapter for modelence
 
 ## Installation
 
 ```bash
-npm i @modelence/resend
+npm i @modelence/aws-ses
 ```
 
 ## Overview
@@ -15,7 +15,7 @@ This package provides `sendEmail` function that utilizes resend under the hood. 
 ## Usage
 
 ```ts
-import { sendEmail } from '@modelence/resend';
+import { sendEmail } from '@modelence/aws-ses';
 
 sendEmail({
   to: 'test@example.com',

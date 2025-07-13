@@ -38,20 +38,25 @@ function initializeResendClient() {
  * 
  */
 export async function sendEmail(
-  data: EmailPayload
+  {
+    from,
+    to,
+    subject,
+    html,
+  }: EmailPayload
 ) {
   const client = initializeResendClient();
 
   try {
-      await client.emails.send({
-        from: data.from,
-        to: data.to,
-        subject: data.subject,
-        html: data.html,
-      });
-    } catch (error) {
-      throw new Error(`Failed to send email using Resend: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    await client.emails.send({
+      from,
+      to,
+      subject,
+      html,
+    });
+  } catch (error) {
+    throw new Error(`Failed to send email using Resend: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export default {
