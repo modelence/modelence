@@ -33,9 +33,7 @@ function initializeResendClient() {
  * })
  * ```
  * 
- * @param data - The email payload containing sender, recipient, subject, and HTML content.
- * @returns Query options object for TanStack Query's useQuery
- * 
+ * @param data - The email payload containing the following fields: from, to, subject, html, react (JSX that will be converted to the html), text, cc, bcc, replyTo, headers, and attachments.
  */
 export async function sendEmail(
   {
@@ -43,6 +41,7 @@ export async function sendEmail(
     to,
     subject,
     html,
+    react,
     text,
     cc,
     bcc,
@@ -60,6 +59,16 @@ export async function sendEmail(
       subject,
       html,
       react,
+      text,
+      cc,
+      bcc,
+      replyTo,
+      headers,
+      attachments: attachments?.map(attachment => ({
+        name: attachment.filename,
+        content: attachment.content,
+        type: attachment.contentType,
+      })),
     });
   } catch (error) {
     throw new Error(`Failed to send email using Resend: ${error instanceof Error ? error.message : String(error)}`);
