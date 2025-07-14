@@ -5,7 +5,10 @@
     "../../packages/modelence",
     "../../packages/react-query",
     "../../packages/ai",
-    "../../packages/next"
+    "../../packages/next",
+    "../../packages/smtp",
+    "../../packages/resend",
+    "../../packages/aws-ses",
   ],
   "out": "../web/api-reference",
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
