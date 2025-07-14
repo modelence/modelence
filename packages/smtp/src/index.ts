@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 import { EmailPayload, EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
@@ -15,7 +16,7 @@ function initializeAmazonSESClient() {
   const pass = String(getConfig('_system.email.smtp.pass'));
 
   if (!host || !port) {
-    throw new Error('SMTP host and port must be configured. Please set them in your environment variables or configure them from cloud.modelence.com');
+    throw new Error('SMTP host and port must be configured. Please set MODELENCE_EMAIL_SMTP_HOST, MODELENCE_EMAIL_SMTP_PORT, MODELENCE_EMAIL_SMTP_USER, MODELENCE_EMAIL_SMTP_PASS in your environment variables or configure them from cloud.modelence.com');
   }
   smtpClient = nodemailer.createTransport({
     host,
@@ -46,7 +47,6 @@ function initializeAmazonSESClient() {
  * ```
  * 
  * @param data - The email payload containing sender, recipient, subject, and HTML content.
- * @returns Query options object for TanStack Query's useQuery
  * 
  */
 export async function sendEmail(
@@ -55,6 +55,13 @@ export async function sendEmail(
     to,
     subject,
     html,
+    react,
+    text,
+    cc,
+    bcc,
+    replyTo,
+    headers,
+    attachments,
   }: EmailPayload,
 ) {
   const client = initializeAmazonSESClient();
@@ -63,7 +70,13 @@ export async function sendEmail(
     from,
     to,
     subject,
-    html,
+    html: html || react ? renderToStaticMarkup(react) : undefined,
+    text,
+    cc,
+    bcc,
+    replyTo,
+    headers,
+    attachments,
   });
 }
 
