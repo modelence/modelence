@@ -1,6 +1,6 @@
 {
   "name": "@modelence/types",
-  "version": "1.0.3-dev.2",
+  "version": "1.0.3-dev.3",
   "description": "Shared TypeScript types for Modelence packages",
   "type": "module",
   "exports": {
@@ -21,6 +21,7 @@
   "license": "ISC",
   "devDependencies": {
     "@types/express": "^5.0.1",
+    "@types/react": "^18.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   }

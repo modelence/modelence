@@ -11,7 +11,7 @@ function initializeResendClient() {
   }
   const apiKey = String(getConfig('_system.email.resend.apiKey'));
   if (!apiKey) {
-    throw new Error('Resend API key is not configured. Please set it from add RESEND_API_KEY to your environment variables or configure it from cloud.modelence.com');
+    throw new Error('Resend API key is not configured. Please set MODELENCE_EMAIL_RESEND_API_KEY to your environment variables or configure it from cloud.modelence.com');
   }
   resendClient = new Resend(apiKey);
 
@@ -43,6 +43,12 @@ export async function sendEmail(
     to,
     subject,
     html,
+    text,
+    cc,
+    bcc,
+    replyTo,
+    headers,
+    attachments,
   }: EmailPayload
 ) {
   const client = initializeResendClient();
@@ -53,6 +59,7 @@ export async function sendEmail(
       to,
       subject,
       html,
+      react,
     });
   } catch (error) {
     throw new Error(`Failed to send email using Resend: ${error instanceof Error ? error.message : String(error)}`);
