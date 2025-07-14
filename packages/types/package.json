@@ -1,6 +1,6 @@
 {
   "name": "@modelence/types",
-  "version": "1.0.3-dev.1",
+  "version": "1.0.3-dev.2",
   "description": "Shared TypeScript types for Modelence packages",
   "type": "module",
   "exports": {
