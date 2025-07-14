@@ -1,8 +1,36 @@
 import nodemailer from 'nodemailer';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { EmailPayload, EmailProvider } from '@modelence/types';
+import { type EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
+import { type ReactNode } from 'react';
+
+// types are duplicated for typedoc
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer | string;
+  contentType: string;
+};
+
+export type EmailPayload = {
+  from: string;
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+  react?: ReactNode;
+  cc?: string;
+  bcc?: string;
+  replyTo?: string;
+  headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
+} & ({
+  html: string;
+} | {
+  text: string;
+} | {
+  react: React.ReactNode;
+});
 
 let smtpClient: nodemailer.Transporter | null = null;
 
@@ -32,30 +60,6 @@ function initializeAmazonSESClient() {
 }
 
 /**
- * @typedef {Object} EmailAttachment
- * @property {string} filename - The name of the file.
- * @property {Buffer|string} content - The file content as a Buffer or string.
- * @property {string} contentType - The MIME type of the attachment.
- */
-
-/**
- * @typedef {Object} EmailPayload
- * @property {string} from - Sender email address.
- * @property {string} to - Recipient email address.
- * @property {string} subject - Email subject.
- * @property {string} [html] - HTML body content (required if `text` and `react` are not provided).
- * @property {string} [text] - Plain text body content (required if `html` and `react` are not provided).
- * @property {React.ReactNode} [react] - React component to render email (required if `html` and `text` are not provided).
- * @property {string} [cc] - CC email address.
- * @property {string} [bcc] - BCC email address.
- * @property {string} [replyTo] - Reply-To address.
- * @property {Object.<string, string>} [headers] - Custom email headers.
- * @property {EmailAttachment[]} [attachments] - List of attachments.
- *
- * @note Exactly one of `html`, `text`, or `react` must be provided.
- */
-
-/**
  * Sends an email via Resend.
  * 
  * @example
@@ -70,7 +74,7 @@ function initializeAmazonSESClient() {
  * })
  * ```
  * 
- * @param {EmailPayload} payload - The email payload object.
+ * @param payload - The email payload object.
  */
 export async function sendEmail(
   {
