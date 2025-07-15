@@ -3,9 +3,9 @@ import {
   SESClient,
  } from '@aws-sdk/client-ses';
 import nodemailer, { createTransport } from "nodemailer";
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import { type EmailProvider } from '@modelence/types';
+import type { EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
 import { renderToStaticMarkup } from 'react-dom/server';
 

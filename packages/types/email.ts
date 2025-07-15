@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 export type EmailAttachment = {
   filename: string;
@@ -18,7 +18,7 @@ export type EmailPayload = {
   replyTo?: string | string[];
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-} & ({ html: string } | { text: string } | { react: React.ReactNode });
+} & ({ html: string } | { text: string } | { react: ReactNode });
 
 export interface EmailProvider {
   sendEmail(data: EmailPayload): Promise<void>;

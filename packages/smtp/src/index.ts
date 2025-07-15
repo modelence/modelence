@@ -1,9 +1,9 @@
 import nodemailer from 'nodemailer';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { type EmailProvider } from '@modelence/types';
+import type { EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // types are duplicated for typedoc
 export type EmailAttachment = {
