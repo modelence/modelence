@@ -34,11 +34,11 @@ function initializeSESClient() {
   if (sesClient) {
     return sesClient;
   }
-  const region = String(getConfig('_system.email.ses.region'));
-  const accessKeyId = String(getConfig('_system.email.ses.accessKeyId'));
-  const secretAccessKey = String(getConfig('_system.email.ses.secretAccessKey'));
+  const region = String(getConfig('_system.email.awsSes.region'));
+  const accessKeyId = String(getConfig('_system.email.awsSes.accessKeyId'));
+  const secretAccessKey = String(getConfig('_system.email.awsSes.secretAccessKey'));
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('Amazon SES credentials are not configured. Please set MODELENCE_EMAIL_SES_REGION, MODELENCE_EMAIL_SES_ACCESS_KEY_ID and MODELENCE_EMAIL_SES_SECRET_ACCESS_KEY in your environment variables or configure them from cloud.modelence.com');
+    throw new Error('Amazon SES credentials are not configured. Please set MODELENCE_EMAIL_AWS_SES_REGION, MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID and MODELENCE_EMAIL_AWS_SES_SECRET_ACCESS_KEY in your environment variables or configure them from cloud.modelence.com');
   }
   sesClient = new SESClient({
     region,

@@ -12,9 +12,9 @@ npm i @modelence/aws-ses
 
 This package provides `sendEmail` function that utilizes *Amazon SES* under the hood. The configuration can be set via Modelence Cloud or the following environment variables:
 
-- MODELENCE_EMAIL_SES_REGION
-- MODELENCE_EMAIL_SES_ACCESS_KEY_ID
-- MODELENCE_EMAIL_SES_SECRET_ACCESS_KEY
+- MODELENCE_EMAIL_AWS_SES_REGION
+- MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID
+- MODELENCE_EMAIL_AWS_SES_SECRET_ACCESS_KEY
 
 ## Simple usage
 
