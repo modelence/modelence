@@ -38,7 +38,7 @@ sendEmail({
   to: 'test@example.com',
   from: 'test@example.com',
   subject: 'Test Email',
-  react: <h1>Test Email</h1>,
+  html: '<h1>Test Email</h1>',
   cc: 'test@example.com',
   bcc: 'test@example.com',
   attachments: [

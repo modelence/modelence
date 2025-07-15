@@ -1,9 +1,7 @@
 import nodemailer from 'nodemailer';
-import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
-import type { ReactNode } from 'react';
 
 // types are duplicated for typedoc
 export type EmailAttachment = {
@@ -18,13 +16,12 @@ export type EmailPayload = {
   subject: string;
   html?: string;
   text?: string;
-  react?: ReactNode;
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string | string[];
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-} & ({ html: string } | { text: string } | { react: React.ReactNode });
+} & ({ html: string } | { text: string });
 
 let smtpClient: nodemailer.Transporter | null = null;
 
@@ -76,7 +73,6 @@ export async function sendEmail(
     to,
     subject,
     html,
-    react,
     text,
     cc,
     bcc,
@@ -91,7 +87,7 @@ export async function sendEmail(
     from,
     to,
     subject,
-    html: html || react ? renderToStaticMarkup(react) : undefined,
+    html,
     text,
     cc,
     bcc,

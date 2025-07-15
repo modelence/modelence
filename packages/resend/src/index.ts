@@ -1,5 +1,4 @@
 import { Resend } from 'resend';
-import type { ReactNode } from 'react';
 
 import type { EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
@@ -17,13 +16,12 @@ export type EmailPayload = {
   subject: string;
   html?: string;
   text?: string;
-  react?: ReactNode;
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string | string[];
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-} & ({ html: string } | { text: string } | { react: React.ReactNode });
+} & ({ html: string } | { text: string });
 
 let resendClient: Resend | null = null;
 
@@ -63,7 +61,6 @@ export async function sendEmail(
     to,
     subject,
     html,
-    react,
     text,
     cc,
     bcc,
@@ -80,8 +77,8 @@ export async function sendEmail(
       to,
       subject,
       html,
-      react,
       text,
+      react: undefined,
       cc,
       bcc,
       replyTo,

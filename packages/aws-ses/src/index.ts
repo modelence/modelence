@@ -3,7 +3,6 @@ import {
   SESClient,
  } from '@aws-sdk/client-ses';
 import nodemailer, { createTransport } from "nodemailer";
-import type { ReactNode } from 'react';
 
 import type { EmailProvider } from '@modelence/types';
 import { getConfig } from 'modelence/server';
@@ -22,13 +21,12 @@ export type EmailPayload = {
   subject: string;
   html?: string;
   text?: string;
-  react?: ReactNode;
   cc?: string | string[];
   bcc?: string | string[];
   replyTo?: string | string[];
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-} & ({ html: string } | { text: string } | { react: React.ReactNode });
+} & ({ html: string } | { text: string });
 
 let sesClient: SESClient | null = null;
 let nodemailerTransporter: nodemailer.Transporter | null = null;
@@ -90,7 +88,6 @@ export async function sendEmail(
     to,
     subject,
     html,
-    react,
     text,
     cc,
     bcc,
@@ -105,7 +102,7 @@ export async function sendEmail(
     from,
     to,
     subject,
-    html: html || react ? renderToStaticMarkup(react) : undefined,
+    html,
     text,
     cc,
     bcc,
