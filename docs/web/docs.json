@@ -38,7 +38,7 @@
               "api-reference/modelence/index",
               "api-reference/@modelence/react-query/index",
               "api-reference/@modelence/ai/index",
-              "api-reference/@modelence/next/index",
+              "api-reference/@modelence/next/index"
             ]
           },
           {
@@ -47,14 +47,6 @@
               "api-reference/modelence/server/functions/startApp",
               "api-reference/modelence/server/classes/Module",
               "api-reference/modelence/client/functions/callMethod"
-            ]
-          },
-          {
-            "group": "Email",
-            "pages": [
-              "api-reference/@modelence/smtp/index",
-              "api-reference/@modelence/resend/index",
-              "api-reference/@modelence/aws-ses/index"
             ]
           },
           {
@@ -86,6 +78,14 @@
             "pages": [
               "api-reference/modelence/server/type-aliases/RateLimitRule",
               "api-reference/modelence/server/functions/consumeRateLimit"
+            ]
+          },
+          {
+            "group": "Email",
+            "pages": [
+              "api-reference/@modelence/smtp/index",
+              "api-reference/@modelence/resend/index",
+              "api-reference/@modelence/aws-ses/index"
             ]
           }
         ]
