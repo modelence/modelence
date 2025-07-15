@@ -1,6 +1,6 @@
 # @modelence/resend
 
-Resend Adapter for modelence
+[Resend](https://resend.com/) Adapter for Modelence
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm i @modelence/resend
 
 ## Overview
 
-This package provides `sendEmail` function that utilizes resend under the hood. The configuration can be set via Modelence Cloud or MODELENCE_EMAIL_RESEND_API_KEY environment variable.
+This package provides `sendEmail` function that utilizes *Resend* under the hood. The configuration can be set via Modelence Cloud or MODELENCE_EMAIL_RESEND_API_KEY environment variable.
 
 ## Simple usage
 

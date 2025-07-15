@@ -28,7 +28,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@modelence/types": "^1.0.3-dev.3",
+    "@modelence/types": "^1.0.3-dev.4",
     "resend": "^4.6.0"
   }
 }

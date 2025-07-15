@@ -1,6 +1,6 @@
 # @modelence/aws-ses
 
-AWS SES Adapter for modelence
+[AWS SES](https://aws.amazon.com/ses/) Adapter for Modelence
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm i @modelence/aws-ses
 
 ## Overview
 
-This package provides `sendEmail` function that utilizes resend under the hood. The configuration can be set via Modelence Cloud or the following environment variables:
+This package provides `sendEmail` function that utilizes *Amazon SES* under the hood. The configuration can be set via Modelence Cloud or the following environment variables:
 
 - MODELENCE_EMAIL_SES_REGION
 - MODELENCE_EMAIL_SES_ACCESS_KEY_ID

@@ -1,6 +1,6 @@
 # @modelence/aws-ses
 
-SMTP Adapter for modelence
+[SMTP](https://www.smtp.com/) Adapter for Modelence
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm i @modelence/smtp
 
 ## Overview
 
-This package provides `sendEmail` function that utilizes resend under the hood. The configuration can be set via Modelence Cloud or the following environment variables:
+This package provides `sendEmail` function that utilizes *SMTP protocol* under the hood. The configuration can be set via Modelence Cloud or the following environment variables:
 
 - MODELENCE_EMAIL_SMTP_HOST
 - MODELENCE_EMAIL_SMTP_PORT
