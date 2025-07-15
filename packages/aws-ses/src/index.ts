@@ -18,23 +18,17 @@ export type EmailAttachment = {
 
 export type EmailPayload = {
   from: string;
-  to: string;
+  to: string | string[];
   subject: string;
   html?: string;
   text?: string;
   react?: ReactNode;
-  cc?: string;
-  bcc?: string;
-  replyTo?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  replyTo?: string | string[];
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-} & ({
-  html: string;
-} | {
-  text: string;
-} | {
-  react: ReactNode;
-});
+} & ({ html: string } | { text: string } | { react: React.ReactNode });
 
 let sesClient: SESClient | null = null;
 let nodemailerTransporter: nodemailer.Transporter | null = null;
