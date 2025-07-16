@@ -1,0 +1,33 @@
+{
+  "type": "module",
+  "name": "@modelence/resend",
+  "version": "1.0.0-dev.2",
+  "description": "Resend Adapter fro Modelence",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "modelence": "*"
+  },
+  "devDependencies": {
+    "modelence": "^0.5.0",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@modelence/types": "^1.0.3-dev.6",
+    "resend": "^4.6.0"
+  }
+}

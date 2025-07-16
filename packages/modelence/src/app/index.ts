@@ -184,6 +184,14 @@ const localConfigMap = {
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
+  MODELENCE_EMAIL_RESEND_API_KEY: '_system.email.resend.apiKey',
+  MODELENCE_EMAIL_AWS_SES_REGION: '_system.email.awsSes.region',
+  MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID: '_system.email.awsSes.accessKeyId',
+  MODELENCE_EMAIL_AWS_SES_SECRET_ACCESS_KEY: '_system.email.awsSes.secretAccessKey',
+  MODELENCE_EMAIL_SMTP_HOST: '_system.email.smtp.host',
+  MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
+  MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
+  MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
 };
 
 function getLocalConfigs(): AppConfig[] {

@@ -1,0 +1,35 @@
+{
+  "type": "module",
+  "name": "@modelence/aws-ses",
+  "version": "1.0.0-dev.1",
+  "description": "AWS SES Adapter fro Modelence",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "modelence": "*"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^6.4.17",
+    "modelence": "^0.5.0",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ses": "^3.844.0",
+    "@modelence/types": "^1.0.3-dev.6",
+    "nodemailer": "^7.0.5"
+  }
+}

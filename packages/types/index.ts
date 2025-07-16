@@ -12,3 +12,5 @@ export interface AppServer {
   handler: (req: Request, res: Response) => void;
   middlewares?: () => ExpressMiddleware[];
 }
+
+export * from './email';
