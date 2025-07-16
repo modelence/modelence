@@ -28,25 +28,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
-      - name: Install types dependencies
-        working-directory: ./packages/types
-        run: npm ci
-
-      - name: Install Modelence dependencies
-        working-directory: ./packages/modelence
-        run: npm ci
-
-      - name: Install React Query dependencies
-        working-directory: ./packages/react-query
-        run: npm ci
-
-      - name: Install AI dependencies
-        working-directory: ./packages/ai
-        run: npm ci
-
-      - name: Install Next dependencies
-        working-directory: ./packages/next
-        run: npm ci
+      - name: Install dependencies for all packages
+        run: |
+          for dir in ./packages/*; do
+            if [ -d "$dir" ]; then
+              echo "Installing dependencies in $dir"
+              npm ci --prefix "$dir"
+            fi
+          done
 
       - name: Install docs generation dependencies
         working-directory: ./docs/gen
