@@ -1,4 +1,4 @@
-# @modelence/aws-ses
+# @modelence/smtp
 
 [SMTP](https://www.smtp.com/) Adapter for Modelence
 
@@ -21,7 +21,7 @@ This package provides `sendEmail` function that utilizes *SMTP protocol* under t
 ## Simple usage
 
 ```ts
-import { sendEmail } from '@modelence/resend';
+import { sendEmail } from '@modelence/smtp';
 
 sendEmail({
   to: 'test@example.com',
@@ -34,7 +34,7 @@ sendEmail({
 ## Advanced example
 
 ```tsx
-import { sendEmail } from '@modelence/resend';
+import { sendEmail } from '@modelence/smtp';
 
 sendEmail({
   to: 'test@example.com',

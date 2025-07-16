@@ -19,7 +19,7 @@ This package provides `sendEmail` function that utilizes *Amazon SES* under the 
 ## Simple usage
 
 ```ts
-import { sendEmail } from '@modelence/resend';
+import { sendEmail } from '@modelence/aws-ses';
 
 sendEmail({
   to: 'test@example.com',
@@ -32,7 +32,7 @@ sendEmail({
 ## Advanced example
 
 ```tsx
-import { sendEmail } from '@modelence/resend';
+import { sendEmail } from '@modelence/aws-ses';
 
 sendEmail({
   to: 'test@example.com',
