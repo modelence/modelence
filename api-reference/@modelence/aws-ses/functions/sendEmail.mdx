@@ -1,0 +1,35 @@
+---
+sidebar_position: 1
+title: sendEmail
+---
+
+[API Reference](/api-reference/@modelence/aws-ses/functions/../../../index) / [@modelence/aws-ses](/api-reference/@modelence/aws-ses/functions/../index) / sendEmail
+
+> **sendEmail**(`payload`): `Promise`\<`void`\>
+
+Defined in: [index.ts:84](https://github.com/modelence/modelence/blob/2f1df56b3cc9110e2382a3eeaeda390e4768d689/packages/aws-ses/src/index.ts#L84)
+
+Sends an email via Resend.
+
+## Example
+
+```ts
+import { sendEmail } from '@modelence/aws-ses';
+
+sendEmail({
+ from: 'test@example.com',
+ to: 'test@example.com',
+ subject: 'Test Email',
+ html: '<h1>Hello World</h1>'
+})
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `payload` | [`EmailPayload`](/api-reference/@modelence/aws-ses/functions/../type-aliases/EmailPayload) | The email payload object. |
+
+## Returns
+
+`Promise`\<`void`\>

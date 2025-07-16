@@ -79,6 +79,14 @@
               "api-reference/modelence/server/type-aliases/RateLimitRule",
               "api-reference/modelence/server/functions/consumeRateLimit"
             ]
+          },
+          {
+            "group": "Email",
+            "pages": [
+              "api-reference/@modelence/smtp/index",
+              "api-reference/@modelence/resend/index",
+              "api-reference/@modelence/aws-ses/index"
+            ]
           }
         ]
       }
