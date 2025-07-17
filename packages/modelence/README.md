@@ -14,6 +14,7 @@
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg" /></a>
+  [![Discord](https://img.shields.io/discord/1386659657535455253?label=Discord&logo=discord&logoColor=white&labelColor=5865F2&cacheSeconds=30)](https://discord.gg/ghxu5PDnkZ)
 </div>
 
 ## Getting Started
