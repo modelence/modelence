@@ -92,6 +92,7 @@ function getRouter() {
     clientID: googleClientId,
     clientSecret: googleClientSecret,
     callbackURL: '/api/_internal/auth/google/callback',
+    proxy: true,
   }, (accessToken, refreshToken, profile, done) => {
     return done(null, profile);
   }));
