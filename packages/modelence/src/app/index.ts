@@ -10,7 +10,7 @@ import { RoleDefinition } from '../auth/types';
 import userModule from '../auth/user';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync } from '../config/sync';
-import { AppConfig, ConfigSchema } from '../config/types';
+import { AppConfig, ConfigSchema, ConfigType } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -61,7 +61,7 @@ export async function startApp(
   initRoles(roles, defaultRoles);
 
   const configSchema = getConfigSchema(combinedModules);
-  setSchema(configSchema ?? {});
+  setSchema(configSchema);
   const stores = getStores(combinedModules);
 
   if (isCronEnabled) {
@@ -80,7 +80,7 @@ export async function startApp(
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
   } else {
-    loadConfigs(getLocalConfigs());
+    loadConfigs(getLocalConfigs(configSchema));
   }
 
   const mongodbUri = getMongodbUri();
@@ -194,16 +194,38 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
 };
 
-function getLocalConfigs(): AppConfig[] {
+function formatLocalConfigValue(value: string, type: ConfigType): string | number | boolean {
+  if (type === 'number') {
+    const numValue = Number(value);
+    if (isNaN(numValue)) {
+      throw new Error(`Invalid number value for config: ${value}`);
+    }
+    return numValue;
+  }
+  if (type === 'boolean') {
+    if (value.toLowerCase() === 'true') {
+      return true;
+    }
+    if (value.toLowerCase() === 'false') {
+      return false;
+    }
+    throw new Error(`Invalid boolean value for config: ${value}`);
+  }
+  return value;
+}
+
+function getLocalConfigs(configSchema: ConfigSchema): AppConfig[] {
   const configs: AppConfig[] = [];
 
   for (const [envVar, configKey] of Object.entries(localConfigMap)) {
     const value = process.env[envVar];
+    const configSchemaEntry = configSchema[configKey];
     if (value) {
+      const type = configSchemaEntry?.type ?? 'string';
       configs.push({
         key: configKey,
-        type: 'string',
-        value,
+        type: type,
+        value: formatLocalConfigValue(value, type),
       });
     }
   }
