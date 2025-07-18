@@ -5,7 +5,7 @@ import { authenticateCli } from './auth';
 import { getStudioUrl, getBuildPath, getProjectPath } from './config';
 import { build } from './build';
 
-export async function deploy(options: { env: string }) {
+export async function deploy(options: { app: string; env: string }) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
 
@@ -17,11 +17,11 @@ export async function deploy(options: { env: string }) {
 
   const { token } = await authenticateCli();
 
-  const { bundleName } = await uploadBundle(options.env, bundlePath, token);
+  const { bundleName } = await uploadBundle(options.app, options.env, bundlePath, token);
 
   await fs.unlink(bundlePath);
 
-  await triggerDeployment(options.env, bundleName, join('.modelence', 'build', 'app.mjs'), token);
+  await triggerDeployment(options.app, options.env, bundleName, join('.modelence', 'build', 'app.mjs'), token);
 }
 
 async function createBundle(bundlePath: string) {
@@ -97,12 +97,17 @@ async function createBundle(bundlePath: string) {
   console.log(`Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-async function uploadBundle(environmentAlias: string, bundlePath: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/environments/${environmentAlias}/upload`), {
+async function uploadBundle(appAlias: string, envAlias: string, bundlePath: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/upload`), {
     method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
-    }
+    },
+    body: JSON.stringify({
+      appAlias,
+      envAlias,
+    }),
   });
 
   if (!response.ok) {
@@ -131,14 +136,16 @@ async function uploadBundle(environmentAlias: string, bundlePath: string, token:
   return { bundleName };
 }
 
-async function triggerDeployment(environmentAlias: string, bundleName: string, entryPoint: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/environments/${environmentAlias}/deploy`), {
+async function triggerDeployment(appAlias: string, envAlias: string, bundleName: string, entryPoint: string, token: string) {
+  const response = await fetch(getStudioUrl(`/api/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({
+      appAlias,
+      envAlias,
       bundleName,
       entryPoint,
     }),
