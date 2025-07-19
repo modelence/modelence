@@ -25,11 +25,7 @@ export function getConfig() {
 }
 
 export function getStudioUrl(path: string) {
-  const studioBaseUrl = getEnv().MODELENCE_SERVICE_ENDPOINT;
-  if (!studioBaseUrl) {
-    throw new Error('MODELENCE_SERVICE_ENDPOINT not found in environment variables');
-  }
-
+  const studioBaseUrl = getEnv().MODELENCE_SERVICE_ENDPOINT || 'https://cloud.modelence.com';
   return `${studioBaseUrl}${path}`;
 }
 

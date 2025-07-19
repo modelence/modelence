@@ -32,7 +32,8 @@ program
 program
   .command('deploy')
   .description('Deploy to Modelence Cloud')
-  .requiredOption('-e, --env <env>', 'Environment (deployment alias)')
+  .requiredOption('-a, --app <app>', 'Application alias')
+  .requiredOption('-e, --env <env>', 'Environment alias')
   .action(async (options) => {
     await loadEnv();
     await deploy(options);
