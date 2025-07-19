@@ -13,10 +13,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@octokit/rest": "^20.0.2",
+    "chalk": "^4.1.2",
     "commander": "^12.0.0",
     "fs-extra": "^11.2.0",
-    "chalk": "^4.1.2",
     "ora": "^5.4.1"
   },
   "devDependencies": {
@@ -25,4 +24,4 @@
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   }
-} 
+}
