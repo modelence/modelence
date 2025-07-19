@@ -98,7 +98,7 @@ async function createBundle(bundlePath: string) {
 }
 
 async function uploadBundle(appAlias: string, envAlias: string, bundlePath: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/upload`), {
+  const response = await fetch(getStudioUrl(`/api/upload-bundle`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
