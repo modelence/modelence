@@ -1,9 +1,8 @@
-import { Octokit } from '@octokit/rest';
 import fs from 'fs-extra';
 import path from 'path';
 import { execSync } from 'child_process';
 
-const EXAMPLES_REPO = 'modelence/examples';
+const EXAMPLES_REPO_URL = 'https://github.com/modelence/examples.git';
 const DEFAULT_TEMPLATE = 'empty-project';
 
 interface CreateAppOptions {
@@ -12,7 +11,7 @@ interface CreateAppOptions {
 
 export async function createApp(projectName: string, options: CreateAppOptions = {}) {
   const template = options.template || DEFAULT_TEMPLATE;
-  
+
   console.log(`Creating new Modelence app: ${projectName}`);
   console.log(`Using template: ${template}`);
 
@@ -28,84 +27,45 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     throw new Error(`Directory ${projectName} already exists`);
   }
 
+  // Clone the examples repo to a temp directory
+  const tempDir = path.resolve(process.cwd(), `.temp-modelence-examples-${Date.now()}`);
   try {
-    // Initialize Octokit
-    const octokit = new Octokit();
+    console.log('Cloning examples repository...');
+    execSync(`git clone --depth 1 ${EXAMPLES_REPO_URL} ${tempDir}`, { stdio: 'inherit' });
 
-    // Get template contents from GitHub
-    const response = await octokit.repos.getContent({
-      owner: 'modelence',
-      repo: 'examples',
-      path: template,
-    });
-
-    if (!Array.isArray(response.data)) {
-      throw new Error('Invalid template structure');
+    const templatePath = path.join(tempDir, template);
+    if (!fs.existsSync(templatePath)) {
+      throw new Error(`Template "${template}" not found in examples repository`);
     }
 
-    // Create project directory
-    fs.mkdirSync(projectPath);
+    // Copy template files to project directory
+    fs.copySync(templatePath, projectPath);
 
-    // Download and extract template files
-    await downloadTemplateFiles(octokit, response.data, template, projectPath);
+    // Clean up temp directory
+    fs.removeSync(tempDir);
 
     // Update package.json
     const packageJsonPath = path.join(projectPath, 'package.json');
-    const packageJson = await fs.readJson(packageJsonPath);
-    packageJson.name = projectName;
-    await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = await fs.readJson(packageJsonPath);
+      packageJson.name = projectName;
+      await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+    }
 
     // Install dependencies
     console.log('Installing dependencies...');
     execSync('npm install', { cwd: projectPath, stdio: 'inherit' });
 
-    console.log(`
-Successfully created ${projectName}!
-
-Get started by typing:
-
-  cd ${projectName}
-  npm run dev
-    `);
-
+    console.log(`\nSuccessfully created ${projectName}!\n\nGet started by typing:\n\n  cd ${projectName}\n  npm run dev\n    `);
   } catch (error: any) {
     // Clean up on error
     if (fs.existsSync(projectPath)) {
       fs.removeSync(projectPath);
     }
-
-    if (error.status === 404) {
-      throw new Error(`Template "${template}" not found in ${EXAMPLES_REPO}`);
+    // Clean up temp dir if exists
+    if (fs.existsSync(tempDir)) {
+      fs.removeSync(tempDir);
     }
     throw error;
   }
 }
-
-async function downloadTemplateFiles(octokit: Octokit, contents: any[], templateName: string, targetPath: string) {
-  for (const item of contents) {
-    const itemPath = path.join(targetPath, item.name);
-
-    if (item.type === 'dir') {
-      fs.mkdirSync(itemPath);
-      const dirContents = await octokit.repos.getContent({
-        owner: 'modelence',
-        repo: 'examples',
-        path: `${templateName}/${item.name}`,
-      });
-      if (Array.isArray(dirContents.data)) {
-        await downloadTemplateFiles(octokit, dirContents.data, `${templateName}/${item.name}`, itemPath);
-      }
-    } else {
-      const fileContent = await octokit.repos.getContent({
-        owner: 'modelence',
-        repo: 'examples',
-        path: `${templateName}/${item.name}`,
-      });
-      
-      if ('content' in fileContent.data && typeof fileContent.data.content === 'string') {
-        const content = Buffer.from(fileContent.data.content, 'base64').toString();
-        await fs.writeFile(itemPath, content);
-      }
-    }
-  }
-} 
