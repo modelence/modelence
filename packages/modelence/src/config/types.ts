@@ -1,4 +1,4 @@
-type ConfigType = 'text' | 'string' | 'number' | 'boolean' | 'secret';
+export type ConfigType = 'text' | 'string' | 'number' | 'boolean' | 'secret';
 
 export type ConfigKey = string;
 
