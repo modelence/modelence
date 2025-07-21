@@ -52,21 +52,6 @@ export default new Module('_system.user', {
     limit: 200,
   }],
   configSchema: {
-    'auth.email.enabled': {
-      type: 'boolean',
-      isPublic: true,
-      default: true,
-    },
-    'auth.email.from': {
-      type: 'string',
-      isPublic: true,
-      default: '',
-    },
-    'auth.email.confirmation': {
-      type: 'boolean',
-      isPublic: true,
-      default: false,
-    },
     'auth.google.enabled': {
       type: 'boolean',
       isPublic: true,
