@@ -1,8 +1,10 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { execSync } from 'child_process';
+import fetch from 'node-fetch';
+import AdmZip from 'adm-zip';
 
-const EXAMPLES_REPO_URL = 'https://github.com/modelence/examples.git';
+const EXAMPLES_REPO_ZIP_URL = 'https://github.com/modelence/examples/archive/refs/heads/main.zip';
 const DEFAULT_TEMPLATE = 'empty-project';
 
 interface CreateAppOptions {
@@ -27,15 +29,44 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     throw new Error(`Directory ${projectName} already exists`);
   }
 
-  // Clone the examples repo to a temp directory
+  // Download and extract the examples repo
   const tempDir = path.resolve(process.cwd(), `.temp-modelence-examples-${Date.now()}`);
+  const zipPath = path.join(tempDir, 'examples.zip');
+  
   try {
-    console.log('Cloning examples repository...');
-    execSync(`git clone --depth 1 ${EXAMPLES_REPO_URL} ${tempDir}`, { stdio: 'inherit' });
-
-    const templatePath = path.join(tempDir, template);
+    // Create temp directory
+    fs.ensureDirSync(tempDir);
+    
+    console.log('Downloading the template');
+    const response = await fetch(EXAMPLES_REPO_ZIP_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to download examples: ${response.statusText}`);
+    }
+    
+    // Save zip file
+    const zipArrayBuffer = await response.arrayBuffer();
+    const zipBuffer = Buffer.from(zipArrayBuffer);
+    fs.writeFileSync(zipPath, zipBuffer);
+    
+    // Extract zip
+    console.log('Extracting the template');
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(tempDir, true);
+    
+    // Find the extracted directory (GitHub adds a folder name like "examples-main")
+    const extractedDirs = fs.readdirSync(tempDir).filter(item => 
+      fs.statSync(path.join(tempDir, item)).isDirectory() && item !== '__MACOSX'
+    );
+    
+    if (extractedDirs.length === 0) {
+      throw new Error('The template is not found');
+    }
+    
+    const extractedRepoDir = path.join(tempDir, extractedDirs[0]);
+    const templatePath = path.join(extractedRepoDir, template);
+    
     if (!fs.existsSync(templatePath)) {
-      throw new Error(`Template "${template}" not found in examples repository`);
+      throw new Error(`Template "${template}" not found`);
     }
 
     // Copy template files to project directory
@@ -53,7 +84,7 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     }
 
     // Install dependencies
-    console.log('Installing dependencies...');
+    console.log('Installing dependencies');
     execSync('npm install', { cwd: projectPath, stdio: 'inherit' });
 
     console.log(`\nSuccessfully created ${projectName}!\n\nGet started by typing:\n\n  cd ${projectName}\n  npm run dev\n    `);
