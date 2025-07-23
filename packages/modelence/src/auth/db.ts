@@ -53,3 +53,24 @@ export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDoma
     }
   ]
 });
+
+export const tokensCollection = new Store('_modelenceTokens', {
+  schema: {
+    userId: schema.objectId(),
+    email: schema.string().optional(),
+    type: schema.string(),
+    token: schema.string(),
+    createdAt: schema.date(),
+    expiresAt: schema.date(),
+  },
+  indexes: [
+    {
+      key: { token: 1 },
+      unique: true
+    },
+    {
+      key: { expiresAt: 1 },
+      expireAfterSeconds: 0
+    }
+  ]
+});

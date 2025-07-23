@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import { AppServer } from '@modelence/types';
+import { AppServer, EmailProvider } from '@modelence/types';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
 import { RoleDefinition } from '../auth/types';
@@ -24,17 +24,21 @@ import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import { setEmailConfig } from './emailConfig';
 
 export type AppOptions = {
   modules?: Module[],
   server?: AppServer,
+  email?: {
+    provider?: EmailProvider,
+  },
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
   migrations?: Array<MigrationScript>
 }
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [] }: AppOptions
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {} }: AppOptions
 ) {
   dotenv.config();
   
@@ -82,6 +86,8 @@ export async function startApp(
   } else {
     loadConfigs(getLocalConfigs(configSchema));
   }
+
+  setEmailConfig(email);
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
@@ -186,7 +192,7 @@ const localConfigMap = {
   MODELENCE_AUTH_GOOGLE_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
   MODELENCE_AUTH_EMAIL_ENABLED: '_system.user.auth.email.enabled',
   MODELENCE_AUTH_EMAIL_FROM: '_system.user.auth.email.from',
-  MODELENCE_AUTH_EMAIL_CONFIRMATION: '_system.user.auth.email.confirmation',
+  MODELENCE_AUTH_EMAIL_VERIFICATION: '_system.user.auth.email.verification',
   MODELENCE_EMAIL_RESEND_API_KEY: '_system.email.resend.apiKey',
   MODELENCE_EMAIL_AWS_SES_REGION: '_system.email.awsSes.region',
   MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID: '_system.email.awsSes.accessKeyId',

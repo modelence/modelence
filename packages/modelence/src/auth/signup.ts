@@ -1,10 +1,13 @@
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 import { Args, Context } from '../methods/types';
-import { usersCollection } from './db';
+import { usersCollection, tokensCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
+import { getConfig } from '@/server';
+import { getEmailConfig } from '@/app/emailConfig';
 
 export async function handleSignupWithPassword(args: Args, { user, connectionInfo }: Context) {
   const email = z.string().email().parse(args.email);
@@ -58,7 +61,36 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
     }
   });
 
-  // TODO: send verification email
+  if (getEmailConfig().provider) {
+    const emailProvider = getEmailConfig().provider;
+    const baseUrl = connectionInfo?.baseUrl;
+    
+    // Generate verification token
+    const verificationToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    
+    // Store token in database
+    await tokensCollection.insertOne({
+      userId: result.insertedId,
+      type: 'emailVerification',
+      email,
+      token: verificationToken,
+      createdAt: new Date(),
+      expiresAt,
+    });
+    
+    const verifyUrl = `${baseUrl}/email-verification?token=${verificationToken}`;
+    
+    await emailProvider?.sendEmail({
+      to: email,
+      from: String(getConfig('_system.user.auth.email.from') || 'noreply@modelence.com'),
+      subject: 'Verify your email address',
+      text: `Please verify your email address by clicking the link below:\n\n${verifyUrl}`,
+      html: `Please verify your email address by clicking the link below:<br><br>` +
+            `<a href="${verifyUrl}">Verify Email</a>`,  
+    });
+  }
+  
 
   return result.insertedId;
 }

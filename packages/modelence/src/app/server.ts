@@ -15,6 +15,7 @@ import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
 import { ModelenceError } from '../error';
 import { Module } from './module';
+import { ConnectionInfo } from '@/methods/types';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -118,11 +119,12 @@ async function getCallContext(req: Request) {
     orientation: z.string().nullable(),
   }).parse(req.body.clientInfo);
 
-  const connectionInfo = {
+  const connectionInfo: ConnectionInfo = {
     ip: getClientIp(req),
     userAgent: req.get('user-agent'),
     acceptLanguage: req.get('accept-language'),
     referrer: req.get('referrer'),
+    baseUrl: req.protocol + '://' + req.get('host'),
   };
 
   const hasDatabase = Boolean(getMongodbUri());

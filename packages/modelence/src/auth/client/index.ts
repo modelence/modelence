@@ -42,6 +42,22 @@ export async function loginWithPassword(options: { email: string, password: stri
 }
 
 /**
+ * Verify user's email with a verification token.
+ * 
+ * @example
+ * ```ts
+ * await verifyEmail({ token: 'verification-token' });
+ * ```
+ * @param options.token - The email verification token.
+ */
+export async function verifyEmail(options: { token: string }) {
+  const { token } = options;
+  const { user } = await callMethod<{ user: UserInfo }>('_system.user.verifyEmail', { token });
+  setCurrentUser(user);
+  return user;
+}
+
+/**
  * Logout the current user.
  * 
  */
