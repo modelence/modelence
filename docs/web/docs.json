@@ -38,7 +38,8 @@
               "api-reference/modelence/index",
               "api-reference/@modelence/react-query/index",
               "api-reference/@modelence/ai/index",
-              "api-reference/@modelence/next/index"
+              "api-reference/@modelence/next/index",
+              "api-reference/@modelence/auth-ui/index"
             ]
           },
           {
