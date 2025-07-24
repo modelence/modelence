@@ -2,7 +2,11 @@ import { randomBytes } from 'crypto';
 
 import { Module } from '../app/module';
 import { time } from '../time';
-import { dbDisposableEmailDomains, tokensCollection, usersCollection } from './db';
+import {
+  dbDisposableEmailDomains,
+  emailVerificationTokensCollection,
+  usersCollection
+} from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
@@ -32,7 +36,7 @@ export default new Module('_system.user', {
   stores: [
     usersCollection,
     dbDisposableEmailDomains,
-    tokensCollection,
+    emailVerificationTokensCollection,
   ],
   queries: {
     getOwnProfile,
