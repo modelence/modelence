@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
-import { usersCollection, tokensCollection } from './db';
-import { setSessionUser } from './session';
+import { usersCollection, emailVerificationTokensCollection } from './db';
 
 export async function handleVerifyEmail(args: Args, { session }: Context) {
   if (!session) {
@@ -12,9 +11,8 @@ export async function handleVerifyEmail(args: Args, { session }: Context) {
   const token = z.string().parse(args.token);
 
   // Find token in database
-  const tokenDoc = await tokensCollection.findOne({
+  const tokenDoc = await emailVerificationTokensCollection.findOne({
     token,
-    type: 'emailVerification',
     expiresAt: { $gt: new Date() }
   });
 
@@ -35,34 +33,32 @@ export async function handleVerifyEmail(args: Args, { session }: Context) {
     throw new Error('Email not found in token');
   }
 
-  // Find the specific email address to verify
-  const emailIndex = userDoc.emails?.findIndex(e => e.address === email);
-  
-  if (!userDoc.emails || emailIndex === undefined || emailIndex === -1) {
-    throw new Error('Email address not found for this user');
-  }
-
-  if (userDoc.emails[emailIndex].verified) {
-    throw new Error('Email is already verified');
-  }
-
-  // Mark the specific email as verified
-  await usersCollection.updateOne(
-    { _id: tokenDoc.userId },
-    { $set: { [`emails.${emailIndex}.verified`]: true } }
+  // Mark the specific email as verified atomically
+  const updateResult = await usersCollection.updateOne(
+    { 
+      _id: tokenDoc.userId,
+      'emails.address': email,
+      'emails.verified': { $ne: true }
+    },
+    { $set: { 'emails.$.verified': true } }
   );
 
+  if (updateResult.matchedCount === 0) {
+    // Check if email exists but is already verified
+    const existingUser = await usersCollection.findOne({
+      _id: tokenDoc.userId,
+      'emails.address': email
+    });
+    
+    if (existingUser) {
+      throw new Error('Email is already verified');
+    } else {
+      throw new Error('Email address not found for this user');
+    }
+  }
+
   // Delete the used token
-  await tokensCollection.deleteOne({ _id: tokenDoc._id });
+  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
 
-  // Set session user
-  await setSessionUser(session.authToken, tokenDoc.userId);
-
-  return {
-    user: {
-      id: userDoc._id,
-      handle: userDoc.handle,
-      emailVerified: true,
-    },
-  };
+  return {};
 }

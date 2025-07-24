@@ -2,6 +2,7 @@ import { EmailProvider } from "@modelence/types";
 
 type EmailConfig = {
   provider?: EmailProvider;
+  from?: string;
 };
 
 let emailConfig: EmailConfig = Object.freeze({});

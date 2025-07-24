@@ -52,9 +52,7 @@ export async function loginWithPassword(options: { email: string, password: stri
  */
 export async function verifyEmail(options: { token: string }) {
   const { token } = options;
-  const { user } = await callMethod<{ user: UserInfo }>('_system.user.verifyEmail', { token });
-  setCurrentUser(user);
-  return user;
+  await callMethod<{ user: UserInfo }>('_system.user.verifyEmail', { token });
 }
 
 /**

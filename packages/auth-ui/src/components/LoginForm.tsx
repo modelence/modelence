@@ -32,7 +32,6 @@ export function LoginForm({
   inputClassName = "",
   labelClassName = ""
 }: LoginFormProps) {
-  const isEmailAuthEnabled = getConfig('_system.user.auth.email.enabled');
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
@@ -101,50 +100,47 @@ export function LoginForm({
             </div>
           </>
         )}
-
-        {isEmailAuthEnabled && (
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
-                Email
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
+              Email
+            </Label>
+            <Input 
+              type="email" 
+              name="email" 
+              id="email" 
+              className={inputClassName}
+              required
+            />
+          </div>
+          
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="password" className={labelClassName}>
+                Password
               </Label>
-              <Input 
-                type="email" 
-                name="email" 
-                id="email" 
-                className={inputClassName}
-                required
-              />
+              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleForgotPassword}>
+                Forgot your password?
+              </a>
             </div>
-            
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label htmlFor="password" className={labelClassName}>
-                  Password
-                </Label>
-                <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleForgotPassword}>
-                  Forgot your password?
-                </a>
-              </div>
-              <Input 
-                type="password" 
-                name="password" 
-                id="password" 
-                className={inputClassName}
-                required
-              />
-            </div>
+            <Input 
+              type="password" 
+              name="password" 
+              id="password" 
+              className={inputClassName}
+              required
+            />
+          </div>
 
-            <Button
-              className={`w-full ${buttonClassName}`}
-              variant={buttonVariant}
-              size={buttonSize}
-              type="submit"
-            >
-              Login
-            </Button>
-          </form>
-        )}
+          <Button
+            className={`w-full ${buttonClassName}`}
+            variant={buttonVariant}
+            size={buttonSize}
+            type="submit"
+          >
+            Login
+          </Button>
+        </form>
       </CardContent>
 
       {isEmailAuthEnabled && renderSignupLink && (

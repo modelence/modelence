@@ -31,6 +31,7 @@ export type AppOptions = {
   server?: AppServer,
   email?: {
     provider?: EmailProvider,
+    from?: string,
   },
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
@@ -190,9 +191,6 @@ const localConfigMap = {
   MODELENCE_AUTH_GOOGLE_ENABLED: '_system.user.auth.google.enabled',
   MODELENCE_AUTH_GOOGLE_CLIENT_ID: '_system.user.auth.google.clientId',
   MODELENCE_AUTH_GOOGLE_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
-  MODELENCE_AUTH_EMAIL_ENABLED: '_system.user.auth.email.enabled',
-  MODELENCE_AUTH_EMAIL_FROM: '_system.user.auth.email.from',
-  MODELENCE_AUTH_EMAIL_VERIFICATION: '_system.user.auth.email.verification',
   MODELENCE_EMAIL_RESEND_API_KEY: '_system.email.resend.apiKey',
   MODELENCE_EMAIL_AWS_SES_REGION: '_system.email.awsSes.region',
   MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID: '_system.email.awsSes.accessKeyId',
