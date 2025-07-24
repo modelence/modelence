@@ -36,8 +36,7 @@ export async function createApp(projectName: string, options: CreateAppOptions =
   try {
     // Create temp directory
     fs.ensureDirSync(tempDir);
-    
-    console.log('Downloading the template');
+
     const response = await fetch(EXAMPLES_REPO_ZIP_URL);
     if (!response.ok) {
       throw new Error(`Failed to download examples: ${response.statusText}`);
@@ -49,7 +48,6 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     fs.writeFileSync(zipPath, zipBuffer);
     
     // Extract zip
-    console.log('Extracting the template');
     const zip = new AdmZip(zipPath);
     zip.extractAllTo(tempDir, true);
     
@@ -84,7 +82,6 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     }
 
     // Install dependencies
-    console.log('Installing dependencies');
     execSync('npm install', { cwd: projectPath, stdio: 'inherit' });
 
     console.log(`\nSuccessfully created ${projectName}!\n\nGet started by typing:\n\n  cd ${projectName}\n  npm run dev\n    `);
