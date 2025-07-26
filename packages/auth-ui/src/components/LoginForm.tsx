@@ -143,7 +143,7 @@ export function LoginForm({
         </form>
       </CardContent>
 
-      {isEmailAuthEnabled && renderSignupLink && (
+      {renderSignupLink && (
         <CardFooter className="justify-center">
           <p className="text-center text-sm text-gray-600 dark:text-gray-400">
             Don't have an account?{' '}
