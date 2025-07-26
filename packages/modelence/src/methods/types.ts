@@ -14,6 +14,7 @@ export type ConnectionInfo = {
   userAgent?: string;
   acceptLanguage?: string;
   referrer?: string;
+  baseUrl?: string;
 };
 
 export type Context = {

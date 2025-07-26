@@ -100,7 +100,6 @@ export function LoginForm({
             </div>
           </>
         )}
-
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
