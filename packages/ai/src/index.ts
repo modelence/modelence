@@ -89,7 +89,21 @@ export async function generateText(options: GenerateTextOptions) {
       ...restOptions,
     });
     
-    transaction.end();
+    if ('setContext' in transaction) {
+      transaction.end('success', {
+        context: {
+          usage: {
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            totalTokens: result.usage.totalTokens,
+          }
+        }
+      });
+    } else {
+      // Backwards compatibility for older versions of Modelence
+      // @ts-ignore
+      transaction.end('success');
+    }
     return result;
   } catch (error) {
     captureError(error as Error);
