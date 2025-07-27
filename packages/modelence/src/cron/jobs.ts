@@ -80,17 +80,19 @@ export async function startCronJobs() {
 
     // TODO: handle different application versions with different parameters for the same job alias
 
-    await cronJobsCollection.upsertMany(
-      aliasSelector,
-      {
-        $set: {
-          lock: {
-            containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
-            acquireDate: new Date(),
+    await Promise.all(aliasList.map(alias => 
+      cronJobsCollection.upsertOne(
+        { alias },
+        {
+          $set: {
+            lock: {
+              containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
+              acquireDate: new Date(),
+            }
           }
         }
-      }
-    );
+      )
+    ));
 
     if (existingLockedRecord) {
       await sleep(LOCK_TRANSFER_DELAY);
