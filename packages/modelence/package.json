@@ -54,7 +54,6 @@
   },
   "dependencies": {
     "@modelence/types": "^1.0.2",
-    "@octokit/rest": "^20.0.2",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",
