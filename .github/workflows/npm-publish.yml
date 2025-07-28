@@ -87,6 +87,3 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Print npm debug log on failure
-        if: failure()
-        run: cat /home/runner/.npm/_logs/* || true
