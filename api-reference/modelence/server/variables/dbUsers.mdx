@@ -7,7 +7,7 @@ title: dbUsers
 
 > `const` **dbUsers**: [`Store`](/api-reference/modelence/server/variables/../classes/Store)\<\{ `authMethods`: `ZodObject`\<\{ `google`: `ZodOptional`\<`ZodObject`\<\{ `id`: `ZodString`; \}, `"strip"`, `ZodTypeAny`, \{ `id`: `string`; \}, \{ `id`: `string`; \}\>\>; `password`: `ZodOptional`\<`ZodObject`\<\{ `hash`: `ZodString`; \}, `"strip"`, `ZodTypeAny`, \{ `hash`: `string`; \}, \{ `hash`: `string`; \}\>\>; \}, `"strip"`, `ZodTypeAny`, \{ `google?`: \{ `id`: `string`; \}; `password?`: \{ `hash`: `string`; \}; \}, \{ `google?`: \{ `id`: `string`; \}; `password?`: \{ `hash`: `string`; \}; \}\>; `createdAt`: `ZodDate`; `emails`: `ZodOptional`\<`ZodArray`\<`ZodObject`\<\{ `address`: `ZodString`; `verified`: `ZodBoolean`; \}, `"strip"`, `ZodTypeAny`, \{ `address`: `string`; `verified`: `boolean`; \}, \{ `address`: `string`; `verified`: `boolean`; \}\>, `"many"`\>\>; `handle`: `ZodString`; \}, `Record`\<`string`, (`this`, ...`args`) => `any`\>\>
 
-Defined in: [src/auth/db.ts:18](https://github.com/modelence/modelence/blob/7d33e85fecc66bf3ad18b30dec60511660ca302d/packages/modelence/src/auth/db.ts#L18)
+Defined in: [src/auth/db.ts:18](https://github.com/modelence/modelence/blob/a1cb59344fac2bf473f8529d63492778a3f0ca41/packages/modelence/src/auth/db.ts#L18)
 
 Database collection for storing user accounts with authentication methods and profile information.
 
