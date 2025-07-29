@@ -53,7 +53,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@modelence/types": "^1.0.2",
+    "@modelence/types": "^1.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",
