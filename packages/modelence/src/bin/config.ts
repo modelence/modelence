@@ -81,6 +81,8 @@ export async function loadEnv() {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       // .modelence.env is optional, may not exist in case of an offline setup
+      // Initialize with empty object to prevent "Environment variables not loaded" error
+      env = {};
     } else {
       throw error;
     }

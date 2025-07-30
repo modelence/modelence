@@ -1,6 +1,6 @@
 {
   "name": "create-modelence-app",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Create Modelence applications with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -13,16 +13,18 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@octokit/rest": "^20.0.2",
+    "adm-zip": "^0.5.16",
+    "chalk": "^4.1.2",
     "commander": "^12.0.0",
     "fs-extra": "^11.2.0",
-    "chalk": "^4.1.2",
+    "node-fetch": "^3.3.2",
     "ora": "^5.4.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   }
-} 
+}
