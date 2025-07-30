@@ -3,6 +3,7 @@ import { EmailProvider } from "@modelence/types";
 type EmailConfig = {
   provider?: EmailProvider;
   from?: string;
+  emailVerifiedRedirectUrl?: string;
 };
 
 let emailConfig: EmailConfig = Object.freeze({});

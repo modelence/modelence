@@ -32,6 +32,7 @@ export type AppOptions = {
   email?: {
     provider?: EmailProvider,
     from?: string,
+    emailVerifiedRedirectUrl?: string,
   },
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,

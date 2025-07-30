@@ -79,7 +79,7 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
       expiresAt,
     });
     
-    const verifyUrl = `${baseUrl}/email-verification?token=${verificationToken}`;
+    const verifyUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
     
     await emailProvider?.sendEmail({
       to: email,

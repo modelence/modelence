@@ -44,7 +44,6 @@ export default new Module('_system.user', {
   mutations: {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
-    verifyEmail: handleVerifyEmail,
     logout: handleLogout,
   },
   cronJobs: {
@@ -93,4 +92,12 @@ export default new Module('_system.user', {
       default: '',
     },
   },
+  routes: [
+    {
+      path: '/api/_internal/auth/verify-email',
+      handlers: {
+        get: handleVerifyEmail
+      },
+    }
+  ],
 });
