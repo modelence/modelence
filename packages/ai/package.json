@@ -28,7 +28,7 @@
     "modelence": "*"
   },
   "devDependencies": {
-    "modelence": "^0.5.7-mod-51.0",
+    "modelence": "^0.5.9-dev.0",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2"
   }
