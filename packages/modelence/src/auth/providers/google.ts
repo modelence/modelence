@@ -81,7 +81,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
 function getRouter() {
   const googleAuthRouter = Router();
-  const googleEnabled = getConfig('_system.user.auth.google.enabled') === "true";
+  const googleEnabled = Boolean(getConfig('_system.user.auth.google.enabled'));
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
   if (!googleEnabled || !googleClientId || !googleClientSecret) {

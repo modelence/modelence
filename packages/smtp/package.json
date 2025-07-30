@@ -29,7 +29,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@modelence/types": "^1.0.3-dev.6",
+    "@modelence/types": "^1.0.3",
     "nodemailer": "^7.0.5"
   }
 }
