@@ -13,10 +13,18 @@ export function logError(message: string, args: object) {
   }
 }
 
-export function startTransaction(type: 'method' | 'cron' | 'ai' | 'custom', name: string, context?: Record<string, any>) {
+interface WrappedTransaction {
+  end(result?: string, context?: Record<string, any>): void;
+  setContext(context: Record<string, any>): void;
+}
+
+export function startTransaction(type: 'method' | 'cron' | 'ai' | 'custom', name: string, context?: Record<string, any>): WrappedTransaction {
   if (!isTelemetryEnabled()) {
     return {
       end: () => {
+        // do nothing
+      },
+      setContext: () => {
         // do nothing
       }
     };
@@ -27,7 +35,18 @@ export function startTransaction(type: 'method' | 'cron' | 'ai' | 'custom', name
   if (context) {
     apm.setCustomContext(context);
   }
-  return transaction;
+  
+  return {
+    end: (result?: string, { endTime, context }: { endTime?: number, context?: Record<string, any> } = {}) => {
+      if (context) {
+        apm.setCustomContext(context);
+      }
+      transaction.end(result, endTime);
+    },
+    setContext: (context: Record<string, any>) => {
+      apm.setCustomContext(context);
+    }
+  };
 }
 
 export function captureError(error: Error) {
