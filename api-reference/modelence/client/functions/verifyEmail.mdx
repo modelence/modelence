@@ -1,0 +1,29 @@
+---
+sidebar_position: 1
+title: verifyEmail
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / verifyEmail
+
+> **verifyEmail**(`options`): `Promise`\<`void`\>
+
+Defined in: [src/auth/client/index.ts:53](https://github.com/modelence/modelence/blob/58d9840d767e7a8a0d115fc2e0a7f7e6118771e6/packages/modelence/src/auth/client/index.ts#L53)
+
+Verify user's email with a verification token.
+
+## Example
+
+```ts
+await verifyEmail({ token: 'verification-token' });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `token`: `string`; \} | - |
+| `options.token` | `string` | The email verification token. |
+
+## Returns
+
+`Promise`\<`void`\>
