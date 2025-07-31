@@ -12,9 +12,10 @@ export type RouteParams = {
 }
 
 export type RouteResponse<T = any> = {
-  data: T;
+  data?: T;
   status?: number;
   headers?: Record<string, string>;
+  redirect?: string;
   // contentType?: string;
   // filename?: string;
 }

@@ -2,11 +2,16 @@ import { randomBytes } from 'crypto';
 
 import { Module } from '../app/module';
 import { time } from '../time';
-import { dbDisposableEmailDomains, usersCollection } from './db';
+import {
+  dbDisposableEmailDomains,
+  emailVerificationTokensCollection,
+  usersCollection
+} from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
+import { handleVerifyEmail } from './verifyEmail';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -28,7 +33,11 @@ async function createGuestUser() {
 }
 
 export default new Module('_system.user', {
-  stores: [usersCollection, dbDisposableEmailDomains],
+  stores: [
+    usersCollection,
+    dbDisposableEmailDomains,
+    emailVerificationTokensCollection,
+  ],
   queries: {
     getOwnProfile,
   },
@@ -52,6 +61,21 @@ export default new Module('_system.user', {
     limit: 200,
   }],
   configSchema: {
+    'auth.email.enabled': {
+      type: 'boolean',
+      isPublic: true,
+      default: true,
+    },
+    'auth.email.from': {
+      type: 'string',
+      isPublic: false,
+      default: '',
+    },
+    'auth.email.verification': {
+      type: 'boolean',
+      isPublic: true,
+      default: false,
+    },
     'auth.google.enabled': {
       type: 'boolean',
       isPublic: true,
@@ -68,4 +92,12 @@ export default new Module('_system.user', {
       default: '',
     },
   },
+  routes: [
+    {
+      path: '/api/_internal/auth/verify-email',
+      handlers: {
+        get: handleVerifyEmail
+      },
+    }
+  ],
 });

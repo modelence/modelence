@@ -18,6 +18,10 @@ export function createRouteHandler(handler: RouteHandler): ExpressHandler {
 
       res.status(response.status || 200);
 
+      if (response.redirect) {
+        res.redirect(response.redirect);
+      }
+
       if (response.headers) {
         Object.entries(response.headers).forEach(([key, value]) => {
           res.setHeader(key, value);

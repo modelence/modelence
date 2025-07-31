@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import { AppServer } from '@modelence/types';
+import { AppServer, EmailProvider } from '@modelence/types';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
 import { RoleDefinition } from '../auth/types';
@@ -24,17 +24,23 @@ import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import { setEmailConfig } from './emailConfig';
 
 export type AppOptions = {
   modules?: Module[],
   server?: AppServer,
+  email?: {
+    provider?: EmailProvider,
+    from?: string,
+    emailVerifiedRedirectUrl?: string,
+  },
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
   migrations?: Array<MigrationScript>
 }
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [] }: AppOptions
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {} }: AppOptions
 ) {
   dotenv.config();
   
@@ -82,6 +88,8 @@ export async function startApp(
   } else {
     loadConfigs(getLocalConfigs(configSchema));
   }
+
+  setEmailConfig(email);
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
