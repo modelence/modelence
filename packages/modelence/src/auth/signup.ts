@@ -73,8 +73,8 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
 
   if (getEmailConfig().provider) {
     const emailProvider = getEmailConfig().provider;
-    const baseUrl = connectionInfo?.baseUrl;
-    
+    const baseUrl = process.env.MODELENCE_SITE_URL || connectionInfo?.baseUrl;
+
     // Generate verification token
     const verificationToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + time.hours(24));
