@@ -1,8 +1,18 @@
 import { EmailProvider } from "@modelence/types";
 
-type EmailConfig = {
+export type EmailConfig = {
   provider?: EmailProvider;
   from?: string;
+  verification?: {
+    subject?: string;
+    template?: (props: {
+      name: string;
+      email: string;
+      verificationUrl: string;
+    }) => string;
+    redirectUrl?: string;
+  };
+  // deprecated
   emailVerifiedRedirectUrl?: string;
 };
 
