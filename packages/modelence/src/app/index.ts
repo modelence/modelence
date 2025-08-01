@@ -24,16 +24,12 @@ import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
-import { setEmailConfig } from './emailConfig';
+import { EmailConfig, setEmailConfig } from './emailConfig';
 
 export type AppOptions = {
   modules?: Module[],
   server?: AppServer,
-  email?: {
-    provider?: EmailProvider,
-    from?: string,
-    emailVerifiedRedirectUrl?: string,
-  },
+  email?: EmailConfig,
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
   migrations?: Array<MigrationScript>
