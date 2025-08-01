@@ -78,8 +78,10 @@ async function getConfig() {
     root: appDir,
     build: {
       outDir: '.modelence/build/client',
-      emptyOutDir: true
+      emptyOutDir: true,
+      copyPublicDir: true
     },
+    publicDir: path.resolve(appDir, 'src/assets'),
     server: {
       proxy: {
         '/api': 'http://localhost:4000'
