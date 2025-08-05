@@ -11,7 +11,7 @@ import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
-import { handleVerifyEmail } from './verifyEmail';
+import { handleVerifyEmail } from './verification';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling

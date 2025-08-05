@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
+import { sendVerificationEmail } from './verification';
 
-export async function handleLoginWithPassword(args: Args, { user, session }: Context) {
+export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
   }
@@ -19,13 +20,26 @@ export async function handleLoginWithPassword(args: Args, { user, session }: Con
     // TODO: handle cases where a user is already logged in
   }
 
-  // TODO: check if the email is verified
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email },
     { collation: { locale: 'en', strength: 2 } }
   );
 
-  const passwordHash = userDoc?.authMethods?.password?.hash;
+  if (!userDoc) {
+    throw incorrectCredentialsError();
+  }
+
+  const emailDoc = userDoc?.emails?.find(e => e.address === email);
+
+  if (!emailDoc?.verified) {
+    await sendVerificationEmail({
+      userId: userDoc?._id,
+      email,
+      baseUrl: connectionInfo?.baseUrl,
+    });
+  }
+
+  const passwordHash = userDoc.authMethods?.password?.hash;
   if (!userDoc || !passwordHash) {
     throw incorrectCredentialsError();
   }

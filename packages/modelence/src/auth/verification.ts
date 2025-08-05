@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 import { usersCollection, emailVerificationTokensCollection } from './db';
-import { RouteParams, RouteResponse } from '@/server';
+import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { getEmailConfig } from '@/app/emailConfig';
+import { randomBytes } from 'crypto';
+import { time } from '@/time';
+import { htmlToText } from '@/utils';
+import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const emailVerifiedRedirectUrl = getEmailConfig().emailVerifiedRedirectUrl || '/';
@@ -71,4 +75,46 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     status: 301,
     redirect: `${emailVerifiedRedirectUrl}?status=verified`,
   };
+}
+
+export async function sendVerificationEmail({
+  userId,
+  email,
+  baseUrl = process.env.MODELENCE_SITE_URL
+}: {
+  userId: ObjectId;
+  email: string;
+  baseUrl?: string;
+}) {
+  if (getEmailConfig().provider) {
+    const emailProvider = getEmailConfig().provider;
+
+    // Generate verification token
+    const verificationToken = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + time.hours(24));
+
+    // Store token in database
+    await emailVerificationTokensCollection.insertOne({
+      userId,
+      email,
+      token: verificationToken,
+      createdAt: new Date(),
+      expiresAt,
+    });
+    
+    const verificationUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
+    
+    const template = getEmailConfig()?.verification?.template || emailVerificationTemplate;
+    // TODO: we should have also the name on this step
+    const htmlTemplate = template({ name: '', email, verificationUrl });
+    const textContent = htmlToText(htmlTemplate);
+    
+    await emailProvider?.sendEmail({
+      to: email,
+      from: getEmailConfig()?.from || 'noreply@modelence.com',
+      subject: getEmailConfig()?.verification?.subject || 'Verify your email address',
+      text: textContent,
+      html: htmlTemplate,
+    });
+  }
 }
