@@ -10,6 +10,15 @@ import { getConfig } from '@/server';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 
+function defaultEmailVerificationTemplate({ name, email, verificationUrl }: { name?: string; email: string; verificationUrl: string }) {
+  return `
+    <p>Hi${name ? ` ${name}` : ''},</p>
+    <p>Please verify your email address ${email} by clicking the link below:</p>
+    <p><a href="${verificationUrl}">${verificationUrl}</a></p>
+    <p>If you did not request this, please ignore this email.</p>
+  `;
+}
+
 export async function handleSignupWithPassword(args: Args, { user, connectionInfo }: Context) {
   const email = z.string().email().parse(args.email);
   const password = z.string()
@@ -64,8 +73,8 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
 
   if (getEmailConfig().provider) {
     const emailProvider = getEmailConfig().provider;
-    const baseUrl = connectionInfo?.baseUrl;
-    
+    const baseUrl = process.env.MODELENCE_SITE_URL || connectionInfo?.baseUrl;
+
     // Generate verification token
     const verificationToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + time.hours(24));
@@ -81,17 +90,20 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
     
     const verifyUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
     
+    const template = getEmailConfig()?.verification?.template || defaultEmailVerificationTemplate;
+    // TODO: we should have also the name on this step
+    const htmlTemplate = template({ name: '', email, verificationUrl: verifyUrl });
+    const textContent = htmlTemplate.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    
     await emailProvider?.sendEmail({
       to: email,
       from: getEmailConfig()?.from || 'noreply@modelence.com',
-      subject: 'Verify your email address',
-      text: `Please verify your email address by clicking the link below:\n\n${verifyUrl}`,
-      html: `Please verify your email address by clicking the link below:<br><br>` +
-            `<a href="${verifyUrl}">Verify Email</a>`,  
+      subject: getEmailConfig()?.verification?.subject || 'Verify your email address',
+      text: textContent,
+      html: htmlTemplate,
     });
   }
   
 
   return result.insertedId;
 }
-
