@@ -5,6 +5,7 @@ import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
 import { sendVerificationEmail } from './verification';
+import { getEmailConfig } from '@/app/emailConfig';
 
 export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   if (!session) {
@@ -31,12 +32,13 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
 
   const emailDoc = userDoc?.emails?.find(e => e.address === email);
 
-  if (!emailDoc?.verified) {
+  if (!emailDoc?.verified && getEmailConfig()?.provider) {
     await sendVerificationEmail({
       userId: userDoc?._id,
       email,
       baseUrl: connectionInfo?.baseUrl,
     });
+    throw new Error("Your email address hasn't been verified yet. We've sent a new verification email to your inbox.");
   }
 
   const passwordHash = userDoc.authMethods?.password?.hash;
