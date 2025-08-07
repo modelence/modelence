@@ -30,7 +30,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
     throw incorrectCredentialsError();
   }
 
-  const emailDoc = userDoc?.emails?.find(e => e.address === email);
+  const emailDoc = userDoc.emails?.find(e => e.address === email);
 
   if (!emailDoc?.verified && getEmailConfig()?.provider) {
     await sendVerificationEmail({
