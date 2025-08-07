@@ -26,7 +26,7 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
     
-    return [express.static('./.modelence/build/client'), express.static('./client/public')];
+    return [express.static('./.modelence/build/client'), express.static('./src/client/public')];
   }
 
   handler(req: express.Request, res: express.Response) {
