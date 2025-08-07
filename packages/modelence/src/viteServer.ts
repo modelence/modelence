@@ -7,12 +7,14 @@ import { AppServer, ExpressMiddleware } from '@modelence/types';
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
+  private config?: any;
 
   async init() {
+    this.config = await getConfig();
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
       this.viteServer = await createServer({
-        ...defineConfig(await getConfig()),
+        ...defineConfig(this.config),
         server: {
           middlewareMode: true,
         },
@@ -26,7 +28,8 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
     
-    return [express.static('./.modelence/build/client'), express.static('./src/client/public')];
+    const publicDir = this.config?.publicDir || './src/client/public';
+    return [express.static('./.modelence/build/client'), express.static(publicDir)];
   }
 
   handler(req: express.Request, res: express.Response) {
