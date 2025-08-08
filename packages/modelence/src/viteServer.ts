@@ -28,8 +28,11 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
     
-    const publicDir = this.config?.publicDir || './src/client/public';
-    return [express.static('./.modelence/build/client'), express.static(publicDir)];
+    const staticFolders = [express.static('./.modelence/build/client')];
+    if (this.config?.publicDir) {
+      staticFolders.push(express.static(this.config.publicDir));
+    }
+    return staticFolders;
   }
 
   handler(req: express.Request, res: express.Response) {
