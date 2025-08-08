@@ -1,4 +1,4 @@
-import { createServer, defineConfig, ViteDevServer } from 'vite';
+import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig } from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
@@ -7,7 +7,7 @@ import { AppServer, ExpressMiddleware } from '@modelence/types';
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
-  private config?: any;
+  private config?: UserConfig;
 
   async init() {
     this.config = await getConfig();
@@ -50,8 +50,21 @@ class ViteServer implements AppServer {
   }
 }
 
+async function loadUserViteConfig() {
+  const appDir = process.cwd();
+  
+  try {
+    const result = await loadConfigFromFile({ command: 'serve', mode: 'development' }, undefined, appDir);
+    return result?.config || {};
+  } catch (error) {
+    console.warn(`Could not load vite config:`, error);
+    return {};
+  }
+}
+
 async function getConfig() {
   const appDir = process.cwd();
+  const userConfig = await loadUserViteConfig();
 
   const eslintConfigFile = [
     '.eslintrc.js',
@@ -100,8 +113,8 @@ async function getConfig() {
       alias: {
         '@': path.resolve(appDir, 'src')
       }
-
-    }
+    },
+    publicDir: userConfig.publicDir,
   };
 }
 
