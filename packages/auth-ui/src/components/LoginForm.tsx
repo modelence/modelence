@@ -1,5 +1,5 @@
 import { getConfig, loginWithPassword } from 'modelence/client';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
@@ -34,6 +34,8 @@ export function LoginForm({
 }: LoginFormProps) {
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -53,6 +55,7 @@ export function LoginForm({
     if (onForgotPassword) {
       onForgotPassword();
     }
+    setShowForgotPassword(true);
   };
 
   const socialButtons = useMemo(() => {
@@ -73,6 +76,21 @@ export function LoginForm({
     }
     return buttons;
   }, []);
+
+  if (showForgotPassword) {
+    return (
+      <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">
+            Reset password
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
