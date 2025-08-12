@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/next",
-  "version": "1.0.3",
+  "version": "1.0.4-dev.0",
   "description": "Next.js server for Modelence",
   "exports": {
     ".": {
@@ -18,13 +18,14 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "next": "^15.1.7"
-  },
   "devDependencies": {
     "@modelence/types": "^1.0.3",
     "@types/express": "^5.0.3",
+    "next": "^15.4.6",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0"
   }
 }
