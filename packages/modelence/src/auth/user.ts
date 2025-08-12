@@ -60,23 +60,33 @@ export default new Module('_system.user', {
     window: time.days(1),
     limit: 200,
   }, {
+    bucket: 'signupAttempt',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 50,
+  }, {
+    bucket: 'signupAttempt',
+    type: 'ip',
+    window: time.days(1),
+    limit: 500,
+  }, {
     bucket: 'signin',
     type: 'ip',
     window: time.minutes(15),
-    limit: 20,
+    limit: 50,
   }, {
     bucket: 'signin',
     type: 'ip',
     window: time.days(1),
-    limit: 200,
+    limit: 500,
   }, {
     bucket: 'verification',
-    type: 'ip',
+    type: 'user',
     window: time.minutes(15),
     limit: 3,
   }, {
     bucket: 'verification',
-    type: 'ip',
+    type: 'user',
     window: time.days(1),
     limit: 10,
   }],

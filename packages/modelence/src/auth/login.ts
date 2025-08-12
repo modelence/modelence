@@ -47,8 +47,8 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
       try {
         await consumeRateLimit({
           bucket: 'verification',
-          type: 'ip',
-          value: ip,
+          type: 'user',
+          value: userDoc._id.toString(),
         });
       } catch {
         throw new Error("Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox.");

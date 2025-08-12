@@ -16,7 +16,7 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
   const ip = connectionInfo?.ip;
   if (ip) {
     await consumeRateLimit({
-      bucket: 'signup',
+      bucket: 'signupAttempt',
       type: 'ip',
       value: ip,
     });
@@ -58,6 +58,14 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
       }
     }
   });
+
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'signup',
+      type: 'ip',
+      value: ip,
+    });
+  }
 
   await sendVerificationEmail({
     userId: result?.insertedId,
