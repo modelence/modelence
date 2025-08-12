@@ -10,7 +10,7 @@
   <img alt="Y Combinator S25" src="https://img.shields.io/badge/Combinator-S25-orange?logo=ycombinator&labelColor=white" />
   </h1>
   
-  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference/intro)
+  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg" /></a>
@@ -20,4 +20,4 @@
 ## Getting Started
 Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
-- Visit our [Quick Start Guide](https://docs.modelence.com/quick-start/intro) to get started with Modelence.
+- Visit our [Quick Start Guide](https://docs.modelence.com/quickstart) to get started with Modelence.
