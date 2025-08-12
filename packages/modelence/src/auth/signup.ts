@@ -13,6 +13,15 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
     .min(8, { message: 'Password must contain at least 8 characters' })
     .parse(args.password);
 
+  const ip = connectionInfo?.ip;
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'signup',
+      type: 'ip',
+      value: ip,
+    });
+  }
+
   if (await isDisposableEmail(email)) {
     throw new Error('Please use a permanent email address');
   }
@@ -31,15 +40,6 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
   if (existingUser) {
     const existingEmail = existingUser.emails?.find(e => e.address === email);
     throw new Error(`User with email already exists: ${existingEmail?.address}`);
-  }
-
-  const ip = connectionInfo?.ip;
-  if (ip) {
-    await consumeRateLimit({
-      bucket: 'signup',
-      type: 'ip',
-      value: ip,
-    });
   }
 
   // Hash password with bcrypt (salt is automatically generated)

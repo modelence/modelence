@@ -59,6 +59,26 @@ export default new Module('_system.user', {
     type: 'ip',
     window: time.days(1),
     limit: 200,
+  }, {
+    bucket: 'signin',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 20,
+  }, {
+    bucket: 'signin',
+    type: 'ip',
+    window: time.days(1),
+    limit: 200,
+  }, {
+    bucket: 'verification',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 3,
+  }, {
+    bucket: 'verification',
+    type: 'ip',
+    window: time.days(1),
+    limit: 10,
   }],
   configSchema: {
     'auth.email.enabled': {

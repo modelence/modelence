@@ -6,10 +6,20 @@ import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
 import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';
+import { consumeRateLimit } from '@/server';
 
 export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
+  }
+
+  const ip = connectionInfo?.ip;
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'signin',
+      type: 'ip',
+      value: ip,
+    });
   }
 
   const email = z.string().email().parse(args.email);
@@ -33,6 +43,18 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
   const emailDoc = userDoc.emails?.find(e => e.address === email);
 
   if (!emailDoc?.verified && getEmailConfig()?.provider) {
+    if (ip) {
+      try {
+        await consumeRateLimit({
+          bucket: 'verification',
+          type: 'ip',
+          value: ip,
+        });
+      } catch {
+        throw new Error("Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox.");
+      }
+    }
+
     await sendVerificationEmail({
       userId: userDoc?._id,
       email,
