@@ -1,5 +1,5 @@
 import { getConfig, loginWithPassword } from 'modelence/client';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
@@ -34,7 +34,20 @@ export function LoginForm({
 }: LoginFormProps) {
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(() => {
+    return window.location.hash === '#reset-password';
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setShowForgotPassword(window.location.hash === '#reset-password');
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,11 +68,11 @@ export function LoginForm({
     if (onForgotPassword) {
       onForgotPassword();
     }
-    setShowForgotPassword(true);
+    window.location.hash = '#reset-password';
   };
 
   const handleShowLogin = () => {
-    setShowForgotPassword(false);
+    window.location.hash = '';
   };
 
   const socialButtons = useMemo(() => {
