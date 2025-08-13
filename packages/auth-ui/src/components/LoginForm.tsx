@@ -58,6 +58,10 @@ export function LoginForm({
     setShowForgotPassword(true);
   };
 
+  const handleShowLogin = () => {
+    setShowForgotPassword(false);
+  };
+
   const socialButtons = useMemo(() => {
     const buttons: JSX.Element[] = [];
     if (isGoogleAuthEnabled) {
@@ -86,7 +90,33 @@ export function LoginForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div>
+              <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
+                Email
+              </Label>
+              <Input 
+                type="email" 
+                name="email" 
+                id="email" 
+                className={inputClassName}
+                required
+              />
+            </div>
+            <Button
+              className={`w-full ${buttonClassName}`}
+              variant={buttonVariant}
+              size={buttonSize}
+              type="submit"
+            >
+              Submit
+            </Button>
+            <div className="text-center pt-2">
+              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleShowLogin}>
+                Back to login
+              </a>
+            </div>
+          </form>
         </CardContent>
       </Card>
     )
