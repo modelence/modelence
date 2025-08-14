@@ -5,6 +5,7 @@ import { time } from '../time';
 import {
   dbDisposableEmailDomains,
   emailVerificationTokensCollection,
+  resetPasswordTokensCollection,
   usersCollection
 } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
@@ -12,6 +13,7 @@ import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail } from './verifyEmail';
+import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -37,6 +39,7 @@ export default new Module('_system.user', {
     usersCollection,
     dbDisposableEmailDomains,
     emailVerificationTokensCollection,
+    resetPasswordTokensCollection,
   ],
   queries: {
     getOwnProfile,
@@ -45,6 +48,8 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
+    sendResetPasswordToken: handleSendResetPasswordToken,
+    resetPassword: handleResetPassword,
   },
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron

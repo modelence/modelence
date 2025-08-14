@@ -1,5 +1,5 @@
 import { getConfig, loginWithPassword } from 'modelence/client';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
@@ -34,21 +34,6 @@ export function LoginForm({
 }: LoginFormProps) {
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
-  const [showForgotPassword, setShowForgotPassword] = useState(() => {
-    return window.location.hash === '#reset-password';
-  });
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      setShowForgotPassword(window.location.hash === '#reset-password');
-    };
-
-    window.addEventListener('hashchange', handleHashChange);
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
-  }, []);
-
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -62,18 +47,6 @@ export function LoginForm({
   const openGoogleAuth = useCallback(() => {
     window.location.href = '/api/_internal/auth/google';
   }, []);
-
-  const handleForgotPassword = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    if (onForgotPassword) {
-      onForgotPassword();
-    }
-    window.location.hash = '#reset-password';
-  };
-
-  const handleShowLogin = () => {
-    window.location.hash = '';
-  };
 
   const socialButtons = useMemo(() => {
     const buttons: JSX.Element[] = [];
@@ -93,47 +66,6 @@ export function LoginForm({
     }
     return buttons;
   }, []);
-
-  if (showForgotPassword) {
-    return (
-      <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">
-            Reset password
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
-                Email
-              </Label>
-              <Input 
-                type="email" 
-                name="email" 
-                id="email" 
-                className={inputClassName}
-                required
-              />
-            </div>
-            <Button
-              className={`w-full ${buttonClassName}`}
-              variant={buttonVariant}
-              size={buttonSize}
-              type="submit"
-            >
-              Submit
-            </Button>
-            <div className="text-center pt-2">
-              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleShowLogin}>
-                Back to login
-              </a>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
@@ -180,7 +112,11 @@ export function LoginForm({
               <Label htmlFor="password" className={labelClassName}>
                 Password
               </Label>
-              <a href="#" className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white" onClick={handleForgotPassword}>
+              <a
+                href="#"
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                onClick={onForgotPassword}
+              >
                 Forgot your password?
               </a>
             </div>
