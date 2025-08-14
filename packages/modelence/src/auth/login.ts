@@ -36,7 +36,8 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
     { collation: { locale: 'en', strength: 2 } }
   );
 
-  if (!userDoc) {
+  const passwordHash = userDoc?.authMethods?.password?.hash;
+  if (!passwordHash) {
     throw incorrectCredentialsError();
   }
 
@@ -61,11 +62,6 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
       baseUrl: connectionInfo?.baseUrl,
     });
     throw new Error("Your email address hasn't been verified yet. We've sent a new verification email to your inbox.");
-  }
-
-  const passwordHash = userDoc.authMethods?.password?.hash;
-  if (!userDoc || !passwordHash) {
-    throw incorrectCredentialsError();
   }
 
   const isValidPassword = await bcrypt.compare(password, passwordHash);

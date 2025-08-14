@@ -42,6 +42,14 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
     throw new Error(`User with email already exists: ${existingEmail?.address}`);
   }
 
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'signup',
+      type: 'ip',
+      value: ip,
+    });
+  }
+
   // Hash password with bcrypt (salt is automatically generated)
   const hash = await bcrypt.hash(password, 10);
 
@@ -58,14 +66,6 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
       }
     }
   });
-
-  if (ip) {
-    await consumeRateLimit({
-      bucket: 'signup',
-      type: 'ip',
-      value: ip,
-    });
-  }
 
   await sendVerificationEmail({
     userId: result?.insertedId,
