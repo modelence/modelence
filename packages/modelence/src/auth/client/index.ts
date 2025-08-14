@@ -19,9 +19,6 @@ export type UserInfo = {
 export async function signupWithPassword(options: { email: string, password: string }) {
   const { email, password } = options;
   await callMethod('_system.user.signupWithPassword', { email, password });
-
-  // TODO: handle auto-login from the signup method itself to avoid a second method call
-  await loginWithPassword({ email, password });
 }
 
 /**

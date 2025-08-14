@@ -11,7 +11,7 @@ import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
-import { handleVerifyEmail } from './verifyEmail';
+import { handleVerifyEmail } from './verification';
 
 async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -59,6 +59,36 @@ export default new Module('_system.user', {
     type: 'ip',
     window: time.days(1),
     limit: 200,
+  }, {
+    bucket: 'signupAttempt',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 50,
+  }, {
+    bucket: 'signupAttempt',
+    type: 'ip',
+    window: time.days(1),
+    limit: 500,
+  }, {
+    bucket: 'signin',
+    type: 'ip',
+    window: time.minutes(15),
+    limit: 50,
+  }, {
+    bucket: 'signin',
+    type: 'ip',
+    window: time.days(1),
+    limit: 500,
+  }, {
+    bucket: 'verification',
+    type: 'user',
+    window: time.minutes(15),
+    limit: 3,
+  }, {
+    bucket: 'verification',
+    type: 'user',
+    window: time.days(1),
+    limit: 10,
   }],
   configSchema: {
     'auth.email.enabled': {

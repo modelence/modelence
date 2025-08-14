@@ -4,10 +4,22 @@ import { z } from 'zod';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
+import { sendVerificationEmail } from './verification';
+import { getEmailConfig } from '@/app/emailConfig';
+import { consumeRateLimit } from '@/server';
 
-export async function handleLoginWithPassword(args: Args, { user, session }: Context) {
+export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
+  }
+
+  const ip = connectionInfo?.ip;
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'signin',
+      type: 'ip',
+      value: ip,
+    });
   }
 
   const email = z.string().email().parse(args.email);
@@ -19,15 +31,37 @@ export async function handleLoginWithPassword(args: Args, { user, session }: Con
     // TODO: handle cases where a user is already logged in
   }
 
-  // TODO: check if the email is verified
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email },
     { collation: { locale: 'en', strength: 2 } }
   );
 
   const passwordHash = userDoc?.authMethods?.password?.hash;
-  if (!userDoc || !passwordHash) {
+  if (!passwordHash) {
     throw incorrectCredentialsError();
+  }
+
+  const emailDoc = userDoc.emails?.find(e => e.address === email);
+
+  if (!emailDoc?.verified && getEmailConfig()?.provider) {
+    if (ip) {
+      try {
+        await consumeRateLimit({
+          bucket: 'verification',
+          type: 'user',
+          value: userDoc._id.toString(),
+        });
+      } catch {
+        throw new Error("Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox.");
+      }
+    }
+
+    await sendVerificationEmail({
+      userId: userDoc?._id,
+      email,
+      baseUrl: connectionInfo?.baseUrl,
+    });
+    throw new Error("Your email address hasn't been verified yet. We've sent a new verification email to your inbox.");
   }
 
   const isValidPassword = await bcrypt.compare(password, passwordHash);

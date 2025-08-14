@@ -1,5 +1,5 @@
 import { getConfig, signupWithPassword } from 'modelence/client';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
@@ -83,6 +83,7 @@ export function SignupForm({
   labelClassName = "",
   consents
 }: SignupFormProps) {
+  const [isSignupSuccess, setIsSignupSuccess] = useState(false);
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
@@ -98,8 +99,13 @@ export function SignupForm({
       return;
     }
     
-    await signupWithPassword({ email, password });
-  }, []);
+    try {
+      await signupWithPassword({ email, password });
+      setIsSignupSuccess(true);
+    } catch (error) {
+      onError(error as Error);
+    }
+  }, [onError]);
 
   const openGoogleAuth = useCallback(() => {
     window.location.href = '/api/_internal/auth/google';
@@ -123,6 +129,27 @@ export function SignupForm({
     }
     return buttons;
   }, []);
+
+  if (isSignupSuccess) {
+    return (
+      <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">
+            Check your email
+          </CardTitle>
+        </CardHeader>
+        
+        <CardContent className="text-center space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            We've sent you a verification email. Please check your inbox and click the verification link to activate your account.
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-500">
+            Don't see the email? Check your spam folder.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
