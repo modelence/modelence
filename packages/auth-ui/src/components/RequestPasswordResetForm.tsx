@@ -47,13 +47,13 @@ export function RequestPasswordResetForm({
       <CardContent className="space-y-6">
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <Label htmlFor="password" className={`block mb-2 ${labelClassName}`}>
-              Password
+            <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
+              Email
             </Label>
             <Input 
-              type="password"
-              name="password"
-              id="password"
+              type="email" 
+              name="email" 
+              id="email" 
               className={inputClassName}
               required
             />
