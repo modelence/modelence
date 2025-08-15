@@ -29,7 +29,7 @@ export function PasswordResetForm({
   buttonSize = "default",
   inputClassName = "",
   labelClassName = ""
-}: RequestPasswordResetFormProps) {
+}: PasswordResetFormProps) {
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
