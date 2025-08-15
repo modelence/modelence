@@ -60,3 +60,27 @@ export async function logout() {
   await callMethod('_system.user.logout');
   setCurrentUser(null);
 }
+
+/**
+ * Send reset password token.
+ * @param options.email - The email of the user. 
+ */
+export async function sendResetPasswordToken(options: { email: string }) {
+  const { email } = options;
+  await callMethod('_system.user.sendResetPasswordToken', {
+    email,
+  });
+}
+
+/**
+ * Reset password.
+ * @param options.token - The password reset token.
+ * @param options.password - The new password.
+ */
+export async function resetPassword(options: { token: string, password: string }) {
+  const { token, password } = options;
+  await callMethod('_system.user.resetPassword', {
+    token,
+    password,
+  });
+}
