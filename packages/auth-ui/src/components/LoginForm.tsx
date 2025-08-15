@@ -5,12 +5,13 @@ import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-
-type SignupLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
+import { Link, LinkRenderer } from './ui/Link';
 
 export interface LoginFormProps {
-  renderSignupLink?: SignupLinkRenderer;
+  renderSignupLink?: LinkRenderer;
+  renderForgotPassword?: LinkRenderer;
   onForgotPassword?: () => void;
+  onSignup?: () => void;
   // Styling overrides
   className?: string;
   cardClassName?: string;
@@ -23,7 +24,9 @@ export interface LoginFormProps {
 
 export function LoginForm({ 
   renderSignupLink,
+  renderForgotPassword,
   onForgotPassword,
+  onSignup,
   className = "",
   cardClassName = "",
   buttonClassName = "",
@@ -112,13 +115,13 @@ export function LoginForm({
               <Label htmlFor="password" className={labelClassName}>
                 Password
               </Label>
-              <a
-                href="#"
+              <Link
                 className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                linkRenderer={renderForgotPassword}
                 onClick={onForgotPassword}
               >
                 Forgot your password?
-              </a>
+              </Link>
             </div>
             <Input 
               type="password" 
@@ -144,10 +147,13 @@ export function LoginForm({
         <CardFooter className="justify-center">
           <p className="text-center text-sm text-gray-600 dark:text-gray-400">
             Don't have an account?{' '}
-            {renderSignupLink({ 
-              className: 'text-gray-900 dark:text-white underline hover:no-underline font-medium', 
-              children: 'Sign up' 
-            })}
+            <Link
+              className="text-gray-900 dark:text-white underline hover:no-underline font-medium"
+              linkRenderer={renderSignupLink}
+              onClick={onSignup}
+            >
+              Sign up
+            </Link>
           </p>
         </CardFooter>
       )}

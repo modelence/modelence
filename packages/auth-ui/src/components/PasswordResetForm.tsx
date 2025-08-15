@@ -4,8 +4,10 @@ import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
+import { Link, LinkRenderer } from './ui/Link';
 
 export interface RequestPasswordResetFormProps {
+  renderLoginLink?: LinkRenderer;
   onLogin?: () => void;
   // Styling overrides
   className?: string;
@@ -19,6 +21,7 @@ export interface RequestPasswordResetFormProps {
 
 export function RequestPasswordResetForm({ 
   onLogin,
+  renderLoginLink,
   className = "",
   cardClassName = "",
   buttonClassName = "",
@@ -67,13 +70,13 @@ export function RequestPasswordResetForm({
             Submit
           </Button>
           <div className="text-center pt-2">
-            <a
-              href="#"
+            <Link
               className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               onClick={onLogin}
+              linkRenderer={renderLoginLink}
             >
               Back to login
-            </a>
+            </Link>
           </div>
         </form>
       </CardContent>

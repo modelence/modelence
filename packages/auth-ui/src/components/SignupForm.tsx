@@ -5,8 +5,7 @@ import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
-
-type LoginLinkRenderer = (props: { className: string; children: React.ReactNode }) => React.ReactElement;
+import { Link, LinkRenderer } from './ui/Link';
 
 interface TermsConsent {
   type: 'terms';
@@ -22,7 +21,8 @@ interface CustomConsent {
 type ConsentItem = TermsConsent | CustomConsent;
 
 export interface SignupFormProps {
-  renderLoginLink?: LoginLinkRenderer;
+  onLogin?: () => void;
+  renderLoginLink?: LinkRenderer;
   onError?: (error: Error) => void;
   className?: string;
   cardClassName?: string;
@@ -235,10 +235,13 @@ export function SignupForm({
         <CardFooter className="justify-center">
           <p className="text-center text-sm text-gray-600 dark:text-gray-400">
             Already have an account?{' '}
-            {renderLoginLink({ 
-              className: 'text-gray-900 dark:text-white underline hover:no-underline font-medium', 
-              children: 'Sign in here' 
-            })}
+            <Link
+              className="text-gray-900 dark:text-white underline hover:no-underline font-medium"
+              linkRenderer={renderLoginLink}
+              onClick={onLogin}
+            >
+              Sign in here
+            </Link>
           </p>
         </CardFooter>
       )}
