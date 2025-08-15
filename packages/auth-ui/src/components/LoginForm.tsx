@@ -9,7 +9,7 @@ import { Link, LinkRenderer } from './ui/Link';
 
 export interface LoginFormProps {
   renderSignupLink?: LinkRenderer;
-  renderForgotPassword?: LinkRenderer;
+  renderForgotPasswordLink?: LinkRenderer;
   onForgotPassword?: () => void;
   onSignup?: () => void;
   // Styling overrides
@@ -24,7 +24,7 @@ export interface LoginFormProps {
 
 export function LoginForm({ 
   renderSignupLink,
-  renderForgotPassword,
+  renderForgotPasswordLink,
   onForgotPassword,
   onSignup,
   className = "",
@@ -117,7 +117,7 @@ export function LoginForm({
               </Label>
               <Link
                 className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                linkRenderer={renderForgotPassword}
+                linkRenderer={renderForgotPasswordLink}
                 onClick={onForgotPassword}
               >
                 Forgot your password?
