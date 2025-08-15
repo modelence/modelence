@@ -1,4 +1,4 @@
-import { loginWithPassword } from 'modelence/client';
+import { sendResetPasswordToken } from 'modelence/client';
 import React, { useCallback } from 'react';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
@@ -35,9 +35,8 @@ export function RequestPasswordResetForm({
     const formData = new FormData(event.currentTarget);
     
     const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
     
-    await loginWithPassword({ email, password });
+    await sendResetPasswordToken({ email });
   }, []);
 
   return (
