@@ -72,6 +72,7 @@ function ConsentCheckbox({
 }
 
 export function SignupForm({ 
+  onLogin,
   renderLoginLink,
   onError = (error: Error) => { console.error(error); },
   className = "",
