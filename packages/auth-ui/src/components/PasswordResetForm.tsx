@@ -6,7 +6,7 @@ import { Input } from './ui/Input';
 import { Label } from './ui/Label';
 import { Link, LinkRenderer } from './ui/Link';
 
-export interface RequestPasswordResetFormProps {
+export interface PasswordResetFormProps {
   renderLoginLink?: LinkRenderer;
   onLogin?: () => void;
   // Styling overrides
@@ -19,7 +19,7 @@ export interface RequestPasswordResetFormProps {
   labelClassName?: string;
 }
 
-export function RequestPasswordResetForm({ 
+export function PasswordResetForm({ 
   onLogin,
   renderLoginLink,
   className = "",
