@@ -7,3 +7,7 @@ export function requireServer() {
     throw new Error('This function can only be called on the server');
   }
 }
+
+export function htmlToText(html: string) {
+  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+}
