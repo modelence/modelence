@@ -1,5 +1,5 @@
 import { sendResetPasswordToken } from 'modelence/client';
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
@@ -30,6 +30,8 @@ export function RequestPasswordResetForm({
   inputClassName = "",
   labelClassName = ""
 }: RequestPasswordResetFormProps) {
+  const [isResetRequestSuccess, setIsResetRequestSuccess] = useState(false);
+
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -37,7 +39,38 @@ export function RequestPasswordResetForm({
     const email = formData.get('email') as string;
     
     await sendResetPasswordToken({ email });
+    setIsResetRequestSuccess(true);
   }, []);
+
+  if (isResetRequestSuccess) {
+    return (
+      <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">
+            Check your email
+          </CardTitle>
+        </CardHeader>
+        
+        <CardContent className="text-center space-y-4">
+          <p className="text-gray-600 dark:text-gray-400">
+            We've sent you a password reset link. Please check your inbox and click the link to reset your password.
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-500">
+            Don't see the email? Check your spam folder.
+          </p>
+          <div className="text-center pt-2">
+            <Link
+              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+              onClick={onLogin}
+              linkRenderer={renderLoginLink}
+            >
+              Back to login
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
