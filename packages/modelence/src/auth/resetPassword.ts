@@ -6,6 +6,7 @@ import { Args, Context } from '@/methods/types';
 import { usersCollection, resetPasswordTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
+import { htmlToText } from '@/utils';
 
 function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; resetUrl: string }) {
   return `
@@ -56,12 +57,13 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Build reset URL
   const baseUrl = process.env.MODELENCE_SITE_URL || connectionInfo?.baseUrl;
-  const resetUrl = `${baseUrl}#reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+  const verificationUrl = getEmailConfig().passwordReset?.redirectUrl || baseUrl;
+  const resetUrl = `${verificationUrl}?token=${resetToken}`;
 
   // Send email
   const template = getEmailConfig()?.passwordReset?.template || defaultPasswordResetTemplate;
   const htmlTemplate = template({ email, resetUrl });
-  const textContent = htmlTemplate.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  const textContent = htmlToText(htmlTemplate);
 
   await emailProvider.sendEmail({
     to: email,

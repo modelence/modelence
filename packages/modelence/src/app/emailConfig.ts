@@ -18,6 +18,7 @@ export type EmailConfig = {
       email: string;
       resetUrl: string;
     }) => string;
+    redirectUrl?: string;
   };
   // @deprecated use verification.redirectUrl instead
   emailVerifiedRedirectUrl?: string;

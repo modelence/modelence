@@ -9,7 +9,8 @@ import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
-  const emailVerifiedRedirectUrl = getEmailConfig().emailVerifiedRedirectUrl || '/';
+  const baseUrl = process.env.MODELENCE_SITE_URL;
+  const emailVerifiedRedirectUrl = getEmailConfig().emailVerifiedRedirectUrl || baseUrl || '/';
   try {
     const token = z.string().parse(params.query.token);
     // Find token in database

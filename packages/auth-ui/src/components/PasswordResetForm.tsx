@@ -1,4 +1,4 @@
-import { loginWithPassword } from 'modelence/client';
+import { loginWithPassword, resetPassword } from 'modelence/client';
 import React, { useCallback } from 'react';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
@@ -9,6 +9,7 @@ import { Link, LinkRenderer } from './ui/Link';
 export interface PasswordResetFormProps {
   renderLoginLink?: LinkRenderer;
   onLogin?: () => void;
+  token: string;
   // Styling overrides
   className?: string;
   cardClassName?: string;
@@ -22,23 +23,23 @@ export interface PasswordResetFormProps {
 export function PasswordResetForm({ 
   onLogin,
   renderLoginLink,
+  token,
   className = "",
   cardClassName = "",
   buttonClassName = "",
   buttonVariant = "default",
   buttonSize = "default",
   inputClassName = "",
-  labelClassName = ""
+  labelClassName = "",
 }: PasswordResetFormProps) {
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
-    const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     
-    await loginWithPassword({ email, password });
-  }, []);
+    await resetPassword({ token, password });
+  }, [token]);
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
