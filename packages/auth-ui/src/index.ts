@@ -3,5 +3,5 @@ export { SignupForm } from './components/SignupForm';
 export { UserMenu } from './components/UserMenu';
 export { UserProfile } from './components/UserProfile';
 export { EmailVerification } from './components/EmailVerification';
+export { NewPasswordForm } from './components/NewPasswordForm';
 export { PasswordResetForm } from './components/PasswordResetForm';
-export { RequestPasswordResetForm } from './components/RequestPasswordResetForm';

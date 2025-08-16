@@ -15,6 +15,7 @@ export type EmailConfig = {
   passwordReset?: {
     subject?: string;
     template?: (props: {
+      name: string;
       email: string;
       resetUrl: string;
     }) => string;

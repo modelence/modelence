@@ -62,7 +62,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Send email
   const template = getEmailConfig()?.passwordReset?.template || defaultPasswordResetTemplate;
-  const htmlTemplate = template({ email, resetUrl });
+  const htmlTemplate = template({ email, resetUrl, name: '' });
   const textContent = htmlToText(htmlTemplate);
 
   await emailProvider.sendEmail({
@@ -78,9 +78,9 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
 export async function handleResetPassword(args: Args, { }: Context) {
   const token = z.string().parse(args.token);
-  const newPassword = z.string()
+  const password = z.string()
     .min(8, { message: 'Password must contain at least 8 characters' })
-    .parse(args.newPassword);
+    .parse(args.password);
 
   // Find the reset token
   const resetTokenDoc = await resetPasswordTokensCollection.findOne({ token });
@@ -101,7 +101,7 @@ export async function handleResetPassword(args: Args, { }: Context) {
   }
 
   // Hash the new password
-  const hash = await bcrypt.hash(newPassword, 10);
+  const hash = await bcrypt.hash(password, 10);
 
   // Update user's password
   await usersCollection.updateOne(

@@ -1,4 +1,4 @@
-import { sendResetPasswordToken } from 'modelence/client';
+import { resetPassword } from 'modelence/client';
 import React, { useCallback, useState } from 'react';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
@@ -6,9 +6,10 @@ import { Input } from './ui/Input';
 import { Label } from './ui/Label';
 import { Link, LinkRenderer } from './ui/Link';
 
-export interface RequestPasswordResetFormProps {
+export interface NewPasswordFormProps {
   renderLoginLink?: LinkRenderer;
   onLogin?: () => void;
+  token: string;
   // Styling overrides
   className?: string;
   cardClassName?: string;
@@ -19,44 +20,42 @@ export interface RequestPasswordResetFormProps {
   labelClassName?: string;
 }
 
-export function RequestPasswordResetForm({ 
+export function NewPasswordForm({ 
   onLogin,
   renderLoginLink,
+  token,
   className = "",
   cardClassName = "",
   buttonClassName = "",
   buttonVariant = "default",
   buttonSize = "default",
   inputClassName = "",
-  labelClassName = ""
-}: RequestPasswordResetFormProps) {
-  const [isResetRequestSuccess, setIsResetRequestSuccess] = useState(false);
+  labelClassName = "",
+}: NewPasswordFormProps) {
+  const [isPasswordResetSuccess, setIsPasswordResetSuccess] = useState(false);
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     
-    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
     
-    await sendResetPasswordToken({ email });
-    setIsResetRequestSuccess(true);
-  }, []);
+    await resetPassword({ token, password });
+    setIsPasswordResetSuccess(true);
+  }, [token]);
 
-  if (isResetRequestSuccess) {
+  if (isPasswordResetSuccess) {
     return (
       <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">
-            Check your email
+            Password reset successful
           </CardTitle>
         </CardHeader>
         
         <CardContent className="text-center space-y-4">
           <p className="text-gray-600 dark:text-gray-400">
-            We've sent you a password reset link. Please check your inbox and click the link to reset your password.
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-500">
-            Don't see the email? Check your spam folder.
+            Your password has been successfully reset. You can now sign in with your new password.
           </p>
           <div className="text-center pt-2">
             <Link
@@ -64,7 +63,7 @@ export function RequestPasswordResetForm({
               onClick={onLogin}
               linkRenderer={renderLoginLink}
             >
-              Back to login
+              Go to login
             </Link>
           </div>
         </CardContent>
@@ -76,19 +75,19 @@ export function RequestPasswordResetForm({
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">
-          Reset password
+          Set a new password
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
-              Email
+            <Label htmlFor="password" className={`block mb-2 ${labelClassName}`}>
+              Password
             </Label>
             <Input 
-              type="email" 
-              name="email" 
-              id="email" 
+              type="password"
+              name="password"
+              id="password"
               className={inputClassName}
               required
             />
