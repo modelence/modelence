@@ -8,6 +8,19 @@ import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
 
+function resolveUrl(baseUrl: string, configuredUrl?: string): string {
+  if (!configuredUrl) {
+    return baseUrl;
+  }
+  
+  if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
+    return configuredUrl;
+  }
+  
+  // Handle relative URL
+  return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
+}
+
 function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; resetUrl: string }) {
   return `
     <p>Hi,</p>
@@ -57,8 +70,8 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Build reset URL
   const baseUrl = process.env.MODELENCE_SITE_URL || connectionInfo?.baseUrl;
-  const verificationUrl = getEmailConfig().passwordReset?.redirectUrl || baseUrl;
-  const resetUrl = `${verificationUrl}?token=${resetToken}`;
+  const resetPasswordUrl = resolveUrl(baseUrl!, getEmailConfig().passwordReset?.redirectUrl);
+  const resetUrl = `${resetPasswordUrl}?token=${resetToken}`;
 
   // Send email
   const template = getEmailConfig()?.passwordReset?.template || defaultPasswordResetTemplate;
