@@ -4,7 +4,9 @@ export type LinkRenderer = (props: {
   className: string;
   children: React.ReactNode;
   href: string;
-  // deprecated
+  /**
+   * @deprecated use href
+   */
   to: string;
 }) => React.ReactElement;
 
