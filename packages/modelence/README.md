@@ -42,3 +42,7 @@ Your app will be available at [http://localhost:3000](http://localhost:3000)
 
 
 For a more detailed guide, check out the [Todo App tutorial](https://docs.modelence.com/tutorial).
+
+### Examples
+
+For more examples on how to use Modelence, check out https://github.com/modelence/examples
