@@ -2,8 +2,10 @@ import { MongoClient, ServerApiVersion } from 'mongodb';
 import { getConfig } from '../config/server';
 
 let client: MongoClient | null = null;
+let reconnecting = false;
+let healthCheckInterval: number | null = null;
 
-export async function connect() {
+export async function connect(): Promise<MongoClient> {
   if (client) return client;
 
   const mongodbUri = getMongodbUri();
@@ -12,7 +14,10 @@ export async function connect() {
   }
 
   client = new MongoClient(mongodbUri, {
-    maxPoolSize: 20
+    maxPoolSize: 20,
+    retryWrites: true,
+    serverApi: ServerApiVersion.v1,
+    serverSelectionTimeoutMS: 5000,
   });
 
   try {
@@ -21,6 +26,8 @@ export async function connect() {
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+
+    startHealthCheck(); // begin self-healing loop
     return client;
   } catch (err) {
     console.error(err);
@@ -38,9 +45,77 @@ export function getClient() {
   return client;
 }
 
-// export async function closeConnection() {
-//   if (client) {
-//     await client.close();
-//     client = null;
-//   }
-// }
+export async function closeConnection() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+  }
+  
+  if (client) {
+    await client.close();
+    client = null;
+  }
+  
+  reconnecting = false;
+}
+
+async function attemptReconnect() {
+  if (reconnecting) return;
+  reconnecting = true;
+
+  let retries = 0;
+  const maxRetries = 10;
+  
+  while (retries < maxRetries) {
+    try {
+      retries++;
+      console.log(`Attempting MongoDB reconnect (#${retries}/${maxRetries})...`);
+      
+      // Close existing client if it exists
+      if (client) {
+        try {
+          await client.close();
+        } catch (closeErr) {
+          console.warn('Error closing existing client:', closeErr);
+        }
+        client = null;
+      }
+      
+      await connect();
+      console.log("Reconnected to MongoDB");
+      reconnecting = false;
+      return;
+    } catch (err) {
+      const delay = Math.min(30000, 1000 * Math.pow(2, retries)); //Max delay of 30s
+      console.error(
+        `Reconnect attempt #${retries}/${maxRetries} failed: ${err}. Retrying in ${delay / 1000}s...`
+      );
+      
+      if (retries < maxRetries) {
+        await new Promise((res) => setTimeout(res, delay));
+      }
+    }
+  }
+  
+  console.error(`Failed to reconnect to MongoDB after ${maxRetries} attempts`);
+  reconnecting = false;
+}
+
+function startHealthCheck() {
+  // Clear existing health check to prevent duplicates
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+  }
+  
+  healthCheckInterval = setInterval(async () => {
+    if (!client) return;
+    
+    try {
+      await client.db("admin").command({ ping: 1 });
+    } catch (err) {
+      console.error("MongoDB ping failed, attempting to reconnect...", err);
+      client = null;
+      attemptReconnect();
+    }
+  }, 15000); // check every 15s
+}
