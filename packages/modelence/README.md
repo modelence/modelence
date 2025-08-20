@@ -10,7 +10,7 @@
   <img alt="Y Combinator S25" src="https://img.shields.io/badge/Combinator-S25-orange?logo=ycombinator&labelColor=white" />
   </h1>
   
-  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
+  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference) | [Modelence Cloud](https://cloud.modelence.com)
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg" /></a>
@@ -20,4 +20,29 @@
 ## Getting Started
 Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
-- Visit our [Quick Start Guide](https://docs.modelence.com/quickstart) to get started with Modelence.
+### Quick Start
+
+#### 1. Create a new project
+```bash
+npx create-modelence-app@latest my-app
+```
+
+#### 2. Install dependencies
+```bash
+cd my-app
+npm install
+```
+
+#### 3. Start the development server
+```bash
+npm run dev
+```
+
+Your app will be available at [http://localhost:3000](http://localhost:3000)
+
+
+For a more detailed guide, check out the [Todo App tutorial](https://docs.modelence.com/tutorial).
+
+### Examples
+
+For more examples on how to use Modelence, check out https://github.com/modelence/examples
