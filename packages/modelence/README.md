@@ -10,7 +10,7 @@
   <img alt="Y Combinator S25" src="https://img.shields.io/badge/Combinator-S25-orange?logo=ycombinator&labelColor=white" />
   </h1>
   
-  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference)
+  [Website](https://modelence.com) | [Documentation](https://docs.modelence.com) | [API Reference](https://docs.modelence.com/api-reference) | [Modelence Cloud](https://cloud.modelence.com)
 
   ![Build Status](https://github.com/modelence/modelence/actions/workflows/build.yml/badge.svg)
   <a href="https://www.npmjs.com/package/modelence"><img alt="NPM version" src="https://img.shields.io/npm/v/modelence.svg" /></a>
