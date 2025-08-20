@@ -20,4 +20,25 @@
 ## Getting Started
 Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
-- Visit our [Quick Start Guide](https://docs.modelence.com/quickstart) to get started with Modelence.
+### Quick Start
+
+#### 1. Create a new project
+```bash
+npx create-modelence-app@latest my-app
+```
+
+#### 2. Install dependencies
+```bash
+cd my-app
+npm install
+```
+
+#### 3. Start the development server
+```bash
+npm run dev
+```
+
+Your app will be available at [http://localhost:3000](http://localhost:3000)
+
+
+For a more detailed guide, check out the [Todo App tutorial](https://docs.modelence.com/tutorial).
