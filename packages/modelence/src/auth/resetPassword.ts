@@ -7,6 +7,7 @@ import { usersCollection, resetPasswordTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
+import { validateEmail, validatePassword } from './validators';
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
@@ -32,8 +33,10 @@ function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; rese
   `;
 }
 
+const passwordResetSent = { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+
 export async function handleSendResetPasswordToken(args: Args, { connectionInfo }: Context) {
-  const email = z.string().email().parse(args.email);
+  const email = validateEmail(args.email as string);
 
   // Find user by email
   const userDoc = await usersCollection.findOne(
@@ -43,12 +46,12 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   if (!userDoc) {
     // For security, don't reveal if email exists or not
-    return { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+    return passwordResetSent;
   }
 
   // Check if user has password auth method
   if (!userDoc.authMethods?.password) {
-    return { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+    return passwordResetSent;
   }
 
   const emailProvider = getEmailConfig().provider;
@@ -86,14 +89,12 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
     html: htmlTemplate,
   });
 
-  return { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+  return passwordResetSent;
 }
 
 export async function handleResetPassword(args: Args, { }: Context) {
   const token = z.string().parse(args.token);
-  const password = z.string()
-    .min(8, { message: 'Password must contain at least 8 characters' })
-    .parse(args.password);
+  const password = validatePassword(args.password as string);
 
   // Find the reset token
   const resetTokenDoc = await resetPasswordTokensCollection.findOne({ token });

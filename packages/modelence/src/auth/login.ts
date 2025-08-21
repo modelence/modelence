@@ -7,6 +7,7 @@ import { clearSessionUser, setSessionUser } from './session';
 import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
+import { validateEmail } from './validators';
 
 export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   if (!session) {
@@ -22,7 +23,8 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
     });
   }
 
-  const email = z.string().email().parse(args.email);
+  const email = validateEmail(args.email as string);
+  // password is accepted just as a string, so users can still sign in if the password validation rules are changes
   const password = z.string().parse(args.password);
 
   // TODO: add rate limiting by email (and perhaps IP address overall)

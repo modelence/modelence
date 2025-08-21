@@ -6,12 +6,11 @@ import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
+import { validateEmail, validatePassword } from './validators';
 
 export async function handleSignupWithPassword(args: Args, { user, connectionInfo }: Context) {
-  const email = z.string().email().parse(args.email);
-  const password = z.string()
-    .min(8, { message: 'Password must contain at least 8 characters' })
-    .parse(args.password);
+  const email = validateEmail(args.email as string);
+  const password = validatePassword(args.password as string);
 
   const ip = connectionInfo?.ip;
   if (ip) {
