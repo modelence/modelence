@@ -1,17 +1,5 @@
-import React from 'react';
 import { logout, useSession } from 'modelence/client';
-
-type MenuItemRenderer = (props: { 
-  className: string; 
-  children: React.ReactNode; 
-  to: string;
-}) => React.ReactElement;
-
-type LinkRenderer = (props: { 
-  href: string; 
-  className: string; 
-  children: React.ReactNode; 
-}) => React.ReactElement;
+import { Link, LinkRenderer } from './ui/Link';
 
 type LogoutHandler = () => void | Promise<void>;
 
@@ -21,7 +9,7 @@ interface MenuItem {
 }
 
 export interface UserMenuProps {
-  renderMenuItem?: MenuItemRenderer;
+  renderMenuItem?: LinkRenderer;
   renderLink?: LinkRenderer;
   onLogout?: LogoutHandler;
   menuItems?: MenuItem[];
@@ -60,15 +48,6 @@ export function UserMenu({
     }
   };
 
-  const defaultMenuItemRenderer = ({ children, to, className }: { children: React.ReactNode, to: string, className: string }) => {
-    if (renderLink) {
-      return renderLink({ href: to, className, children });
-    }
-    return <a href={to} className={className}>{children}</a>;
-  };
-
-  const MenuItemComponent = renderMenuItem || defaultMenuItemRenderer;
-
   return (
     <div className={`relative group ${className}`}>
       <div className={`w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center cursor-pointer ${avatarClassName}`}>
@@ -85,12 +64,13 @@ export function UserMenu({
           <ul className="py-2 text-sm text-gray-700 dark:text-gray-200">
             {menuItems.map((item, index) => (
               <li key={index}>
-                <MenuItemComponent 
-                  to={item.href} 
+                <Link 
+                  href={item.href}
+                  linkRenderer={renderMenuItem || renderLink}
                   className={`block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${menuItemClassName}`}
                 >
                   {item.label}
-                </MenuItemComponent>
+                </Link>
               </li>
             ))}
           </ul>

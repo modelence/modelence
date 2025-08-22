@@ -12,6 +12,15 @@ export type EmailConfig = {
     }) => string;
     redirectUrl?: string;
   };
+  passwordReset?: {
+    subject?: string;
+    template?: (props: {
+      name: string;
+      email: string;
+      resetUrl: string;
+    }) => string;
+    redirectUrl?: string;
+  };
   // @deprecated use verification.redirectUrl instead
   emailVerifiedRedirectUrl?: string;
 };

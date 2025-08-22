@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/auth-ui",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Authentication UI components for Modelence",
   "exports": {
     ".": {
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
-    "modelence": "^0.5.0",
+    "modelence": "^0.5.13-dev.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   }

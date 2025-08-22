@@ -29,10 +29,10 @@ function initializeAmazonSESClient() {
   if (smtpClient) {
     return smtpClient;
   }
-  const host = String(getConfig('_system.email.smtp.host'));
+  const host = getConfig('_system.email.smtp.host') as string | undefined;
   const port = Number(getConfig('_system.email.smtp.port'));
-  const user = String(getConfig('_system.email.smtp.user'));
-  const pass = String(getConfig('_system.email.smtp.pass'));
+  const user = getConfig('_system.email.smtp.user') as string | undefined;
+  const pass = getConfig('_system.email.smtp.pass') as string | undefined;
 
   if (!host || !port) {
     throw new Error('SMTP host and port must be configured. Please set MODELENCE_EMAIL_SMTP_HOST, MODELENCE_EMAIL_SMTP_PORT, MODELENCE_EMAIL_SMTP_USER, MODELENCE_EMAIL_SMTP_PASS in your environment variables or configure them from cloud.modelence.com');
