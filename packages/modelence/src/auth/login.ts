@@ -24,7 +24,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
   }
 
   const email = validateEmail(args.email as string);
-  // password is accepted just as a string, so users can still sign in if the password validation rules are changes
+  // password is accepted just as a string, so users can still sign in if the password validation rules are changed
   const password = z.string().parse(args.password);
 
   // TODO: add rate limiting by email (and perhaps IP address overall)
