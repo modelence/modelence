@@ -3,6 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig((options) => ({
   entry: ['src/index.ts', 'src/client.ts', 'src/server.ts', 'src/telemetry.ts', 'src/mongo.ts', 'src/bin/modelence.ts'],
   format: ['esm'],
+  bundle: false,
   dts: {
     resolve: true,
     entry: {
