@@ -1,5 +1,6 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import { getConfig } from '../config/server';
+import { time } from '../time';
 
 let client: MongoClient | null = null;
 let reconnecting = false;
@@ -17,7 +18,7 @@ export async function connect(): Promise<MongoClient> {
     maxPoolSize: 20,
     retryWrites: true,
     serverApi: ServerApiVersion.v1,
-    serverSelectionTimeoutMS: 5000,
+    serverSelectionTimeoutMS: time.seconds(5),
   });
 
   try {
@@ -59,7 +60,19 @@ export async function closeConnection() {
   reconnecting = false;
 }
 
-async function attemptReconnect() {
+async function closeExistingClientConnection() {
+  if (client) {
+    try {
+      await client.close();
+    } catch (closeErr) {
+      console.warn('Error closing existing client:', closeErr);
+    }
+    client = null;
+  }
+}
+
+
+async function reconnect() {
   if (reconnecting) return;
   reconnecting = true;
 
@@ -69,24 +82,17 @@ async function attemptReconnect() {
   while (retries < maxRetries) {
     try {
       retries++;
-      console.log(`Attempting MongoDB reconnect (#${retries}/${maxRetries})...`);
+      console.log(`Reconnecting to MongoDB (#${retries}/${maxRetries})...`);
       
       // Close existing client if it exists
-      if (client) {
-        try {
-          await client.close();
-        } catch (closeErr) {
-          console.warn('Error closing existing client:', closeErr);
-        }
-        client = null;
-      }
+      await closeExistingClientConnection();
       
       await connect();
       console.log("Reconnected to MongoDB");
       reconnecting = false;
       return;
     } catch (err) {
-      const delay = Math.min(30000, 1000 * Math.pow(2, retries)); //Max delay of 30s
+      const delay = Math.min(time.seconds(30), time.seconds(1) * Math.pow(2, retries)); //Max delay of 30s
       console.error(
         `Reconnect attempt #${retries}/${maxRetries} failed: ${err}. Retrying in ${delay / 1000}s...`
       );
@@ -114,8 +120,7 @@ function startHealthCheck() {
       await client.db("admin").command({ ping: 1 });
     } catch (err) {
       console.error("MongoDB ping failed, attempting to reconnect...", err);
-      client = null;
-      attemptReconnect();
+      reconnect();
     }
-  }, 15000); // check every 15s
+  }, time.seconds(15)); // check every 15s
 }
