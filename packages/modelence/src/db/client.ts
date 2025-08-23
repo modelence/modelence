@@ -52,10 +52,7 @@ export async function closeConnection() {
     healthCheckInterval = null;
   }
   
-  if (client) {
-    await client.close();
-    client = null;
-  }
+  await closeExistingClientConnection();
   
   reconnecting = false;
 }
