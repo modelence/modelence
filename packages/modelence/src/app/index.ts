@@ -13,7 +13,7 @@ import { startConfigSync } from '../config/sync';
 import { AppConfig, ConfigSchema, ConfigType } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
-import { connect, getClient, getMongodbUri } from '../db/client';
+import { connect,dbEvents, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import { MigrationScript, default as migrationModule, runMigrations } from '../migration';
 import rateLimitModule from '../rate-limit';
@@ -89,6 +89,7 @@ export async function startApp(
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
+    setupStoreReinitEvent(stores);
     await connect();
     initStores(stores);
   }
@@ -280,4 +281,11 @@ async function getAppDetails() {
       name: 'unknown'
     };
   }
+}
+
+
+function setupStoreReinitEvent(stores: Store<any, any>[]) {
+  dbEvents.on("reconnected", () => {
+    initStores(stores);
+  });
 }

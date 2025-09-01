@@ -101,7 +101,7 @@ export class Store<
 
   /** @internal */
   init(client: MongoClient) {
-    if (this.collection) {
+    if (this.collection && client === this.client) {
       throw new Error(`Collection ${this.name} is already initialized`);
     }
 

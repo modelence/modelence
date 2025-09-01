@@ -1,40 +1,51 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import { getConfig } from '../config/server';
 import { time } from '../time';
+import { EventEmitter } from "events";
 
 let client: MongoClient | null = null;
 let reconnecting = false;
-let healthCheckInterval: number | null = null;
+let healthCheckInterval: NodeJS.Timeout | null = null;
+let connectingPromise: Promise<MongoClient> | null = null;
+export const dbEvents = new EventEmitter();
 
 export async function connect(): Promise<MongoClient> {
   if (client) return client;
+
+  if (connectingPromise) return connectingPromise;
 
   const mongodbUri = getMongodbUri();
   if (!mongodbUri) {
     throw new Error('MongoDB URI is not set');
   }
 
-  client = new MongoClient(mongodbUri, {
-    maxPoolSize: 20,
-    retryWrites: true,
-    serverApi: ServerApiVersion.v1,
-    serverSelectionTimeoutMS: time.seconds(5),
-  });
+  connectingPromise = (async () => {
+    const newClient = new MongoClient(mongodbUri, {
+      maxPoolSize: 20,
+      retryWrites: true,
+      serverApi: ServerApiVersion.v1,
+      serverSelectionTimeoutMS: time.seconds(5),
+    });
 
-  try {
-    // Connect the client to the server
-    await client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    try {
+      // Connect the client to the server
+      await newClient.connect();
+      // Send a ping to confirm a successful connection
+      await newClient.db("admin").command({ ping: 1 });
+      console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-    startHealthCheck(); // begin self-healing loop
-    return client;
-  } catch (err) {
-    console.error(err);
-    client = null;
-    throw err;
-  }
+      client = newClient;
+      startHealthCheck();
+      return client;
+    } catch (err) {
+      client = null;
+      throw err;
+    } finally {
+      connectingPromise = null;
+    }
+  })();
+
+  return connectingPromise;
 }
 
 export function getMongodbUri() {
@@ -43,6 +54,9 @@ export function getMongodbUri() {
 }
 
 export function getClient() {
+  if (!client) {
+    throw new Error("MongoClient not initialized. Call connect() first.");
+  }
   return client;
 }
 
@@ -85,8 +99,9 @@ async function reconnect() {
       await closeExistingClientConnection();
       
       await connect();
-      console.log("Reconnected to MongoDB");
       reconnecting = false;
+      console.log("Reconnected to MongoDB");
+      dbEvents.emit("reconnected");
       return;
     } catch (err) {
       const delay = Math.min(time.seconds(30), time.seconds(1) * Math.pow(2, retries)); //Max delay of 30s
@@ -112,12 +127,12 @@ function startHealthCheck() {
   
   healthCheckInterval = setInterval(async () => {
     if (!client) return;
-    
+
     try {
       await client.db("admin").command({ ping: 1 });
     } catch (err) {
       console.error("MongoDB ping failed, attempting to reconnect...", err);
-      reconnect();
+      await reconnect();
     }
   }, time.seconds(15)); // check every 15s
 }
