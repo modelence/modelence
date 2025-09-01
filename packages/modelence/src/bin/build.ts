@@ -26,7 +26,7 @@ async function buildVite() {
 
   const modelenceConfig = {
     build: {
-      outDir: path.resolve(process.cwd(), '.modelence/build/client'),
+      outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
       emptyOutDir: true
     }
   };
