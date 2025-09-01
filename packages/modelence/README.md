@@ -26,7 +26,7 @@ See what you can build in just a few hours with Modelence's batteries-included a
     <tr>
       <td align="center">
         <a href="https://finchat.modelence.app/" target="_blank">
-          <img src="/assets/finchat-preview.png" alt="FinChat" style="width: 300px; height: 200px; object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+          <img src="/assets/finchat-preview.png" alt="FinChat" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
         </a>
         <br />
         <strong>FinChat</strong>
@@ -35,7 +35,7 @@ See what you can build in just a few hours with Modelence's batteries-included a
       </td>
       <td align="center">
         <a href="https://smartrepos.modelence.app/" target="_blank">
-          <img src="/assets/smartrepos-preview.png" alt="SmartRepos" style="width: 300px; height: 200px; object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+          <img src="/assets/smartrepos-preview.png" alt="SmartRepos" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
         </a>
         <br />
         <strong>SmartRepos</strong>
@@ -44,7 +44,7 @@ See what you can build in just a few hours with Modelence's batteries-included a
       </td>
       <td align="center">
         <a href="https://typesonic.modelence.app/" target="_blank">
-          <img src="/assets/typesonic-preview.png" alt="TypeSonic" style="width: 300px; height: 200px; object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+          <img src="/assets/typesonic-preview.png" alt="TypeSonic" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
         </a>
         <br />
         <strong>TypeSonic</strong>
