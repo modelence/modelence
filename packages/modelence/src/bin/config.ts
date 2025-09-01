@@ -31,7 +31,9 @@ export function getStudioUrl(path: string) {
 
 export function getServerPath() {
   const { serverDir, serverEntry } = getConfig();
-  return join(serverDir, serverEntry);
+  const path = join(serverDir, serverEntry);
+  // Normalize path to use forward slashes for cross-platform compatibility
+  return path.replace(/\\/g, '/');
 }
 
 export function getPostBuildCommand() {
@@ -40,16 +42,25 @@ export function getPostBuildCommand() {
 
 export function getBuildPath(subPath?: string) {
   const buildDir = getModelencePath('build');
-  return subPath ? join(buildDir, subPath) : buildDir;
+  if (subPath) {
+    const path = join(buildDir, subPath);
+    return path.replace(/\\/g, '/');
+  }
+  return buildDir.replace(/\\/g, '/');
 }
 
 export function getProjectPath(subPath: string) {
-  return join(process.cwd(), subPath);
+  const path = join(process.cwd(), subPath);
+  return path.replace(/\\/g, '/');
 }
 
 export function getModelencePath(subPath?: string) {
   const modelenceDir = getProjectPath('.modelence');
-  return subPath ? join(modelenceDir, subPath) : modelenceDir;
+  if (subPath) {
+    const path = join(modelenceDir, subPath);
+    return path.replace(/\\/g, '/');
+  }
+  return modelenceDir.replace(/\\/g, '/');
 }
 
 export async function loadEnv() {

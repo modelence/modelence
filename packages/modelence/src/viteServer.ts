@@ -28,7 +28,7 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
     
-    const staticFolders = [express.static('./.modelence/build/client')];
+    const staticFolders = [express.static('./.modelence/build/client'.replace(/\\/g, '/'))];
     if (this.config?.publicDir) {
       staticFolders.push(express.static(this.config.publicDir));
     }
@@ -44,7 +44,7 @@ class ViteServer implements AppServer {
         res.status(500).send('Internal Server Error');
       }
     } else {
-      res.sendFile('index.html', { root: './.modelence/build/client' });
+      res.sendFile('index.html', { root: './.modelence/build/client'.replace(/\\/g, '/') });
     }
   }
 
@@ -96,7 +96,7 @@ async function getConfig() {
     plugins,
     root: appDir,
     build: {
-      outDir: '.modelence/build/client',
+      outDir: '.modelence/build/client'.replace(/\\/g, '/'),
       emptyOutDir: true
     },
     server: {
@@ -114,7 +114,7 @@ async function getConfig() {
     },
     resolve: {
       alias: {
-        '@': path.resolve(appDir, 'src')
+        '@': path.resolve(appDir, 'src').replace(/\\/g, '/')
       }
     },
     publicDir: userConfig.publicDir,
