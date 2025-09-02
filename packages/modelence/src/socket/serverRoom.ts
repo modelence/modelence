@@ -1,0 +1,31 @@
+import { Session, User } from "@/auth/types";
+import { Server as SocketServer } from 'socket.io';
+
+type CanAccessRoom = (props: {
+  user: User | null,
+  session: Session | null,
+  roles: string[],
+}) => Promise<boolean>;
+
+export class ServerRoom<T = any> {
+  public readonly roomCategory: string;
+  public readonly canAccessRoom: CanAccessRoom;
+  private socketServer: SocketServer | null = null;
+
+  constructor(
+    roomCategory: string,
+    canAccessRoom: CanAccessRoom,
+  ) {
+    this.roomCategory = roomCategory;
+    this.canAccessRoom = canAccessRoom;
+  }
+
+  init(socketServer: SocketServer) {
+    this.socketServer = socketServer;
+  }
+
+  emit(roomId: string, data: T) {
+    this.socketServer?.to(`${this.roomCategory}:${roomId}`).emit(this.roomCategory, data);
+  }
+}
+

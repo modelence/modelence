@@ -32,11 +32,12 @@ export type AppOptions = {
   email?: EmailConfig,
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
-  migrations?: Array<MigrationScript>
+  migrations?: Array<MigrationScript>,
+  websockets?: boolean
 }
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {} }: AppOptions
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {}, websockets = false }: AppOptions
 ) {
   dotenv.config();
   
@@ -65,6 +66,7 @@ export async function startApp(
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
   const stores = getStores(combinedModules);
+  const rooms = getRooms(combinedModules);
 
   if (isCronEnabled) {
     defineCronJobs(combinedModules);
@@ -112,7 +114,7 @@ export async function startApp(
     startCronJobs().catch(console.error);
   }
 
-  await startServer(server, { combinedModules });
+  await startServer(server, { combinedModules, websockets, rooms });
 }
 
 function initCustomMethods(modules: Module[]) {
@@ -139,6 +141,10 @@ function initSystemMethods(modules: Module[]) {
 
 function getStores(modules: Module[]) {
   return modules.flatMap(module => module.stores);
+}
+
+function getRooms(modules: Module[]) {
+  return modules.flatMap(module => module.rooms);
 }
 
 function getRateLimits(modules: Module[]) {
