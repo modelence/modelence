@@ -17,6 +17,44 @@
   [![Discord](https://img.shields.io/discord/1386659657535455253?label=Discord&logo=discord&logoColor=white&labelColor=5865F2&cacheSeconds=30)](https://discord.gg/ghxu5PDnkZ)
 </div>
 
+## 🚀 Showcase
+
+See what you can build in just a few hours with Modelence's batteries-included approach:
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <a href="https://finchat.modelence.app/" target="_blank">
+          <img src="/assets/finchat-preview.png" alt="FinChat" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+        </a>
+        <br />
+        <strong>FinChat</strong>
+        <br />
+        <small>AI-powered financial chat assistant</small>
+      </td>
+      <td align="center">
+        <a href="https://smartrepos.modelence.app/" target="_blank">
+          <img src="/assets/smartrepos-preview.png" alt="SmartRepos" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+        </a>
+        <br />
+        <strong>SmartRepos</strong>
+        <br />
+        <small>Intelligent repository management</small>
+      </td>
+      <td align="center">
+        <a href="https://typesonic.modelence.app/" target="_blank">
+          <img src="/assets/typesonic-preview.png" alt="TypeSonic" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
+        </a>
+        <br />
+        <strong>TypeSonic</strong>
+        <br />
+        <small>Competitive typing racing app</small>
+      </td>
+    </tr>
+  </table>
+</div>
+
 ## Getting Started
 Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
