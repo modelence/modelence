@@ -49,7 +49,7 @@ See what you can build in just a few hours with Modelence's batteries-included a
         <br />
         <strong>TypeSonic</strong>
         <br />
-        <small>Competitive typing racing app</small>
+        <small>Compete on typing speed</small>
       </td>
     </tr>
   </table>
