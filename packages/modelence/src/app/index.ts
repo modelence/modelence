@@ -33,11 +33,13 @@ export type AppOptions = {
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
   migrations?: Array<MigrationScript>,
-  websockets?: boolean
+  websockets?: {
+    enabled?: boolean;
+  }
 }
 
 export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {}, websockets = false }: AppOptions
+  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {}, websockets = {} }: AppOptions
 ) {
   dotenv.config();
   

@@ -22,9 +22,8 @@ export function initSocketServer(
 
     try {
       socket.data = await authenticate(token);
+    } finally {
       next();
-    } catch (err) {
-      next(new Error("Not authorized"));
     }
   });
 

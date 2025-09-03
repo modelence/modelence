@@ -21,3 +21,5 @@ export {
   resetPassword,
   type UserInfo,
 } from './auth/client';
+export { ClientRoom } from './socket/clientRoom';
+export { initSocketClient } from './socket/client';

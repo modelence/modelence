@@ -37,7 +37,9 @@ export async function startServer(server: AppServer, {
   rooms,
 }: {
   combinedModules: Module[],
-  websockets?: boolean,
+  websockets?: {
+    enabled?: boolean;
+  },
   rooms: ServerRoom[]
 }) {
   const app = express();
@@ -111,7 +113,7 @@ export async function startServer(server: AppServer, {
 
   const httpServer = http.createServer(app);
   
-  if (websockets) {
+  if (websockets?.enabled) {
     initSocketServer(httpServer, rooms);
   }
 

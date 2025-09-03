@@ -1,5 +1,6 @@
 import { Session, User } from "@/auth/types";
 import { Server as SocketServer } from 'socket.io';
+import { getSocketServer } from "./server";
 
 type CanAccessRoom = (props: {
   user: User | null,
@@ -9,23 +10,17 @@ type CanAccessRoom = (props: {
 
 export class ServerRoom<T = any> {
   public readonly roomCategory: string;
-  public readonly canAccessRoom: CanAccessRoom;
-  private socketServer: SocketServer | null = null;
+  public readonly canAccessRoom: CanAccessRoom | null;
 
   constructor(
     roomCategory: string,
-    canAccessRoom: CanAccessRoom,
+    canAccessRoom?: CanAccessRoom,
   ) {
     this.roomCategory = roomCategory;
-    this.canAccessRoom = canAccessRoom;
+    this.canAccessRoom = canAccessRoom || null;
   }
 
-  init(socketServer: SocketServer) {
-    this.socketServer = socketServer;
-  }
-
-  emit(roomId: string, data: T) {
-    this.socketServer?.to(`${this.roomCategory}:${roomId}`).emit(this.roomCategory, data);
+  broadcast(roomId: string, data: T) {
+    getSocketServer()?.to(`${this.roomCategory}:${roomId}`).emit(this.roomCategory, data);
   }
 }
-
