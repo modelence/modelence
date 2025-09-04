@@ -120,6 +120,10 @@
       {
         "label": "Blog",
         "href": "https://modelence.medium.com"
+      },
+      {
+        "label": "Sign In",
+        "href": "https://cloud.modelence.com"
       }
     ],
     "primary": {
