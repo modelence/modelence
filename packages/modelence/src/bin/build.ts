@@ -51,7 +51,7 @@ async function buildServer() {
       watch: false,
       bundle: true,
       treeshake: true,
-      skipNodeModulesBundle: true,
+      platform: 'node',
       outExtension: ({ format }) => ({
         js: '.mjs'
       }),
