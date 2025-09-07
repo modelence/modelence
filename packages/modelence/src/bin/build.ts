@@ -49,7 +49,7 @@ async function buildServer() {
       outDir: '.modelence/build',
       clean: true,
       watch: false,
-      bundle: true,
+      bundle: false,
       treeshake: true,
       skipNodeModulesBundle: false,
       outExtension: ({ format }) => ({

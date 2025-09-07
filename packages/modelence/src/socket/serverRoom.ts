@@ -1,5 +1,4 @@
 import { Session, User } from "@/auth/types";
-import { Server as SocketServer } from 'socket.io';
 import { getSocketServer } from "./server";
 
 type CanAccessRoom = (props: {
