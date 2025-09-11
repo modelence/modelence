@@ -117,7 +117,7 @@ export async function startServer(server: AppServer, {
     initSocketServer(httpServer, rooms);
   }
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
     console.log(`\nApplication started on http://localhost:${port}\n`);
