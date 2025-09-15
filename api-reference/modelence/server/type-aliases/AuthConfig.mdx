@@ -1,0 +1,49 @@
+---
+sidebar_position: 1
+title: AuthConfig
+---
+
+[API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / AuthConfig
+
+> **AuthConfig** = `object`
+
+Defined in: [src/app/authConfig.ts:45](https://github.com/modelence/modelence/blob/d88bece3974cd51974bddcc5c31e2d2934236ebd/packages/modelence/src/app/authConfig.ts#L45)
+
+Authentication configuration for the application
+
+## Example
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    login: {
+      onSuccess: (user) => {
+        console.log('User logged in:', user.name);
+        // Redirect to dashboard
+      },
+      onError: (error) => {
+        console.error('Login failed:', error.message);
+        // Show error toast
+      }
+    },
+    signup: {
+      onSuccess: (user) => {
+        console.log('User signed up:', user.email);
+        // Send welcome email
+      },
+      onError: (error) => {
+        console.error('Signup failed:', error.message);
+      }
+    }
+  }
+});
+```
+
+## Properties
+
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="login"></a> `login?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | Authentication options for login operations | [src/app/authConfig.ts:47](https://github.com/modelence/modelence/blob/d88bece3974cd51974bddcc5c31e2d2934236ebd/packages/modelence/src/app/authConfig.ts#L47) |
+| <a id="signup"></a> `signup?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | Authentication options for signup operations | [src/app/authConfig.ts:49](https://github.com/modelence/modelence/blob/d88bece3974cd51974bddcc5c31e2d2934236ebd/packages/modelence/src/app/authConfig.ts#L49) |
