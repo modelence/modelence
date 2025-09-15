@@ -25,11 +25,13 @@ import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
 import { EmailConfig, setEmailConfig } from './emailConfig';
+import { AuthConfig, setAuthConfig } from './authConfig';
 
 export type AppOptions = {
   modules?: Module[],
   server?: AppServer,
   email?: EmailConfig,
+  auth?: AuthConfig,
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
   migrations?: Array<MigrationScript>,
@@ -38,9 +40,16 @@ export type AppOptions = {
   }
 }
 
-export async function startApp(
-  { modules = [], roles = {}, defaultRoles = {}, server = viteServer, migrations = [], email = {}, websockets = {} }: AppOptions
-) {
+export async function startApp({
+  modules = [],
+  roles = {},
+  defaultRoles = {},
+  server = viteServer,
+  migrations = [],
+  email = {},
+  auth = {},
+  websockets = {},
+}: AppOptions) {
   dotenv.config();
   
   dotenv.config({ path: '.modelence.env' });
@@ -90,6 +99,7 @@ export async function startApp(
   }
 
   setEmailConfig(email);
+  setAuthConfig(auth);
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
