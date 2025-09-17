@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import { AppServer, EmailProvider } from '@modelence/types';
+import { AppServer } from '@modelence/types';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
 import { RoleDefinition } from '../auth/types';
@@ -26,6 +26,7 @@ import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
+import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
   modules?: Module[],
@@ -34,7 +35,8 @@ export type AppOptions = {
   auth?: AuthConfig,
   roles?: Record<string, RoleDefinition>,
   defaultRoles?: Record<string, string>,
-  migrations?: Array<MigrationScript>
+  migrations?: Array<MigrationScript>,
+  websocket?: WebsocketConfig;
 }
 
 export async function startApp({
@@ -45,6 +47,7 @@ export async function startApp({
   migrations = [],
   email = {},
   auth = {},
+  websocket = {},
 }: AppOptions) {
   dotenv.config();
   
@@ -73,6 +76,7 @@ export async function startApp({
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
   const stores = getStores(combinedModules);
+  const rooms = getRooms(combinedModules);
 
   if (isCronEnabled) {
     defineCronJobs(combinedModules);
@@ -95,6 +99,7 @@ export async function startApp({
 
   setEmailConfig(email);
   setAuthConfig(auth);
+  setWebsocketConfig(websocket);
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
@@ -121,7 +126,7 @@ export async function startApp({
     startCronJobs().catch(console.error);
   }
 
-  await startServer(server, { combinedModules });
+  await startServer(server, { combinedModules, websocket, rooms });
 }
 
 function initCustomMethods(modules: Module[]) {
@@ -148,6 +153,10 @@ function initSystemMethods(modules: Module[]) {
 
 function getStores(modules: Module[]) {
   return modules.flatMap(module => module.stores);
+}
+
+function getRooms(modules: Module[]) {
+  return modules.flatMap(module => module.rooms);
 }
 
 function getRateLimits(modules: Module[]) {

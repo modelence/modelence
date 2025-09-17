@@ -21,3 +21,6 @@ export {
   resetPassword,
   type UserInfo,
 } from './auth/client';
+export { getWebsocketClientProvider, setWebsocketClientProvider } from './websocket/client';
+export { ClientRoom } from './websocket/clientRoom';
+export { getLocalStorageSession } from './client/localStorage';

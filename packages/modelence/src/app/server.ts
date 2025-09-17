@@ -16,6 +16,8 @@ import { getMongodbUri } from '../db/client';
 import { ModelenceError } from '../error';
 import { Module } from './module';
 import { ConnectionInfo } from '@/methods/types';
+import { ServerRoom } from '@/websocket/serverRoom';
+import { WebsocketConfig } from './websocketConfig';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -29,7 +31,15 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
   }
 }
 
-export async function startServer(server: AppServer, { combinedModules }: { combinedModules: Module[] }) {
+export async function startServer(server: AppServer, {
+  combinedModules,
+  websocket,
+  rooms,
+}: {
+  combinedModules: Module[],
+  websocket?: WebsocketConfig,
+  rooms: ServerRoom[]
+}) {
   const app = express();
 
   app.use(express.json());
@@ -100,7 +110,16 @@ export async function startServer(server: AppServer, { combinedModules }: { comb
   });
 
   const httpServer = http.createServer(app);
-  const port = process.env.PORT || 3000;
+  
+  if (websocket?.provider) {
+    const websocketProvider = websocket?.provider;
+    websocketProvider.init({
+      httpServer,
+      rooms,
+    });
+  }
+
+  const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
     console.log(`\nApplication started on http://localhost:${port}\n`);

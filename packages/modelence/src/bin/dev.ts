@@ -10,6 +10,7 @@ export function dev() {
 
   execSync(`"${tsxPath}" watch "${serverPath}"`, {
     stdio: 'inherit',
+    cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: 'development' }
   });    
 }
