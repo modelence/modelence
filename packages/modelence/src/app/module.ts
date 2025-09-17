@@ -4,7 +4,7 @@ import { Store } from '../data/store';
 import { MethodDefinition } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 import { RateLimitRule } from '../rate-limit/types';
-import { ServerRoom } from '@/socket/serverRoom';
+import { ServerRoom } from '@/websocket/serverRoom';
 
 /** Array of Store instances that will be provisioned when the module is loaded */
 type Stores = Store<any, any>[];

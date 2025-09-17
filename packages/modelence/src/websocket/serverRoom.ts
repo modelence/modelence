@@ -1,5 +1,6 @@
 import { Session, User } from "@/auth/types";
-import { getSocketServer } from "./server";
+import { getWebSocketConfig } from "@/app/websocketConfig";
+import { logError } from "../telemetry";
 
 type CanAccessRoom = (props: {
   user: User | null,
@@ -20,6 +21,16 @@ export class ServerRoom<T = any> {
   }
 
   broadcast(roomId: string, data: T) {
-    getSocketServer()?.to(`${this.roomCategory}:${roomId}`).emit(this.roomCategory, data);
+    const websocketProvider = getWebSocketConfig().provider;
+    if (!websocketProvider) {
+      logError("Websockets provider should be added to startApp", {});
+      return;
+    }
+
+    websocketProvider.broadcast({
+      roomCategory: this.roomCategory,
+      roomId,
+      data,
+    });
   }
 }

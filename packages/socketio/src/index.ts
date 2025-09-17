@@ -1,15 +1,18 @@
+import { Server } from "http";
+import { WebsocketServerProvider } from 'modelence';
+import { authenticate, ServerRoom } from 'modelence/server';
+import { logInfo } from "modelence/telemetry";
 import { Server as SocketServer, Socket } from 'socket.io';
-import { logInfo } from '../telemetry';
-import { authenticate } from '@/auth';
-import type { ServerRoom } from './serverRoom';
-import type { Server } from 'http';
 
 let socketServer: SocketServer | null = null;
 
-export function initSocketServer(
-  httpServer: Server,
-  rooms: ServerRoom[],
-) {
+export function init({
+  httpServer,
+  rooms,
+}: {
+  httpServer: Server;
+  rooms: ServerRoom[];
+}) {
   socketServer = new SocketServer(httpServer, {
     cors: {
       origin: "*",
@@ -65,6 +68,19 @@ export function initSocketServer(
   return socketServer;
 }
 
-export function getSocketServer() {
-  return socketServer;
+function broadcast<T>({
+  roomCategory,
+  roomId,
+  data,
+}: {
+  roomCategory: string,
+  roomId: string,
+  data: T,
+}) {
+  socketServer?.to(`${roomCategory}:${roomId}`).emit(roomCategory, data);
 }
+
+export default {
+  init,
+  broadcast,
+} as WebsocketServerProvider;
