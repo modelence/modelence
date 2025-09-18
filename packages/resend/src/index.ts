@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 
-import type { EmailProvider } from '@modelence/types';
+import type { EmailProvider } from 'modelence/types';
 import { getConfig } from 'modelence/server';
 
 // types are duplicated for typedoc

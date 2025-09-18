@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import { AppServer, EmailProvider } from '@modelence/types';
+import { AppServer, EmailProvider } from 'modelence/types';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
 import { RoleDefinition } from '../auth/types';

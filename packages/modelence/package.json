@@ -10,7 +10,11 @@
     "./client": "./dist/client.js",
     "./server": "./dist/server.js",
     "./telemetry": "./dist/telemetry.js",
-    "./mongodb": "./dist/mongo.js"
+    "./mongodb": "./dist/mongo.js",
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
   },
   "files": [
     "dist",
@@ -52,7 +56,6 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@modelence/types": "^1.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",

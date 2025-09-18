@@ -19,7 +19,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@modelence/types": "^1.0.3",
     "@types/express": "^5.0.3",
     "next": "^15.4.6",
     "tsup": "^8.3.6",
