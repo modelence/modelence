@@ -30,7 +30,12 @@ export async function connect() {
 }
 
 export function getMongodbUri() {
-  const value = getConfig('_system.mongodbUri');
+  const mongodbMode = getConfig('_system.mongodbMode');
+  const value = (
+    mongodbMode === 'custom' ?
+    getConfig('_system.customMongodbUri') :
+    getConfig('_system.mongodbUri')
+  );
   return value ? String(value) : undefined;
 }
 

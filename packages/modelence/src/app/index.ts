@@ -193,7 +193,9 @@ function initStores(stores: Store<any, any>[]) {
 }
 
 const localConfigMap = {
-  MONGODB_URI: '_system.mongodbUri',
+  MODELENCE_MONGODB_MODE: '_system.mongodbMode',
+  MODELENCE_MONGODB_URI: '_system.mongodbUri',
+  MODELENCE_CUSTOM_MONGODB_URI: '_system.customMongodbUri',
   MODELENCE_AUTH_GOOGLE_ENABLED: '_system.user.auth.google.enabled',
   MODELENCE_AUTH_GOOGLE_CLIENT_ID: '_system.user.auth.google.clientId',
   MODELENCE_AUTH_GOOGLE_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
@@ -209,6 +211,7 @@ const localConfigMap = {
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
+  MONGODB_URI: '_system.mongodbUri',
 };
 
 function formatLocalConfigValue(value: string, type: ConfigType): string | number | boolean {
