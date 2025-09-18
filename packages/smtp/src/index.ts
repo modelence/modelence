@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-import type { EmailProvider } from 'modelence/types';
+import { EmailProvider } from 'modelence/types';
 import { getConfig } from 'modelence/server';
 
 // types are duplicated for typedoc
