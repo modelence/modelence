@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.844.0",
-    "@modelence/types": "^1.0.3",
     "nodemailer": "^7.0.5"
   }
 }

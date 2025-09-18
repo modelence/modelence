@@ -1,5 +1,5 @@
 import next from 'next';
-import { AppServer } from '@modelence/types';
+import { AppServer } from 'modelence/types';
 import { Request, Response } from 'express';
 
 /**
