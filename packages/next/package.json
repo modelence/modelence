@@ -25,6 +25,7 @@
     "typescript": "^5.7.2"
   },
   "peerDependencies": {
+    "modelence": "*",
     "next": "^15.0.0"
   }
 }
