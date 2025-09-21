@@ -3,7 +3,7 @@ import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
 import express from 'express';
-import { AppServer, ExpressMiddleware } from './types';
+import type { AppServer, ExpressMiddleware } from './types';
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;

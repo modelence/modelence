@@ -18,4 +18,4 @@ export interface AppServer {
   middlewares?: () => ExpressMiddleware[];
 }
 
-export * from './email'
+export type * from './email'
