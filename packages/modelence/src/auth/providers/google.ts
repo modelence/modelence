@@ -99,7 +99,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     }
   } catch(error) {
     if (error instanceof Error) {
-      getAuthConfig().login?.onError?.(error);
+      getAuthConfig().signup?.onError?.(error);
     }
     throw error;
   }
