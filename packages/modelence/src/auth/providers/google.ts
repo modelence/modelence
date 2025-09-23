@@ -5,6 +5,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { usersCollection } from "../db";
 import { createSession } from "../session";
+import { getAuthConfig } from "@/app/authConfig";
 
 interface GoogleUser {
   id: string;
@@ -33,50 +34,75 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     { 'authMethods.google.id': googleUser.id },
   );
 
-  if (existingUser) {
-    await authenticateUser(res, existingUser._id);
-    
-    return;
+  try {
+    if (existingUser) {
+      await authenticateUser(res, existingUser._id);
+
+      getAuthConfig().login?.onSuccess?.(existingUser);
+      
+      return;
+    }
+  } catch(error) {
+    if (error instanceof Error) {
+      getAuthConfig().login?.onError?.(error);
+    }
+    throw error;
   }
 
-  const googleEmail = googleUser.emails[0] && googleUser.emails[0]?.value;
+  try {
+    const googleEmail = googleUser.emails[0] && googleUser.emails[0]?.value;
 
-  if (!googleEmail) {
-    res.status(400).json({
-      error: "Email address is required for Google authentication.",
-    });
-  }
+    if (!googleEmail) {
+      res.status(400).json({
+        error: "Email address is required for Google authentication.",
+      });
+    }
 
-  const existingUserByEmail = await usersCollection.findOne(
-    { 'emails.address': googleEmail, },
-    { collation: { locale: 'en', strength: 2 } },
-  );
+    const existingUserByEmail = await usersCollection.findOne(
+      { 'emails.address': googleEmail, },
+      { collation: { locale: 'en', strength: 2 } },
+    );
 
-  // TODO: check if the email is verified
-  if (existingUserByEmail) {
-    // TODO: handle case with an HTML page
-    res.status(400).json({
-      error: "User with this email already exists. Please log in instead.",
-    });
-    return;
-  }
+    // TODO: check if the email is verified
+    if (existingUserByEmail) {
+      // TODO: handle case with an HTML page
+      res.status(400).json({
+        error: "User with this email already exists. Please log in instead.",
+      });
+      return;
+    }
 
-  // If the user does not exist, create a new user
-  const newUser = await usersCollection.insertOne({
-    handle: googleEmail,
-    emails: [{
-      address: googleEmail,
-      verified: true, // Google email is considered verified
-    }],
-    createdAt: new Date(),
-    authMethods: {
-      google: {
-        id: googleUser.id,
+    // If the user does not exist, create a new user
+    const newUser = await usersCollection.insertOne({
+      handle: googleEmail,
+      emails: [{
+        address: googleEmail,
+        verified: true, // Google email is considered verified
+      }],
+      createdAt: new Date(),
+      authMethods: {
+        google: {
+          id: googleUser.id,
+        },
       },
-    },
-  });
+    });
 
-  await authenticateUser(res, newUser.insertedId);
+    await authenticateUser(res, newUser.insertedId);
+
+    const userDocument = await usersCollection.findOne(
+      { _id: newUser.insertedId },
+      { readPreference: "primary" }
+    );
+
+    if (userDocument) {
+      getAuthConfig().signup?.onSuccess?.(userDocument);
+    }
+  } catch(error) {
+    if (error instanceof Error) {
+      getAuthConfig().login?.onError?.(error);
+    }
+    throw error;
+  }
 }
 
 function getRouter() {
