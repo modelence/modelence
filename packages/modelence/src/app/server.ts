@@ -9,7 +9,7 @@ import express, { Request, Response } from 'express';
 import http from 'http';
 import passport from 'passport';
 import z from 'zod';
-import { AppServer } from '../../../types';
+import type { AppServer } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';

@@ -3,8 +3,7 @@ import {
   SESClient,
  } from '@aws-sdk/client-ses';
 import nodemailer, { createTransport } from "nodemailer";
-
-import type { EmailProvider } from '@modelence/types';
+import type { EmailProvider } from 'modelence/types';
 import { getConfig } from 'modelence/server';
 
 // types are duplicated for typedoc
