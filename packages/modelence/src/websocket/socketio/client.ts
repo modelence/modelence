@@ -2,7 +2,6 @@ import io, { Socket } from 'socket.io-client';
 import { WebsocketClientProvider } from '../types';
 import { ClientRoom } from '../clientRoom';
 import { getLocalStorageSession } from '@/client/localStorage';
-import { setWebsocketClientProvider } from '../client';
 
 let socketClient: Socket;
 
@@ -14,8 +13,6 @@ function init(props: {
       token: getLocalStorageSession()?.authToken,
     },
   });
-
-  setWebsocketClientProvider(websocketProvider);
 
   props.rooms.forEach(room => room.init());
 }
