@@ -6,6 +6,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { usersCollection } from "../db";
 import { createSession } from "../session";
 import { getAuthConfig } from "@/app/authConfig";
+import { getCallContext } from "@/app/server";
 
 interface GoogleUser {
   id: string;
@@ -34,10 +35,20 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     { 'authMethods.google.id': googleUser.id },
   );
 
+  const {
+    session,
+    connectionInfo,
+  } = await getCallContext(req);
+
   try {
     if (existingUser) {
       await authenticateUser(res, existingUser._id);
 
+      getAuthConfig().afterLogin?.({
+        user: existingUser,
+        session,
+        connectionInfo,
+      });
       getAuthConfig().login?.onSuccess?.(existingUser);
       
       return;
@@ -45,6 +56,12 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   } catch(error) {
     if (error instanceof Error) {
       getAuthConfig().login?.onError?.(error);
+
+      getAuthConfig().loginError?.({
+        error,
+        session,
+        connectionInfo,
+      });
     }
     throw error;
   }
@@ -95,10 +112,22 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     );
 
     if (userDocument) {
+      getAuthConfig().afterSignup?.({
+        user: userDocument,
+        session,
+        connectionInfo,
+      });
+
       getAuthConfig().signup?.onSuccess?.(userDocument);
     }
   } catch(error) {
     if (error instanceof Error) {
+      getAuthConfig().signupError?.({
+        error,
+        session,
+        connectionInfo,
+      });
+
       getAuthConfig().signup?.onError?.(error);
     }
     throw error;

@@ -20,24 +20,20 @@ export type AuthOption = {
  *
  * startApp({
  *   auth: {
- *     login: {
- *       onSuccess: (user) => {
- *         console.log('User logged in:', user.name);
- *         // Redirect to dashboard
- *       },
- *       onError: (error) => {
- *         console.error('Login failed:', error.message);
- *         // Show error toast
- *       }
+ *     afterLogin: ({ user }) => {
+ *       console.log('User logged in:', user.name);
+ *       // Redirect to dashboard
  *     },
- *     signup: {
- *       onSuccess: (user) => {
- *         console.log('User signed up:', user.email);
- *         // Send welcome email
- *       },
- *       onError: (error) => {
- *         console.error('Signup failed:', error.message);
- *       }
+ *     loginError: ({ error }) => {
+ *       console.error('Login failed:', error.message);
+ *       // Show error toast
+ *     },
+ *     afterSignup: ({ user }) => {
+ *       console.log('User signed up:', user.email);
+ *       // Send welcome email
+ *     },
+ *     signupError: ({ error }) => {
+ *       console.error('Signup failed:', error.message);
  *     }
  *   }
  * });
