@@ -1,4 +1,5 @@
-import { User } from "@/auth/types";
+import { Session, User } from "@/auth/types";
+import { ConnectionInfo } from "@/methods/types";
 
 /**
  * Callback options for authentication operations
@@ -43,9 +44,30 @@ export type AuthOption = {
  * ```
  */
 export type AuthConfig = {
-  /** Authentication options for login operations */
+  afterLogin?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  loginError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  afterSignup?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  signupError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+
+  /** deprecated: use afterLogin and loginError */
   login?: AuthOption;
-  /** Authentication options for signup operations */
+  /** deprecated: user afterSignup and signupError */
   signup?: AuthOption;
 };
 
