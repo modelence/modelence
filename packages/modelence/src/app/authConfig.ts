@@ -1,4 +1,5 @@
-import { User } from "@/auth/types";
+import { Session, User } from "@/auth/types";
+import { ConnectionInfo } from "@/methods/types";
 
 /**
  * Callback options for authentication operations
@@ -19,33 +20,50 @@ export type AuthOption = {
  *
  * startApp({
  *   auth: {
- *     login: {
- *       onSuccess: (user) => {
- *         console.log('User logged in:', user.name);
- *         // Redirect to dashboard
- *       },
- *       onError: (error) => {
- *         console.error('Login failed:', error.message);
- *         // Show error toast
- *       }
+ *     afterLogin: ({ user }) => {
+ *       console.log('User logged in:', user.name);
+ *       // Redirect to dashboard
  *     },
- *     signup: {
- *       onSuccess: (user) => {
- *         console.log('User signed up:', user.email);
- *         // Send welcome email
- *       },
- *       onError: (error) => {
- *         console.error('Signup failed:', error.message);
- *       }
+ *     loginError: ({ error }) => {
+ *       console.error('Login failed:', error.message);
+ *       // Show error toast
+ *     },
+ *     afterSignup: ({ user }) => {
+ *       console.log('User signed up:', user.email);
+ *       // Send welcome email
+ *     },
+ *     signupError: ({ error }) => {
+ *       console.error('Signup failed:', error.message);
  *     }
  *   }
  * });
  * ```
  */
 export type AuthConfig = {
-  /** Authentication options for login operations */
+  afterLogin?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  loginError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  afterSignup?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  signupError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+
+  /** deprecated: use afterLogin and loginError */
   login?: AuthOption;
-  /** Authentication options for signup operations */
+  /** deprecated: user afterSignup and signupError */
   signup?: AuthOption;
 };
 

@@ -9,7 +9,7 @@ import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 
-export async function handleSignupWithPassword(args: Args, { user, connectionInfo }: Context) {
+export async function handleSignupWithPassword(args: Args, { user, session, connectionInfo }: Context) {
   try {
     const email = validateEmail(args.email as string);
     const password = validatePassword(args.password as string);
@@ -83,11 +83,23 @@ export async function handleSignupWithPassword(args: Args, { user, connectionInf
       baseUrl: connectionInfo?.baseUrl,
     });
 
+    getAuthConfig().afterSignup?.({
+      user: userDocument,
+      session,
+      connectionInfo,
+    });
+
     getAuthConfig().signup?.onSuccess?.(userDocument);
 
     return result.insertedId;
   } catch(error) {
     if (error instanceof Error) {
+      getAuthConfig().signupError?.({
+        error,
+        session,
+        connectionInfo,
+      });
+
       getAuthConfig().signup?.onError?.(error);
     }
     throw error;
