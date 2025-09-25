@@ -6,7 +6,7 @@ export interface WebsocketServerProvider {
   init(props: {
     httpServer: Server,
     rooms: ServerRoom[],
-  }): void;
+  }): Promise<void>;
   broadcast<T>(props: {
     roomCategory: string,
     roomId: string,

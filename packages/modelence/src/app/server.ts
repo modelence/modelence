@@ -18,6 +18,7 @@ import { Module } from './module';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerRoom } from '@/websocket/serverRoom';
 import { WebsocketConfig } from './websocketConfig';
+import { socketioServer } from '@/websocket/socketio/server';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -111,13 +112,11 @@ export async function startServer(server: AppServer, {
 
   const httpServer = http.createServer(app);
   
-  if (websocket?.provider) {
-    const websocketProvider = websocket?.provider;
-    websocketProvider.init({
-      httpServer,
-      rooms,
-    });
-  }
+  const websocketProvider = websocket?.provider || socketioServer;
+  websocketProvider.init({
+    httpServer,
+    rooms,
+  });
 
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {

@@ -4,21 +4,39 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import { ServerRoom } from "../serverRoom";
 import { authenticate } from "@/auth";
 import { WebsocketServerProvider } from "../types";
+import { createAdapter } from "@socket.io/mongo-adapter";
+import { getClient } from "@/db/client";
 
 let socketServer: SocketServer | null = null;
 
-export function init({
+const COLLECTION = '_system.socketio';
+
+export async function init({
   httpServer,
   rooms,
 }: {
   httpServer: Server;
   rooms: ServerRoom[];
 }) {
+
+  const mongodbClient = getClient();
+  if (!mongodbClient) {
+    throw new Error('');
+  }
+
+  const mongoCollection = mongodbClient.db().collection(COLLECTION);
+
+  await mongoCollection.createIndex(
+    { createdAt: 1 },
+    { expireAfterSeconds: 3600, background: true }
+  );
+
   socketServer = new SocketServer(httpServer, {
     cors: {
       origin: "*",
       methods: ["GET", "POST"]
-    }
+    },
+    adapter: createAdapter(mongoCollection),
   });
 
   socketServer.use(async (socket, next) => {
@@ -65,8 +83,6 @@ export function init({
   });
 
   logInfo(`Socket.IO server initialized`, { source: 'websocket' });
-
-  return socketServer;
 }
 
 function broadcast<T>({
