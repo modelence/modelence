@@ -1,11 +1,14 @@
-import { getLocalStorageSession, setWebsocketClientProvider } from 'modelence/client';
-import { WebsocketClientProvider } from 'modelence';
 import io, { Socket } from 'socket.io-client';
-import { ClientRoom } from 'modelence/client';
+import { WebsocketClientProvider } from '../types';
+import { ClientRoom } from '../clientRoom';
+import { getLocalStorageSession } from '@/client/localStorage';
+import { setWebsocketClientProvider } from '../client';
 
 let socketClient: Socket;
 
-function init(rooms: ClientRoom<unknown>[]) {
+function init(props: {
+  rooms: ClientRoom<unknown>[],
+}) {
   socketClient = io('/', {
     auth: {
       token: getLocalStorageSession()?.authToken,
@@ -14,7 +17,7 @@ function init(rooms: ClientRoom<unknown>[]) {
 
   setWebsocketClientProvider(websocketProvider);
 
-  rooms.forEach(room => room.init());
+  props.rooms.forEach(room => room.init());
 }
 
 function on<T = any>({

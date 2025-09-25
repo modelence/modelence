@@ -1,8 +1,9 @@
 import { Server } from "http";
-import { WebsocketServerProvider } from 'modelence';
-import { authenticate, ServerRoom } from 'modelence/server';
 import { logInfo } from "modelence/telemetry";
 import { Server as SocketServer, Socket } from 'socket.io';
+import { ServerRoom } from "../serverRoom";
+import { authenticate } from "@/auth";
+import { WebsocketServerProvider } from "../types";
 
 let socketServer: SocketServer | null = null;
 
