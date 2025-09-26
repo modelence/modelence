@@ -1,12 +1,12 @@
 import io, { Socket } from 'socket.io-client';
 import { WebsocketClientProvider } from '../types';
-import { ClientRoom } from '../clientRoom';
+import { ClientChannel } from '../clientChannel';
 import { getLocalStorageSession } from '@/client/localStorage';
 
 let socketClient: Socket;
 
 function init(props: {
-  rooms: ClientRoom<unknown>[],
+  channels: ClientChannel<unknown>[],
 }) {
   socketClient = io('/', {
     auth: {
@@ -14,76 +14,76 @@ function init(props: {
     },
   });
 
-  props.rooms.forEach(room => room.init());
+  props.channels.forEach(channel => channel.init());
 }
 
 function on<T = any>({
-  roomCategory,
+  category,
   listener,
 }: {
-  roomCategory: string,
+  category: string,
   listener: (data: T) => void,
 }) {
-  socketClient.on(roomCategory, listener);
+  socketClient.on(category, listener);
 }
 
 function once<T = any>({
-  roomCategory,
+  category,
   listener,
 }: {
-  roomCategory: string,
+  category: string,
   listener: (data: T) => void,
 }) {
-  socketClient.once(roomCategory, listener);
+  socketClient.once(category, listener);
 }
 
 function off<T = any>({
-  roomCategory,
+  category,
   listener,
 }: {
-  roomCategory: string,
+  category: string,
   listener: (data: T) => void,
 }) {
-  socketClient.off(roomCategory, listener);
+  socketClient.off(category, listener);
 }
 
 function emit({
   eventName,
-  roomCategory,
-  roomId,
+  category,
+  id,
 }: {
   eventName: string,
-  roomCategory: string,
-  roomId: string,
+  category: string,
+  id: string,
 }) {
-  socketClient.emit(eventName, `${roomCategory}:${roomId}`)
+  socketClient.emit(eventName, `${category}:${id}`)
 }
 
 function joinRoom({
-  roomCategory,
-  roomId,
+  category,
+  id,
 }: {
-  roomCategory: string,
-  roomId: string,
+  category: string,
+  id: string,
 }) {
   emit({
     eventName: 'joinRoom',
-    roomCategory,
-    roomId,
+    category,
+    id,
   });
 }
 
 function leaveRoom({
-  roomCategory,
-  roomId,
+  category,
+  id,
 }: {
-  roomCategory: string,
-  roomId: string,
+  category: string,
+  id: string,
 }) {
   emit({
     eventName: 'leaveRoom',
-    roomCategory,
-    roomId,
+    category,
+    id,
   });
 }
 

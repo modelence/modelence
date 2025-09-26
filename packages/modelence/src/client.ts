@@ -22,5 +22,5 @@ export {
   type UserInfo,
 } from './auth/client';
 export { getWebsocketClientProvider, setWebsocketClientProvider } from './websocket/client';
-export { ClientRoom } from './websocket/clientRoom';
+export { ClientChannel } from './websocket/clientChannel';
 export { getLocalStorageSession } from './client/localStorage';

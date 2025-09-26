@@ -1,46 +1,46 @@
 import { Server } from "http";
-import { ServerRoom } from "./serverRoom";
-import { ClientRoom } from "./clientRoom";
+import { ServerChannel } from "./serverChannel";
+import { ClientChannel } from "./clientChannel";
 
 export interface WebsocketServerProvider {
   init(props: {
     httpServer: Server,
-    rooms: ServerRoom[],
+    channels: ServerChannel[],
   }): Promise<void>;
   broadcast<T>(props: {
-    roomCategory: string,
-    roomId: string,
+    category: string,
+    id: string,
     data: T,
   }): void;
 }
 
 export interface WebsocketClientProvider {
   init(props: {
-    rooms: ClientRoom[],
+    channels: ClientChannel[],
   }): void;
   on<T>(props: {
-    roomCategory: string,
+    category: string,
     listener: (data: T) => void;
   }): void;
   once<T>(props: {
-    roomCategory: string,
+    category: string,
     listener: (data: T) => void;
   }): void;
   off<T>(props: {
-    roomCategory: string,
+    category: string,
     listener: (data: T) => void;
   }): void;
   emit(props: {
     eventName: string,
-    roomCategory: string,
-    roomId: string,
+    category: string,
+    id: string,
   }): void;
   joinRoom(props: {
-    roomCategory: string,
-    roomId: string,
+    category: string,
+    id: string,
   }): void;
   leaveRoom(props: {
-    roomCategory: string,
-    roomId: string,
+    category: string,
+    id: string,
   }): void;
 }

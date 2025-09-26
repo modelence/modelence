@@ -76,7 +76,7 @@ export async function startApp({
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
   const stores = getStores(combinedModules);
-  const rooms = getRooms(combinedModules);
+  const channels = getChannels(combinedModules);
 
   if (isCronEnabled) {
     defineCronJobs(combinedModules);
@@ -126,7 +126,7 @@ export async function startApp({
     startCronJobs().catch(console.error);
   }
 
-  await startServer(server, { combinedModules, websocket, rooms });
+  await startServer(server, { combinedModules, websocket, channels });
 }
 
 function initCustomMethods(modules: Module[]) {
@@ -155,8 +155,8 @@ function getStores(modules: Module[]) {
   return modules.flatMap(module => module.stores);
 }
 
-function getRooms(modules: Module[]) {
-  return modules.flatMap(module => module.rooms);
+function getChannels(modules: Module[]) {
+  return modules.flatMap(module => module.channels);
 }
 
 function getRateLimits(modules: Module[]) {

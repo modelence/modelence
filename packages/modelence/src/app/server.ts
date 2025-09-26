@@ -16,9 +16,9 @@ import { getMongodbUri } from '../db/client';
 import { ModelenceError } from '../error';
 import { Module } from './module';
 import { ConnectionInfo } from '@/methods/types';
-import { ServerRoom } from '@/websocket/serverRoom';
+import { ServerChannel } from '@/websocket/serverChannel';
 import { WebsocketConfig } from './websocketConfig';
-import { socketioServer } from '@/websocket/socketio/server';
+import socketioServer from '@/websocket/socketio/server';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -35,11 +35,11 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
 export async function startServer(server: AppServer, {
   combinedModules,
   websocket,
-  rooms,
+  channels,
 }: {
   combinedModules: Module[],
   websocket?: WebsocketConfig,
-  rooms: ServerRoom[]
+  channels: ServerChannel[]
 }) {
   const app = express();
 
@@ -115,7 +115,7 @@ export async function startServer(server: AppServer, {
   const websocketProvider = websocket?.provider || socketioServer;
   websocketProvider.init({
     httpServer,
-    rooms,
+    channels,
   });
 
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;

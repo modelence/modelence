@@ -8,7 +8,7 @@ type CanAccessRoom = (props: {
   roles: string[],
 }) => Promise<boolean>;
 
-export class ServerRoom<T = any> {
+export class ServerChannel<T = any> {
   public readonly roomCategory: string;
   public readonly canAccessRoom: CanAccessRoom | null;
 

@@ -23,5 +23,5 @@ export { consumeRateLimit } from './rate-limit/rules';
 
 export { getConfig } from './config/server';
 export type { CloudBackendConnectResponse } from './app/backendApi';
-export { ServerRoom } from './websocket/serverRoom';
+export { ServerChannel } from './websocket/serverChannel';
 export { authenticate } from './auth';

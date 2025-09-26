@@ -1,7 +1,7 @@
 import { Server } from "http";
 import { logInfo } from "modelence/telemetry";
 import { Server as SocketServer, Socket } from 'socket.io';
-import { ServerRoom } from "../serverRoom";
+import { ServerChannel } from "../serverChannel";
 import { authenticate } from "@/auth";
 import { WebsocketServerProvider } from "../types";
 import { createAdapter } from "@socket.io/mongo-adapter";
@@ -13,10 +13,10 @@ const COLLECTION = '_system.socketio';
 
 export async function init({
   httpServer,
-  rooms,
+  channels,
 }: {
   httpServer: Server;
-  rooms: ServerRoom[];
+  channels: ServerChannel[];
 }) {
 
   const mongodbClient = getClient();
@@ -58,12 +58,12 @@ export async function init({
 
     socket.on('joinRoom', async (roomName) => {
       const [roomCategory] = roomName.split(':');
-      for (const room of rooms) {
+      for (const channel of channels) {
         if (
-          room.roomCategory === roomCategory &&
+          channel.roomCategory === roomCategory &&
           (
-            !room.canAccessRoom ||
-            await room.canAccessRoom(socket.data)
+            !channel.canAccessRoom ||
+            await channel.canAccessRoom(socket.data)
           )
         ) {
           socket.join(roomName);

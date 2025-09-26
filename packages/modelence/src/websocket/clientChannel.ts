@@ -1,6 +1,6 @@
 import { getWebsocketClientProvider } from "./client";
 
-export class ClientRoom<T = any> {
+export class ClientChannel<T = any> {
   public readonly roomCategory: string;
   private readonly onMessage: (data: T) => void;
 
