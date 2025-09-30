@@ -9,7 +9,7 @@ import { ServerChannel } from "../serverChannel";
 
 let socketServer: SocketServer | null = null;
 
-const COLLECTION = '_system.socketio';
+const COLLECTION = '_modelenceSocketio';
 
 export async function init({
   httpServer,
