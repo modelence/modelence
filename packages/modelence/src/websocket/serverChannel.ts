@@ -2,7 +2,7 @@ import { Session, User } from "@/auth/types";
 import { getWebsocketConfig } from "@/app/websocketConfig";
 import { logError } from "../telemetry";
 
-type CanAccessRoom = (props: {
+type canAccessChannel = (props: {
   user: User | null,
   session: Session | null,
   roles: string[],
@@ -10,14 +10,14 @@ type CanAccessRoom = (props: {
 
 export class ServerChannel<T = any> {
   public readonly category: string;
-  public readonly canAccessRoom: CanAccessRoom | null;
+  public readonly canAccessChannel: canAccessChannel | null;
 
   constructor(
     category: string,
-    canAccessRoom?: CanAccessRoom,
+    canAccessChannel?: canAccessChannel,
   ) {
     this.category = category;
-    this.canAccessRoom = canAccessRoom || null;
+    this.canAccessChannel = canAccessChannel || null;
   }
 
   broadcast(id: string, data: T) {

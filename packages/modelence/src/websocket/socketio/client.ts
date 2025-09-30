@@ -59,7 +59,7 @@ function emit({
   socketClient.emit(eventName, `${category}:${id}`)
 }
 
-function joinRoom({
+function joinChannel({
   category,
   id,
 }: {
@@ -67,13 +67,13 @@ function joinRoom({
   id: string,
 }) {
   emit({
-    eventName: 'joinRoom',
+    eventName: 'joinChannel',
     category,
     id,
   });
 }
 
-function leaveRoom({
+function leaveChannel({
   category,
   id,
 }: {
@@ -81,7 +81,7 @@ function leaveRoom({
   id: string,
 }) {
   emit({
-    eventName: 'leaveRoom',
+    eventName: 'leaveChannel',
     category,
     id,
   });
@@ -93,8 +93,8 @@ const websocketProvider: WebsocketClientProvider = {
   once,
   off,
   emit,
-  joinRoom,
-  leaveRoom,
+  joinChannel,
+  leaveChannel,
 };
 
 export default websocketProvider;

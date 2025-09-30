@@ -56,29 +56,29 @@ export async function init({
       logInfo(`Socket.IO client disconnected`, { source: 'websocket', socketId: socket.id });
     });
 
-    socket.on('joinRoom', async (roomName) => {
-      const [category] = roomName.split(':');
+    socket.on('joinChannel', async (channelName) => {
+      const [category] = channelName.split(':');
       for (const channel of channels) {
         if (
           channel.category === category &&
           (
-            !channel.canAccessRoom ||
-            await channel.canAccessRoom(socket.data)
+            !channel.canAccessChannel ||
+            await channel.canAccessChannel(socket.data)
           )
         ) {
-          socket.join(roomName);
+          socket.join(channelName);
         }
       }
 
-      socket.join(roomName);
-      console.log(`User ${socket.id} joined room ${roomName}`);
-      socket.emit('joinedRoom', roomName);
+      socket.join(channelName);
+      console.log(`User ${socket.id} joined channel ${channelName}`);
+      socket.emit('joinedChannel', channelName);
     });
 
-    socket.on('leaveRoom', (roomName) => {
-      socket.leave(roomName);
-      console.log(`User ${socket.id} left room ${roomName}`);
-      socket.emit('leftRoom', roomName);
+    socket.on('leaveChannel', (channelName) => {
+      socket.leave(channelName);
+      console.log(`User ${socket.id} left channel ${channelName}`);
+      socket.emit('leftChannel', channelName);
     });
   });
 

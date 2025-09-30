@@ -19,15 +19,15 @@ export class ClientChannel<T = any> {
     });
   }
 
-  joinRoom(id: string) {
-    getWebsocketClientProvider()?.joinRoom({
+  joinChannel(id: string) {
+    getWebsocketClientProvider()?.joinChannel({
       category: this.category,
       id,
     });
   }
 
-  leaveRoom(id: string) {
-    getWebsocketClientProvider()?.leaveRoom({
+  leaveChannel(id: string) {
+    getWebsocketClientProvider()?.leaveChannel({
       category: this.category,
       id,
     });

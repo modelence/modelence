@@ -35,11 +35,11 @@ export interface WebsocketClientProvider {
     category: string,
     id: string,
   }): void;
-  joinRoom(props: {
+  joinChannel(props: {
     category: string,
     id: string,
   }): void;
-  leaveRoom(props: {
+  leaveChannel(props: {
     category: string,
     id: string,
   }): void;
