@@ -1,10 +1,10 @@
 import { Server } from "http";
 import { Server as SocketServer, Socket } from 'socket.io';
-import { authenticate } from "@/auth";
-import { WebsocketServerProvider } from "../types";
 import { createAdapter } from "@socket.io/mongo-adapter";
+import { authenticate } from "@/auth";
 import { getClient } from "@/db/client";
 import { logInfo } from "@/telemetry";
+import { WebsocketServerProvider } from "../types";
 import { ServerChannel } from "../serverChannel";
 
 let socketServer: SocketServer | null = null;

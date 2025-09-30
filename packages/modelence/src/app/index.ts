@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 
 import { AppServer } from '@modelence/types';
+import socketioServer from '@/websocket/socketio/server';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
 import { RoleDefinition } from '../auth/types';
@@ -99,7 +100,10 @@ export async function startApp({
 
   setEmailConfig(email);
   setAuthConfig(auth);
-  setWebsocketConfig(websocket);
+  setWebsocketConfig({
+    ...websocket,
+    provider: websocket.provider || socketioServer,
+  });
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
@@ -126,7 +130,7 @@ export async function startApp({
     startCronJobs().catch(console.error);
   }
 
-  await startServer(server, { combinedModules, websocket, channels });
+  await startServer(server, { combinedModules, channels });
 }
 
 function initCustomMethods(modules: Module[]) {

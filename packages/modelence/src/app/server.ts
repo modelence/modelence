@@ -17,8 +17,7 @@ import { ModelenceError } from '../error';
 import { Module } from './module';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
-import { WebsocketConfig } from './websocketConfig';
-import socketioServer from '@/websocket/socketio/server';
+import { getWebsocketConfig } from './websocketConfig';
 
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
@@ -34,11 +33,9 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
 
 export async function startServer(server: AppServer, {
   combinedModules,
-  websocket,
   channels,
 }: {
   combinedModules: Module[],
-  websocket?: WebsocketConfig,
   channels: ServerChannel[]
 }) {
   const app = express();
@@ -112,11 +109,13 @@ export async function startServer(server: AppServer, {
 
   const httpServer = http.createServer(app);
   
-  const websocketProvider = websocket?.provider || socketioServer;
-  websocketProvider.init({
-    httpServer,
-    channels,
-  });
+  const websocketProvider = getWebsocketConfig()?.provider;
+  if (websocketProvider) {
+    websocketProvider.init({
+      httpServer,
+      channels,
+    });
+  }
 
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
