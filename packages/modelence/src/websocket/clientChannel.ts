@@ -1,35 +1,35 @@
 import { getWebsocketClientProvider } from "./client";
 
 export class ClientChannel<T = any> {
-  public readonly roomCategory: string;
+  public readonly category: string;
   private readonly onMessage: (data: T) => void;
 
   constructor(
-    roomCategory: string,
+    category: string,
     onMessage: (data: T) => void
   ) {
-    this.roomCategory = roomCategory;
+    this.category = category;
     this.onMessage = onMessage;
   }
 
   init() {
     getWebsocketClientProvider()?.on({
-      roomCategory: this.roomCategory,
+      category: this.category,
       listener: this.onMessage
     });
   }
 
-  joinRoom(roomId: string) {
+  joinRoom(id: string) {
     getWebsocketClientProvider()?.joinRoom({
-      roomCategory: this.roomCategory,
-      roomId,
+      category: this.category,
+      id,
     });
   }
 
-  leaveRoom(roomId: string) {
+  leaveRoom(id: string) {
     getWebsocketClientProvider()?.leaveRoom({
-      roomCategory: this.roomCategory,
-      roomId,
+      category: this.category,
+      id,
     });
   }
 }

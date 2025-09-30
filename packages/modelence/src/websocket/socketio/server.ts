@@ -57,10 +57,10 @@ export async function init({
     });
 
     socket.on('joinRoom', async (roomName) => {
-      const [roomCategory] = roomName.split(':');
+      const [category] = roomName.split(':');
       for (const channel of channels) {
         if (
-          channel.roomCategory === roomCategory &&
+          channel.category === category &&
           (
             !channel.canAccessRoom ||
             await channel.canAccessRoom(socket.data)
@@ -86,15 +86,15 @@ export async function init({
 }
 
 function broadcast<T>({
-  roomCategory,
-  roomId,
+  category,
+  id,
   data,
 }: {
-  roomCategory: string,
-  roomId: string,
+  category: string,
+  id: string,
   data: T,
 }) {
-  socketServer?.to(`${roomCategory}:${roomId}`).emit(roomCategory, data);
+  socketServer?.to(`${category}:${id}`).emit(category, data);
 }
 
 export default {

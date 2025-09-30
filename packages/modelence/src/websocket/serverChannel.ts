@@ -9,18 +9,18 @@ type CanAccessRoom = (props: {
 }) => Promise<boolean>;
 
 export class ServerChannel<T = any> {
-  public readonly roomCategory: string;
+  public readonly category: string;
   public readonly canAccessRoom: CanAccessRoom | null;
 
   constructor(
-    roomCategory: string,
+    category: string,
     canAccessRoom?: CanAccessRoom,
   ) {
-    this.roomCategory = roomCategory;
+    this.category = category;
     this.canAccessRoom = canAccessRoom || null;
   }
 
-  broadcast(roomId: string, data: T) {
+  broadcast(id: string, data: T) {
     const websocketProvider = getWebsocketConfig().provider;
     if (!websocketProvider) {
       logError("Websockets provider should be added to startApp", {});
@@ -28,8 +28,8 @@ export class ServerChannel<T = any> {
     }
 
     websocketProvider.broadcast({
-      roomCategory: this.roomCategory,
-      roomId,
+      category: this.category,
+      id,
       data,
     });
   }
