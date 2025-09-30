@@ -10,6 +10,6 @@ export function setWebsocketConfig(newWebsocketConfig: WebsocketConfig) {
   websocketConfig = Object.freeze(Object.assign({}, websocketConfig, newWebsocketConfig));
 }
 
-export function getWebSocketConfig() {
+export function getWebsocketConfig() {
   return websocketConfig;
 }
