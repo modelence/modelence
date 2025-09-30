@@ -1,3 +1,4 @@
+import { ClientChannel } from "./clientChannel";
 import websocketProvider from "./socketio/client";
 import { WebsocketClientProvider } from "./types";
 
@@ -13,6 +14,11 @@ export function getWebsocketClientProvider() {
 
 export function startWebsockets(props?: {
   provider?: WebsocketClientProvider,
+  channels?: ClientChannel[],
 }) {
-  setWebsocketClientProvider(props?.provider || websocketProvider);
+  const provider = props?.provider || websocketProvider;
+  provider.init({
+    channels: props?.channels,
+  });
+  setWebsocketClientProvider(provider);
 }

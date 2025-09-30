@@ -16,7 +16,7 @@ export interface WebsocketServerProvider {
 
 export interface WebsocketClientProvider {
   init(props: {
-    channels: ClientChannel[],
+    channels?: ClientChannel[],
   }): void;
   on<T>(props: {
     category: string,

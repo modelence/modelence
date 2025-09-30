@@ -6,7 +6,7 @@ import { getLocalStorageSession } from '@/client/localStorage';
 let socketClient: Socket;
 
 function init(props: {
-  channels: ClientChannel<unknown>[],
+  channels?: ClientChannel<unknown>[],
 }) {
   socketClient = io('/', {
     auth: {
@@ -14,7 +14,7 @@ function init(props: {
     },
   });
 
-  props.channels.forEach(channel => channel.init());
+  props.channels?.forEach(channel => channel.init());
 }
 
 function on<T = any>({

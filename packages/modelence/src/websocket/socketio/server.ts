@@ -1,11 +1,11 @@
 import { Server } from "http";
-import { logInfo } from "modelence/telemetry";
 import { Server as SocketServer, Socket } from 'socket.io';
-import { ServerChannel } from "../serverChannel";
 import { authenticate } from "@/auth";
 import { WebsocketServerProvider } from "../types";
 import { createAdapter } from "@socket.io/mongo-adapter";
 import { getClient } from "@/db/client";
+import { logInfo } from "@/telemetry";
+import { ServerChannel } from "../serverChannel";
 
 let socketServer: SocketServer | null = null;
 
