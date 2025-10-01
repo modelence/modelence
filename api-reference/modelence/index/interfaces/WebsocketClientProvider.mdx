@@ -1,0 +1,166 @@
+---
+sidebar_position: 1
+title: WebsocketClientProvider
+---
+
+[API Reference](/api-reference/modelence/index/interfaces/../../../index) / [modelence](/api-reference/modelence/index/interfaces/../../index) / [index](/api-reference/modelence/index/interfaces/../index) / WebsocketClientProvider
+
+Defined in: [src/websocket/types.ts:17](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L17)
+
+## Methods
+
+### emit()
+
+> **emit**(`props`): `void`
+
+Defined in: [src/websocket/types.ts:33](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L33)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `eventName`: `string`; `id`: `string`; \} |
+| `props.category` | `string` |
+| `props.eventName` | `string` |
+| `props.id` | `string` |
+
+#### Returns
+
+`void`
+
+***
+
+### init()
+
+> **init**(`props`): `void`
+
+Defined in: [src/websocket/types.ts:18](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L18)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `channels?`: [`ClientChannel`](/api-reference/modelence/index/interfaces/../../client/classes/ClientChannel)\<`any`\>[]; \} |
+| `props.channels?` | [`ClientChannel`](/api-reference/modelence/index/interfaces/../../client/classes/ClientChannel)\<`any`\>[] |
+
+#### Returns
+
+`void`
+
+***
+
+### joinChannel()
+
+> **joinChannel**(`props`): `void`
+
+Defined in: [src/websocket/types.ts:38](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L38)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `id`: `string`; \} |
+| `props.category` | `string` |
+| `props.id` | `string` |
+
+#### Returns
+
+`void`
+
+***
+
+### leaveChannel()
+
+> **leaveChannel**(`props`): `void`
+
+Defined in: [src/websocket/types.ts:42](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L42)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `id`: `string`; \} |
+| `props.category` | `string` |
+| `props.id` | `string` |
+
+#### Returns
+
+`void`
+
+***
+
+### off()
+
+> **off**\<`T`\>(`props`): `void`
+
+Defined in: [src/websocket/types.ts:29](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L29)
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `T` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `listener`: (`data`) => `void`; \} |
+| `props.category` | `string` |
+| `props.listener` | (`data`) => `void` |
+
+#### Returns
+
+`void`
+
+***
+
+### on()
+
+> **on**\<`T`\>(`props`): `void`
+
+Defined in: [src/websocket/types.ts:21](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L21)
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `T` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `listener`: (`data`) => `void`; \} |
+| `props.category` | `string` |
+| `props.listener` | (`data`) => `void` |
+
+#### Returns
+
+`void`
+
+***
+
+### once()
+
+> **once**\<`T`\>(`props`): `void`
+
+Defined in: [src/websocket/types.ts:25](https://github.com/modelence/modelence/blob/5904a57fe50964e5b66f94e20b2f5e3f75002742/packages/modelence/src/websocket/types.ts#L25)
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `T` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `props` | \{ `category`: `string`; `listener`: (`data`) => `void`; \} |
+| `props.category` | `string` |
+| `props.listener` | (`data`) => `void` |
+
+#### Returns
+
+`void`
