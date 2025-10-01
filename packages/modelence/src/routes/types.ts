@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 
-export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head';
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'all' | 'use';
 
 export type RouteParams = {
   query: Record<string, string>;
