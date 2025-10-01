@@ -20,16 +20,24 @@ export async function init({
 }) {
 
   const mongodbClient = getClient();
+
   if (!mongodbClient) {
-    throw new Error('');
+    console.error('Socket.IO initialization failed: MongoDB client is not initialized');
+    throw new Error('Mongodb Client is not initialized');
   }
+
+  console.log('Initializing Socket.IO server...');
 
   const mongoCollection = mongodbClient.db().collection(COLLECTION);
 
-  await mongoCollection.createIndex(
-    { createdAt: 1 },
-    { expireAfterSeconds: 3600, background: true }
-  );
+  try {
+    await mongoCollection.createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 3600, background: true }
+    );
+  } catch (error) {
+    console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+  }
 
   socketServer = new SocketServer(httpServer, {
     cors: {
@@ -37,6 +45,9 @@ export async function init({
       methods: ["GET", "POST"]
     },
     adapter: createAdapter(mongoCollection),
+    transports: ['polling', 'websocket'],
+    allowUpgrades: true,
+    perMessageDeflate: false,
   });
 
   socketServer.use(async (socket, next) => {
