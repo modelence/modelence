@@ -4,6 +4,7 @@ import { Store } from '../data/store';
 import { MethodDefinition } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 import { RateLimitRule } from '../rate-limit/types';
+import { ServerChannel } from '@/websocket/serverChannel';
 
 /** Array of Store instances that will be provisioned when the module is loaded */
 type Stores = Store<any, any>[];
@@ -62,6 +63,9 @@ export class Module {
   /** @internal */
   public readonly rateLimits: RateLimitRule[];
 
+  /** @internal */
+  public readonly channels: ServerChannel[];
+
   /**
    * Creates a new Module instance
    * 
@@ -80,7 +84,8 @@ export class Module {
       routes = [],
       cronJobs = {},
       configSchema = {},
-      rateLimits = []
+      rateLimits = [],
+      channels = []
     }: { 
       stores?: Store<any, any>[],
       queries?: Queries,
@@ -88,7 +93,8 @@ export class Module {
       routes?: RouteDefinition[],
       cronJobs?: Record<string, CronJobInputParams>,
       configSchema?: ConfigSchema,
-      rateLimits?: RateLimitRule[]
+      rateLimits?: RateLimitRule[],
+      channels?: ServerChannel[],
     }
   ) {
     this.name = name;
@@ -99,5 +105,6 @@ export class Module {
     this.cronJobs = cronJobs;
     this.configSchema = configSchema;
     this.rateLimits = rateLimits;
+    this.channels = channels;
   }
 }
