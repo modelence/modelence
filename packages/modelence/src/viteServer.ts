@@ -17,6 +17,8 @@ class ViteServer implements AppServer {
         ...defineConfig(this.config),
         server: {
           middlewareMode: true,
+          host: '0.0.0.0',
+          allowedHosts: true,
         },
         root: './src/client'
       }); 
@@ -100,8 +102,6 @@ async function getConfig(): Promise<UserConfig> {
       emptyOutDir: true
     },
     server: {
-      host: '0.0.0.0',
-      allowedHosts: true,
       proxy: {
         '/api': 'http://localhost:4000'
       },
