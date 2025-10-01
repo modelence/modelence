@@ -65,7 +65,7 @@ async function loadUserViteConfig() {
   }
 }
 
-async function getConfig() {
+async function getConfig(): Promise<UserConfig> {
   const appDir = process.cwd();
   const userConfig = await loadUserViteConfig();
 
@@ -100,6 +100,8 @@ async function getConfig() {
       emptyOutDir: true
     },
     server: {
+      host: '0.0.0.0',
+      allowedHosts: true,
       proxy: {
         '/api': 'http://localhost:4000'
       },
