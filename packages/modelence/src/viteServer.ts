@@ -17,6 +17,8 @@ class ViteServer implements AppServer {
         ...defineConfig(this.config),
         server: {
           middlewareMode: true,
+          host: '0.0.0.0',
+          allowedHosts: true,
         },
         root: './src/client'
       }); 
@@ -65,7 +67,7 @@ async function loadUserViteConfig() {
   }
 }
 
-async function getConfig() {
+async function getConfig(): Promise<UserConfig> {
   const appDir = process.cwd();
   const userConfig = await loadUserViteConfig();
 
