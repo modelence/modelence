@@ -3,7 +3,6 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from "@socket.io/mongo-adapter";
 import { authenticate } from "@/auth";
 import { getClient } from "@/db/client";
-import { logInfo } from "@/telemetry";
 import { WebsocketServerProvider } from "../types";
 import { ServerChannel } from "../serverChannel";
 
@@ -50,6 +49,10 @@ export async function init({
     perMessageDeflate: false,
   });
 
+  socketServer.on('error', (error) => {
+    console.error('Socket.IO error:', error);
+  });
+
   socketServer.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
 
@@ -61,10 +64,10 @@ export async function init({
   });
 
   socketServer.on('connection', (socket: Socket) => {
-    logInfo(`Socket.IO client connected`, { source: 'websocket', socketId: socket.id });
+    console.log(`Socket.IO client connected`);
     
     socket.on('disconnect', () => {
-      logInfo(`Socket.IO client disconnected`, { source: 'websocket', socketId: socket.id });
+      console.log(`Socket.IO client disconnected`);
     });
 
     socket.on('joinChannel', async (channelName) => {
@@ -93,7 +96,7 @@ export async function init({
     });
   });
 
-  logInfo(`Socket.IO server initialized`, { source: 'websocket' });
+  console.log("Socket.IO server initialized");
 }
 
 function broadcast<T>({
