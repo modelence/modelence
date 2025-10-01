@@ -1,4 +1,4 @@
-import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig, mergeConfig } from 'vite';
+import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig } from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
@@ -13,7 +13,13 @@ class ViteServer implements AppServer {
     this.config = await getConfig();
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
-      this.viteServer = await createServer(this.config); 
+      this.viteServer = await createServer({
+        ...defineConfig(this.config),
+        server: {
+          middlewareMode: true,
+        },
+        root: './src/client'
+      }); 
     }
   }
 
@@ -59,29 +65,6 @@ async function loadUserViteConfig() {
   }
 }
 
-function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
-  const mergedConfig = mergeConfig(baseConfig, userConfig);
-  
-  // Deduplicate plugins by name, keeping user plugins over framework plugins
-  if (mergedConfig.plugins && Array.isArray(mergedConfig.plugins)) {
-    const seenPlugins = new Set();
-    mergedConfig.plugins = mergedConfig.plugins.filter((plugin: any) => {
-      if (!plugin || typeof plugin !== 'object') {
-        return true;
-      }
-      const pluginName = plugin.name;
-      if (!pluginName || seenPlugins.has(pluginName)) {
-        return false;
-      }
-      seenPlugins.add(pluginName);
-      return true;
-    }).reverse(); // Reverse to prioritize user plugins over framework plugins
-    mergedConfig.plugins.reverse(); // Reverse back to maintain original order
-  }
-  
-  return mergedConfig;
-}
-
 async function getConfig() {
   const appDir = process.cwd();
   const userConfig = await loadUserViteConfig();
@@ -109,24 +92,33 @@ async function getConfig() {
     );
   }
 
-  const baseConfig = defineConfig({
+  return {
     plugins,
+    root: appDir,
     build: {
       outDir: '.modelence/build/client'.replace(/\\/g, '/'),
       emptyOutDir: true
     },
     server: {
-      middlewareMode: true,
+      proxy: {
+        '/api': 'http://localhost:4000'
+      },
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      hmr: {
+        port: 0,
+      },
     },
-    root: './src/client',
     resolve: {
       alias: {
         '@': path.resolve(appDir, 'src').replace(/\\/g, '/')
       }
     },
-  });
-
-  return safelyMergeConfig(baseConfig, userConfig);
+    publicDir: userConfig.publicDir,
+  };
 }
 
 function modelenceAssetPlugin() {
