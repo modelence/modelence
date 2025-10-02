@@ -25,3 +25,4 @@ export { getConfig } from './config/server';
 export type { CloudBackendConnectResponse } from './app/backendApi';
 export { ServerChannel } from './websocket/serverChannel';
 export { authenticate } from './auth';
+export { sendEmail } from './app/email';
