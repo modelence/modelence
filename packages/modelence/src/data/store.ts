@@ -19,6 +19,8 @@ import {
   InsertManyResult,
   Db,
   ClientSession,
+  SearchIndexDescription,
+  MongoError,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -64,6 +66,7 @@ export class Store<
   private readonly schema: TSchema;
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
+  private readonly searchIndexes: SearchIndexDescription[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -82,12 +85,15 @@ export class Store<
       methods?: TMethods;
       /** MongoDB indexes to create */
       indexes: IndexDescription[];
+      /** MongoDB Atlas Search */
+      searchIndexes?: SearchIndexDescription[];
     }
   ) {
     this.name = name;
     this.schema = options.schema;
     this.methods = options.methods;
     this.indexes = options.indexes;
+    this.searchIndexes = options.searchIndexes || [];
   }
 
   getName() {
@@ -112,7 +118,32 @@ export class Store<
   /** @internal */
   async createIndexes() {
     if (this.indexes.length > 0) {
-      await this.requireCollection().createIndexes(this.indexes);
+      for (const index of this.indexes) {
+        try {
+          await this.requireCollection().createIndexes([index]);
+        } catch (error) {
+          if (error instanceof MongoError && error.code === 68 && index.name) {
+            await this.requireCollection().dropIndex(index.name);
+            await this.requireCollection().createIndexes([index]);
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+    if (this.searchIndexes.length > 0) {
+      for (const searchIndex of this.searchIndexes) {
+        try {
+          await this.requireCollection().createSearchIndexes([searchIndex]);
+        } catch (error) {
+          if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
+            await this.requireCollection().dropSearchIndex(searchIndex.name);
+            await this.requireCollection().createSearchIndexes([searchIndex]);
+          } else {
+            throw error;
+          }
+        }
+      }
     }
   }
 
