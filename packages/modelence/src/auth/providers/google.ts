@@ -44,7 +44,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     if (existingUser) {
       await authenticateUser(res, existingUser._id);
 
-      getAuthConfig().afterLogin?.({
+      getAuthConfig().onAfterLogin?.({
         user: existingUser,
         session,
         connectionInfo,
@@ -57,7 +57,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     if (error instanceof Error) {
       getAuthConfig().login?.onError?.(error);
 
-      getAuthConfig().loginError?.({
+      getAuthConfig().onLoginError?.({
         error,
         session,
         connectionInfo,
@@ -112,7 +112,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     );
 
     if (userDocument) {
-      getAuthConfig().afterSignup?.({
+      getAuthConfig().onAfterSignup?.({
         user: userDocument,
         session,
         connectionInfo,
@@ -122,7 +122,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     }
   } catch(error) {
     if (error instanceof Error) {
-      getAuthConfig().signupError?.({
+      getAuthConfig().onSignupError?.({
         error,
         session,
         connectionInfo,

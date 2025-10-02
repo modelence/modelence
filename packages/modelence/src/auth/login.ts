@@ -75,7 +75,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
 
     await setSessionUser(session.authToken, userDoc._id);
 
-    getAuthConfig().afterLogin?.({
+    getAuthConfig().onAfterLogin?.({
       user: userDoc,
       session,
       connectionInfo,
@@ -90,7 +90,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
     }
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().loginError?.({
+      getAuthConfig().onLoginError?.({
         error,
         session,
         connectionInfo,

@@ -83,7 +83,7 @@ export async function handleSignupWithPassword(args: Args, { user, session, conn
       baseUrl: connectionInfo?.baseUrl,
     });
 
-    getAuthConfig().afterSignup?.({
+    getAuthConfig().onAfterSignup?.({
       user: userDocument,
       session,
       connectionInfo,
@@ -94,7 +94,7 @@ export async function handleSignupWithPassword(args: Args, { user, session, conn
     return result.insertedId;
   } catch(error) {
     if (error instanceof Error) {
-      getAuthConfig().signupError?.({
+      getAuthConfig().onSignupError?.({
         error,
         session,
         connectionInfo,

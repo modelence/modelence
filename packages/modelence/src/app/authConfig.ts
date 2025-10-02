@@ -20,19 +20,19 @@ export type AuthOption = {
  *
  * startApp({
  *   auth: {
- *     afterLogin: ({ user }) => {
+ *     onAfterLogin: ({ user }) => {
  *       console.log('User logged in:', user.name);
  *       // Redirect to dashboard
  *     },
- *     loginError: ({ error }) => {
+ *     onLoginError: ({ error }) => {
  *       console.error('Login failed:', error.message);
  *       // Show error toast
  *     },
- *     afterSignup: ({ user }) => {
+ *     onAfterSignup: ({ user }) => {
  *       console.log('User signed up:', user.email);
  *       // Send welcome email
  *     },
- *     signupError: ({ error }) => {
+ *     onSignupError: ({ error }) => {
  *       console.error('Signup failed:', error.message);
  *     }
  *   }
@@ -40,30 +40,30 @@ export type AuthOption = {
  * ```
  */
 export type AuthConfig = {
-  afterLogin?: (props: {
+  onAfterLogin?: (props: {
     user: User,
     session: Session | null,
     connectionInfo: ConnectionInfo,
   }) => void;
-  loginError?: (props: {
+  onLoginError?: (props: {
     error: Error,
     session: Session | null,
     connectionInfo: ConnectionInfo,
   }) => void;
-  afterSignup?: (props: {
+  onAfterSignup?: (props: {
     user: User,
     session: Session | null,
     connectionInfo: ConnectionInfo,
   }) => void;
-  signupError?: (props: {
+  onSignupError?: (props: {
     error: Error,
     session: Session | null,
     connectionInfo: ConnectionInfo,
   }) => void;
 
-  /** deprecated: use afterLogin and loginError */
+  /** deprecated: use onAfterLogin and onLoginError */
   login?: AuthOption;
-  /** deprecated: user afterSignup and signupError */
+  /** deprecated: user onAfterSignup and onSignupError */
   signup?: AuthOption;
 };
 
