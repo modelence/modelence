@@ -26,6 +26,12 @@
             "pages": [
               "tutorial"
             ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "stores"
+            ]
           }
         ]
       },
