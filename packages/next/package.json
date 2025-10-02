@@ -23,8 +23,6 @@
     "modelence": "*",
     "next": "^15.4.6",
     "tsup": "^8.3.6",
-    "typedoc": "^0.28.13",
-    "typedoc-plugin-markdown": "^4.9.0",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {
