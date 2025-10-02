@@ -4,6 +4,7 @@ import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
 import { execSync } from 'child_process';
+import pkg from '../../package.json';
 
 async function buildClient() {
   const postBuildCommand = getPostBuildCommand();
@@ -51,7 +52,11 @@ async function buildServer() {
       watch: false,
       bundle: true,
       treeshake: true,
-      skipNodeModulesBundle: false,
+      platform: 'node',
+      external: [
+        ...Object.keys(pkg.dependencies ?? {}),
+        ...Object.keys(pkg.peerDependencies ?? {}),
+      ],
       outExtension: ({ format }) => ({
         js: '.mjs'
       }),

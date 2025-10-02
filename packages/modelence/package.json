@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.5.17",
+  "version": "0.6.0",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -46,6 +46,7 @@
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
+    "@types/socket.io": "^3.0.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "react": "^19.0.0",
@@ -53,6 +54,7 @@
   },
   "dependencies": {
     "@modelence/types": "^1.0.3",
+    "@socket.io/mongo-adapter": "^0.4.0",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",
@@ -67,6 +69,8 @@
     "open": "^10.1.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "tsup": "^8.3.6",
     "tsx": "^4.19.3",
     "typescript": "^5.7.2",
