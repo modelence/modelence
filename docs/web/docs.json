@@ -22,6 +22,12 @@
             ]
           },
           {
+            "group": "Features",
+            "pages": [
+              "email"
+            ]
+          },
+          {
             "group": "Tutorials",
             "pages": [
               "tutorial"
