@@ -1,4 +1,5 @@
-import { User } from "@/auth/types";
+import { Session, User } from "@/auth/types";
+import { ConnectionInfo } from "@/methods/types";
 
 /**
  * Callback options for authentication operations
@@ -19,33 +20,50 @@ export type AuthOption = {
  *
  * startApp({
  *   auth: {
- *     login: {
- *       onSuccess: (user) => {
- *         console.log('User logged in:', user.name);
- *         // Redirect to dashboard
- *       },
- *       onError: (error) => {
- *         console.error('Login failed:', error.message);
- *         // Show error toast
- *       }
+ *     onAfterLogin: ({ user }) => {
+ *       console.log('User logged in:', user.name);
+ *       // Redirect to dashboard
  *     },
- *     signup: {
- *       onSuccess: (user) => {
- *         console.log('User signed up:', user.email);
- *         // Send welcome email
- *       },
- *       onError: (error) => {
- *         console.error('Signup failed:', error.message);
- *       }
+ *     onLoginError: ({ error }) => {
+ *       console.error('Login failed:', error.message);
+ *       // Show error toast
+ *     },
+ *     onAfterSignup: ({ user }) => {
+ *       console.log('User signed up:', user.email);
+ *       // Send welcome email
+ *     },
+ *     onSignupError: ({ error }) => {
+ *       console.error('Signup failed:', error.message);
  *     }
  *   }
  * });
  * ```
  */
 export type AuthConfig = {
-  /** Authentication options for login operations */
+  onAfterLogin?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  onLoginError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  onAfterSignup?: (props: {
+    user: User,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+  onSignupError?: (props: {
+    error: Error,
+    session: Session | null,
+    connectionInfo: ConnectionInfo,
+  }) => void;
+
+  /** deprecated: use onAfterLogin and onLoginError */
   login?: AuthOption;
-  /** Authentication options for signup operations */
+  /** deprecated: user onAfterSignup and onSignupError */
   signup?: AuthOption;
 };
 

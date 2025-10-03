@@ -124,7 +124,7 @@ export async function startServer(server: AppServer, {
   });
 }
 
-async function getCallContext(req: Request) {
+export async function getCallContext(req: Request) {
   const authToken = z.string().nullish().transform(val => val ?? null).parse(req.cookies.authToken || req.body.authToken);
 
   const clientInfo = z.object({
