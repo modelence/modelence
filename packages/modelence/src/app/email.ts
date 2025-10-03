@@ -1,5 +1,5 @@
 import { getEmailConfig } from "@/app/emailConfig";
-import { EmailPayload } from "@modelence/types";
+import { EmailPayload } from "../types";
 
 export function sendEmail(payload: EmailPayload) {
   if (!getEmailConfig().provider) {
