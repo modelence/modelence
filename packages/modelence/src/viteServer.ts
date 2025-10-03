@@ -79,8 +79,6 @@ function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
     mergedConfig.plugins.reverse(); // Reverse back to maintain original order
   }
 
-  console.log(mergedConfig.plugins);
-
   return mergedConfig;
 }
 
