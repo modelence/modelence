@@ -373,29 +373,6 @@ When your application starts, Modelence will:
 Stores handle all MongoDB connection management automatically. Just define your Store and include it in a module - Modelence takes care of the rest.
 </Tip>
 
-## Advanced Usage
-
-### Raw Collection Access
-
-Access the underlying MongoDB collection for advanced operations:
-
-```typescript
-const collection = dbTodos.rawCollection();
-const database = dbTodos.getDatabase();
-
-// Use native MongoDB driver methods
-await collection.createIndex({ customField: 1 });
-```
-
-### Migrations
-
-Rename collections during migrations:
-
-```typescript
-// Rename 'old_todos' collection to 'todos'
-await dbTodos.renameFrom('old_todos');
-```
-
 ## Best Practices
 
 1. **Define stores per domain** - Keep related data in the same module
