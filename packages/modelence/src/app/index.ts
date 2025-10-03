@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import { AppServer } from '@modelence/types';
+import type { AppServer } from '../types';
 import socketioServer from '@/websocket/socketio/server';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';

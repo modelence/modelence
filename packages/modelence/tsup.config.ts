@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig((options) => ({
-  entry: ['src/index.ts', 'src/client.ts', 'src/server.ts', 'src/telemetry.ts', 'src/mongo.ts', 'src/bin/modelence.ts'],
+  entry: ['src/index.ts', 'src/client.ts', 'src/server.ts', 'src/telemetry.ts', 'src/mongo.ts', 'src/types.ts', 'src/bin/modelence.ts'],
   format: ['esm'],
   dts: {
     resolve: true,
@@ -10,7 +10,8 @@ export default defineConfig((options) => ({
       client: 'src/client.ts',
       server: 'src/server.ts',
       telemetry: 'src/telemetry.ts',
-      mongo: 'src/mongo.ts'
+      mongo: 'src/mongo.ts',
+      types: 'src/types.ts'
     }
   },
   splitting: true,

@@ -1,4 +1,4 @@
-import { EmailProvider } from "@modelence/types";
+import type { EmailProvider } from "../types";
 
 export type EmailConfig = {
   provider?: EmailProvider;

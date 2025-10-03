@@ -9,7 +9,7 @@ import express, { Request, Response } from 'express';
 import http from 'http';
 import passport from 'passport';
 import z from 'zod';
-import { AppServer } from '../../../types';
+import type { AppServer } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
@@ -124,7 +124,7 @@ export async function startServer(server: AppServer, {
   });
 }
 
-async function getCallContext(req: Request) {
+export async function getCallContext(req: Request) {
   const authToken = z.string().nullish().transform(val => val ?? null).parse(req.cookies.authToken || req.body.authToken);
 
   const clientInfo = z.object({
