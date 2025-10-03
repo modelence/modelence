@@ -22,7 +22,7 @@
     "modelence": "*"
   },
   "devDependencies": {
-    "modelence": "^0.5.0",
+    "modelence": "^0.6.2",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2"
   },
