@@ -1,4 +1,4 @@
-import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig, mergeConfig, PluginOption } from 'vite';
+import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig, mergeConfig } from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
