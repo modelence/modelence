@@ -129,8 +129,9 @@ async function tickCronJobs() {
     const { params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
-        // TODO: log cron trace timeout error
+        console.error(`Cron job '${job.alias}' timed out after ${params.timeout}ms`);
         state.isRunning = false;
+        captureError(new Error(`Job ${job.alias} timed out`))
       }
       return;
     }
@@ -145,25 +146,69 @@ async function tickCronJobs() {
 
 async function startCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
+  if (state.isRunning) return;
   state.isRunning = true;
   state.startTs = Date.now();
+  const startTs = state.startTs;
   const transaction = startTransaction('cron', `cron:${alias}`);
-  // TODO: enforce job timeout
-  handler().then(() => {
-    handleCronJobCompletion(state, params);
-    transaction.end('success');
-  }).catch((err) => {
-    handleCronJobCompletion(state, params);
-    captureError(err);
-    transaction.end('error');
-    console.error(`Error in cron job '${alias}':`, err);
-  });
-  await cronJobsCollection.updateOne({ alias }, {
-    $set: {
-      lastStartDate: new Date(state.startTs),
+  const controller = new AbortController();
+  let timerId: NodeJS.Timeout | undefined;
+
+  const invokeHandler = async () => {
+    try {
+      // Check if handler has parameters and pass abort signal
+      // @ts-ignore
+      const maybePromise = handler.length >= 1 ? handler(controller.signal) : handler();
+      return await maybePromise;
+    } catch (err) {
+      throw err; 
     }
-  });
+  }; 
+
+  try{
+    const handlerPromise = invokeHandler();
+    const timeoutPromise = new Promise<never>((_, reject)=>{
+      timerId = setTimeout(() => {
+        controller.abort(); // abort handler if timeout occurs
+        reject(new Error('__CRON_TIMEOUT__')); 
+      }, params.timeout);
+    });
+    await Promise.race([handlerPromise, timeoutPromise]);
+    if (timerId) { //clear timeout if job is completed
+      clearTimeout(timerId);
+      timerId = undefined;
+    }
+    await cronJobsCollection.updateOne({ alias },{
+      $set: { lastStartDate: new Date(startTs) }
+    });
+    transaction.end('success');
+  }catch (err){
+    if ((err as Error).message === '__CRON_TIMEOUT__'){
+      // handling timeout
+      console.error(`Cron job '${alias}' exceeded timeout of ${params.timeout}ms`)
+      captureError(new Error(`Job ${alias} timed out`))
+      await cronJobsCollection.updateOne({ alias }, {
+        $set: { lastStartDate: new Date(startTs) }
+      });
+      transaction.end('timeout');
+    }else{
+      captureError(err as Error);
+      await cronJobsCollection.updateOne({ alias },{
+        $set: { lastStartDate: new Date(startTs) }
+      });
+      transaction.end('error');
+      console.error(`Error in cron job '${alias}':`, err)
+    }
+  } finally {
+    // timeout is cleared and job state is handled
+    if (timerId) {
+      clearTimeout(timerId);
+      timerId = undefined;
+    }
+    handleCronJobCompletion(state, params);
+  }
 }
+
 
 function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
   state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
