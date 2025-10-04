@@ -49,7 +49,7 @@ export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDoma
   indexes: [
     {
       key: { domain: 1 },
-      unique: true
+      unique: true,
     }
   ]
 });

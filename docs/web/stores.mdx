@@ -1,0 +1,386 @@
+---
+title: 'Stores'
+description: 'MongoDB collections with TypeScript schemas and helper methods'
+icon: 'database'
+---
+
+Stores in Modelence provide a type-safe interface for MongoDB collections with built-in schema validation, custom methods, and indexing support.
+
+## Overview
+
+A Store represents a MongoDB collection with:
+
+- **Type-safe schemas** using Modelence schema types (based on Zod)
+- **Custom document methods** for business logic
+- **MongoDB indexes** for query performance
+- **Search indexes** for MongoDB Atlas Search
+- **CRUD operations** with full TypeScript support
+
+## Creating a Store
+
+Define a Store by specifying a collection name and configuration:
+
+```typescript
+import { Store, schema } from 'modelence/server';
+
+export const dbTodos = new Store('todos', {
+  schema: {
+    title: schema.string(),
+    isCompleted: schema.boolean(),
+    dueDate: schema.date().optional(),
+    userId: schema.userId(),
+    createdAt: schema.date(),
+  },
+
+  indexes: [
+    { key: { userId: 1 } },
+    { key: { dueDate: 1 } },
+  ],
+
+  methods: {
+    isOverdue() {
+      return this.dueDate ? this.dueDate < new Date() : false;
+    }
+  }
+});
+```
+
+## Schema Definition
+
+Modelence schemas are based on and closely resemble Zod types. Available schema types include:
+
+```typescript
+{
+  // Primitive types
+  name: schema.string(),
+  age: schema.number(),
+  isActive: schema.boolean(),
+  createdAt: schema.date(),
+
+  // Optional fields
+  description: schema.string().optional(),
+
+  // Arrays
+  tags: schema.array(schema.string()),
+
+  // Objects
+  metadata: schema.object({
+    key: schema.string(),
+    value: schema.string(),
+  }),
+
+  // Built-in Modelence types
+  userId: schema.userId(),  // References a user ID
+}
+```
+
+## Custom Methods
+
+Add custom methods to documents for business logic:
+
+```typescript
+export const dbProducts = new Store('products', {
+  schema: {
+    name: schema.string(),
+    price: schema.number(),
+    discount: schema.number().optional(),
+  },
+
+  methods: {
+    getFinalPrice() {
+      return this.discount
+        ? this.price * (1 - this.discount / 100)
+        : this.price;
+    },
+
+    hasDiscount() {
+      return !!this.discount && this.discount > 0;
+    }
+  }
+});
+
+// Usage
+const product = await dbProducts.findById(productId);
+console.log(product.getFinalPrice());  // Custom method available
+```
+
+## MongoDB Indexes
+
+Configure indexes to improve query performance:
+
+```typescript
+export const dbPosts = new Store('posts', {
+  schema: {
+    title: schema.string(),
+    authorId: schema.userId(),
+    publishedAt: schema.date(),
+    status: schema.string(),
+  },
+
+  indexes: [
+    // Single field index
+    { key: { authorId: 1 } },
+
+    // Compound index
+    { key: { status: 1, publishedAt: -1 } },
+
+    // Named index
+    {
+      key: { title: 'text' },
+      name: 'title_text_index'
+    },
+
+    // Unique index
+    {
+      key: { slug: 1 },
+      unique: true
+    }
+  ]
+});
+```
+
+Modelence automatically creates these indexes when the application starts.
+
+## MongoDB Atlas Search Indexes
+
+For advanced full-text search capabilities using MongoDB Atlas Search, configure search indexes:
+
+```typescript
+export const dbArticles = new Store('articles', {
+  schema: {
+    title: schema.string(),
+    content: schema.string(),
+    tags: schema.array(schema.string()),
+    category: schema.string(),
+    authorId: schema.userId(),
+  },
+
+  indexes: [
+    { key: { authorId: 1 } },
+  ],
+
+  searchIndexes: [
+    {
+      name: 'article_search',
+      definition: {
+        mappings: {
+          dynamic: false,
+          fields: {
+            title: {
+              type: 'string',
+              analyzer: 'lucene.standard'
+            },
+            content: {
+              type: 'string',
+              analyzer: 'lucene.standard'
+            },
+            tags: {
+              type: 'string',
+              analyzer: 'lucene.keyword'
+            },
+            category: {
+              type: 'string',
+              analyzer: 'lucene.keyword'
+            }
+          }
+        }
+      }
+    }
+  ]
+});
+```
+
+### Using Search Indexes
+
+Once configured, use the search indexes with MongoDB's aggregation pipeline:
+
+```typescript
+// Full-text search across title and content
+const results = await dbArticles.aggregate([
+  {
+    $search: {
+      index: 'article_search',
+      text: {
+        query: 'machine learning',
+        path: ['title', 'content']
+      }
+    }
+  },
+  {
+    $limit: 10
+  }
+]).toArray();
+
+// Search with filters
+const filteredResults = await dbArticles.aggregate([
+  {
+    $search: {
+      index: 'article_search',
+      compound: {
+        must: [
+          {
+            text: {
+              query: 'tutorial',
+              path: 'title'
+            }
+          }
+        ],
+        filter: [
+          {
+            text: {
+              query: 'javascript',
+              path: 'category'
+            }
+          }
+        ]
+      }
+    }
+  }
+]).toArray();
+```
+
+<Note>
+Search indexes require MongoDB Atlas. They are automatically created when your application starts, similar to regular indexes.
+</Note>
+
+## CRUD Operations
+
+Stores provide comprehensive methods for data operations:
+
+### Finding Documents
+
+```typescript
+// Find one document
+const todo = await dbTodos.findOne({ userId: user.id });
+
+// Find by ID
+const todo = await dbTodos.findById(todoId);
+
+// Require one (throws error if not found)
+const todo = await dbTodos.requireById(todoId);
+
+// Fetch multiple documents
+const todos = await dbTodos.fetch(
+  { userId: user.id },
+  { sort: { createdAt: -1 }, limit: 10 }
+);
+
+// Count documents
+const count = await dbTodos.countDocuments({ isCompleted: false });
+```
+
+### Inserting Documents
+
+```typescript
+// Insert one
+const { insertedId } = await dbTodos.insertOne({
+  title: 'Buy groceries',
+  isCompleted: false,
+  userId: user.id,
+  createdAt: new Date()
+});
+
+// Insert many
+const result = await dbTodos.insertMany([
+  { title: 'Task 1', isCompleted: false, userId: user.id, createdAt: new Date() },
+  { title: 'Task 2', isCompleted: false, userId: user.id, createdAt: new Date() }
+]);
+```
+
+### Updating Documents
+
+```typescript
+// Update one
+await dbTodos.updateOne(
+  { id: todoId },
+  { $set: { isCompleted: true } }
+);
+
+// Update one with convenience selector (by ID string)
+await dbTodos.updateOne(
+  todoId,
+  { $set: { isCompleted: true } }
+);
+
+// Upsert (update or insert)
+await dbTodos.upsertOne(
+  { userId: user.id, title: 'Unique task' },
+  { $set: { isCompleted: false } }
+);
+
+// Update many
+await dbTodos.updateMany(
+  { userId: user.id },
+  { $set: { isArchived: true } }
+);
+```
+
+### Deleting Documents
+
+```typescript
+// Delete one
+await dbTodos.deleteOne({ id: todoId });
+
+// Delete many
+await dbTodos.deleteMany({ isCompleted: true });
+```
+
+### Advanced Operations
+
+```typescript
+// Aggregation pipeline
+const stats = await dbTodos.aggregate([
+  { $match: { userId: user.id } },
+  { $group: {
+    _id: '$isCompleted',
+    count: { $sum: 1 }
+  }}
+]).toArray();
+
+// Bulk write operations
+await dbTodos.bulkWrite([
+  { insertOne: { document: { title: 'New task', /* ... */ } } },
+  { updateOne: { filter: { id: todoId }, update: { $set: { isCompleted: true } } } },
+  { deleteOne: { filter: { id: oldTodoId } } }
+]);
+```
+
+## Including Stores in Modules
+
+Register stores in your module to automatically provision them:
+
+```typescript
+import { Module } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  stores: [dbTodos],
+
+  queries: {
+    async getAll() {
+      return await dbTodos.fetch({});
+    }
+  }
+});
+```
+
+When your application starts, Modelence will:
+- Provision the collection in MongoDB
+- Create all configured indexes
+- Create all configured search indexes
+
+<Tip>
+Stores handle all MongoDB connection management automatically. Just define your Store and include it in a module - Modelence takes care of the rest.
+</Tip>
+
+## Best Practices
+
+1. **Define stores per domain** - Keep related data in the same module
+2. **Use indexes wisely** - Index fields used frequently in queries
+3. **Leverage custom methods** - Encapsulate business logic in document methods
+4. **Type safety** - Let TypeScript guide you with schema-based types
+5. **Search indexes for Atlas** - Use search indexes for advanced full-text search capabilities
+
+## API Reference
+
+For a complete list of available methods and detailed API documentation, see the [Store API Reference](/api-reference/modelence/server/classes/Store).
