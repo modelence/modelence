@@ -1,0 +1,438 @@
+Modelence provides a comprehensive built-in authentication system with support for email/password authentication, email verification, password reset, and session management. This guide explains how authentication works in Modelence and how to implement it in your application.
+
+## Overview
+
+Modelence authentication includes:
+
+- **Email/Password Authentication** - User signup and login with email and password
+- **Session Management** - Secure session handling with automatic token rotation
+- **Email Verification** - Optional email verification for new signups
+- **Password Reset** - Secure password reset flow with email tokens
+- **Rate Limiting** - Built-in protection against brute force attacks
+- **User Management** - User profile and role management
+
+## How Authentication Works
+
+### Session Management
+
+When a user visits your application, Modelence automatically creates a session:
+
+1. **Session Creation** - A secure session token is generated using cryptographically random bytes
+2. **Token Storage** - The session token is stored in the database and sent to the client
+3. **Automatic Expiration** - Sessions expire after 7 days of inactivity
+4. **Heartbeat Updates** - Active sessions are automatically renewed through periodic heartbeat requests
+
+Sessions are stored in the `_modelenceSessions` collection and tracked with the following properties:
+
+```typescript
+{
+  authToken: string;      // Secure random token
+  createdAt: Date;        // Session creation timestamp
+  expiresAt: Date;        // Automatic expiration date
+  userId: ObjectId | null; // Associated user (null for guest sessions)
+}
+```
+
+### User Authentication Flow
+
+#### Signup Process
+
+When a user signs up with email and password:
+
+1. **Validation** - Email format and password strength are validated
+2. **Duplicate Check** - System checks if email already exists
+3. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+4. **User Creation** - User record is created in the `_modelenceUsers` collection
+5. **Session Linking** - The session is linked to the new user
+6. **Email Verification** (Optional) - If enabled, a verification email is sent
+
+#### Login Process
+
+When a user logs in:
+
+1. **Credential Verification** - Email and password are validated against stored credentials
+2. **Session Update** - Current session is linked to the authenticated user
+3. **User Data** - User information is returned to the client
+4. **State Update** - Client-side session state is updated
+
+## Basic Implementation
+
+### Client-Side Usage
+
+#### Signup
+
+```typescript
+import { signupWithPassword } from 'modelence/client';
+
+async function handleSignup(email: string, password: string) {
+  try {
+    await signupWithPassword({ email, password });
+    // User is now signed up
+    // If email verification is disabled, user is automatically logged in
+  } catch (error) {
+    console.error('Signup failed:', error.message);
+  }
+}
+```
+
+#### Login
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    const user = await loginWithPassword({ email, password });
+    console.log('Logged in as:', user.handle);
+  } catch (error) {
+    console.error('Login failed:', error.message);
+  }
+}
+```
+
+#### Logout
+
+```typescript
+import { logout } from 'modelence/client';
+
+async function handleLogout() {
+  await logout();
+  // User is now logged out
+}
+```
+
+#### Accessing Current User
+
+```typescript
+import { useSession } from 'modelence/client';
+
+function MyComponent() {
+  const { user } = useSession();
+
+  if (!user) {
+    return <div>Please log in</div>;
+  }
+
+  return <div>Welcome, {user.handle}!</div>;
+}
+```
+
+### Server-Side Configuration
+
+#### Basic Setup
+
+Configure authentication in your [startApp](/api-reference/modelence/server/functions/startApp) call:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  // ... other configuration
+  auth: {
+    onAfterLogin: ({ user }) => {
+      console.log('User logged in:', user.handle);
+    },
+    onAfterSignup: ({ user }) => {
+      console.log('New user signed up:', user.email);
+    },
+  },
+});
+```
+
+#### Auth Callbacks
+
+The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    onAfterLogin: ({ user, session, connectionInfo }) => {
+      // Called after successful login
+      console.log(`${user.handle} logged in from ${connectionInfo.ip}`);
+    },
+    onLoginError: ({ error, session, connectionInfo }) => {
+      // Called when login fails
+      console.error('Login error:', error.message);
+    },
+    onAfterSignup: ({ user, session, connectionInfo }) => {
+      // Called after successful signup
+      // Perfect place to send welcome emails or analytics
+    },
+    onSignupError: ({ error, session, connectionInfo }) => {
+      // Called when signup fails
+      console.error('Signup error:', error.message);
+    },
+  },
+});
+```
+
+## Email Verification
+
+Email verification adds an extra layer of security by ensuring users own the email address they register with.
+
+### Enabling Email Verification
+
+First, configure your email provider (see [Email Configuration](/email)):
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Verify your email',
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+### How It Works
+
+1. When a user signs up, a verification token is generated and stored
+2. An email with a verification link is sent to the user's email address
+3. The link contains the token: `https://yourapp.com/api/_internal/auth/verify-email?token=...`
+4. When clicked, the token is validated and the user's email is marked as verified
+5. The user is redirected to your configured `redirectUrl`
+
+### Custom Verification Templates
+
+You can customize the verification email template:
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Welcome! Please verify your email',
+      template: ({ name, email, verificationUrl }) => `
+        <html>
+          <body>
+            <h1>Welcome to Our App!</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>Please click the button below to verify your email address:</p>
+            <a href="${verificationUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Verify Email
+            </a>
+            <p>Or copy and paste this link: ${verificationUrl}</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+### Manual Verification
+
+You can also manually trigger email verification from the client:
+
+```typescript
+import { verifyEmail } from 'modelence/client';
+
+async function handleVerification(token: string) {
+  try {
+    await verifyEmail({ token });
+    console.log('Email verified successfully!');
+  } catch (error) {
+    console.error('Verification failed:', error.message);
+  }
+}
+```
+
+## Password Reset
+
+Modelence provides a secure password reset flow with email tokens.
+
+### Configuration
+
+Configure password reset emails in your server setup:
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    passwordReset: {
+      subject: 'Reset your password',
+      redirectUrl: 'https://yourdomain.com/reset-password',
+    },
+  },
+});
+```
+
+### How It Works
+
+1. User requests a password reset by providing their email
+2. A secure reset token is generated and stored in the database
+3. An email with a reset link is sent to the user
+4. The link redirects to your app with the token as a query parameter
+5. User enters their new password along with the token
+6. Password is updated and token is invalidated
+
+### Client Implementation
+
+#### Request Password Reset
+
+```typescript
+import { sendResetPasswordToken } from 'modelence/client';
+
+async function handleForgotPassword(email: string) {
+  try {
+    await sendResetPasswordToken({ email });
+    console.log('Password reset email sent');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
+#### Reset Password with Token
+
+```typescript
+import { resetPassword } from 'modelence/client';
+
+async function handleResetPassword(token: string, newPassword: string) {
+  try {
+    await resetPassword({ token, password: newPassword });
+    console.log('Password reset successful');
+  } catch (error) {
+    console.error('Reset failed:', error.message);
+  }
+}
+```
+
+### Custom Reset Email Template
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    passwordReset: {
+      subject: 'Reset Your Password',
+      template: ({ name, email, resetUrl }) => `
+        <html>
+          <body>
+            <h1>Password Reset Request</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>We received a request to reset your password. Click the button below to proceed:</p>
+            <a href="${resetUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Reset Password
+            </a>
+            <p>If you didn't request this, you can safely ignore this email.</p>
+            <p>This link will expire in 1 hour.</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/reset-password',
+    },
+  },
+});
+```
+
+## Rate Limiting
+
+Modelence includes built-in rate limiting to protect against brute force attacks and abuse. Rate limits are automatically applied to authentication endpoints.
+
+### Default Rate Limits
+
+- **Signup**: 20 attempts per 15 minutes, 200 per day (per IP)
+- **Login**: 50 attempts per 15 minutes, 500 per day (per IP)
+- **Email Verification**: 3 attempts per 15 minutes, 10 per day (per user)
+
+These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
+
+### Handling Rate Limit Errors
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+import { RateLimitError } from 'modelence';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    await loginWithPassword({ email, password });
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      console.error('Too many attempts. Please try again later.');
+    } else {
+      console.error('Login failed:', error.message);
+    }
+  }
+}
+```
+
+## Security Best Practices
+
+### Password Security
+
+- **Minimum Length**: Enforce minimum password length (8+ characters recommended)
+- **Complexity**: Consider requiring mixed case, numbers, or special characters
+- **Hashing**: Passwords are automatically hashed with bcrypt - never store plain text
+- **No Validation on Client**: Always validate passwords on the server
+
+### Session Security
+
+- **Token Storage**: Session tokens are automatically managed - don't expose them
+- **HTTPS Only**: Always use HTTPS in production to protect session tokens
+- **Automatic Expiration**: Sessions expire after 7 days of inactivity
+- **Logout**: Always provide a clear logout option for users
+
+### Email Validation
+
+- **Format Validation**: Email format is automatically validated
+- **Disposable Email Detection**: Modelence includes protection against disposable email services
+- **Verification**: Enable email verification for sensitive applications
+
+## UI Components
+
+Modelence provides pre-built authentication UI components through the [@modelence/auth-ui](/api-reference/@modelence/auth-ui/index) package.
+
+```bash
+npm install @modelence/auth-ui
+```
+
+These components handle all the authentication flows with a polished UI out of the box.
+
+## API Reference
+
+### Client Functions
+
+- [signupWithPassword](/api-reference/modelence/client/functions/signupWithPassword) - Sign up with email and password
+- [loginWithPassword](/api-reference/modelence/client/functions/loginWithPassword) - Log in with email and password
+- [logout](/api-reference/modelence/client/functions/logout) - Log out current user
+- [useSession](/api-reference/modelence/client/functions/useSession) - Access current user session
+- [verifyEmail](/api-reference/modelence/client/functions/verifyEmail) - Verify email with token
+- [sendResetPasswordToken](/api-reference/modelence/client/functions/sendResetPasswordToken) - Request password reset
+- [resetPassword](/api-reference/modelence/client/functions/resetPassword) - Reset password with token
+
+### Server Types
+
+- [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) - Authentication configuration
+- [UserInfo](/api-reference/modelence/server/type-aliases/UserInfo) - User information type
+- [dbUsers](/api-reference/modelence/server/variables/dbUsers) - User database collection
+
+### Error Types
+
+- [AuthError](/api-reference/modelence/index/classes/AuthError) - Authentication errors
+- [ValidationError](/api-reference/modelence/index/classes/ValidationError) - Validation errors
+- [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) - Rate limit errors
+
+## Next Steps
+
+- Learn about [Email Configuration](/email) to enable verification and password reset
+- Explore the [@modelence/auth-ui](/api-reference/@modelence/auth-ui/index) package for pre-built UI components
+- Check out the [Tutorial](/tutorial) for a complete application example
+- Review [Database](/api-reference/modelence/server/classes/Store) documentation for custom user data
