@@ -178,7 +178,7 @@ Modelence supports OAuth authentication with Google, allowing users to sign in w
 Before implementing Google Sign-In, you need to:
 
 1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/)
-2. Enable the Google+ API
+2. Configure the OAuth consent screen
 3. Create OAuth 2.0 credentials (Client ID and Client Secret)
 4. Configure authorized redirect URIs
 
@@ -189,10 +189,16 @@ Before implementing Google Sign-In, you need to:
    - Click "Select a project" → "New Project"
    - Name your project and click "Create"
 
-2. **Enable Google+ API**
-   - In your project, go to "APIs & Services" → "Library"
-   - Search for "Google+ API"
-   - Click on it and press "Enable"
+2. **Configure OAuth Consent Screen**
+   - Go to "APIs & Services" → "OAuth consent screen"
+   - Choose user type (External for most applications)
+   - Fill in the required fields:
+     - App name
+     - User support email
+     - Developer contact information
+   - Click "Save and Continue"
+   - Add scopes if needed (profile and email are included by default)
+   - Click "Save and Continue"
 
 3. **Create OAuth Credentials**
    - Go to "APIs & Services" → "Credentials"
@@ -211,7 +217,7 @@ Before implementing Google Sign-In, you need to:
 
 5. **Save Credentials**
    - Copy your **Client ID** and **Client Secret**
-   - Store them securely (use environment variables)
+   - Store them securely (use environment variables or Modelence Cloud config)
 
 ### Server-Side Configuration
 
