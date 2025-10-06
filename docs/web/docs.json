@@ -30,7 +30,8 @@
           {
             "group": "Tutorials",
             "pages": [
-              "tutorial"
+              "tutorial",
+              "data-api"
             ]
           }
         ]
