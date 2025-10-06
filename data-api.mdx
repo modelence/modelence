@@ -1,0 +1,557 @@
+---
+title: 'Data API'
+description: 'REST API for MongoDB operations with Modelence'
+icon: 'database'
+---
+
+<Tip>
+  **Quick Start Tutorial**: [Migrate your MongoDB Data API in 30 minutes](https://medium.com/modelence/migrate-your-mongodb-data-api-in-30-minutes-c1d8d5959728) - A step-by-step guide to get started with Modelence Data API.
+</Tip>
+
+## What is MongoDB Data API
+
+An open-source API to read, write, and aggregate data in MongoDB. The application can be deployed to Modelence Cloud or to any other cloud provider.
+
+- **CRUD Operations**: Insert, find, update, and delete documents
+- **Advanced Querying**: Aggregation pipelines and complex queries
+- **Database Management**: Collection and index management
+- **Authentication**: API key-based security
+- **MongoDB Operations**: Direct access to MongoDB features
+
+## Sandbox
+
+Try the Data API live at [data-api-demo.modelence.app](http://data-api-demo.modelence.app/) to explore all endpoints and test operations without setup.
+
+## Project Setup
+
+### 1. Create a new application
+
+```bash
+npx create-modelence-app@latest data-api --template data-api
+```
+
+### 2. Connect to Modelenece Cloud
+
+1. Open [cloud.modelence.com](https://cloud.modelence.com/) create
+2. Create a new application and a local environment
+3. Click on Setting → Set up
+4. Follow the steps described in the modal
+
+### 3. Start the Development Server
+
+```bash
+npm run dev
+```
+
+Your Data API will be available at `http://localhost:3000`
+
+## Core Components
+
+### DB Access
+
+The MongoDB URL for Data API can be configured via the `dataApi.mongodbUri` setting in Application → Configuration at https://cloud.modelence.com/.
+
+<Note>
+The Modelence framework uses the `_system.mongodbUri` configuration to connect to MongoDB. You can configure two different MongoDB instances to separate Modelence-specific collections from those accessible via Data API. 
+</Note>
+
+### Authentication
+
+The Data API supports two authentication methods:
+
+#### 1. Direct API Key Authentication
+
+Set the api key as the value of 'dataApi.apiKey' in Modelence Cloud from the Application page. (Alternatively you can use DATA_API_KEY environment variable).
+
+Use the `apiKey` header in your requests:
+
+```bash
+apiKey: your-secure-api-key-here
+```
+
+#### 2. Bearer Token Authentication
+
+Alternatively, you can use Bearer token authentication by first obtaining an access token from the login endpoint:
+
+**Login Endpoint**: `POST /auth/providers/api-key/login`
+
+**Request**:
+```json
+{
+  "key": "your-api-key"
+}
+```
+
+**Response**:
+```json
+{
+  "access_token": "eyJhbGc...",
+  "refresh_token": "eyJhbGc...",
+  "token_type": "Bearer",
+  "expires_in": 1800
+}
+```
+
+Then use the access token in the `Authorization` header:
+
+```bash
+Authorization: Bearer eyJhbGc...
+```
+
+Access tokens expire after 30 minutes. Use the refresh token to obtain a new access token without re-authenticating.
+
+### Available Endpoints
+
+The API provides comprehensive MongoDB operations with full request/response specifications:
+
+## API Operations Reference
+
+### 1. Find One Document (`POST /api/findOne`)
+
+**Purpose**: Retrieve a single document from a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name (uses default if not specified)
+  "filter": {},                    // Optional: Query filter object
+  "projection": {}                 // Optional: Fields to include/exclude
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "users",
+  "filter": { "email": "user@example.com" },
+  "projection": { "name": 1, "email": 1, "_id": 0 }
+}
+```
+
+**Response**:
+```json
+{
+  "document": {
+    "name": "John Doe",
+    "email": "user@example.com"
+  }
+}
+```
+
+### 2. Find Multiple Documents (`POST /api/find`)
+
+**Purpose**: Retrieve multiple documents from a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {},                    // Optional: Query filter object
+  "projection": {},               // Optional: Fields to include/exclude
+  "sort": {},                     // Optional: Sort specification
+  "limit": 0,                     // Optional: Maximum number of documents
+  "skip": 0                       // Optional: Number of documents to skip
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "products",
+  "filter": { "category": "electronics", "price": { "$lt": 500 } },
+  "projection": { "name": 1, "price": 1, "category": 1 },
+  "sort": { "price": 1 },
+  "limit": 10,
+  "skip": 0
+}
+```
+
+**Response**:
+```json
+{
+  "documents": [
+    {
+      "name": "Wireless Mouse",
+      "price": 29.99,
+      "category": "electronics"
+    },
+    {
+      "name": "USB Cable",
+      "price": 9.99,
+      "category": "electronics"
+    }
+  ]
+}
+```
+
+### 3. Insert One Document (`POST /api/insertOne`)
+
+**Purpose**: Insert a single document into a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "document": {}                   // Required: Document to insert
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "users",
+  "document": {
+    "name": "John Doe",
+    "email": "john@example.com",
+    "age": 30,
+    "createdAt": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "insertedId": "507f1f77bcf86cd799439011"
+}
+```
+
+### 4. Insert Multiple Documents (`POST /api/insertMany`)
+
+**Purpose**: Insert multiple documents into a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "documents": []                  // Required: Array of documents to insert
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "orders",
+  "documents": [
+    {
+      "orderId": "ORD001",
+      "customerId": "CUST123",
+      "total": 99.99,
+      "status": "pending"
+    },
+    {
+      "orderId": "ORD002",
+      "customerId": "CUST456",
+      "total": 149.99,
+      "status": "completed"
+    }
+  ]
+}
+```
+
+**Response**:
+```json
+{
+  "insertedIds": [
+    "507f1f77bcf86cd799439011",
+    "507f1f77bcf86cd799439012"
+  ]
+}
+```
+
+### 5. Update One Document (`POST /api/updateOne`)
+
+**Purpose**: Update a single document in a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {},                    // Required: Query filter to match document
+  "update": {},                    // Required: Update operations
+  "upsert": false                  // Optional: Create document if not found
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "users",
+  "filter": { "email": "john@example.com" },
+  "update": {
+    "$set": { "lastLogin": "2024-01-15T10:30:00Z" },
+    "$inc": { "loginCount": 1 }
+  },
+  "upsert": false
+}
+```
+
+**Response**:
+```json
+{
+  "matchedCount": 1,
+  "modifiedCount": 1
+}
+```
+
+### 6. Update Multiple Documents (`POST /api/updateMany`)
+
+**Purpose**: Update multiple documents in a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {},                    // Required: Query filter to match documents
+  "update": {},                    // Required: Update operations
+  "upsert": false                  // Optional: Create documents if not found
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "products",
+  "filter": { "category": "electronics" },
+  "update": {
+    "$mul": { "price": 0.9 }
+  },
+  "upsert": false
+}
+```
+
+**Response**:
+```json
+{
+  "matchedCount": 25,
+  "modifiedCount": 25
+}
+```
+
+### 7. Replace One Document (`POST /api/replaceOne`)
+
+**Purpose**: Replace an entire document in a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {},                    // Required: Query filter to match document
+  "replacement": {},               // Required: New document to replace with
+  "upsert": false                  // Optional: Create document if not found
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "users",
+  "filter": { "_id": { "$oid": "507f1f77bcf86cd799439011" } },
+  "replacement": {
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "age": 25,
+    "department": "Engineering"
+  },
+  "upsert": false
+}
+```
+
+**Response**:
+```json
+{
+  "matchedCount": 1,
+  "modifiedCount": 1
+}
+```
+
+### 8. Delete One Document (`POST /api/deleteOne`)
+
+**Purpose**: Delete a single document from a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {}                     // Required: Query filter to match document
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "users",
+  "filter": { "email": "inactive@example.com" }
+}
+```
+
+**Response**:
+```json
+{
+  "deletedCount": 1
+}
+```
+
+### 9. Delete Multiple Documents (`POST /api/deleteMany`)
+
+**Purpose**: Delete multiple documents from a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "filter": {}                     // Required: Query filter to match documents
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "logs",
+  "filter": {
+    "timestamp": {
+      "$lt": "2024-01-01T00:00:00Z"
+    }
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "deletedCount": 1523
+}
+```
+
+### 10. Aggregate (`POST /api/aggregate`)
+
+**Purpose**: Perform aggregation operations on a collection
+
+**Request Fields**:
+```json
+{
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Optional: Database name
+  "pipeline": []                   // Required: Aggregation pipeline stages
+}
+```
+
+**Example Request**:
+```json
+{
+  "collection": "orders",
+  "pipeline": [
+    {
+      "$match": { "status": "completed" }
+    },
+    {
+      "$group": {
+        "_id": "$customerId",
+        "totalSpent": { "$sum": "$total" },
+        "orderCount": { "$sum": 1 }
+      }
+    },
+    {
+      "$sort": { "totalSpent": -1 }
+    },
+    {
+      "$limit": 10
+    }
+  ]
+}
+```
+
+**Response**:
+```json
+{
+  "documents": [
+    {
+      "_id": "CUST123",
+      "totalSpent": 1299.97,
+      "orderCount": 13
+    },
+    {
+      "_id": "CUST456",
+      "totalSpent": 899.95,
+      "orderCount": 6
+    }
+  ]
+}
+```
+
+#### Advanced Operations
+- `POST /api/countDocuments` - Count documents
+- `POST /api/runCommand` - Execute database commands
+
+#### Database Management
+- `GET /api/listCollections` - List all collections
+- `POST /api/createCollection` - Create a new collection
+- `POST /api/dropCollection` - Drop a collection
+- `GET /api/listDatabases` - List databases
+
+
+## Quick cURL Examples
+
+```bash
+# Insert a document
+curl -X POST http://localhost:3000/api/insertOne \
+  -H "Content-Type: application/json" \
+  -H "apiKey: your-api-key" \
+  -d '{"collection": "users", "document": {"name": "John Doe"}}'
+
+# Find documents
+curl -X POST http://localhost:3000/api/find \
+  -H "Content-Type: application/json" \
+  -H "apiKey: your-api-key" \
+  -d '{"collection": "users", "filter": {"name": "John Doe"}}'
+
+# Update a document
+curl -X POST http://localhost:3000/api/updateOne \
+  -H "Content-Type: application/json" \
+  -H "apiKey: your-api-key" \
+  -d '{"collection": "users", "filter": {"name": "John Doe"}, "update": {"$set": {"active": true}}}'
+```
+
+## Security Considerations
+
+- **API Key Authentication**: All endpoints require a valid API key
+- **Input Validation**: Requests are validated before processing
+- **Error Handling**: Proper error responses without exposing sensitive information
+- **Rate Limiting**: Consider implementing rate limiting for production use
+
+## Use Cases
+
+The Data API is ideal for:
+
+- **Admin Dashboards**: Building administrative interfaces for data management
+- **Data Integration**: Connecting external systems to your MongoDB database
+- **Rapid Prototyping**: Quickly testing database operations and queries
+- **Analytics Tools**: Building custom analytics and reporting tools
+- **Mobile Apps**: Providing backend API for mobile applications
+
+## Complete Example
+
+Want to see the full working code? Check it out on GitHub:
+
+<Card
+  title="Complete Data API Example"
+  icon="github"
+  href="https://github.com/modelence/examples/tree/main/data-api"
+>
+  See the complete source code for this example on GitHub, including all endpoints and configuration.
+</Card>
+
+## Next Steps
+
+- Explore the [Store API Reference](../../api-reference/store) for advanced MongoDB operations
+- Learn about [Authentication](/auth) for more secure authentication methods
+- Check out the [Modules Guide](/modules) to understand how to organize your application
