@@ -4,10 +4,6 @@ description: 'REST API for MongoDB operations with Modelence'
 icon: 'database'
 ---
 
-<Note>
-This tutorial assumes you've already [created a Modelence project](/quickstart) and [completed the setup](/setup). If you haven't done so, please complete those steps first.
-</Note>
-
 ## What is MongoDB Data API
 
 An open-source API to read, write, and aggregate data in MongoDB. The application can be deployed to Modelence Cloud or to any other cloud provider.
@@ -27,19 +23,15 @@ Try the Data API live at [data-api-demo.modelence.app](http://data-api-demo.mode
 ### 1. Create a new application
 
 ```bash
-npx create-modelence-app@latest ai-chat --template data-api
+npx create-modelence-app@latest data-api --template data-api
 ```
 
 ### 2. Connect to Modelenece Cloud
 
 1. Open [cloud.modelence.com](https://cloud.modelence.com/) create
 2. Create a new application and a local environment
-3. Click on Setting -> Set up
-4. Copy the command that connects to remote DB, it should looks like the following:
-
-```bash
-npx modelence@latest setup --token "your token here"
-```
+3. Click on Setting → Set up
+4. Follow the steps described in the modal
 
 ### 3. Start the Development Server
 
@@ -50,6 +42,14 @@ npm run dev
 Your Data API will be available at `http://localhost:3000`
 
 ## Core Components
+
+### DB Access
+
+The MongoDB URL for Data API can be configured via the dataApi.mongodbUri setting in Application → Configuration at https://cloud.modelence.com/.
+
+<Note>
+The Modelence framework uses the `_system.mongodbUri` configuration to connect to MongoDB. You can configure two different MongoDB instances to separate Modelence-specific collections from those accessible via Data API. 
+</Note>
 
 ### Authentication
 
