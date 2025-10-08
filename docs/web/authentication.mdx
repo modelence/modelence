@@ -1,0 +1,644 @@
+Modelence provides a comprehensive built-in authentication system with support for email/password authentication, email verification, password reset, and session management. This guide explains how authentication works in Modelence and how to implement it in your application.
+
+## Overview
+
+Modelence authentication includes:
+
+- **Email/Password Authentication** - User signup and login with email and password
+- **Google Sign-In** - OAuth authentication with Google accounts
+- **Session Management** - Secure session handling with automatic token rotation
+- **Email Verification** - Optional email verification for new signups
+- **Password Reset** - Secure password reset flow with email tokens
+- **Rate Limiting** - Built-in protection against brute force attacks
+- **User Management** - User profile and role management
+
+## How Authentication Works
+
+### Session Management
+
+When a user visits your application, Modelence automatically creates a session:
+
+1. **Session Creation** - A secure session token is generated using cryptographically random bytes
+2. **Token Storage** - The session token is stored in the database and sent to the client
+3. **Automatic Expiration** - Sessions expire after 7 days of inactivity
+4. **Heartbeat Updates** - Active sessions are automatically renewed through periodic heartbeat requests
+
+Sessions are stored in the `_modelenceSessions` collection and tracked with the following properties:
+
+```typescript
+{
+  authToken: string;      // Secure random token
+  createdAt: Date;        // Session creation timestamp
+  expiresAt: Date;        // Automatic expiration date
+  userId: ObjectId | null; // Associated user (null for guest sessions)
+}
+```
+
+### User Authentication Flow
+
+#### Signup Process
+
+When a user signs up with email and password:
+
+1. **Validation** - Email format and password strength are validated
+2. **Duplicate Check** - System checks if email already exists
+3. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+4. **User Creation** - User record is created in the `_modelenceUsers` collection
+5. **Session Linking** - The session is linked to the new user
+6. **Email Verification** (Optional) - If enabled, a verification email is sent
+
+#### Login Process
+
+When a user logs in:
+
+1. **Credential Verification** - Email and password are validated against stored credentials
+2. **Session Update** - Current session is linked to the authenticated user
+3. **User Data** - User information is returned to the client
+4. **State Update** - Client-side session state is updated
+
+## Basic Implementation
+
+### Client-Side Usage
+
+#### Signup
+
+```typescript
+import { signupWithPassword } from 'modelence/client';
+
+async function handleSignup(email: string, password: string) {
+  try {
+    await signupWithPassword({ email, password });
+    // User is now signed up
+    // If email verification is disabled, user is automatically logged in
+  } catch (error) {
+    console.error('Signup failed:', error.message);
+  }
+}
+```
+
+#### Login
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    const user = await loginWithPassword({ email, password });
+    console.log('Logged in as:', user.handle);
+  } catch (error) {
+    console.error('Login failed:', error.message);
+  }
+}
+```
+
+#### Logout
+
+```typescript
+import { logout } from 'modelence/client';
+
+async function handleLogout() {
+  await logout();
+  // User is now logged out
+}
+```
+
+#### Accessing Current User
+
+```typescript
+import { useSession } from 'modelence/client';
+
+function MyComponent() {
+  const { user } = useSession();
+
+  if (!user) {
+    return <div>Please log in</div>;
+  }
+
+  return <div>Welcome, {user.handle}!</div>;
+}
+```
+
+### Server-Side Configuration
+
+#### Basic Setup
+
+Configure authentication in your [startApp](/api-reference/modelence/server/functions/startApp) call:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  // ... other configuration
+  auth: {
+    onAfterLogin: ({ user }) => {
+      console.log('User logged in:', user.handle);
+    },
+    onAfterSignup: ({ user }) => {
+      console.log('New user signed up:', user.email);
+    },
+  },
+});
+```
+
+#### Auth Callbacks
+
+The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    onAfterLogin: ({ user, session, connectionInfo }) => {
+      // Called after successful login
+      console.log(`${user.handle} logged in from ${connectionInfo.ip}`);
+    },
+    onLoginError: ({ error, session, connectionInfo }) => {
+      // Called when login fails
+      console.error('Login error:', error.message);
+    },
+    onAfterSignup: ({ user, session, connectionInfo }) => {
+      // Called after successful signup
+      // Perfect place to send welcome emails or analytics
+    },
+    onSignupError: ({ error, session, connectionInfo }) => {
+      // Called when signup fails
+      console.error('Signup error:', error.message);
+    },
+  },
+});
+```
+
+## Google Sign-In
+
+Modelence supports OAuth authentication with Google, allowing users to sign in with their Google accounts.
+
+### Prerequisites
+
+Before implementing Google Sign-In, you need to:
+
+1. Create a project in the [Google Cloud Console](https://console.cloud.google.com/)
+2. Configure the OAuth consent screen
+3. Create OAuth 2.0 credentials (Client ID and Client Secret)
+4. Configure authorized redirect URIs
+
+### Google Cloud Console Setup
+
+1. **Create a Project**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Click "Select a project" → "New Project"
+   - Name your project and click "Create"
+
+2. **Configure OAuth Consent Screen**
+   - Go to "APIs & Services" → "OAuth consent screen"
+   - Choose user type (External for most applications)
+   - Fill in the required fields:
+     - App name
+     - User support email
+     - Developer contact information
+   - Click "Save and Continue"
+   - Add scopes if needed (profile and email are included by default)
+   - Click "Save and Continue"
+
+3. **Create OAuth Credentials**
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Select "Web application" as the application type
+   - Add a name for your OAuth client
+
+4. **Configure Redirect URIs**
+   - Under "Authorized JavaScript origins", add:
+     - `http://localhost:3000` (for local development)
+     - `https://yourdomain.com` (for production)
+   - Under "Authorized redirect URIs", add:
+     - `http://localhost:3000/api/_internal/auth/google/callback` (for local development)
+     - `https://yourdomain.com/api/_internal/auth/google/callback` (for production)
+   - Click "Create"
+
+5. **Save Credentials**
+   - Copy your **Client ID** and **Client Secret**
+   - Store them securely (use environment variables or Modelence Cloud config)
+
+### Server-Side Configuration
+
+Google Sign-In is built into Modelence and requires no additional packages.
+
+#### Option 1: Modelence Cloud (Recommended)
+
+The preferred way to configure Google authentication is through [Modelence Cloud](https://cloud.modelence.com/):
+
+1. Go to [https://cloud.modelence.com/](https://cloud.modelence.com/)
+2. Navigate to your project's configuration
+3. Set the following configs:
+   - `_system.user.auth.google.enabled` - Set to `true`
+   - `_system.user.auth.google.clientId` - Your Google Client ID
+   - `_system.user.auth.google.clientSecret` - Your Google Client Secret
+
+This approach allows you to manage your configuration centrally and keeps sensitive credentials secure.
+
+#### Option 2: Environment Variables
+
+Alternatively, you can use environment variables. Create a `.env` file in your project root:
+
+```bash
+MODELENCE_AUTH_GOOGLE_ENABLED=true
+MODELENCE_AUTH_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+MODELENCE_AUTH_GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+Make sure to add `.env` to your `.gitignore` file to keep credentials secure.
+
+The Google authentication is automatically enabled when these configurations are set. No additional server code is needed.
+
+### Client-Side Implementation
+
+To initiate Google Sign-In, redirect the user to the Google authentication endpoint:
+
+```typescript
+function handleGoogleSignIn() {
+  // Redirect to Google OAuth flow
+  window.location.href = '/api/_internal/auth/google';
+}
+```
+
+### UI Integration
+
+Add a Google Sign-In button to your UI:
+
+```typescript
+function LoginForm() {
+  return (
+    <div>
+      <h2>Sign In</h2>
+      <button onClick={() => window.location.href = '/api/_internal/auth/google'}>
+        Sign in with Google
+      </button>
+    </div>
+  );
+}
+```
+
+### How Google Sign-In Works
+
+1. **Initiation** - User clicks "Sign in with Google" button
+2. **Redirect** - User is redirected to Google's OAuth consent screen
+3. **Authorization** - User grants permission to your app
+4. **Callback** - Google redirects back to your app with an authorization code
+5. **Token Exchange** - Your server exchanges the code for user information
+6. **User Creation/Login** - If user doesn't exist, a new account is created; otherwise, user is logged in
+7. **Session Creation** - A session is established and the user is authenticated
+
+### User Data Handling
+
+When a user signs in with Google, Modelence automatically:
+
+- Creates a user account if one doesn't exist
+- Links the Google account to the user profile
+- Retrieves profile information (name, email, profile picture)
+- Marks the email as verified (since Google has verified it)
+
+The user object will contain:
+
+```typescript
+{
+  email: string;           // Google account email
+  handle: string;          // Generated from email or name
+  emailVerified: true;     // Always true for Google sign-in
+  googleId: string;        // Google user ID
+  name?: string;           // Full name from Google
+  picture?: string;        // Profile picture URL
+}
+```
+
+### Combining with Email/Password Authentication
+
+Users can have both Google and email/password authentication on the same account:
+
+```typescript
+import { loginWithPassword, logout } from 'modelence/client';
+import { useState } from 'react';
+
+function LoginOptions() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  return (
+    <div>
+      <h2>Sign In</h2>
+
+      {/* Google Sign-In */}
+      <button onClick={() => window.location.href = '/api/_internal/auth/google'}>
+        Sign in with Google
+      </button>
+
+      <div>or</div>
+
+      {/* Email/Password Sign-In */}
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        await loginWithPassword({ email, password });
+      }}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+        />
+        <button type="submit">Sign In</button>
+      </form>
+    </div>
+  );
+}
+```
+
+### Troubleshooting
+
+**Redirect URI Mismatch Error**
+- Ensure the redirect URI in Google Cloud Console exactly matches your application URL
+- Check for trailing slashes and http vs https
+- Common format: `https://yourdomain.com/api/_internal/auth/google/callback`
+
+**Invalid Client Error**
+- Verify your Client ID and Client Secret are correct
+- Check that environment variables are properly loaded
+- Ensure credentials are from the correct Google Cloud project
+
+**Access Blocked: Authorization Error**
+- Make sure Google+ API is enabled in your project
+- Verify your OAuth consent screen is configured
+- Check that your domain is authorized
+
+## Email Verification
+
+Email verification adds an extra layer of security by ensuring users own the email address they register with.
+
+### Enabling Email Verification
+
+First, configure your email provider (see [Email Configuration](/email)):
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Verify your email',
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+### How It Works
+
+1. When a user signs up, a verification token is generated and stored
+2. An email with a verification link is sent to the user's email address
+3. The link contains the token: `https://yourapp.com/api/_internal/auth/verify-email?token=...`
+4. When clicked, the token is validated and the user's email is marked as verified
+5. The user is redirected to your configured `redirectUrl`
+
+### Custom Verification Templates
+
+You can customize the verification email template:
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Welcome! Please verify your email',
+      template: ({ name, email, verificationUrl }) => `
+        <html>
+          <body>
+            <h1>Welcome to Our App!</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>Please click the button below to verify your email address:</p>
+            <a href="${verificationUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Verify Email
+            </a>
+            <p>Or copy and paste this link: ${verificationUrl}</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+### Manual Verification
+
+You can also manually trigger email verification from the client:
+
+```typescript
+import { verifyEmail } from 'modelence/client';
+
+async function handleVerification(token: string) {
+  try {
+    await verifyEmail({ token });
+    console.log('Email verified successfully!');
+  } catch (error) {
+    console.error('Verification failed:', error.message);
+  }
+}
+```
+
+## Password Reset
+
+Modelence provides a secure password reset flow with email tokens.
+
+### Configuration
+
+Configure password reset emails in your server setup:
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    passwordReset: {
+      subject: 'Reset your password',
+      redirectUrl: 'https://yourdomain.com/reset-password',
+    },
+  },
+});
+```
+
+### How It Works
+
+1. User requests a password reset by providing their email
+2. A secure reset token is generated and stored in the database
+3. An email with a reset link is sent to the user
+4. The link redirects to your app with the token as a query parameter
+5. User enters their new password along with the token
+6. Password is updated and token is invalidated
+
+### Client Implementation
+
+#### Request Password Reset
+
+```typescript
+import { sendResetPasswordToken } from 'modelence/client';
+
+async function handleForgotPassword(email: string) {
+  try {
+    await sendResetPasswordToken({ email });
+    console.log('Password reset email sent');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
+#### Reset Password with Token
+
+```typescript
+import { resetPassword } from 'modelence/client';
+
+async function handleResetPassword(token: string, newPassword: string) {
+  try {
+    await resetPassword({ token, password: newPassword });
+    console.log('Password reset successful');
+  } catch (error) {
+    console.error('Reset failed:', error.message);
+  }
+}
+```
+
+### Custom Reset Email Template
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    passwordReset: {
+      subject: 'Reset Your Password',
+      template: ({ name, email, resetUrl }) => `
+        <html>
+          <body>
+            <h1>Password Reset Request</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>We received a request to reset your password. Click the button below to proceed:</p>
+            <a href="${resetUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Reset Password
+            </a>
+            <p>If you didn't request this, you can safely ignore this email.</p>
+            <p>This link will expire in 1 hour.</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/reset-password',
+    },
+  },
+});
+```
+
+## Rate Limiting
+
+Modelence includes built-in rate limiting to protect against brute force attacks and abuse. Rate limits are automatically applied to authentication endpoints.
+
+### Default Rate Limits
+
+- **Signup**: 20 attempts per 15 minutes, 200 per day (per IP)
+- **Login**: 50 attempts per 15 minutes, 500 per day (per IP)
+- **Email Verification**: 3 attempts per 15 minutes, 10 per day (per user)
+
+These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
+
+### Handling Rate Limit Errors
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+import { RateLimitError } from 'modelence';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    await loginWithPassword({ email, password });
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      console.error('Too many attempts. Please try again later.');
+    } else {
+      console.error('Login failed:', error.message);
+    }
+  }
+}
+```
+
+## Security Best Practices
+
+### Password Security
+
+- **Minimum Length**: Enforce minimum password length (8+ characters recommended)
+- **Complexity**: Consider requiring mixed case, numbers, or special characters
+- **Hashing**: Passwords are automatically hashed with bcrypt - never store plain text
+- **No Validation on Client**: Always validate passwords on the server
+
+### Session Security
+
+- **Token Storage**: Session tokens are automatically managed - don't expose them
+- **HTTPS Only**: Always use HTTPS in production to protect session tokens
+- **Automatic Expiration**: Sessions expire after 7 days of inactivity
+- **Logout**: Always provide a clear logout option for users
+
+### Email Validation
+
+- **Format Validation**: Email format is automatically validated
+- **Disposable Email Detection**: Modelence includes protection against disposable email services
+- **Verification**: Enable email verification for sensitive applications
+
+## UI Components
+
+Modelence provides pre-built authentication UI components through the [@modelence/auth-ui](/api-reference/@modelence/auth-ui/index) package.
+
+```bash
+npm install @modelence/auth-ui
+```
+
+These components handle all the authentication flows with a polished UI out of the box.
+
+## API Reference
+
+### Client Functions
+
+- [signupWithPassword](/api-reference/modelence/client/functions/signupWithPassword) - Sign up with email and password
+- [loginWithPassword](/api-reference/modelence/client/functions/loginWithPassword) - Log in with email and password
+- [logout](/api-reference/modelence/client/functions/logout) - Log out current user
+- [useSession](/api-reference/modelence/client/functions/useSession) - Access current user session
+- [verifyEmail](/api-reference/modelence/client/functions/verifyEmail) - Verify email with token
+- [sendResetPasswordToken](/api-reference/modelence/client/functions/sendResetPasswordToken) - Request password reset
+- [resetPassword](/api-reference/modelence/client/functions/resetPassword) - Reset password with token
+
+### Server Types
+
+- [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) - Authentication configuration
+- [UserInfo](/api-reference/modelence/server/type-aliases/UserInfo) - User information type
+- [dbUsers](/api-reference/modelence/server/variables/dbUsers) - User database collection
+
+### Error Types
+
+- [AuthError](/api-reference/modelence/index/classes/AuthError) - Authentication errors
+- [ValidationError](/api-reference/modelence/index/classes/ValidationError) - Validation errors
+- [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) - Rate limit errors
+
+## Next Steps
+
+- Learn about [Email Configuration](/email) to enable verification and password reset
+- Explore the [@modelence/auth-ui](/api-reference/@modelence/auth-ui/index) package for pre-built UI components
+- Check out the [Tutorial](/tutorial) for a complete application example
+- Review [Database](/api-reference/modelence/server/classes/Store) documentation for custom user data

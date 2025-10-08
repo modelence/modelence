@@ -24,14 +24,16 @@
           {
             "group": "Features",
             "pages": [
-              "stores",
-              "email"
+              "authentication",
+              "email",
+              "stores"
             ]
           },
           {
             "group": "Tutorials",
             "pages": [
-              "tutorial"
+              "tutorial",
+              "data-api"
             ]
           }
         ]
