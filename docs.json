@@ -25,7 +25,8 @@
             "group": "Features",
             "pages": [
               "authentication",
-              "email"
+              "email",
+              "stores"
             ]
           },
           {
