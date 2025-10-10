@@ -1,8 +1,8 @@
 {
   "type": "module",
   "name": "@modelence/voyageai",
-  "version": "1.0.1",
-  "description": "SMTP Adapter fro Modelence",
+  "version": "1.0.0",
+  "description": "Voyage AI integration for Modelence",
   "exports": {
     ".": {
       "import": "./dist/index.js",
