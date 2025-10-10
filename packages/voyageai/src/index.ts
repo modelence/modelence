@@ -5,6 +5,8 @@ import { VoyageAIClient } from "voyageai";
 
 export type VoyageModel = 'voyage-3-large' | 'voyage-3.5' | 'voyage-3.5-lite' | 'voyage-code-3' | 'voyage-finance-2' | 'voyage-law-2' | 'voyage-code-2' | (string & {});
 
+export type RerankModel = 'rerank-2.5' | 'rerank-2.5-lite' | 'rerank-2' | 'rerank-2-lite' | 'rerank-lite-1' | (string & {});
+
 const voyageModelSettings: Record<VoyageModel, { defaultDimension: number; dimensions: number[] }> = {
   'voyage-3-large': {
     defaultDimension: 1024,
@@ -64,7 +66,10 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     }
     const dimension = options.dimension || voyageModelSettings[model]?.defaultDimension || 1024;
     const indexName = name + '_vector_index';
+    
     const apiKey = getConfig('_system.voyageai.apiKey') as string || process.env.MODELENCE_VOYAGEAI_API_KEY;
+
+    console.log(process.env);
 
     if (!apiKey) {
       throw new Error('VoyageAI API key is required. Set it in the Modelence config under _system.voyageai.apiKey or as the MODELENCE_VOYAGEAI_API_KEY environment variable.');
@@ -79,9 +84,12 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
         type: 'vectorSearch',
         name: indexName,
         definition: {
-          field: 'embedding',
-          dimensions: dimension,
-          similarity: 'cosine',
+          fields: [{
+            type: 'vector',
+            path: 'embedding',
+            numDimensions: dimension,
+            similarity: 'cosine',
+          }],
         },
       }],
       schema: {
@@ -125,17 +133,21 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     limit?: number;
     numCandidates?: number;
     projection?: Partial<Record<keyof TSchema, 1 | 0>>;
+    rerankModel?: RerankModel;
   }) {
+    const embeddingResponse = await this.voyageai.embed({
+      input: query,
+      model: this.model,
+      outputDimension: this.dimension,
+    });
+    const queryVector = embeddingResponse.data?.[0]?.embedding;
+
     const response = await this.aggregate([
       {
         $vectorSearch: {
           index: this.indexName,
           path: "embedding",
-          queryVector: this.voyageai.embed({
-            input: query,
-            model: this.model,
-            outputDimension: this.dimension,
-          }),
+          queryVector,
           numCandidates: options?.numCandidates || 100,
           limit: options?.limit || 10
         }
@@ -150,8 +162,12 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
       }
     ]).toArray();
 
+    if (!options?.rerankModel) {
+      return response;
+    }
+
     const rerankedResponse = await this.voyageai.rerank({
-      model: this.model,
+      model: options.rerankModel,
       query: query,
       documents: response.map(doc => doc.content),
       topK: options?.limit || 10,
@@ -169,8 +185,3 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     return mappedResponse;
   }
 }
-
-const store: Store<any, any> = new VoyageStore('documents', 'voyage-3-large', {
-  schema: {},
-  indexes: [],
-});
