@@ -39,6 +39,8 @@ const voyageModelSettings: Record<VoyageModel, { defaultDimension: number; dimen
 export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<string, (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: Parameters<any>) => any>> extends Store<TSchema, TMethods> {
   private indexName: string;
   private voyageai: VoyageAIClient;
+  private model: VoyageModel;
+  private dimension: number;
   /**
    * Creates a new Store instance
    *
@@ -57,7 +59,10 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     /** MongoDB Atlas Search */
     searchIndexes?: SearchIndexDescription[];
   }) {
-    const dimension = voyageModelSettings[model]?.defaultDimension || 1024;
+    if (options.dimension && !voyageModelSettings[model]?.dimensions.includes(options.dimension)) {
+      throw new Error(`Invalid dimension ${options.dimension} for model ${model}. Supported dimensions: ${voyageModelSettings[model]?.dimensions.join(', ')}`);
+    }
+    const dimension = options.dimension || voyageModelSettings[model]?.defaultDimension || 1024;
     const indexName = name + '_vector_index';
     const voyageai = new VoyageAIClient({
       apiKey: process.env.VOYAGEAI_API_KEY,
@@ -81,30 +86,61 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     });
     this.indexName = indexName;
     this.voyageai = voyageai;
+    this.model = model;
+    this.dimension = dimension;
   }
 
-  insertOne(document: OptionalUnlessRequiredId<this['_type']>) {
-    const embedding = this.voyageai.embed(document.content);
+  async insertOne(document: OptionalUnlessRequiredId<this['_type']> & { content: string }) {
+    const result = await this.voyageai.embed({ input: document.content, model: 'voyage-3' });
+    const embedding = result.data?.[0]?.embedding;
     return super.insertOne({ ...document, embedding });
   }
 
-  vectorSearch() {
-    this.aggregate([
+  async vectorSearch(query: string, options?: {
+    limit?: number;
+    numCandidates?: number;
+    projection: Partial<Record<keyof TSchema, 1 | 0>>;
+  }) {
+    const response = await this.aggregate([
       {
         $vectorSearch: {
           index: this.indexName,
           path: "embedding",
-          queryVector: voyage.embed("holiday cookie recipes without nuts"),
-          numCandidates: 100,
-          limit: 5
+          queryVector: this.voyageai.embed({
+            input: query,
+            model: this.model,
+            outputDimension: this.dimension,
+          }),
+          numCandidates: options?.numCandidates || 100,
+          limit: options?.limit || 10
         }
       },
       {
         $project: {
-          title: 1,
+          ...options?.projection,
+          _id: 1,
+          content: 1,
           score: { $meta: "vectorSearchScore" }
         }
       }
-    ]);
+    ]).toArray();
+
+    const rerankedResponse = await this.voyageai.rerank({
+      model: this.model,
+      query: query,
+      documents: response.map(doc => doc.content),
+      topK: options?.limit || 10,
+    });
+
+    // Map the reranked results back to the original documents
+    const mappedResponse = rerankedResponse.data?.map(rerankedDoc => {
+      const index = rerankedDoc.index || 0;
+      return {
+        ...response[index],
+        score: rerankedDoc.relevanceScore
+      };
+    }) || response;
+
+    return mappedResponse;
   }
 }
