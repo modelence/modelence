@@ -1,9 +1,9 @@
-import { Store, schema } from "modelence/server";
-import { IndexDescription, OptionalUnlessRequiredId, SearchIndexDescription, WithId } from "mongodb";
+import { Store, getConfig, schema } from "modelence/server";
+import { IndexDescription, InsertManyResult, OptionalUnlessRequiredId, SearchIndexDescription, WithId } from "mongodb";
 import type { ModelSchema, InferDocumentType } from "modelence/types";
 import { VoyageAIClient } from "voyageai";
 
-export type VoyageModel = 'voyage-3-large' | 'voyage-3.5' | 'voyage-3.5-lite' | 'voyage-code-3' | 'voyage-finance-2' | 'voyage-law-2' | 'voyage-code-2' | string;
+export type VoyageModel = 'voyage-3-large' | 'voyage-3.5' | 'voyage-3.5-lite' | 'voyage-code-3' | 'voyage-finance-2' | 'voyage-law-2' | 'voyage-code-2' | (string & {});
 
 const voyageModelSettings: Record<VoyageModel, { defaultDimension: number; dimensions: number[] }> = {
   'voyage-3-large': {
@@ -36,7 +36,7 @@ const voyageModelSettings: Record<VoyageModel, { defaultDimension: number; dimen
   },
 };
 
-export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<string, (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: Parameters<any>) => any>> extends Store<TSchema, TMethods> {
+export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<string, (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: Parameters<any>) => any>> extends Store<any, any> {
   private indexName: string;
   private voyageai: VoyageAIClient;
   private model: VoyageModel;
@@ -64,8 +64,14 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     }
     const dimension = options.dimension || voyageModelSettings[model]?.defaultDimension || 1024;
     const indexName = name + '_vector_index';
+    const apiKey = getConfig('_system.voyageai.apiKey') as string || process.env.MODELENCE_VOYAGEAI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('VoyageAI API key is required. Set it in the Modelence config under _system.voyageai.apiKey or as the MODELENCE_VOYAGEAI_API_KEY environment variable.');
+    }
+
     const voyageai = new VoyageAIClient({
-      apiKey: process.env.VOYAGEAI_API_KEY,
+      apiKey,
     });
     super(name, {
       ...options,
@@ -91,15 +97,34 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
   }
 
   async insertOne(document: OptionalUnlessRequiredId<this['_type']> & { content: string }) {
-    const result = await this.voyageai.embed({ input: document.content, model: 'voyage-3' });
+    const result = await this.voyageai.embed({
+      input: document.content,
+      model: this.model,
+      outputDimension: this.dimension,
+    });
     const embedding = result.data?.[0]?.embedding;
     return super.insertOne({ ...document, embedding });
+  }
+
+  async insertMany(documents: (OptionalUnlessRequiredId<this['_type']> & { content: string })[]): Promise<InsertManyResult> {
+    const contents = documents.map(doc => doc.content);
+    const response = await this.voyageai.embed({
+      input: contents,
+      model: this.model,
+      outputDimension: this.dimension,
+    });
+    const embeddings = response.data?.map(item => item.embedding) || [];
+    const docsWithEmbeddings = documents.map((doc, idx) => ({
+      ...doc,
+      embedding: embeddings[idx],
+    }));
+    return super.insertMany(docsWithEmbeddings);
   }
 
   async vectorSearch(query: string, options?: {
     limit?: number;
     numCandidates?: number;
-    projection: Partial<Record<keyof TSchema, 1 | 0>>;
+    projection?: Partial<Record<keyof TSchema, 1 | 0>>;
   }) {
     const response = await this.aggregate([
       {
@@ -144,3 +169,8 @@ export class VoyageStore<TSchema extends ModelSchema, TMethods extends Record<st
     return mappedResponse;
   }
 }
+
+const store: Store<any, any> = new VoyageStore('documents', 'voyage-3-large', {
+  schema: {},
+  indexes: [],
+});
