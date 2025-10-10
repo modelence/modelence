@@ -1,0 +1,32 @@
+{
+  "type": "module",
+  "name": "@modelence/voyageai",
+  "version": "1.0.1",
+  "description": "SMTP Adapter fro Modelence",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "modelence": "*"
+  },
+  "devDependencies": {
+    "modelence": "file:.yalc/modelence",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "voyageai": "^0.0.8"
+  }
+}
