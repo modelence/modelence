@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { z } from 'zod';
+import { z, ZodArray, ZodNumber } from 'zod';
 import { Store } from './store';
 
 type ObjectTypeDefinition = {
@@ -36,6 +36,9 @@ export const schema = {
   array: schemaArray,
   object: schemaObject,
   enum: schemaEnum,
+  embedding(): ZodArray<ZodNumber> {
+    return z.array(z.number());
+  },
   objectId(): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },

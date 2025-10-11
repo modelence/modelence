@@ -432,4 +432,60 @@ export class Store<
 
     await existingCollection.rename(this.name, options);
   }
+
+  async vectorSearch({
+    field,
+    embedding,
+    numCandidates,
+    limit,
+    projection,
+  }: {
+    field: string,
+    embedding: number[],
+    numCandidates?: number;
+    limit?: number;
+    projection?: Document;
+  }) {
+    return this.aggregate([
+      {
+        $vectorSearch: {
+          index: field + 'VectorSearch',
+          path: field,
+          queryVector: embedding,
+          numCandidates: numCandidates || 100,
+          limit: limit || 10,
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          score: { $meta: 'vectorSearchScore' },
+          ...projection,
+        }
+      }
+    ]);
+  }
+
+  static vectorIndex({
+    field,
+    dimensions,
+    similarity = 'cosine',
+  }: {
+    field: string;
+    dimensions: number;
+    similarity?: 'cosine' | 'euclidean' | 'dotProduct';
+  }) {
+    return {
+      type: 'vectorSearch',
+      name: field + 'VectorSearch',
+      definition: {
+        fields: [{
+          type: 'vector',
+          path: field,
+          numDimensions: dimensions,
+          similarity,
+        }],
+      },
+    };
+  }
 }
