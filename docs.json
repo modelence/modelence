@@ -33,7 +33,8 @@
             "group": "Tutorials",
             "pages": [
               "tutorial",
-              "data-api"
+              "data-api",
+              "voyage-ai"
             ]
           }
         ]
