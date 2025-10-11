@@ -442,6 +442,7 @@ export class Store<
    * @param params.numCandidates - Number of nearest neighbors to consider (default: 100)
    * @param params.limit - Maximum number of results to return (default: 10)
    * @param params.projection - Additional fields to include in the results
+   * @param params.indexName - Name of index (default: field + VectorSearch)
    * @returns An aggregation cursor with search results and scores
    *
    * @example
@@ -461,17 +462,19 @@ export class Store<
     numCandidates,
     limit,
     projection,
+    indexName,
   }: {
     field: string,
     embedding: number[],
     numCandidates?: number;
     limit?: number;
     projection?: Document;
+    indexName?: string;
   }) {
     return this.aggregate([
       {
         $vectorSearch: {
-          index: field + 'VectorSearch',
+          index: indexName || (field + 'VectorSearch'),
           path: field,
           queryVector: embedding,
           numCandidates: numCandidates || 100,
@@ -495,6 +498,7 @@ export class Store<
    * @param params.field - The field name to create the vector index on
    * @param params.dimensions - The number of dimensions in the vector embeddings
    * @param params.similarity - The similarity metric to use (default: 'cosine')
+   * @param params.indexName - Name of index (default: field + VectorSearch)
    * @returns A search index description object
    *
    * @example
@@ -519,14 +523,16 @@ export class Store<
     field,
     dimensions,
     similarity = 'cosine',
+    indexName,
   }: {
     field: string;
     dimensions: number;
     similarity?: 'cosine' | 'euclidean' | 'dotProduct';
+    indexName?: string;
   }) {
     return {
       type: 'vectorSearch',
-      name: field + 'VectorSearch',
+      name: indexName || (field + 'VectorSearch'),
       definition: {
         fields: [{
           type: 'vector',
