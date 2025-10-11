@@ -1,0 +1,504 @@
+---
+title: 'Voyage AI'
+description: 'Build semantic search with Modelence, MongoDB and Voyage AI'
+icon: 'ship'
+---
+
+In this tutorial, you'll learn how to integrate Voyage AI with Modelence to build powerful semantic search capabilities. You'll learn how to:
+
+- Generate **embeddings** using Voyage AI's embedding models
+- Store embeddings in **MongoDB** using vector fields
+- Perform **vector search** with MongoDB's vector search capabilities
+- Use **reranking** to improve search results
+
+<Note>
+This tutorial assumes you've already [created a Modelence project](/quickstart) and [completed the setup](/setup). If you haven't done so, please complete those steps first.
+</Note>
+
+## What is Voyage AI?
+
+Voyage AI provides state-of-the-art embedding and reranking models that enable semantic search, recommendation systems, and RAG (Retrieval-Augmented Generation) applications. Their models are optimized for:
+
+- **High-quality embeddings** for semantic similarity
+- **Reranking** to improve search result relevance
+- **Domain-specific fine-tuning** options
+
+## Prerequisites
+
+Before starting, you'll need:
+
+1. A Voyage AI API key - [Get one here](https://www.voyageai.com/)
+2. A Modelence account with MongoDB configured
+
+## Quick Start with Template
+
+The fastest way to get started is using the Voyage AI template:
+
+```bash
+npx create-modelence-app@latest my-voyage-app --template voyage-ai
+```
+
+This creates a ready-to-use project with all the code from this tutorial pre-configured.
+
+### Setup Steps
+
+1. **Create an account** on [cloud.modelence.com](https://cloud.modelence.com/)
+
+2. **Create an application and local environment** in the Modelence Cloud dashboard
+
+3. **Open the Settings page** of your environment and click on **Setup Local Environment**
+
+4. **Copy the command** from the "Connect to Modelence Cloud" section and execute it in your project directory
+
+5. **Add your Voyage AI API key**:
+   - Get your API key from [voyageai.com](https://www.voyageai.com/)
+   - Add it as the value of `MODELENCE_VOYAGEAI_API_KEY` in your `.modelence.env` file
+
+6. **Run the project**:
+   ```bash
+   npm run dev
+   ```
+
+<Tip>
+You can also view a [live demo](https://voyage-ai-mg8435n3pj5-sandbox.prod.modelence.app) of the complete example.
+</Tip>
+
+## Manual Setup
+
+If you want to add Voyage AI to an existing project, follow these steps:
+
+### Step 1: Install Dependencies
+
+Install the Voyage AI client library:
+
+```bash
+npm install voyageai
+```
+
+## Step 2: Create a Document Store with Vector Embeddings
+
+Stores in Modelence support vector embeddings out of the box with the `schema.embedding()` type and vector search indexes.
+
+Create a new directory `src/server/voyage` and add a `db.ts` file:
+
+```typescript title="src/server/voyage/db.ts"
+import { Store, schema } from 'modelence/server';
+
+export const dbDocuments = new Store('documents', {
+  schema: {
+    content: schema.string(),
+    metadata: schema.object({
+      title: schema.string(),
+      description: schema.string(),
+    }),
+    embedding: schema.embedding(),
+    createdAt: schema.date(),
+  },
+  indexes: [
+    { key: { createdAt: -1 } },
+  ],
+  searchIndexes: [
+    Store.vectorIndex({
+      field: 'embedding',
+      dimensions: 1024, // Voyage-3.5 default (supports 256, 512, 1024, 2048)
+    }),
+  ],
+});
+```
+
+<Tip>
+The `schema.embedding()` type is a special type for storing vector embeddings. The `vectorIndex()` method creates a MongoDB vector search index for fast similarity searches.
+</Tip>
+
+## Step 3: Create Voyage AI Helper Functions
+
+Create a `voyage.ts` file to handle embedding generation and reranking:
+
+```typescript title="src/server/voyage/voyage.ts"
+import { getConfig } from 'modelence/server';
+import { VoyageAIClient } from 'voyageai';
+
+let voyageClient: VoyageAIClient | null = null;
+
+export function getVoyageClient() {
+  if (!voyageClient) {
+    const apiKey = getConfig('voyage.apiKey') as string || process.env.VOYAGE_API_KEY;
+    if (!apiKey) {
+      throw new Error('VOYAGE_API_KEY environment variable is not set');
+    }
+    voyageClient = new VoyageAIClient({ apiKey });
+  }
+  return voyageClient;
+}
+
+export async function generateEmbedding(
+  text: string,
+  inputType: 'query' | 'document' = 'document'
+): Promise<number[]> {
+  const client = getVoyageClient();
+  const result = await client.embed({
+    input: [text],
+    model: 'voyage-3.5',
+    inputType,
+  });
+
+  return result.data?.[0].embedding || [];
+}
+
+export async function rerank<T extends Record<string, any>>(
+  results: T[],
+  field: string,
+  query: string
+) {
+  const client = getVoyageClient();
+  const rerankedResponse = await client.rerank({
+    model: 'rerank-2.5',
+    query: query,
+    documents: results.map(doc => doc[field]),
+    topK: 10,
+  });
+
+  // Map the reranked results back to the original documents
+  return rerankedResponse.data?.map(rerankedDoc => {
+    const index = rerankedDoc.index || 0;
+    return {
+      ...results[index],
+      score: rerankedDoc.relevanceScore
+    };
+  }) || results;
+}
+```
+
+### Key Points:
+
+- **Input Type**: Voyage AI supports different input types (`query` vs `document`) to optimize embeddings for different use cases
+- **Model Selection**: `voyage-3.5` is the latest embedding model supporting 4 dimension options (256, 512, 1024 default, and 2048). See all available [embedding models](https://docs.voyageai.com/docs/embeddings)
+- **Reranking**: Improves search results by reordering them based on relevance to the query. See all available [reranker models](https://docs.voyageai.com/docs/reranker)
+
+## Step 4: Create a Module with Search Capabilities
+
+Create an `index.ts` file to tie everything together:
+
+```typescript title="src/server/voyage/index.ts"
+import { Module } from 'modelence/server';
+import { z } from 'zod';
+import { dbDocuments } from './db';
+import { generateEmbedding, rerank } from './voyage';
+
+export default new Module('voyage', {
+  stores: [dbDocuments],
+  queries: {
+    async getDocuments() {
+      return dbDocuments.fetch({}, {
+        sort: { createdAt: -1 },
+        limit: 50,
+      });
+    },
+    async searchSimilar(args) {
+      const { query } = z.object({
+        query: z.string(),
+      }).parse(args);
+
+      // Generate embedding for the query
+      const queryEmbedding = await generateEmbedding(query, 'query');
+
+      // Perform vector search using MongoDB
+      const results = await (await dbDocuments.vectorSearch({
+        field: 'embedding',
+        embedding: queryEmbedding,
+        numCandidates: 100,
+        limit: 10,
+        projection: {
+          content: 1,
+          metadata: 1,
+          createdAt: 1,
+        },
+      })).toArray();
+
+      // Rerank results for better relevance
+      return await rerank(results, 'content', query);
+    },
+  },
+  mutations: {
+    async addDocument(args) {
+      const { title, description } = z.object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+      }).parse(args);
+
+      // Combine title and description for embedding
+      const content = `${title}\n${description}`;
+
+      // Generate embedding for the document
+      const embedding = await generateEmbedding(content, 'document');
+
+      const result = await dbDocuments.insertOne({
+        content,
+        metadata: {
+          title,
+          description,
+        },
+        embedding,
+        createdAt: new Date(),
+      });
+
+      return {
+        id: result.insertedId.toString(),
+        content,
+        metadata: { title, description },
+        createdAt: new Date(),
+      };
+    },
+    async deleteDocument(args) {
+      const { id } = z.object({
+        id: z.string(),
+      }).parse(args);
+
+      await dbDocuments.deleteOne({ id });
+      return { success: true };
+    },
+  },
+  configSchema: {
+    apiKey: {
+      type: 'string',
+      isPublic: false,
+      default: '',
+    },
+  },
+});
+```
+
+### Understanding Vector Search
+
+The `vectorSearch()` method performs semantic search using MongoDB's vector search capabilities:
+
+- **field**: The field containing the embedding vectors
+- **embedding**: The query embedding to search for
+- **numCandidates**: Number of candidates to consider (higher = more accurate but slower)
+- **limit**: Maximum number of results to return
+- **projection**: Fields to include in results
+
+## Step 5: Include the Module
+
+Add the Voyage module to your main server file:
+
+```typescript title="src/server/app.ts"
+import { startApp } from 'modelence/server';
+import voyageModule from './voyage';
+
+startApp({
+  modules: [voyageModule]
+});
+```
+
+## Step 6: Configure the API Key
+
+You can configure the Voyage AI API key in two ways:
+
+### Option 1: Environment Variable
+
+Add to your `.env` file:
+
+```bash
+VOYAGE_API_KEY=your_api_key_here
+```
+
+### Option 2: Module Config
+
+Store it securely in MongoDB using Modelence's config system:
+
+```typescript
+import { setConfig } from 'modelence/server';
+
+await setConfig('voyage.apiKey', 'your_api_key_here');
+```
+
+## Step 7: Build the Frontend
+
+Create a React component to interact with your semantic search backend:
+
+```tsx title="src/client/pages/VoyageSearchPage.tsx"
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { modelenceMutation, modelenceQuery } from '@modelence/react-query';
+
+interface Document {
+  _id: string;
+  content: string;
+  metadata: {
+    title: string;
+    description: string;
+  };
+  createdAt: Date;
+}
+
+interface SearchResult extends Document {
+  score: number;
+}
+
+export default function VoyageSearchPage() {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+
+  const { data: documents, refetch } = useQuery<Document[]>(
+    modelenceQuery('voyage.getDocuments')
+  );
+  const addDocument = useMutation(modelenceMutation('voyage.addDocument'));
+  const deleteDocument = useMutation(modelenceMutation('voyage.deleteDocument'));
+  const searchSimilar = useMutation(modelenceMutation('voyage.searchSimilar'));
+
+  const handleAddDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !description.trim()) return;
+
+    await addDocument.mutateAsync({ title, description });
+    setTitle('');
+    setDescription('');
+    refetch();
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    const results = await searchSimilar.mutateAsync({ query: searchQuery });
+    setSearchResults(results as SearchResult[]);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-8">Semantic Search with Voyage AI</h1>
+
+      {/* Search Form */}
+      <div className="mb-8 p-6 bg-white rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">Search Documents</h2>
+        <form onSubmit={handleSearch} className="flex gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Enter your search query..."
+            className="flex-1 px-4 py-2 border rounded"
+          />
+          <button
+            type="submit"
+            disabled={searchSimilar.isPending}
+            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            {searchSimilar.isPending ? 'Searching...' : 'Search'}
+          </button>
+        </form>
+
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <div className="mt-6 space-y-3">
+            <h3 className="font-medium">
+              Found {searchResults.length} results
+            </h3>
+            {searchResults.map((result) => (
+              <div key={result._id} className="p-4 bg-blue-50 rounded border">
+                <h4 className="font-semibold">{result.metadata.title}</h4>
+                <p className="text-sm text-gray-700 mt-2">
+                  {result.metadata.description}
+                </p>
+                <div className="text-xs text-gray-500 mt-2">
+                  Relevance: {(result.score * 100).toFixed(0)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Document Form */}
+      <div className="mb-8 p-6 bg-white rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">Add New Document</h2>
+        <form onSubmit={handleAddDocument} className="space-y-4">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Document title..."
+            className="w-full px-4 py-2 border rounded"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Document description..."
+            rows={4}
+            className="w-full px-4 py-2 border rounded"
+          />
+          <button
+            type="submit"
+            disabled={addDocument.isPending}
+            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            {addDocument.isPending ? 'Adding...' : 'Add Document'}
+          </button>
+        </form>
+      </div>
+
+      {/* Documents List */}
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">All Documents</h2>
+        {documents?.length === 0 ? (
+          <p className="text-gray-500">No documents yet</p>
+        ) : (
+          <div className="space-y-3">
+            {documents?.map((doc) => (
+              <div key={doc._id} className="p-4 border rounded">
+                <h4 className="font-semibold">{doc.metadata.title}</h4>
+                <p className="text-sm text-gray-700 mt-2">
+                  {doc.metadata.description}
+                </p>
+                <button
+                  onClick={() => deleteDocument.mutateAsync({ id: doc._id })}
+                  className="text-sm text-red-600 mt-2"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## How It Works
+
+1. **Document Ingestion**: When you add a document, the content is sent to Voyage AI to generate an embedding vector
+2. **Storage**: The embedding is stored alongside the document in MongoDB
+3. **Search**: When searching, your query is converted to an embedding and MongoDB finds similar vectors
+4. **Reranking**: Results are reranked using Voyage AI's reranking model for improved relevance
+
+## Use Cases
+
+This pattern is perfect for:
+
+- **Knowledge bases** with semantic search
+- **Support chatbots** with contextual document retrieval
+- **Recommendation systems** based on content similarity
+- **RAG applications** for AI assistants
+
+## Complete Example
+
+Want to see the full working code? Check out the complete example:
+
+<Card
+  title="Complete Voyage AI Example"
+  icon="github"
+  href="https://github.com/modelence/modelence/tree/main/examples/voyage-ai"
+>
+  See the complete source code with a polished UI and additional features.
+</Card>
+
+## Next Steps
+
+- Explore [MongoDB Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/)
+- Learn about [Voyage AI's models and capabilities](https://docs.voyageai.com/)
+- Read about [Store API Reference](/api-reference/modelence/server/classes/Store) for more vector search options
