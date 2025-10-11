@@ -1,5 +1,6 @@
 import { getConfig, loginWithPassword } from 'modelence/client';
 import React, { useCallback, useMemo } from 'react';
+import { GitHubIcon } from './icons/GitHubIcon';
 import { GoogleIcon } from './icons/GoogleIcon';
 import { Button } from './ui/Button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/Card';
@@ -22,7 +23,7 @@ export interface LoginFormProps {
   labelClassName?: string;
 }
 
-export function LoginForm({ 
+export function LoginForm({
   renderSignupLink,
   renderForgotPasswordLink,
   onForgotPassword,
@@ -36,6 +37,7 @@ export function LoginForm({
   labelClassName = ""
 }: LoginFormProps) {
   const isGoogleAuthEnabled = getConfig('_system.user.auth.google.enabled');
+  const isGitHubAuthEnabled = getConfig('_system.user.auth.github.enabled');
 
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,12 +53,16 @@ export function LoginForm({
     window.location.href = '/api/_internal/auth/google';
   }, []);
 
+  const openGitHubAuth = useCallback(() => {
+    window.location.href = '/api/_internal/auth/github';
+  }, []);
+
   const socialButtons = useMemo(() => {
     const buttons: JSX.Element[] = [];
     if (isGoogleAuthEnabled) {
       buttons.push(
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="w-full flex items-center justify-center gap-3"
           type="button"
           key="google"
@@ -67,8 +73,22 @@ export function LoginForm({
         </Button>
       );
     }
+    if (isGitHubAuthEnabled) {
+      buttons.push(
+        <Button
+          variant="outline"
+          className="w-full flex items-center justify-center gap-3"
+          type="button"
+          key="github"
+          onClick={openGitHubAuth}
+        >
+          <GitHubIcon className="w-5 h-5" />
+          <span className="font-medium">Sign in with GitHub</span>
+        </Button>
+      );
+    }
     return buttons;
-  }, []);
+  }, [isGoogleAuthEnabled, isGitHubAuthEnabled, openGoogleAuth, openGitHubAuth]);
 
   return (
     <Card className={`w-full max-w-md mx-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-white ${cardClassName}`}>

@@ -30,6 +30,9 @@ export const usersCollection = new Store('_modelenceUsers', {
       google: schema.object({
         id: schema.string(),
       }).optional(),
+      github: schema.object({
+        id: schema.string(),
+      }).optional(),
     }),
   },
   indexes: [
