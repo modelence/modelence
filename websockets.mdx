@@ -1,0 +1,680 @@
+---
+title: 'WebSockets'
+description: 'Real-time bidirectional communication with WebSocket support'
+icon: 'signal-stream'
+---
+
+Modelence provides built-in WebSocket support for real-time, bidirectional communication between your server and clients. Built on Socket.IO with MongoDB adapter for horizontal scaling, WebSockets enable live updates, notifications, collaborative features, and more.
+
+## Overview
+
+Modelence WebSocket implementation includes:
+
+- **Real-Time Communication** - Instant bidirectional messaging between server and clients
+- **Channel-Based Architecture** - Organize connections into logical channels with access control
+- **Authentication Integration** - Automatic user authentication for WebSocket connections
+- **Horizontal Scaling** - MongoDB adapter enables scaling across multiple server instances
+- **Type Safety** - Full TypeScript support with generic types for message payloads
+- **Built on Socket.IO** - Leverages the robust Socket.IO library with fallback support
+
+## How WebSockets Work
+
+### Connection Flow
+
+1. **Client Connection** - Client initiates WebSocket connection to the server
+2. **Authentication** - Connection is automatically authenticated using the session token
+3. **Channel Registration** - Channels are registered in your Module
+4. **Join Channels** - Client joins specific channels by category and ID
+5. **Real-Time Messages** - Server broadcasts messages to all clients in a channel
+6. **Automatic Reconnection** - Socket.IO handles reconnection on network interruptions
+
+### Channel Architecture
+
+Channels are organized using a `category:id` pattern:
+
+- **Category** - Defines the type of channel (e.g., "chat", "notifications", "game")
+- **ID** - Unique identifier for the specific channel instance (e.g., room ID, user ID)
+- **Access Control** - Optional server-side function to control who can join
+
+Example channel names:
+- `chat:room123` - Chat room with ID "room123"
+- `notifications:user456` - Notifications for user "user456"
+- `game:match789` - Game updates for match "match789"
+
+## Server-Side Setup
+
+### Creating Server Channels
+
+Create a server channel file to define your channel:
+
+```typescript
+// src/server/channels/chatServerChannel.ts
+import { ServerChannel } from "modelence/server";
+
+interface ChatMessage {
+  userId: string;
+  username: string;
+  message: string;
+  timestamp: number;
+}
+
+const chatServerChannel = new ServerChannel<ChatMessage>("chat");
+
+export default chatServerChannel;
+```
+
+### Registering Channels in Module
+
+Channels are registered in your Module definition:
+
+```typescript
+// src/server/module.ts
+import { Module } from "modelence/server";
+import chatServerChannel from "./channels/chatServerChannel";
+
+export default new Module('myApp', {
+  channels: [
+    chatServerChannel,
+  ],
+  mutations: {
+    // ... your mutations
+  },
+});
+```
+
+### Broadcasting Messages
+
+Use the channel to broadcast messages to all connected clients:
+
+```typescript
+// src/server/methods/sendMessage.ts
+import chatServerChannel from "../channels/chatServerChannel";
+
+export async function sendMessage(roomId: string, userId: string, message: string) {
+  // Broadcast to all clients in the room
+  chatServerChannel.broadcast(roomId, {
+    userId,
+    username: "John Doe",
+    message,
+    timestamp: Date.now(),
+  });
+}
+```
+
+### Channel with Access Control
+
+Add access control to restrict who can join a channel:
+
+```typescript
+// src/server/channels/privateChannel.ts
+import { ServerChannel } from "modelence/server";
+
+const privateChannel = new ServerChannel(
+  'private',
+  async ({ user, session, roles }) => {
+    // Only authenticated users can join
+    if (!user) {
+      return false;
+    }
+
+    // Check user roles
+    if (roles.includes('admin') || roles.includes('moderator')) {
+      return true;
+    }
+
+    return false;
+  }
+);
+
+export default privateChannel;
+```
+
+## Client-Side Setup
+
+### Creating Client Channels
+
+Define a client channel to receive messages:
+
+```typescript
+// src/client/channels/chatClientChannel.ts
+import { ClientChannel } from "modelence/client";
+
+interface ChatMessage {
+  userId: string;
+  username: string;
+  message: string;
+  timestamp: number;
+}
+
+const chatClientChannel = new ClientChannel<ChatMessage>("chat", async (data) => {
+  console.log("Received message:", data);
+  // Handle the message (update UI, state, etc.)
+});
+
+export default chatClientChannel;
+```
+
+### Initialize WebSockets
+
+Start WebSocket connection and register channels in your app entry point:
+
+```typescript
+// src/client/index.tsx
+import { startWebsockets, renderApp } from 'modelence/client';
+import chatClientChannel from './channels/chatClientChannel';
+
+startWebsockets({
+  channels: [
+    chatClientChannel,
+  ],
+});
+
+renderApp({
+  // ... your app configuration
+});
+```
+
+### Joining and Leaving Channels
+
+Join specific channels to start receiving messages:
+
+```typescript
+import { useEffect } from 'react';
+import chatClientChannel from '../channels/chatClientChannel';
+
+function ChatRoom({ roomId }: { roomId: string }) {
+  useEffect(() => {
+    // Join the specific room
+    chatClientChannel.joinChannel(roomId);
+
+    // Cleanup: leave when component unmounts
+    return () => {
+      chatClientChannel.leaveChannel(roomId);
+    };
+  }, [roomId]);
+
+  return (
+    <div>
+      {/* Your chat UI */}
+    </div>
+  );
+}
+```
+
+## Complete Example
+
+Here's a complete example of a real-time chat system:
+
+### Server
+
+**Channel Definition:**
+```typescript
+// src/server/channels/chatServerChannel.ts
+import { ServerChannel } from "modelence/server";
+
+export interface ChatMessage {
+  projectId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+const chatServerChannel = new ServerChannel<ChatMessage>("chat");
+
+export default chatServerChannel;
+```
+
+**Module Registration:**
+```typescript
+// src/server/module.ts
+import { Module } from "modelence/server";
+import z from "zod";
+import chatServerChannel from "./channels/chatServerChannel";
+
+export default new Module('chat', {
+  channels: [
+    chatServerChannel,
+  ],
+  mutations: {
+    sendMessage: (args) => {
+      const { projectId, message } = z.object({
+        projectId: z.string(),
+        message: z.string(),
+      }).parse(args);
+
+      // Broadcast to all clients in the project
+      chatServerChannel.broadcast(projectId, {
+        projectId,
+        role: 'assistant',
+        content: message,
+        timestamp: Date.now(),
+      });
+
+      return { success: true };
+    },
+  },
+});
+```
+
+**App Startup:**
+```typescript
+// src/server/app.ts
+import { startApp } from 'modelence/server';
+import chatModule from './module';
+
+startApp({
+  modules: [chatModule],
+});
+```
+
+### Client
+
+**Channel Definition:**
+```typescript
+// src/client/channels/chatClientChannel.ts
+import { ClientChannel } from "modelence/client";
+
+interface ChatMessage {
+  projectId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+const chatClientChannel = new ClientChannel<ChatMessage>("chat", async (data) => {
+  console.log("Received chat message:", data);
+  // Handle the message in your application
+});
+
+export default chatClientChannel;
+```
+
+**App Initialization:**
+```typescript
+// src/client/index.tsx
+import { startWebsockets, renderApp } from 'modelence/client';
+import chatClientChannel from './channels/chatClientChannel';
+
+startWebsockets({
+  channels: [
+    chatClientChannel,
+  ],
+});
+
+renderApp({
+  // ... your app configuration
+});
+```
+
+**Using in Components:**
+```typescript
+// src/client/pages/ChatPage.tsx
+import { useEffect, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { modelenceMutation } from '@modelence/react-query';
+import chatClientChannel from '../channels/chatClientChannel';
+
+export default function ChatPage() {
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const projectId = 'project123';
+
+  // Join the chat channel for this project
+  useEffect(() => {
+    if (projectId) {
+      chatClientChannel.joinChannel(projectId);
+    }
+    return () => {
+      if (projectId) {
+        chatClientChannel.leaveChannel(projectId);
+      }
+    };
+  }, [projectId]);
+
+  const { mutateAsync: sendMessage, isPending } = useMutation(
+    modelenceMutation('chat.sendMessage')
+  );
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || !projectId) return;
+
+    // Add user message to local state
+    const newMessage = {
+      projectId,
+      role: 'user' as const,
+      content: message,
+      timestamp: Date.now()
+    };
+    setMessages(prev => [...prev, newMessage]);
+    const currentMessage = message;
+    setMessage('');
+
+    // Send to server (server will broadcast response)
+    try {
+      await sendMessage({
+        projectId,
+        message: currentMessage
+      });
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {messages.map((msg) => (
+          <div
+            key={msg.timestamp}
+            className={msg.role === 'user' ? 'text-right' : 'text-left'}
+          >
+            <div className="inline-block px-4 py-2 rounded-lg mb-2">
+              {msg.content}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Input */}
+      <div className="p-4 border-t">
+        <div className="flex gap-2">
+          <input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Type your message..."
+            className="flex-1 px-3 py-2 border rounded"
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!message.trim() || isPending}
+            className="px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Horizontal Scaling
+
+Modelence WebSockets use the Socket.IO MongoDB adapter, which enables horizontal scaling across multiple server instances:
+
+### How It Works
+
+1. **Shared MongoDB Collection** - All server instances share a MongoDB collection (`_modelenceSocketio`)
+2. **Message Distribution** - When one server broadcasts a message, it's stored in MongoDB
+3. **Cross-Instance Delivery** - All server instances receive the message and deliver to their connected clients
+4. **Automatic Cleanup** - Messages expire after 1 hour (TTL index on `createdAt` field)
+
+### Configuration
+
+The MongoDB adapter is automatically configured when you:
+
+1. Initialize Modelence with MongoDB connection
+2. Register channels in your Module
+3. Start your application
+
+No additional configuration needed! The scaling happens automatically.
+
+### Load Balancing
+
+When deploying multiple instances:
+
+```bash
+# Server 1
+npm start
+
+# Server 2 (on different port/server)
+npm start
+
+# Use a load balancer (nginx, ALB, etc.) to distribute connections
+```
+
+Nginx example:
+
+```nginx
+upstream modelence_servers {
+    server localhost:3000;
+    server localhost:3001;
+    server localhost:3002;
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://modelence_servers;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```
+
+## Security Best Practices
+
+### Authentication
+
+- **Automatic Auth** - WebSocket connections are automatically authenticated using session tokens
+- **Access Control** - Use the second parameter in `ServerChannel` to restrict channel access
+- **Token Validation** - Session tokens are validated on every connection
+
+### Channel Security
+
+```typescript
+// Bad: Public channel with sensitive data
+const privateChannel = new ServerChannel('user-data');
+
+// Good: Protected channel with access control
+const privateChannel = new ServerChannel(
+  'user-data',
+  async ({ user, session, roles }) => {
+    // Verify user is authenticated
+    if (!user) return false;
+
+    // Additional checks as needed
+    return roles.includes('verified');
+  }
+);
+```
+
+### Data Validation
+
+Always validate data before broadcasting:
+
+```typescript
+import { z } from 'zod';
+
+const messageSchema = z.object({
+  message: z.string().min(1).max(1000),
+  userId: z.string(),
+});
+
+// In your method
+const validated = messageSchema.parse(input);
+chatChannel.broadcast(roomId, validated);
+```
+
+## Performance Considerations
+
+### Channel Granularity
+
+- **Fine-grained** - Create specific channels for individual resources (e.g., `chat:room123`)
+- **User-specific** - Use user IDs for personal channels (e.g., `notifications:user456`)
+- **Avoid Global** - Don't broadcast to all users; use targeted channels
+
+### Message Size
+
+Keep message payloads small for optimal performance:
+
+```typescript
+// Good: Small, focused payload
+chatChannel.broadcast(roomId, {
+  userId: '123',
+  message: 'Hello',
+  timestamp: Date.now(),
+});
+
+// Bad: Large payload with unnecessary data
+chatChannel.broadcast(roomId, {
+  user: { /* entire user object */ },
+  message: 'Hello',
+  allMessages: [ /* entire chat history */ ],
+  roomDetails: { /* unnecessary data */ },
+});
+```
+
+## TypeScript Support
+
+Full TypeScript support with generic types:
+
+```typescript
+// Define your message type
+interface ChatMessage {
+  userId: string;
+  username: string;
+  message: string;
+  timestamp: number;
+}
+
+// Server channel with type
+const chatChannel = new ServerChannel<ChatMessage>('chat');
+
+// TypeScript enforces the type
+chatChannel.broadcast('room1', {
+  userId: '123',
+  username: 'john',
+  message: 'Hello',
+  timestamp: Date.now(),
+}); // ✓ OK
+
+chatChannel.broadcast('room1', {
+  message: 'Hello',
+}); // ✗ Error: missing required fields
+
+// Client channel with type
+const clientChannel = new ClientChannel<ChatMessage>(
+  'chat',
+  (data) => {
+    // data is typed as ChatMessage
+    console.log(data.username); // ✓ OK
+    console.log(data.invalid); // ✗ Error: property doesn't exist
+  }
+);
+```
+
+## API Reference
+
+### Server Types
+
+- **WebsocketServerProvider** - Interface for WebSocket server providers ([types.ts:5](../../packages/modelence/src/websocket/types.ts#L5))
+- **ServerChannel** - Server-side channel class ([serverChannel.ts:11](../../packages/modelence/src/websocket/serverChannel.ts#L11))
+
+### Client Types
+
+- **WebsocketClientProvider** - Interface for WebSocket client providers ([types.ts:17](../../packages/modelence/src/websocket/types.ts#L17))
+- **ClientChannel** - Client-side channel class ([clientChannel.ts:3](../../packages/modelence/src/websocket/clientChannel.ts#L3))
+
+### Functions
+
+- **startWebsockets** - Initialize WebSocket connection ([client.ts:15](../../packages/modelence/src/websocket/client.ts#L15))
+- **broadcast** - Send message to all clients in a channel ([serverChannel.ts:23](../../packages/modelence/src/websocket/serverChannel.ts#L23))
+- **joinChannel** - Join a specific channel ([clientChannel.ts:22](../../packages/modelence/src/websocket/clientChannel.ts#L22))
+- **leaveChannel** - Leave a specific channel ([clientChannel.ts:29](../../packages/modelence/src/websocket/clientChannel.ts#L29))
+
+## Common Use Cases
+
+### Real-Time Chat
+
+```typescript
+// Multiple chat rooms with message history
+const chatChannel = new ServerChannel<ChatMessage>('chat');
+
+// Users can join/leave rooms dynamically
+// Messages broadcast to all users in the room
+```
+
+### Live Notifications
+
+```typescript
+// User-specific notification feeds
+const notificationChannel = new ServerChannel<Notification>('notifications');
+
+// Each user joins their own notification channel
+// Server sends targeted notifications
+```
+
+### Collaborative Editing
+
+```typescript
+// Document collaboration with operational transforms
+const documentChannel = new ServerChannel<DocumentUpdate>('document');
+
+// Users join document channels
+// Real-time updates as users edit
+```
+
+### Live Dashboard
+
+```typescript
+// Real-time metrics and analytics
+const analyticsChannel = new ServerChannel<MetricsUpdate>('analytics');
+
+// Admin users join to see live updates
+// Server pushes metrics as they change
+```
+
+### Gaming
+
+```typescript
+// Real-time game state synchronization
+const gameChannel = new ServerChannel<GameState>('game');
+
+// Players join game-specific channels
+// Server broadcasts game state updates
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Problem**: Client can't connect to WebSocket server
+
+**Solutions**:
+- Verify server is started with channels registered in Module
+- Check that MongoDB is connected
+- Ensure firewall allows WebSocket connections
+- Verify CORS settings if connecting from different origin
+
+### Messages Not Received
+
+**Problem**: Client joined channel but not receiving messages
+
+**Solutions**:
+- Verify channel category matches exactly between client and server
+- Check access control function if channel is protected
+- Ensure user is authenticated if channel requires auth
+- Confirm channels are registered in `startWebsockets()`
+
+### Scaling Issues
+
+**Problem**: Messages not reaching all clients across multiple servers
+
+**Solutions**:
+- Verify MongoDB connection is shared across all instances
+- Check that `_modelenceSocketio` collection exists
+- Ensure TTL index was created successfully
+- Review MongoDB logs for adapter errors
+
+## Next Steps
+
+- Explore the [Authentication](/authentication) docs for securing WebSocket connections
+- Check out the [Tutorial](/tutorial) for complete application examples
+- Review [Stores](/stores) documentation for persisting real-time data
+- Learn about [Modules](/api-reference/modelence/server/classes/Module) for organizing your application
