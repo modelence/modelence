@@ -433,6 +433,28 @@ export class Store<
     await existingCollection.rename(this.name, options);
   }
 
+  /**
+   * Performs a vector similarity search using MongoDB Atlas Vector Search
+   *
+   * @param params - Vector search parameters
+   * @param params.field - The field name containing the vector embeddings
+   * @param params.embedding - The query vector to search for
+   * @param params.numCandidates - Number of nearest neighbors to consider (default: 100)
+   * @param params.limit - Maximum number of results to return (default: 10)
+   * @param params.projection - Additional fields to include in the results
+   * @returns An aggregation cursor with search results and scores
+   *
+   * @example
+   * ```ts
+   * const results = await store.vectorSearch({
+   *   field: 'embedding',
+   *   embedding: [0.1, 0.2, 0.3, ...],
+   *   numCandidates: 100,
+   *   limit: 10,
+   *   projection: { title: 1, description: 1 }
+   * });
+   * ```
+   */
   async vectorSearch({
     field,
     embedding,
@@ -466,6 +488,33 @@ export class Store<
     ]);
   }
 
+  /**
+   * Creates a MongoDB Atlas Vector Search index definition
+   *
+   * @param params - Vector index parameters
+   * @param params.field - The field name to create the vector index on
+   * @param params.dimensions - The number of dimensions in the vector embeddings
+   * @param params.similarity - The similarity metric to use (default: 'cosine')
+   * @returns A search index description object
+   *
+   * @example
+   * ```ts
+   * const store = new Store('documents', {
+   *   schema: {
+   *     title: schema.string(),
+   *     embedding: schema.array(schema.number()),
+   *   },
+   *   indexes: [],
+   *   searchIndexes: [
+   *     Store.vectorIndex({
+   *       field: 'embedding',
+   *       dimensions: 1536,
+   *       similarity: 'cosine'
+   *     })
+   *   ]
+   * });
+   * ```
+   */
   static vectorIndex({
     field,
     dimensions,
