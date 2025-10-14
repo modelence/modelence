@@ -1,5 +1,5 @@
 import { getConfig } from "@/server";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { ObjectId } from "mongodb";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -136,29 +136,41 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
 function getRouter() {
   const googleAuthRouter = Router();
-  const googleEnabled = Boolean(getConfig('_system.user.auth.google.enabled'));
-  const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
-  const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
-  if (!googleEnabled || !googleClientId || !googleClientSecret) {
-    return googleAuthRouter;
-  }
 
-  passport.use(new GoogleStrategy({
-    clientID: googleClientId,
-    clientSecret: googleClientSecret,
-    callbackURL: '/api/_internal/auth/google/callback',
-    proxy: true,
-  }, (accessToken, refreshToken, profile, done) => {
-    return done(null, profile);
-  }));
+  // Middleware to check if Google auth is enabled and configured
+  const checkGoogleEnabled = (_req: Request, res: Response, next: NextFunction) => {
+    const googleEnabled = Boolean(getConfig('_system.user.auth.google.enabled'));
+    const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
+    const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
 
-  googleAuthRouter.get("/api/_internal/auth/google", passport.authenticate("google", {
+    if (!googleEnabled || !googleClientId || !googleClientSecret) {
+      res.status(503).json({ error: 'Google authentication is not configured' });
+      return;
+    }
+
+    // Configure passport strategy dynamically if needed
+    if (!(passport as any)._strategies['google']) {
+      passport.use(new GoogleStrategy({
+        clientID: googleClientId,
+        clientSecret: googleClientSecret,
+        callbackURL: '/api/_internal/auth/google/callback',
+        proxy: true,
+      }, (_accessToken, _refreshToken, profile, done) => {
+        return done(null, profile);
+      }));
+    }
+
+    next();
+  };
+
+  googleAuthRouter.get("/api/_internal/auth/google", checkGoogleEnabled, passport.authenticate("google", {
     scope: ["profile", "email"],
     session: false,
   }));
 
   googleAuthRouter.get(
     "/api/_internal/auth/google/callback",
+    checkGoogleEnabled,
     passport.authenticate("google", { session: false }),
     handleGoogleAuthenticationCallback,
   );

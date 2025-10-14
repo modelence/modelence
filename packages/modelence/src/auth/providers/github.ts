@@ -1,5 +1,5 @@
 import { getConfig } from "@/server";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { ObjectId } from "mongodb";
 import passport from "passport";
 import { Strategy as GitHubStrategy } from "passport-github2";
@@ -137,35 +137,45 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
 
 function getRouter() {
   const githubAuthRouter = Router();
-  const githubEnabled = Boolean(getConfig('_system.user.auth.github.enabled'));
-  console.log(githubEnabled);
 
-  const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
-  const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
-  const githubScopes = getConfig('_system.user.auth.github.scopes');
-  if (!githubEnabled || !githubClientId || !githubClientSecret) {
-    return githubAuthRouter;
-  }
+  // Middleware to check if GitHub auth is enabled and configured
+  const checkGitHubEnabled = (_req: Request, res: Response, next: NextFunction) => {
+    const githubEnabled = Boolean(getConfig('_system.user.auth.github.enabled'));
+    const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
+    const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
 
-  const scopes = githubScopes
-    ? String(githubScopes).split(',').map(s => s.trim())
-    : ['user:email'];
+    if (!githubEnabled || !githubClientId || !githubClientSecret) {
+      res.status(503).json({ error: 'GitHub authentication is not configured' });
+      return;
+    }
 
-  passport.use(new GitHubStrategy({
-    clientID: githubClientId,
-    clientSecret: githubClientSecret,
-    callbackURL: '/api/_internal/auth/github/callback',
-    scope: scopes,
-  }, (accessToken: string, refreshToken: string, profile: any, done: any) => {
-    return done(null, profile);
-  }));
+    // Configure passport strategy dynamically if needed
+    if (!(passport as any)._strategies['github']) {
+      const githubScopes = getConfig('_system.user.auth.github.scopes');
+      const scopes = githubScopes
+        ? String(githubScopes).split(',').map(s => s.trim())
+        : ['user:email'];
 
-  githubAuthRouter.get("/api/_internal/auth/github", passport.authenticate("github", {
+      passport.use(new GitHubStrategy({
+        clientID: githubClientId,
+        clientSecret: githubClientSecret,
+        callbackURL: '/api/_internal/auth/github/callback',
+        scope: scopes,
+      }, (_accessToken: string, _refreshToken: string, profile: any, done: any) => {
+        return done(null, profile);
+      }));
+    }
+
+    next();
+  };
+
+  githubAuthRouter.get("/api/_internal/auth/github", checkGitHubEnabled, passport.authenticate("github", {
     session: false,
   }));
 
   githubAuthRouter.get(
     "/api/_internal/auth/github/callback",
+    checkGitHubEnabled,
     passport.authenticate("github", { session: false }),
     handleGitHubAuthenticationCallback,
   );
