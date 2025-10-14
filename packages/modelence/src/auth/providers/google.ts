@@ -1,10 +1,11 @@
 import { getConfig } from "@/server";
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { ObjectId } from "mongodb";
-import { usersCollection } from "../db";
-import { createSession } from "../session";
-import { getAuthConfig } from "@/app/authConfig";
-import { getCallContext } from "@/app/server";
+import {
+  getRedirectUri,
+  handleOAuthUserAuthentication,
+  validateOAuthCode,
+  type OAuthUserData
+} from "./oauth-common";
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -21,19 +22,6 @@ interface GoogleUserInfo {
   email_verified: boolean;
   picture: string;
 }
-
-async function authenticateUser(res: Response, userId: ObjectId) {
-  const { authToken } = await createSession(userId);
-
-  res.cookie("authToken", authToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  });
-  res.status(301);
-  res.redirect("/");
-}
-
 
 async function exchangeCodeForToken(
   code: string,
@@ -77,16 +65,16 @@ async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo>
 }
 
 async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
-  const { code } = req.query;
+  const code = validateOAuthCode(req.query.code);
 
-  if (!code || typeof code !== 'string') {
+  if (!code) {
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
-  const redirectUri = `${req.protocol}://${req.get('host')}/api/_internal/auth/google/callback`;
+  const redirectUri = getRedirectUri(req, 'google');
 
   try {
     // Exchange code for tokens
@@ -95,108 +83,14 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     // Fetch user info
     const googleUser = await fetchGoogleUserInfo(tokenData.access_token);
 
-    const existingUser = await usersCollection.findOne(
-      { 'authMethods.google.id': googleUser.sub },
-    );
+    const userData: OAuthUserData = {
+      id: googleUser.sub,
+      email: googleUser.email,
+      emailVerified: googleUser.email_verified,
+      providerName: 'google',
+    };
 
-    const {
-      session,
-      connectionInfo,
-    } = await getCallContext(req);
-
-    try {
-      if (existingUser) {
-        await authenticateUser(res, existingUser._id);
-
-        getAuthConfig().onAfterLogin?.({
-          user: existingUser,
-          session,
-          connectionInfo,
-        });
-        getAuthConfig().login?.onSuccess?.(existingUser);
-
-        return;
-      }
-    } catch(error) {
-      if (error instanceof Error) {
-        getAuthConfig().login?.onError?.(error);
-
-        getAuthConfig().onLoginError?.({
-          error,
-          session,
-          connectionInfo,
-        });
-      }
-      throw error;
-    }
-
-    try {
-      const googleEmail = googleUser.email;
-
-      if (!googleEmail) {
-        res.status(400).json({
-          error: "Email address is required for Google authentication.",
-        });
-        return;
-      }
-
-      const existingUserByEmail = await usersCollection.findOne(
-        { 'emails.address': googleEmail, },
-        { collation: { locale: 'en', strength: 2 } },
-      );
-
-      // TODO: check if the email is verified
-      if (existingUserByEmail) {
-        // TODO: handle case with an HTML page
-        res.status(400).json({
-          error: "User with this email already exists. Please log in instead.",
-        });
-        return;
-      }
-
-      // If the user does not exist, create a new user
-      const newUser = await usersCollection.insertOne({
-        handle: googleEmail,
-        emails: [{
-          address: googleEmail,
-          verified: googleUser.email_verified,
-        }],
-        createdAt: new Date(),
-        authMethods: {
-          google: {
-            id: googleUser.sub,
-          },
-        },
-      });
-
-      await authenticateUser(res, newUser.insertedId);
-
-      const userDocument = await usersCollection.findOne(
-        { _id: newUser.insertedId },
-        { readPreference: "primary" }
-      );
-
-      if (userDocument) {
-        getAuthConfig().onAfterSignup?.({
-          user: userDocument,
-          session,
-          connectionInfo,
-        });
-
-        getAuthConfig().signup?.onSuccess?.(userDocument);
-      }
-    } catch(error) {
-      if (error instanceof Error) {
-        getAuthConfig().onSignupError?.({
-          error,
-          session,
-          connectionInfo,
-        });
-
-        getAuthConfig().signup?.onError?.(error);
-      }
-      throw error;
-    }
+    await handleOAuthUserAuthentication(req, res, userData);
   } catch (error) {
     console.error('Google OAuth error:', error);
     res.status(500).json({ error: 'Authentication failed' });
@@ -223,7 +117,7 @@ function getRouter() {
   // Initiate OAuth flow
   googleAuthRouter.get("/api/_internal/auth/google", checkGoogleEnabled, (req: Request, res: Response) => {
     const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/_internal/auth/google/callback`;
+    const redirectUri = getRedirectUri(req, 'google');
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.append('client_id', googleClientId);
