@@ -32,6 +32,7 @@ export async function connectCloudBackend({
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any, any>[];
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
@@ -104,7 +105,7 @@ async function callApi(endpoint: string, method: string, payload?: object) {
       throw new Error(
         `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${json?.error}`
       );
-    } catch (error) {
+    } catch {
       throw new Error(
         `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`
       );

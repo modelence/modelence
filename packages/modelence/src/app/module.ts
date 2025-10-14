@@ -7,12 +7,15 @@ import { RateLimitRule } from '../rate-limit/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 
 /** Array of Store instances that will be provisioned when the module is loaded */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Stores = Store<any, any>[];
 
 /** Record of query methods that can be called from the client */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Queries = Record<string, MethodDefinition<any>>;
 
 /** Record of mutation methods that can be called from the client */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Mutations = Record<string, MethodDefinition<any>>;
 
 /**
@@ -87,6 +90,7 @@ export class Module {
       rateLimits = [],
       channels = [],
     }: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stores?: Store<any, any>[];
       queries?: Queries;
       mutations?: Mutations;

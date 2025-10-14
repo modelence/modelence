@@ -195,6 +195,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function initStores(stores: Store<any, any>[]) {
   const client = getClient();
   if (!client) {
@@ -298,7 +299,7 @@ async function getAppDetails() {
     return {
       name: packageJson.name || 'unknown',
     };
-  } catch (error) {
+  } catch {
     return {
       name: 'unknown',
     };

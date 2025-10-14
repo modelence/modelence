@@ -44,9 +44,14 @@ export const updateDisposableEmailListCron = {
             addedAt: now,
           }))
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         // MongoDB throws BulkWriteError when some documents are duplicates
-        if (error.name === 'MongoBulkWriteError' && error.result?.nInserted) {
+        if (
+          error &&
+          typeof error === 'object' &&
+          'name' in error &&
+          error.name === 'MongoBulkWriteError'
+        ) {
           // console.warn(`Error inserting batch starting at index ${i}:`, error.message);
         }
       }

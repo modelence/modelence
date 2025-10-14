@@ -17,7 +17,10 @@ export function createMutation<T extends unknown[]>(name: string, methodDef: Met
   return _createMethodInternal('mutation', name, methodDef);
 }
 
-export function _createSystemQuery<T extends unknown[]>(name: string, methodDef: MethodDefinition<T>) {
+export function _createSystemQuery<T extends unknown[]>(
+  name: string,
+  methodDef: MethodDefinition<T>
+) {
   requireServer();
   validateSystemMethodName(name);
   return _createMethodInternal('query', name, methodDef);

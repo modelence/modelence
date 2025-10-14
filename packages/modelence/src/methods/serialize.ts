@@ -58,7 +58,10 @@ export function reviveResponseTypes<T = unknown>(data: T, typeMap?: Record<strin
     return Object.fromEntries(
       Object.entries(data as Record<string, unknown>).map(([key, value]) => [
         key,
-        reviveResponseTypes(value, (typeMap.props as Record<string, unknown>)[key] as Record<string, unknown>),
+        reviveResponseTypes(
+          value,
+          (typeMap.props as Record<string, unknown>)[key] as Record<string, unknown>
+        ),
       ])
     ) as T;
   }

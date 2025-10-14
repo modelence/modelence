@@ -15,8 +15,8 @@ const buffer: { stdout: LogBuffer; stderr: LogBuffer } = {
 let sequenceId = 1;
 
 export function startLoggerProcess({
-  elasticCloudId,
-  elasticApiKey,
+  elasticCloudId: _elasticCloudId,
+  elasticApiKey: _elasticApiKey,
 }: {
   elasticCloudId: string;
   elasticApiKey: string;
@@ -24,11 +24,13 @@ export function startLoggerProcess({
   const originalStdoutWrite = process.stdout.write;
   const originalStderrWrite = process.stderr.write;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   process.stdout.write = function (chunk: string | Uint8Array, ...args: any[]) {
     addToBuffer(chunk.toString(), buffer.stdout);
     return originalStdoutWrite.call(process.stdout, chunk, ...args);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   process.stderr.write = function (chunk: string | Uint8Array, ...args: any[]) {
     addToBuffer(chunk.toString(), buffer.stderr);
     return originalStderrWrite.call(process.stderr, chunk, ...args);

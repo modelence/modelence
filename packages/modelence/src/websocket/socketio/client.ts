@@ -15,15 +15,33 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
   props.channels?.forEach((channel) => channel.init());
 }
 
-function on<T = unknown>({ category, listener }: { category: string; listener: (data: T) => void }) {
+function on<T = unknown>({
+  category,
+  listener,
+}: {
+  category: string;
+  listener: (data: T) => void;
+}) {
   socketClient.on(category, listener);
 }
 
-function once<T = unknown>({ category, listener }: { category: string; listener: (data: T) => void }) {
+function once<T = unknown>({
+  category,
+  listener,
+}: {
+  category: string;
+  listener: (data: T) => void;
+}) {
   socketClient.once(category, listener);
 }
 
-function off<T = unknown>({ category, listener }: { category: string; listener: (data: T) => void }) {
+function off<T = unknown>({
+  category,
+  listener,
+}: {
+  category: string;
+  listener: (data: T) => void;
+}) {
   socketClient.off(category, listener);
 }
 

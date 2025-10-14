@@ -108,7 +108,7 @@ export async function handleLoginWithPassword(
   }
 }
 
-export async function handleLogout(args: Args, { user, session }: Context) {
+export async function handleLogout(args: Args, { session }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
   }

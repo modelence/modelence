@@ -15,7 +15,7 @@ import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
 
-async function createGuestUser() {
+export async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
 
   const guestId = randomBytes(9)

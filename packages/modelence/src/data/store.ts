@@ -17,7 +17,6 @@ import {
   BulkWriteResult,
   AnyBulkWriteOperation,
   InsertManyResult,
-  Db,
   ClientSession,
   SearchIndexDescription,
   MongoError,

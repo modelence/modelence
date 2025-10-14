@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';

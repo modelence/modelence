@@ -37,7 +37,7 @@ async function buildVite() {
 
 async function buildServer() {
   console.log('Building server with tsup...');
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     tsupBuild({
       entry: [getServerPath()],
       format: 'esm',
@@ -53,7 +53,7 @@ async function buildServer() {
         ...Object.keys(pkg.dependencies ?? {}),
         ...Object.keys(pkg.peerDependencies ?? {}),
       ],
-      outExtension: ({ format }) => ({
+      outExtension: () => ({
         js: '.mjs',
       }),
       onSuccess: async () => {
@@ -81,7 +81,7 @@ export async function build() {
 
   try {
     await fs.access(getModelencePath());
-  } catch (error) {
+  } catch {
     throw new Error(
       'Could not find the .modelence directory. Looks like something went wrong during the build.'
     );

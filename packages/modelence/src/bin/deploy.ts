@@ -2,7 +2,7 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getStudioUrl, getBuildPath, getProjectPath } from './config';
+import { getStudioUrl, getProjectPath } from './config';
 import { build } from './build';
 
 export async function deploy(options: { app: string; env: string }) {
@@ -128,7 +128,7 @@ async function uploadBundle(appAlias: string, envAlias: string, bundlePath: stri
   const fileBuffer = await fs.readFile(bundlePath);
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
-    body: fileBuffer,
+    body: new Uint8Array(fileBuffer),
     headers: {
       'Content-Type': 'application/zip',
     },

@@ -79,7 +79,7 @@ export async function setup(options: { token: string; host: string }) {
         console.log('Setup canceled');
         process.exit(0);
       }
-    } catch (error) {
+    } catch {
       // File doesn't exist, we'll create it
     }
 
