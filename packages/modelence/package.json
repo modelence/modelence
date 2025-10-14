@@ -47,8 +47,6 @@
     "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.5.1",
-    "@types/passport-github2": "^1.2.9",
-    "@types/passport-google-oauth20": "^2.0.16",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
     "@types/socket.io": "^3.0.1",
