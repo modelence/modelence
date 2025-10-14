@@ -8,7 +8,6 @@ import { logInfo } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
-import passport from 'passport';
 import z from 'zod';
 import type { AppServer } from '../types';
 import { authenticate } from '../auth';
@@ -44,8 +43,6 @@ export async function startServer(server: AppServer, {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
-
-  app.use(passport.initialize());
 
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
