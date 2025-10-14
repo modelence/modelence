@@ -1,19 +1,30 @@
 import { getConfig } from "@/server";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { ObjectId } from "mongodb";
-import passport from "passport";
-import { Strategy as GitHubStrategy } from "passport-github2";
 import { usersCollection } from "../db";
 import { createSession } from "../session";
 import { getAuthConfig } from "@/app/authConfig";
 import { getCallContext } from "@/app/server";
 
-interface GitHubUser {
-  id: string;
-  displayName: string;
-  username: string;
-  emails: { value: string; }[];
-  photos: { value: string }[];
+interface GitHubTokenResponse {
+  access_token: string;
+  token_type: string;
+  scope: string;
+}
+
+interface GitHubUserInfo {
+  id: number;
+  login: string;
+  name: string;
+  email: string | null;
+  avatar_url: string;
+}
+
+interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: string | null;
 }
 
 async function authenticateUser(res: Response, userId: ObjectId) {
@@ -28,110 +39,192 @@ async function authenticateUser(res: Response, userId: ObjectId) {
   res.redirect("/");
 }
 
+async function exchangeCodeForToken(
+  code: string,
+  clientId: string,
+  clientSecret: string,
+  redirectUri: string
+): Promise<GitHubTokenResponse> {
+  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+    }),
+  });
 
-async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
-  const githubUser = req.user as GitHubUser;
-
-  const existingUser = await usersCollection.findOne(
-    { 'authMethods.github.id': githubUser.id },
-  );
-
-  const {
-    session,
-    connectionInfo,
-  } = await getCallContext(req);
-
-  try {
-    if (existingUser) {
-      await authenticateUser(res, existingUser._id);
-
-      getAuthConfig().onAfterLogin?.({
-        user: existingUser,
-        session,
-        connectionInfo,
-      });
-      getAuthConfig().login?.onSuccess?.(existingUser);
-
-      return;
-    }
-  } catch(error) {
-    if (error instanceof Error) {
-      getAuthConfig().login?.onError?.(error);
-
-      getAuthConfig().onLoginError?.({
-        error,
-        session,
-        connectionInfo,
-      });
-    }
-    throw error;
+  if (!tokenResponse.ok) {
+    throw new Error(`Failed to exchange code for token: ${tokenResponse.statusText}`);
   }
 
+  return tokenResponse.json();
+}
+
+async function fetchGitHubUserInfo(accessToken: string): Promise<GitHubUserInfo> {
+  const userInfoResponse = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (!userInfoResponse.ok) {
+    throw new Error(`Failed to fetch user info: ${userInfoResponse.statusText}`);
+  }
+
+  return userInfoResponse.json();
+}
+
+async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]> {
+  const emailsResponse = await fetch('https://api.github.com/user/emails', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (!emailsResponse.ok) {
+    throw new Error(`Failed to fetch user emails: ${emailsResponse.statusText}`);
+  }
+
+  return emailsResponse.json();
+}
+
+async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
+  const { code } = req.query;
+
+  if (!code || typeof code !== 'string') {
+    res.status(400).json({ error: 'Missing authorization code' });
+    return;
+  }
+
+  const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
+  const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/_internal/auth/github/callback`;
+
   try {
-    const githubEmail = githubUser.emails[0] && githubUser.emails[0]?.value;
+    // Exchange code for access token
+    const tokenData = await exchangeCodeForToken(code, githubClientId, githubClientSecret, redirectUri);
 
-    if (!githubEmail) {
-      res.status(400).json({
-        error: "Email address is required for GitHub authentication.",
-      });
-    }
+    // Fetch user info and emails
+    const [githubUser, githubEmails] = await Promise.all([
+      fetchGitHubUserInfo(tokenData.access_token),
+      fetchGitHubUserEmails(tokenData.access_token),
+    ]);
 
-    const existingUserByEmail = await usersCollection.findOne(
-      { 'emails.address': githubEmail, },
-      { collation: { locale: 'en', strength: 2 } },
+    const existingUser = await usersCollection.findOne(
+      { 'authMethods.github.id': String(githubUser.id) },
     );
 
-    // TODO: check if the email is verified
-    if (existingUserByEmail) {
-      // TODO: handle case with an HTML page
-      res.status(400).json({
-        error: "User with this email already exists. Please log in instead.",
-      });
-      return;
+    const {
+      session,
+      connectionInfo,
+    } = await getCallContext(req);
+
+    try {
+      if (existingUser) {
+        await authenticateUser(res, existingUser._id);
+
+        getAuthConfig().onAfterLogin?.({
+          user: existingUser,
+          session,
+          connectionInfo,
+        });
+        getAuthConfig().login?.onSuccess?.(existingUser);
+
+        return;
+      }
+    } catch(error) {
+      if (error instanceof Error) {
+        getAuthConfig().login?.onError?.(error);
+
+        getAuthConfig().onLoginError?.({
+          error,
+          session,
+          connectionInfo,
+        });
+      }
+      throw error;
     }
 
-    // If the user does not exist, create a new user
-    const newUser = await usersCollection.insertOne({
-      handle: githubEmail,
-      emails: [{
-        address: githubEmail,
-        verified: true, // GitHub email is considered verified
-      }],
-      createdAt: new Date(),
-      authMethods: {
-        github: {
-          id: githubUser.id,
+    try {
+      // Find primary verified email
+      const primaryEmail = githubEmails.find(e => e.primary && e.verified);
+      const githubEmail = primaryEmail?.email || githubUser.email;
+
+      if (!githubEmail) {
+        res.status(400).json({
+          error: "Email address is required for GitHub authentication.",
+        });
+        return;
+      }
+
+      const existingUserByEmail = await usersCollection.findOne(
+        { 'emails.address': githubEmail, },
+        { collation: { locale: 'en', strength: 2 } },
+      );
+
+      // TODO: check if the email is verified
+      if (existingUserByEmail) {
+        // TODO: handle case with an HTML page
+        res.status(400).json({
+          error: "User with this email already exists. Please log in instead.",
+        });
+        return;
+      }
+
+      // If the user does not exist, create a new user
+      const newUser = await usersCollection.insertOne({
+        handle: githubEmail,
+        emails: [{
+          address: githubEmail,
+          verified: primaryEmail?.verified ?? false,
+        }],
+        createdAt: new Date(),
+        authMethods: {
+          github: {
+            id: String(githubUser.id),
+          },
         },
-      },
-    });
-
-    await authenticateUser(res, newUser.insertedId);
-
-    const userDocument = await usersCollection.findOne(
-      { _id: newUser.insertedId },
-      { readPreference: "primary" }
-    );
-
-    if (userDocument) {
-      getAuthConfig().onAfterSignup?.({
-        user: userDocument,
-        session,
-        connectionInfo,
       });
 
-      getAuthConfig().signup?.onSuccess?.(userDocument);
-    }
-  } catch(error) {
-    if (error instanceof Error) {
-      getAuthConfig().onSignupError?.({
-        error,
-        session,
-        connectionInfo,
-      });
+      await authenticateUser(res, newUser.insertedId);
 
-      getAuthConfig().signup?.onError?.(error);
+      const userDocument = await usersCollection.findOne(
+        { _id: newUser.insertedId },
+        { readPreference: "primary" }
+      );
+
+      if (userDocument) {
+        getAuthConfig().onAfterSignup?.({
+          user: userDocument,
+          session,
+          connectionInfo,
+        });
+
+        getAuthConfig().signup?.onSuccess?.(userDocument);
+      }
+    } catch(error) {
+      if (error instanceof Error) {
+        getAuthConfig().onSignupError?.({
+          error,
+          session,
+          connectionInfo,
+        });
+
+        getAuthConfig().signup?.onError?.(error);
+      }
+      throw error;
     }
-    throw error;
+  } catch (error) {
+    console.error('GitHub OAuth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
   }
 }
 
@@ -149,34 +242,30 @@ function getRouter() {
       return;
     }
 
-    // Configure passport strategy dynamically if needed
-    if (!(passport as any)._strategies['github']) {
-      const githubScopes = getConfig('_system.user.auth.github.scopes');
-      const scopes = githubScopes
-        ? String(githubScopes).split(',').map(s => s.trim())
-        : ['user:email'];
-
-      passport.use(new GitHubStrategy({
-        clientID: githubClientId,
-        clientSecret: githubClientSecret,
-        callbackURL: '/api/_internal/auth/github/callback',
-        scope: scopes,
-      }, (_accessToken: string, _refreshToken: string, profile: any, done: any) => {
-        return done(null, profile);
-      }));
-    }
-
     next();
   };
 
-  githubAuthRouter.get("/api/_internal/auth/github", checkGitHubEnabled, passport.authenticate("github", {
-    session: false,
-  }));
+  // Initiate OAuth flow
+  githubAuthRouter.get("/api/_internal/auth/github", checkGitHubEnabled, (req: Request, res: Response) => {
+    const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
+    const redirectUri = `${req.protocol}://${req.get('host')}/api/_internal/auth/github/callback`;
+    const githubScopes = getConfig('_system.user.auth.github.scopes');
+    const scopes = githubScopes
+      ? String(githubScopes).split(',').map(s => s.trim()).join(' ')
+      : 'user:email';
 
+    const authUrl = new URL('https://github.com/login/oauth/authorize');
+    authUrl.searchParams.append('client_id', githubClientId);
+    authUrl.searchParams.append('redirect_uri', redirectUri);
+    authUrl.searchParams.append('scope', scopes);
+
+    res.redirect(authUrl.toString());
+  });
+
+  // Handle OAuth callback
   githubAuthRouter.get(
     "/api/_internal/auth/github/callback",
     checkGitHubEnabled,
-    passport.authenticate("github", { session: false }),
     handleGitHubAuthenticationCallback,
   );
 
