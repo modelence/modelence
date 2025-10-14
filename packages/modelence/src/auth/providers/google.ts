@@ -16,10 +16,10 @@ interface GoogleTokenResponse {
 }
 
 interface GoogleUserInfo {
-  sub: string;
+  id: string;
   name: string;
   email: string;
-  email_verified: boolean;
+  verified_email: boolean;
   picture: string;
 }
 
@@ -84,9 +84,9 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     const googleUser = await fetchGoogleUserInfo(tokenData.access_token);
 
     const userData: OAuthUserData = {
-      id: googleUser.sub,
+      id: googleUser.id,
       email: googleUser.email,
-      emailVerified: googleUser.email_verified,
+      emailVerified: googleUser.verified_email,
       providerName: 'google',
     };
 

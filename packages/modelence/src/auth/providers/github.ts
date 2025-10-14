@@ -101,20 +101,23 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     // Exchange code for access token
     const tokenData = await exchangeCodeForToken(code, githubClientId, githubClientSecret, redirectUri);
 
-    // Fetch user info and emails
-    const [githubUser, githubEmails] = await Promise.all([
-      fetchGitHubUserInfo(tokenData.access_token),
-      fetchGitHubUserEmails(tokenData.access_token),
-    ]);
+    // Fetch user info
+    const githubUser = await fetchGitHubUserInfo(tokenData.access_token);
 
-    // Find primary verified email
-    const primaryEmail = githubEmails.find(e => e.primary && e.verified);
-    const githubEmail = primaryEmail?.email || githubUser.email || '';
+    // Use the public email from user profile
+    const githubEmail = githubUser.email || '';
+
+    if (!githubEmail) {
+      res.status(400).json({
+        error: 'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.'
+      });
+      return;
+    }
 
     const userData: OAuthUserData = {
       id: String(githubUser.id),
       email: githubEmail,
-      emailVerified: primaryEmail?.verified ?? false,
+      emailVerified: true, // Assume public email is verified
       providerName: 'github',
     };
 
