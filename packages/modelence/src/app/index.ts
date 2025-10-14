@@ -30,15 +30,15 @@ import { AuthConfig, setAuthConfig } from './authConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
-  modules?: Module[],
-  server?: AppServer,
-  email?: EmailConfig,
-  auth?: AuthConfig,
-  roles?: Record<string, RoleDefinition>,
-  defaultRoles?: Record<string, string>,
-  migrations?: Array<MigrationScript>,
+  modules?: Module[];
+  server?: AppServer;
+  email?: EmailConfig;
+  auth?: AuthConfig;
+  roles?: Record<string, RoleDefinition>;
+  defaultRoles?: Record<string, string>;
+  migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
-}
+};
 
 export async function startApp({
   modules = [],
@@ -51,17 +51,19 @@ export async function startApp({
   websocket = {},
 }: AppOptions) {
   dotenv.config();
-  
+
   dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
-  trackAppStart().then(() => {
-    // Do nothing
-  }).catch(() => {
-    // Silently ignore tracking errors to not disrupt app startup
-  });
+  trackAppStart()
+    .then(() => {
+      // Do nothing
+    })
+    .catch(() => {
+      // Silently ignore tracking errors to not disrupt app startup
+    });
 
   // TODO: verify that user modules don't start with `_system.` prefix
   const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule];
@@ -87,11 +89,12 @@ export async function startApp({
   initRateLimits(rateLimits);
 
   if (hasRemoteBackend) {
-    const { configs, environmentId, appAlias, environmentAlias, telemetry } = await connectCloudBackend({
-      configSchema,
-      cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
-      stores
-    });
+    const { configs, environmentId, appAlias, environmentAlias, telemetry } =
+      await connectCloudBackend({
+        configSchema,
+        cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
+        stores,
+      });
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
   } else {
@@ -156,15 +159,15 @@ function initSystemMethods(modules: Module[]) {
 }
 
 function getStores(modules: Module[]) {
-  return modules.flatMap(module => module.stores);
+  return modules.flatMap((module) => module.stores);
 }
 
 function getChannels(modules: Module[]) {
-  return modules.flatMap(module => module.channels);
+  return modules.flatMap((module) => module.channels);
 }
 
 function getRateLimits(modules: Module[]) {
-  return modules.flatMap(module => module.rateLimits);
+  return modules.flatMap((module) => module.rateLimits);
 }
 
 function getConfigSchema(modules: Module[]): ConfigSchema {
@@ -174,9 +177,7 @@ function getConfigSchema(modules: Module[]): ConfigSchema {
     for (const [key, value] of Object.entries(module.configSchema)) {
       const absoluteKey = `${module.name}.${key}`;
       if (absoluteKey in merged) {
-        throw new Error(
-          `Duplicate config schema key: ${absoluteKey} (${module.name})`
-        );
+        throw new Error(`Duplicate config schema key: ${absoluteKey} (${module.name})`);
       }
 
       merged[absoluteKey] = value;
@@ -269,21 +270,21 @@ async function trackAppStart() {
   if (isTrackingEnabled) {
     const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
     const environmentId = process.env.MODELENCE_ENVIRONMENT_ID;
-    
+
     const appDetails = await getAppDetails();
     const modelencePackageJson = await import('../../package.json');
-    
+
     await fetch(`${serviceEndpoint}/api/track/app-start`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         projectName: appDetails.name,
         version: modelencePackageJson.default.version,
         localHostname: os.hostname(),
-        environmentId
-      })
+        environmentId,
+      }),
     });
   }
 }
@@ -293,13 +294,13 @@ async function getAppDetails() {
     const packageJsonPath = path.join(process.cwd(), 'package.json');
     const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
     const packageJson = JSON.parse(packageJsonContent);
-    
+
     return {
-      name: packageJson.name || 'unknown'
+      name: packageJson.name || 'unknown',
     };
   } catch (error) {
     return {
-      name: 'unknown'
+      name: 'unknown',
     };
   }
 }

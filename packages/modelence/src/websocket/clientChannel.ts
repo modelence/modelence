@@ -1,13 +1,10 @@
-import { getWebsocketClientProvider } from "./client";
+import { getWebsocketClientProvider } from './client';
 
-export class ClientChannel<T = any> {
+export class ClientChannel<T = unknown> {
   public readonly category: string;
   private readonly onMessage: (data: T) => void;
 
-  constructor(
-    category: string,
-    onMessage: (data: T) => void
-  ) {
+  constructor(category: string, onMessage: (data: T) => void) {
     this.category = category;
     this.onMessage = onMessage;
   }
@@ -15,7 +12,7 @@ export class ClientChannel<T = any> {
   init() {
     getWebsocketClientProvider()?.on({
       category: this.category,
-      listener: this.onMessage
+      listener: this.onMessage,
     });
   }
 

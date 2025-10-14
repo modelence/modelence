@@ -5,7 +5,7 @@
   
   While this is specific to Next.js, it is simply ignored outside of Next.js and should not cause errors.
 */
-"use client";
+'use client';
 
 import React, { useState, useEffect, ReactNode } from 'react';
 import { initSession } from './session';

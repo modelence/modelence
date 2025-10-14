@@ -23,27 +23,29 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
-    lock: schema.object({
-      containerId: schema.string(),
-      acquireDate: schema.date(),
-    }).optional(),
+    lock: schema
+      .object({
+        containerId: schema.string(),
+        acquireDate: schema.date(),
+      })
+      .optional(),
   },
-  indexes: [
-    { key: { alias: 1 }, unique: true, background: true },
-  ]
+  indexes: [{ key: { alias: 1 }, unique: true, background: true }],
 });
 
 // TODO: allow changing interval and timeout with cron jobconfigs
 export function defineCronJob(
   alias: CronJob['alias'],
-  { description = '', interval, timeout = DEFAULT_TIMEOUT, handler }: CronJobInputParams,
+  { description = '', interval, timeout = DEFAULT_TIMEOUT, handler }: CronJobInputParams
 ) {
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
   }
 
   if (cronJobsInterval) {
-    throw new Error(`Unable to add a cron job - cron jobs have already been initialized: [${alias}]`);
+    throw new Error(
+      `Unable to add a cron job - cron jobs have already been initialized: [${alias}]`
+    );
   }
 
   if (interval < time.seconds(5)) {
@@ -60,7 +62,7 @@ export function defineCronJob(
     handler,
     state: {
       isRunning: false,
-    }
+    },
   };
 }
 
@@ -75,24 +77,26 @@ export async function startCronJobs() {
 
     const existingLockedRecord = await cronJobsCollection.findOne({
       ...aliasSelector,
-      'lock.containerId': { $exists: true }
+      'lock.containerId': { $exists: true },
     });
 
     // TODO: handle different application versions with different parameters for the same job alias
 
-    await Promise.all(aliasList.map(alias => 
-      cronJobsCollection.upsertOne(
-        { alias },
-        {
-          $set: {
-            lock: {
-              containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
-              acquireDate: new Date(),
-            }
+    await Promise.all(
+      aliasList.map((alias) =>
+        cronJobsCollection.upsertOne(
+          { alias },
+          {
+            $set: {
+              lock: {
+                containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
+                acquireDate: new Date(),
+              },
+            },
           }
-        }
+        )
       )
-    ));
+    );
 
     if (existingLockedRecord) {
       await sleep(LOCK_TRANSFER_DELAY);
@@ -105,7 +109,9 @@ export async function startCronJobs() {
       if (!job) {
         return;
       }
-      job.state.scheduledRunTs = record.lastStartDate ? record.lastStartDate.getTime() + job.params.interval : now;
+      job.state.scheduledRunTs = record.lastStartDate
+        ? record.lastStartDate.getTime() + job.params.interval
+        : now;
     });
     Object.values(cronJobs).forEach((job) => {
       if (!job.state.scheduledRunTs) {
@@ -149,20 +155,25 @@ async function startCronJob(job: CronJob) {
   state.startTs = Date.now();
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
-  handler().then(() => {
-    handleCronJobCompletion(state, params);
-    transaction.end('success');
-  }).catch((err) => {
-    handleCronJobCompletion(state, params);
-    captureError(err);
-    transaction.end('error');
-    console.error(`Error in cron job '${alias}':`, err);
-  });
-  await cronJobsCollection.updateOne({ alias }, {
-    $set: {
-      lastStartDate: new Date(state.startTs),
+  handler()
+    .then(() => {
+      handleCronJobCompletion(state, params);
+      transaction.end('success');
+    })
+    .catch((err) => {
+      handleCronJobCompletion(state, params);
+      captureError(err);
+      transaction.end('error');
+      console.error(`Error in cron job '${alias}':`, err);
+    });
+  await cronJobsCollection.updateOne(
+    { alias },
+    {
+      $set: {
+        lastStartDate: new Date(state.startTs),
+      },
     }
-  });
+  );
 }
 
 function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {

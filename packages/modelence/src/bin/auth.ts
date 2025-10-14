@@ -18,7 +18,7 @@ export async function authenticateCli() {
 
   console.log(`Please visit ${verificationUrl} to authenticate`);
   console.log(`Code: ${code}`);
-  
+
   await open(verificationUrl);
 
   const token = await waitForAuth(code);
@@ -41,7 +41,7 @@ async function waitForAuth(code: string): Promise<string> {
     } catch (error) {
       console.error('Error polling for CLI token:', error);
     }
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
   throw new Error('Unable to authenticate CLI - timed out. Please try again.');

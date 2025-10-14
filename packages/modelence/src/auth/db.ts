@@ -3,9 +3,9 @@ import { Store } from '../data/store';
 
 /**
  * Database collection for storing user accounts with authentication methods and profile information.
- * 
+ *
  * This is where **signupWithPassword** automatically creates new users.
- * 
+ *
  * @example
  * ```typescript
  * // Find user by email
@@ -13,32 +13,40 @@ import { Store } from '../data/store';
  *   { 'emails.address': 'john@example.com' }
  * );
  * ```
- * 
+ *
  */
 export const usersCollection = new Store('_modelenceUsers', {
   schema: {
     handle: schema.string(),
-    emails: schema.array(schema.object({
-      address: schema.string(),
-      verified: schema.boolean(),
-    })).optional(),
+    emails: schema
+      .array(
+        schema.object({
+          address: schema.string(),
+          verified: schema.boolean(),
+        })
+      )
+      .optional(),
     createdAt: schema.date(),
     authMethods: schema.object({
-      password: schema.object({
-        hash: schema.string(),
-      }).optional(),
-      google: schema.object({
-        id: schema.string(),
-      }).optional(),
+      password: schema
+        .object({
+          hash: schema.string(),
+        })
+        .optional(),
+      google: schema
+        .object({
+          id: schema.string(),
+        })
+        .optional(),
     }),
   },
   indexes: [
     {
       key: { handle: 1 },
       unique: true,
-      collation: { locale: 'en', strength: 2 }  // Case-insensitive
+      collation: { locale: 'en', strength: 2 }, // Case-insensitive
     },
-  ]
+  ],
 });
 
 export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDomains', {
@@ -50,8 +58,8 @@ export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDoma
     {
       key: { domain: 1 },
       unique: true,
-    }
-  ]
+    },
+  ],
 });
 
 export const emailVerificationTokensCollection = new Store('_modelenceEmailVerificationTokens', {
@@ -65,13 +73,13 @@ export const emailVerificationTokensCollection = new Store('_modelenceEmailVerif
   indexes: [
     {
       key: { token: 1 },
-      unique: true
+      unique: true,
     },
     {
       key: { expiresAt: 1 },
-      expireAfterSeconds: 0
-    }
-  ]
+      expireAfterSeconds: 0,
+    },
+  ],
 });
 
 export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordTokens', {
@@ -84,11 +92,11 @@ export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordT
   indexes: [
     {
       key: { token: 1 },
-      unique: true
+      unique: true,
     },
     {
       key: { expiresAt: 1 },
-      expireAfterSeconds: 0
-    }
-  ]
+      expireAfterSeconds: 0,
+    },
+  ],
 });

@@ -25,6 +25,14 @@ jobs:
         working-directory: ./packages/modelence
         run: npm ci
 
+      - name: Run lint check
+        working-directory: ./packages/modelence
+        run: npm run lint:check
+
+      - name: Run format check
+        working-directory: ./packages/modelence
+        run: npm run format:check
+
       - name: Build modelence
         working-directory: ./packages/modelence
         run: npm run build 

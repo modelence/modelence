@@ -8,7 +8,7 @@ export type UserInfo = {
 
 /**
  * Sign up a new user with an email and password.
- * 
+ *
  * @example
  * ```ts
  * await signupWithPassword({ email: 'test@example.com', password: '12345678' });
@@ -16,14 +16,14 @@ export type UserInfo = {
  * @param options.email - The email of the user.
  * @param options.password - The password of the user.
  */
-export async function signupWithPassword(options: { email: string, password: string }) {
+export async function signupWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
   await callMethod('_system.user.signupWithPassword', { email, password });
 }
 
 /**
  * Login a user with an email and password.
- * 
+ *
  * @example
  * ```ts
  * await loginWithPassword({ email: 'test@example.com', password: '12345678' });
@@ -31,16 +31,19 @@ export async function signupWithPassword(options: { email: string, password: str
  * @param options.email - The email of the user.
  * @param options.password - The password of the user.
  */
-export async function loginWithPassword(options: { email: string, password: string }) {
+export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user } = await callMethod<{ user: UserInfo }>('_system.user.loginWithPassword', { email, password });
+  const { user } = await callMethod<{ user: UserInfo }>('_system.user.loginWithPassword', {
+    email,
+    password,
+  });
   setCurrentUser(user);
   return user;
 }
 
 /**
  * Verify user's email with a verification token.
- * 
+ *
  * @example
  * ```ts
  * await verifyEmail({ token: 'verification-token' });
@@ -54,7 +57,7 @@ export async function verifyEmail(options: { token: string }) {
 
 /**
  * Logout the current user.
- * 
+ *
  */
 export async function logout() {
   await callMethod('_system.user.logout');
@@ -63,7 +66,7 @@ export async function logout() {
 
 /**
  * Send reset password token.
- * @param options.email - The email of the user. 
+ * @param options.email - The email of the user.
  */
 export async function sendResetPasswordToken(options: { email: string }) {
   const { email } = options;
@@ -77,7 +80,7 @@ export async function sendResetPasswordToken(options: { email: string }) {
  * @param options.token - The password reset token.
  * @param options.password - The new password.
  */
-export async function resetPassword(options: { token: string, password: string }) {
+export async function resetPassword(options: { token: string; password: string }) {
   const { token, password } = options;
   await callMethod('_system.user.resetPassword', {
     token,

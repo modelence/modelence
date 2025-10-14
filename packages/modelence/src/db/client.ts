@@ -1,4 +1,4 @@
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import { getConfig } from '../config/server';
 
 let client: MongoClient | null = null;
@@ -12,15 +12,15 @@ export async function connect() {
   }
 
   client = new MongoClient(mongodbUri, {
-    maxPoolSize: 20
+    maxPoolSize: 20,
   });
 
   try {
     // Connect the client to the server
     await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    await client.db('admin').command({ ping: 1 });
+    console.log('Pinged your deployment. You successfully connected to MongoDB!');
     return client;
   } catch (err) {
     console.error(err);

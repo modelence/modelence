@@ -27,11 +27,11 @@ import { ModelSchema, InferDocumentType } from './types';
 
 /**
  * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
- * 
+ *
  * @category Store
  * @typeParam TSchema - The document schema type
  * @typeParam TMethods - Custom methods that will be added to documents
- * 
+ *
  * @example
  * ```ts
  * const dbTodos = new Store('todos', {
@@ -51,7 +51,11 @@ import { ModelSchema, InferDocumentType } from './types';
  */
 export class Store<
   TSchema extends ModelSchema,
-  TMethods extends Record<string, (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: Parameters<any>) => any>
+  TMethods extends Record<
+    string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this: WithId<InferDocumentType<TSchema>> & TMethods, ...args: any[]) => any
+  >,
 > {
   /** @internal */
   readonly _type!: InferDocumentType<TSchema>;
@@ -59,7 +63,7 @@ export class Store<
   readonly _rawDoc!: WithId<this['_type']>;
   /** @internal */
   readonly _doc!: this['_rawDoc'] & TMethods;
-  
+
   readonly Doc!: this['_doc'];
 
   private name: string;
@@ -72,7 +76,7 @@ export class Store<
 
   /**
    * Creates a new Store instance
-   * 
+   *
    * @param name - The collection name in MongoDB
    * @param options - Store configuration
    */
@@ -156,7 +160,7 @@ export class Store<
       null,
       Object.getOwnPropertyDescriptors({
         ...document,
-        ...this.methods
+        ...this.methods,
       })
     );
 
@@ -165,7 +169,7 @@ export class Store<
 
   /**
    * For convenience, to also allow directy passing a string or ObjectId as the selector
-  */
+   */
   private getSelector(selector: Filter<this['_type']> | string | ObjectId) {
     if (typeof selector === 'string') {
       return { _id: new ObjectId(selector) } as Filter<this['_type']>;
@@ -196,20 +200,16 @@ export class Store<
     return this.client;
   }
 
-  async findOne(
-    query: Filter<this['_type']>, 
-    options?: FindOptions
-  ) {
+  async findOne(query: Filter<this['_type']>, options?: FindOptions) {
     const document = await this.requireCollection().findOne<this['_rawDoc']>(query, options);
     return document ? this.wrapDocument(document) : null;
   }
 
   async requireOne(
-    query: Filter<this['_type']>, 
+    query: Filter<this['_type']>,
     options?: FindOptions,
     errorHandler?: () => Error
   ): Promise<this['_doc']> {
-    
     const result = await this.findOne(query, options);
     if (!result) {
       throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
@@ -217,7 +217,10 @@ export class Store<
     return result;
   }
 
-  private find(query: Filter<this['_type']>, options?: { sort?: Document, limit?: number, skip?: number }) {
+  private find(
+    query: Filter<this['_type']>,
+    options?: { sort?: Document; limit?: number; skip?: number }
+  ) {
     const cursor = this.requireCollection().find(query);
     if (options?.sort) {
       cursor.sort(options.sort);
@@ -233,7 +236,7 @@ export class Store<
 
   /**
    * Fetches a single document by its ID
-   * 
+   *
    * @param id - The ID of the document to find
    * @returns The document, or null if not found
    */
@@ -244,7 +247,7 @@ export class Store<
 
   /**
    * Fetches a single document by its ID, or throws an error if not found
-   * 
+   *
    * @param id - The ID of the document to find
    * @param errorHandler - Optional error handler to return a custom error if the document is not found
    * @returns The document
@@ -252,14 +255,16 @@ export class Store<
   async requireById(id: string | ObjectId, errorHandler?: () => Error): Promise<this['_doc']> {
     const result = await this.findById(id);
     if (!result) {
-      throw errorHandler ? errorHandler() : new Error(`Record with id ${id} not found in ${this.name}`);
+      throw errorHandler
+        ? errorHandler()
+        : new Error(`Record with id ${id} not found in ${this.name}`);
     }
     return result;
   }
 
   /**
    * Counts the number of documents that match a query
-   * 
+   *
    * @param query - The query to filter documents
    * @returns The number of documents that match the query
    */
@@ -269,19 +274,22 @@ export class Store<
 
   /**
    * Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
-   * 
+   *
    * @param query - The query to filter documents
    * @param options - Options
    * @returns The documents
    */
-  async fetch(query: Filter<this['_type']>, options?: { sort?: Document, limit?: number, skip?: number }): Promise<this['_doc'][]> {
-    const cursor = this.find(query, options)
+  async fetch(
+    query: Filter<this['_type']>,
+    options?: { sort?: Document; limit?: number; skip?: number }
+  ): Promise<this['_doc'][]> {
+    const cursor = this.find(query, options);
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));
   }
 
   /**
    * Inserts a single document
-   * 
+   *
    * @param document - The document to insert
    * @returns The result of the insert operation
    */
@@ -291,46 +299,56 @@ export class Store<
 
   /**
    * Inserts multiple documents
-   * 
+   *
    * @param documents - The documents to insert
    * @returns The result of the insert operation
    */
-  async insertMany(documents: OptionalUnlessRequiredId<this['_type']>[]): Promise<InsertManyResult> {
+  async insertMany(
+    documents: OptionalUnlessRequiredId<this['_type']>[]
+  ): Promise<InsertManyResult> {
     return await this.requireCollection().insertMany(documents);
   }
 
   /**
    * Updates a single document
-   * 
+   *
    * @param selector - The selector to find the document to update
    * @param update - The update to apply to the document
    * @returns The result of the update operation
    */
-  async updateOne(selector: Filter<this['_type']> | string | ObjectId, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
+  async updateOne(
+    selector: Filter<this['_type']> | string | ObjectId,
+    update: UpdateFilter<this['_type']>
+  ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(this.getSelector(selector), update);
   }
 
   /**
    * Updates a single document, or inserts it if it doesn't exist
-   * 
+   *
    * @param selector - The selector to find the document to update
    * @param update - The MongoDB modifier to apply to the document
    * @returns The result of the update operation
    */
-  async upsertOne(selector: Filter<this['_type']> | string | ObjectId, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(this.getSelector(selector), update, { upsert: true });
+  async upsertOne(
+    selector: Filter<this['_type']> | string | ObjectId,
+    update: UpdateFilter<this['_type']>
+  ): Promise<UpdateResult> {
+    return await this.requireCollection().updateOne(this.getSelector(selector), update, {
+      upsert: true,
+    });
   }
 
   /**
    * Updates multiple documents
-   * 
+   *
    * @param selector - The selector to find the documents to update
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
    */
   async updateMany(
-    selector: Filter<this['_type']>, 
-    update: UpdateFilter<this['_type']>, 
+    selector: Filter<this['_type']>,
+    update: UpdateFilter<this['_type']>,
     options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update, options);
@@ -338,18 +356,21 @@ export class Store<
 
   /**
    * Updates multiple documents, or inserts them if they don't exist
-   * 
+   *
    * @param selector - The selector to find the documents to update
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
    */
-  async upsertMany(selector: Filter<this['_type']>, update: UpdateFilter<this['_type']>): Promise<UpdateResult> {
+  async upsertMany(
+    selector: Filter<this['_type']>,
+    update: UpdateFilter<this['_type']>
+  ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector, update, { upsert: true });
   }
 
   /**
    * Deletes a single document
-   * 
+   *
    * @param selector - The selector to find the document to delete
    * @returns The result of the delete operation
    */
@@ -359,7 +380,7 @@ export class Store<
 
   /**
    * Deletes multiple documents
-   * 
+   *
    * @param selector - The selector to find the documents to delete
    * @returns The result of the delete operation
    */
@@ -369,7 +390,7 @@ export class Store<
 
   /**
    * Aggregates documents using MongoDB's aggregation framework
-   * 
+   *
    * @param pipeline - The aggregation pipeline
    * @param options - Optional options
    * @returns The aggregation cursor
@@ -380,7 +401,7 @@ export class Store<
 
   /**
    * Performs a bulk write operation on the collection
-   * 
+   *
    * @param operations - The operations to perform
    * @returns The result of the bulk write operation
    */
@@ -464,8 +485,8 @@ export class Store<
     projection,
     indexName,
   }: {
-    field: string,
-    embedding: number[],
+    field: string;
+    embedding: number[];
     numCandidates?: number;
     limit?: number;
     projection?: Document;
@@ -474,20 +495,20 @@ export class Store<
     return this.aggregate([
       {
         $vectorSearch: {
-          index: indexName || (field + 'VectorSearch'),
+          index: indexName || field + 'VectorSearch',
           path: field,
           queryVector: embedding,
           numCandidates: numCandidates || 100,
           limit: limit || 10,
-        }
+        },
       },
       {
         $project: {
           _id: 1,
           score: { $meta: 'vectorSearchScore' },
           ...projection,
-        }
-      }
+        },
+      },
     ]);
   }
 
@@ -532,14 +553,16 @@ export class Store<
   }) {
     return {
       type: 'vectorSearch',
-      name: indexName || (field + 'VectorSearch'),
+      name: indexName || field + 'VectorSearch',
       definition: {
-        fields: [{
-          type: 'vector',
-          path: field,
-          numDimensions: dimensions,
-          similarity,
-        }],
+        fields: [
+          {
+            type: 'vector',
+            path: field,
+            numDimensions: dimensions,
+            similarity,
+          },
+        ],
       },
     };
   }

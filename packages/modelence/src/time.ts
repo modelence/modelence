@@ -10,4 +10,4 @@ export const time = {
   hours: (x: number) => x * hourMs,
   days: (x: number) => x * dayMs,
   weeks: (x: number) => x * weekMs,
-}
+};

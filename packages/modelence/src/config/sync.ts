@@ -7,11 +7,11 @@ let isSyncing = false;
 const SYNC_INTERVAL = time.seconds(10);
 
 export function startConfigSync() {
-  setInterval(async() => {
+  setInterval(async () => {
     if (isSyncing) {
       return;
     }
-  
+
     isSyncing = true;
 
     // TODO: move this sync outside of config
@@ -20,14 +20,14 @@ export function startConfigSync() {
     } catch (error) {
       console.error('Error syncing status', error);
     }
-  
+
     try {
       await syncConfig();
     } catch (error) {
       console.error('Error syncing config', error);
     }
-  
-    isSyncing = false;  
+
+    isSyncing = false;
   }, SYNC_INTERVAL);
 }
 

@@ -28,15 +28,11 @@ async function buildVite() {
   const modelenceConfig = {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
-      emptyOutDir: true
-    }
+      emptyOutDir: true,
+    },
   };
 
-  await viteBuild(mergeConfig(
-    userConfig?.config || {},
-    modelenceConfig,
-    true
-  ));
+  await viteBuild(mergeConfig(userConfig?.config || {}, modelenceConfig, true));
 }
 
 async function buildServer() {
@@ -58,9 +54,11 @@ async function buildServer() {
         ...Object.keys(pkg.peerDependencies ?? {}),
       ],
       outExtension: ({ format }) => ({
-        js: '.mjs'
+        js: '.mjs',
       }),
-      onSuccess: async () => { resolve(undefined); }
+      onSuccess: async () => {
+        resolve(undefined);
+      },
     });
   });
 }
@@ -71,7 +69,7 @@ export async function build() {
   try {
     const buildDir = getBuildPath();
     await fs.rm(buildDir, { recursive: true, force: true });
-  
+
     await buildServer();
     await buildClient();
 
@@ -81,10 +79,11 @@ export async function build() {
     throw new Error('Build failed');
   }
 
-
   try {
     await fs.access(getModelencePath());
   } catch (error) {
-    throw new Error('Could not find the .modelence directory. Looks like something went wrong during the build.');
+    throw new Error(
+      'Could not find the .modelence directory. Looks like something went wrong during the build.'
+    );
   }
 }

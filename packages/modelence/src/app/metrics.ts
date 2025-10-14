@@ -4,7 +4,13 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
-import { getAppAlias, getEnvironmentAlias, getEnvironmentId, getTelemetryServiceName, isTelemetryEnabled } from './state';
+import {
+  getAppAlias,
+  getEnvironmentAlias,
+  getEnvironmentId,
+  getTelemetryServiceName,
+  isTelemetryEnabled,
+} from './state';
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
@@ -57,12 +63,12 @@ async function initElasticApm() {
         id: elasticCloudId,
       },
       auth: {
-        apiKey: elasticApiKey
+        apiKey: elasticApiKey,
       },
       requestTimeout: 10000,
       tls: {
-        rejectUnauthorized: false
-      }
+        rejectUnauthorized: false,
+      },
     },
     bufferLimit: 1000,
     silent: false,
@@ -77,22 +83,18 @@ async function initElasticApm() {
     defaultMeta: {
       serviceName,
     },
-    format: winston.format.combine(
-      winston.format.json(),
-    ),
+    format: winston.format.combine(winston.format.json()),
     transports: [
       // new winston.transports.Console(), // TODO: remove, just for debugging
-      esTransport
-    ]
+      esTransport,
+    ],
   });
 
   startLoggerProcess({
     elasticCloudId,
-    elasticApiKey
+    elasticApiKey,
   });
 }
-
-
 
 export function getApm() {
   if (!apm) {

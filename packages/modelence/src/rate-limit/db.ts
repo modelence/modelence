@@ -23,5 +23,5 @@ export const dbRateLimits = new Store('_modelenceRateLimits', {
   indexes: [
     { key: { bucket: 1, type: 1, value: 1, windowMs: 1 }, unique: true },
     { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
-  ]
+  ],
 });

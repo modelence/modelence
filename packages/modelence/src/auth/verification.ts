@@ -16,7 +16,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     // Find token in database
     const tokenDoc = await emailVerificationTokensCollection.findOne({
       token,
-      expiresAt: { $gt: new Date() }
+      expiresAt: { $gt: new Date() },
     });
 
     if (!tokenDoc) {
@@ -38,10 +38,10 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     // Mark the specific email as verified atomically
     const updateResult = await usersCollection.updateOne(
-      { 
+      {
         _id: tokenDoc.userId,
         'emails.address': email,
-        'emails.verified': { $ne: true }
+        'emails.verified': { $ne: true },
       },
       { $set: { 'emails.$.verified': true } }
     );
@@ -50,9 +50,9 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       // Check if email exists but is already verified
       const existingUser = await usersCollection.findOne({
         _id: tokenDoc.userId,
-        'emails.address': email
+        'emails.address': email,
       });
-      
+
       if (existingUser) {
         throw new Error('Email is already verified');
       } else {
@@ -81,7 +81,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 export async function sendVerificationEmail({
   userId,
   email,
-  baseUrl = process.env.MODELENCE_SITE_URL
+  baseUrl = process.env.MODELENCE_SITE_URL,
 }: {
   userId: ObjectId;
   email: string;
@@ -102,14 +102,14 @@ export async function sendVerificationEmail({
       createdAt: new Date(),
       expiresAt,
     });
-    
+
     const verificationUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
-    
+
     const template = getEmailConfig()?.verification?.template || emailVerificationTemplate;
     // TODO: we should have also the name on this step
     const htmlTemplate = template({ name: '', email, verificationUrl });
     const textContent = htmlToText(htmlTemplate);
-    
+
     await emailProvider?.sendEmail({
       to: email,
       from: getEmailConfig()?.from || 'noreply@modelence.com',

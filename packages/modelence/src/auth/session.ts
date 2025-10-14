@@ -14,10 +14,7 @@ export const sessionsCollection = new Store('_modelenceSessions', {
     expiresAt: schema.date(),
     userId: schema.userId().nullable(),
   },
-  indexes: [
-    { key: { authToken: 1 }, unique: true },
-    { key: { expiresAt: 1 }},
-  ]
+  indexes: [{ key: { authToken: 1 }, unique: true }, { key: { expiresAt: 1 } }],
   // TODO: add TTL index on expiresAt
 });
 
@@ -29,22 +26,28 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
       authToken: String(existingSession.authToken),
       expiresAt: new Date(existingSession.expiresAt),
       userId: existingSession.userId ?? null,
-    }
+    };
   }
 
   return await createSession();
 }
 
 export async function setSessionUser(authToken: string, userId: ObjectId) {
-  await sessionsCollection.updateOne({ authToken }, {
-    $set: { userId }
-  });
+  await sessionsCollection.updateOne(
+    { authToken },
+    {
+      $set: { userId },
+    }
+  );
 }
 
 export async function clearSessionUser(authToken: string) {
-  await sessionsCollection.updateOne({ authToken }, {
-    $set: { userId: null }
-  });
+  await sessionsCollection.updateOne(
+    { authToken },
+    {
+      $set: { userId: null },
+    }
+  );
 }
 
 export async function createSession(userId: ObjectId | null = null): Promise<Session> {
@@ -72,31 +75,34 @@ async function processSessionHeartbeat(session: Session) {
   const now = Date.now();
   const newExpiresAt = new Date(now + time.days(7));
 
-  await sessionsCollection.updateOne({ authToken: session.authToken }, {
-    $set: {
-      lastActiveDate: new Date(now),
-      expiresAt: newExpiresAt
+  await sessionsCollection.updateOne(
+    { authToken: session.authToken },
+    {
+      $set: {
+        lastActiveDate: new Date(now),
+        expiresAt: newExpiresAt,
+      },
     }
-  });
+  );
 }
 
 export default new Module('_system.session', {
   stores: [sessionsCollection],
   mutations: {
-    init: async function(args, { session, user }) {
+    init: async function (args, { session, user }) {
       // TODO: mark or track app load somewhere
-  
+
       return {
         session,
         user,
         configs: getPublicConfigs(),
       };
     },
-    heartbeat: async function(args, { session }) {
+    heartbeat: async function (args, { session }) {
       // Session might not exist if there is no database/authentication setup
       if (session) {
         await processSessionHeartbeat(session);
       }
-    }
+    },
   },
 });

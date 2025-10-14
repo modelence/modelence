@@ -1,4 +1,12 @@
-export function emailVerificationTemplate({ name, email, verificationUrl }: { name?: string; email: string; verificationUrl: string }) {
+export function emailVerificationTemplate({
+  name,
+  email,
+  verificationUrl,
+}: {
+  name?: string;
+  email: string;
+  verificationUrl: string;
+}) {
   return `
     <p>Hi${name ? ` ${name}` : ''},</p>
     <p>Please verify your email address ${email} by clicking the link below:</p>
