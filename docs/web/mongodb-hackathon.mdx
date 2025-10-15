@@ -2,6 +2,42 @@
 title: 'MongoDB Hackathon'
 ---
 
+## Example of Modelence application with Voyage AI
+
+[Voyage AI Live Example](https://voyage-ai-mg8435n3pj5-sandbox.prod.modelence.app)
+
+[Voyage AI Example source code](https://github.com/modelence/examples/tree/main/voyage-ai)
+
+[Voyage AI Tutorial](/voyage-ai)
+
 ## Setting up MongoDB and Voyage AI
 
-Instructions for the MongoDB hackathon will be posted here soon.
+Follow these steps to get started with Modelence and Voyage AI:
+
+1. Run the following command to create a project
+
+```
+npx create-modelence-app@latest voyage-ai --template voyage-ai
+```
+
+2. **Create an account** on [cloud.modelence.com](https://cloud.modelence.com/)
+
+3. **Create an application and local environment** in the Modelence Cloud dashboard
+
+4. **Open the Settings page** of your environment and click on **Setup Local Environment**
+
+5. **Copy the command** from the "Connect to Modelence Cloud" section and execute in the project directory
+
+6. **Add your Voyage AI API key**:
+   - Get your API key from [voyageai.com](https://www.voyageai.com/)
+   - Add it as the value of `MODELENCE_VOYAGEAI_API_KEY` in your `.modelence.env` file
+
+7. **Run the project** using the command:
+   ```bash
+   npm run dev
+   ```
+
+## Questions?
+
+If you have any questions, feel free to reach out in the [Discord channel](https://discord.com/channels/1420625359581479025/1420627154596663317).
+

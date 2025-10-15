@@ -65,7 +65,7 @@ function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
   // Deduplicate plugins by name, keeping user plugins over framework plugins
   if (mergedConfig.plugins && Array.isArray(mergedConfig.plugins)) {
     const seenPlugins = new Set();
-    mergedConfig.plugins = mergedConfig.plugins.filter((plugin: any) => {
+    mergedConfig.plugins = mergedConfig.plugins.flat().filter((plugin: any) => {
       if (!plugin || typeof plugin !== 'object') {
         return true;
       }
@@ -78,7 +78,7 @@ function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
     }).reverse(); // Reverse to prioritize user plugins over framework plugins
     mergedConfig.plugins.reverse(); // Reverse back to maintain original order
   }
-  
+
   return mergedConfig;
 }
 

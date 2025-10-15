@@ -24,13 +24,18 @@
           {
             "group": "Features",
             "pages": [
-              "email"
+              "authentication",
+              "email",
+              "stores",
+              "websockets"
             ]
           },
           {
             "group": "Tutorials",
             "pages": [
-              "tutorial"
+              "tutorial",
+              "data-api",
+              "voyage-ai"
             ]
           }
         ]

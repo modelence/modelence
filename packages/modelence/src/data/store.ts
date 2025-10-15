@@ -19,6 +19,8 @@ import {
   InsertManyResult,
   Db,
   ClientSession,
+  SearchIndexDescription,
+  MongoError,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -64,6 +66,7 @@ export class Store<
   private readonly schema: TSchema;
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
+  private readonly searchIndexes: SearchIndexDescription[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -82,12 +85,15 @@ export class Store<
       methods?: TMethods;
       /** MongoDB indexes to create */
       indexes: IndexDescription[];
+      /** MongoDB Atlas Search */
+      searchIndexes?: SearchIndexDescription[];
     }
   ) {
     this.name = name;
     this.schema = options.schema;
     this.methods = options.methods;
     this.indexes = options.indexes;
+    this.searchIndexes = options.searchIndexes || [];
   }
 
   getName() {
@@ -112,7 +118,32 @@ export class Store<
   /** @internal */
   async createIndexes() {
     if (this.indexes.length > 0) {
-      await this.requireCollection().createIndexes(this.indexes);
+      for (const index of this.indexes) {
+        try {
+          await this.requireCollection().createIndexes([index]);
+        } catch (error) {
+          if (error instanceof MongoError && error.code === 68 && index.name) {
+            await this.requireCollection().dropIndex(index.name);
+            await this.requireCollection().createIndexes([index]);
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+    if (this.searchIndexes.length > 0) {
+      for (const searchIndex of this.searchIndexes) {
+        try {
+          await this.requireCollection().createSearchIndexes([searchIndex]);
+        } catch (error) {
+          if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
+            await this.requireCollection().dropSearchIndex(searchIndex.name);
+            await this.requireCollection().createSearchIndexes([searchIndex]);
+          } else {
+            throw error;
+          }
+        }
+      }
     }
   }
 
@@ -400,5 +431,116 @@ export class Store<
     const existingCollection = db.collection<this['_type']>(oldName);
 
     await existingCollection.rename(this.name, options);
+  }
+
+  /**
+   * Performs a vector similarity search using MongoDB Atlas Vector Search
+   *
+   * @param params - Vector search parameters
+   * @param params.field - The field name containing the vector embeddings
+   * @param params.embedding - The query vector to search for
+   * @param params.numCandidates - Number of nearest neighbors to consider (default: 100)
+   * @param params.limit - Maximum number of results to return (default: 10)
+   * @param params.projection - Additional fields to include in the results
+   * @param params.indexName - Name of index (default: field + VectorSearch)
+   * @returns An aggregation cursor with search results and scores
+   *
+   * @example
+   * ```ts
+   * const results = await store.vectorSearch({
+   *   field: 'embedding',
+   *   embedding: [0.1, 0.2, 0.3, ...],
+   *   numCandidates: 100,
+   *   limit: 10,
+   *   projection: { title: 1, description: 1 }
+   * });
+   * ```
+   */
+  async vectorSearch({
+    field,
+    embedding,
+    numCandidates,
+    limit,
+    projection,
+    indexName,
+  }: {
+    field: string,
+    embedding: number[],
+    numCandidates?: number;
+    limit?: number;
+    projection?: Document;
+    indexName?: string;
+  }) {
+    return this.aggregate([
+      {
+        $vectorSearch: {
+          index: indexName || (field + 'VectorSearch'),
+          path: field,
+          queryVector: embedding,
+          numCandidates: numCandidates || 100,
+          limit: limit || 10,
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          score: { $meta: 'vectorSearchScore' },
+          ...projection,
+        }
+      }
+    ]);
+  }
+
+  /**
+   * Creates a MongoDB Atlas Vector Search index definition
+   *
+   * @param params - Vector index parameters
+   * @param params.field - The field name to create the vector index on
+   * @param params.dimensions - The number of dimensions in the vector embeddings
+   * @param params.similarity - The similarity metric to use (default: 'cosine')
+   * @param params.indexName - Name of index (default: field + VectorSearch)
+   * @returns A search index description object
+   *
+   * @example
+   * ```ts
+   * const store = new Store('documents', {
+   *   schema: {
+   *     title: schema.string(),
+   *     embedding: schema.array(schema.number()),
+   *   },
+   *   indexes: [],
+   *   searchIndexes: [
+   *     Store.vectorIndex({
+   *       field: 'embedding',
+   *       dimensions: 1536,
+   *       similarity: 'cosine'
+   *     })
+   *   ]
+   * });
+   * ```
+   */
+  static vectorIndex({
+    field,
+    dimensions,
+    similarity = 'cosine',
+    indexName,
+  }: {
+    field: string;
+    dimensions: number;
+    similarity?: 'cosine' | 'euclidean' | 'dotProduct';
+    indexName?: string;
+  }) {
+    return {
+      type: 'vectorSearch',
+      name: indexName || (field + 'VectorSearch'),
+      definition: {
+        fields: [{
+          type: 'vector',
+          path: field,
+          numDimensions: dimensions,
+          similarity,
+        }],
+      },
+    };
   }
 }
