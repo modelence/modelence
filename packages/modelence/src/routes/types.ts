@@ -20,9 +20,9 @@ export type RouteResponse<T = any> = {
   redirect?: string;
   // contentType?: string;
   // filename?: string;
-};
+} | null;
 
-export type RouteHandler<T = any> = (params: RouteParams) => Promise<RouteResponse<T>> | RouteResponse<T> | null;
+export type RouteHandler<T = any> = (params: RouteParams) => Promise<RouteResponse<T>> | RouteResponse<T>;
 
 export type RouteHandlers = {
   [key in HttpMethod]?: RouteHandler;
