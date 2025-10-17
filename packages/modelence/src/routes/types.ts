@@ -20,7 +20,7 @@ export type RouteParams<T = unknown> = {
   req: Request;
   res: Response;
   next: NextFunction;
-}
+};
 
 export type RouteResponse<T = unknown> = {
   data?: T;

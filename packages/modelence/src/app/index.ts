@@ -67,7 +67,14 @@ export async function startApp({
     });
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule, siteModule];
+  const systemModules = [
+    userModule,
+    sessionModule,
+    cronModule,
+    migrationModule,
+    rateLimitModule,
+    siteModule,
+  ];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
