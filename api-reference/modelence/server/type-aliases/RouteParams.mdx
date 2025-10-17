@@ -5,17 +5,25 @@ title: RouteParams
 
 [API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / RouteParams
 
-> **RouteParams** = `object`
+> **RouteParams**\<`T`\> = `object`
 
-Defined in: [src/routes/types.ts:5](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L5)
+Defined in: [src/routes/types.ts:14](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L14)
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
 
 ## Properties
 
 | Property | Type | Defined in |
 | ------ | ------ | ------ |
-| <a id="body"></a> `body` | `any` | [src/routes/types.ts:7](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L7) |
-| <a id="cookies"></a> `cookies` | `Record`\<`string`, `string`\> | [src/routes/types.ts:10](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L10) |
-| <a id="headers"></a> `headers` | `Record`\<`string`, `string`\> | [src/routes/types.ts:9](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L9) |
-| <a id="params"></a> `params` | `Record`\<`string`, `string`\> | [src/routes/types.ts:8](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L8) |
-| <a id="query"></a> `query` | `Record`\<`string`, `string`\> | [src/routes/types.ts:6](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L6) |
-| <a id="req"></a> `req` | `Request` | [src/routes/types.ts:11](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/routes/types.ts#L11) |
+| <a id="body"></a> `body` | `T` | [src/routes/types.ts:16](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L16) |
+| <a id="cookies"></a> `cookies` | `Record`\<`string`, `string`\> | [src/routes/types.ts:19](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L19) |
+| <a id="headers"></a> `headers` | `Record`\<`string`, `string`\> | [src/routes/types.ts:18](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L18) |
+| <a id="next"></a> `next` | `NextFunction` | [src/routes/types.ts:22](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L22) |
+| <a id="params"></a> `params` | `Record`\<`string`, `string`\> | [src/routes/types.ts:17](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L17) |
+| <a id="query"></a> `query` | `Record`\<`string`, `string`\> | [src/routes/types.ts:15](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L15) |
+| <a id="req"></a> `req` | `Request` | [src/routes/types.ts:20](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L20) |
+| <a id="res"></a> `res` | `Response` | [src/routes/types.ts:21](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/routes/types.ts#L21) |

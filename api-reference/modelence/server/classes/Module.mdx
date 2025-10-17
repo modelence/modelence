@@ -5,7 +5,7 @@ title: Module
 
 [API Reference](/api-reference/modelence/server/classes/../../../index) / [modelence](/api-reference/modelence/server/classes/../../index) / [server](/api-reference/modelence/server/classes/../index) / Module
 
-Defined in: [src/app/module.ts:41](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/app/module.ts#L41)
+Defined in: [src/app/module.ts:44](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/app/module.ts#L44)
 
 The Module class is a core building block of a Modelence application that encapsulates related functionality.
 Modules can contain stores, queries, mutations, routes, cron jobs and configurations.
@@ -34,7 +34,7 @@ const todoModule = new Module('todo', {
 
 > **new Module**(`name`, `options`): `Module`
 
-Defined in: [src/app/module.ts:78](https://github.com/modelence/modelence/blob/7d5ab6803a03a590fa9ba44d3ce0544ecf5463af/packages/modelence/src/app/module.ts#L78)
+Defined in: [src/app/module.ts:81](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/modelence/src/app/module.ts#L81)
 
 Creates a new Module instance
 
@@ -43,8 +43,8 @@ Creates a new Module instance
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `name` | `string` | The unique name of the module. This name is used to namespace queries, mutations, cron jobs and configuration values with a prefix (e.g. "todo.create") |
-| `options` | \{ `channels?`: [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`any`\>[]; `configSchema?`: [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema); `cronJobs?`: `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\>; `mutations?`: `Mutations`; `queries?`: `Queries`; `rateLimits?`: [`RateLimitRule`](/api-reference/modelence/server/classes/../type-aliases/RateLimitRule)[]; `routes?`: [`RouteDefinition`](/api-reference/modelence/server/classes/../type-aliases/RouteDefinition)[]; `stores?`: [`Store`](/api-reference/modelence/server/classes/Store)\<`any`, `any`\>[]; \} | Module configuration options |
-| `options.channels?` | [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`any`\>[] | - |
+| `options` | \{ `channels?`: [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`unknown`\>[]; `configSchema?`: [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema); `cronJobs?`: `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\>; `mutations?`: `Mutations`; `queries?`: `Queries`; `rateLimits?`: [`RateLimitRule`](/api-reference/modelence/server/classes/../type-aliases/RateLimitRule)[]; `routes?`: [`RouteDefinition`](/api-reference/modelence/server/classes/../type-aliases/RouteDefinition)[]; `stores?`: [`Store`](/api-reference/modelence/server/classes/Store)\<`any`, `any`\>[]; \} | Module configuration options |
+| `options.channels?` | [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`unknown`\>[] | - |
 | `options.configSchema?` | [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema) | - |
 | `options.cronJobs?` | `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\> | - |
 | `options.mutations?` | `Mutations` | - |

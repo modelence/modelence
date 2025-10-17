@@ -1,0 +1,25 @@
+---
+sidebar_position: 1
+title: nextServer
+---
+
+[API Reference](/api-reference/@modelence/next/variables/../../../index) / [@modelence/next](/api-reference/@modelence/next/variables/../index) / nextServer
+
+> `const` **nextServer**: [`NextServer`](/api-reference/@modelence/next/variables/../classes/NextServer)
+
+Defined in: [index.ts:54](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/next/src/index.ts#L54)
+
+Pre-configured Next.js server instance for Modelence applications.
+
+Use this instance in your Modelence server configuration:
+
+## Example
+
+```typescript
+import { startApp } from 'modelence/server';
+import { nextServer } from '@modelence/next';
+
+startApp({
+  server: nextServer
+});
+```

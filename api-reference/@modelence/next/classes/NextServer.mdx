@@ -1,0 +1,70 @@
+---
+sidebar_position: 1
+title: NextServer
+---
+
+[API Reference](/api-reference/@modelence/next/classes/../../../index) / [@modelence/next](/api-reference/@modelence/next/classes/../index) / NextServer
+
+Defined in: [index.ts:11](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/next/src/index.ts#L11)
+
+Next.js server implementation for Modelence applications.
+
+This class wraps Next.js to provide a compatible server interface
+for the Modelence framework.
+
+## Implements
+
+- `AppServer`
+
+## Constructors
+
+### Constructor
+
+> **new NextServer**(): `NextServer`
+
+#### Returns
+
+`NextServer`
+
+## Methods
+
+### handler()
+
+> **handler**(`req`, `res`): `void`
+
+Defined in: [index.ts:30](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/next/src/index.ts#L30)
+
+Handle incoming HTTP requests using Next.js.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `req` | `Request` | Express request object |
+| `res` | `Response` | Express response object |
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+`AppServer.handler`
+
+***
+
+### init()
+
+> **init**(): `Promise`\<`void`\>
+
+Defined in: [index.ts:17](https://github.com/modelence/modelence/blob/fb665d9aae241cad0ab509603cacf0636942b653/packages/next/src/index.ts#L17)
+
+Initialize the Next.js application and prepare the request handler.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Implementation of
+
+`AppServer.init`
