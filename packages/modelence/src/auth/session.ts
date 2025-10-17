@@ -85,7 +85,7 @@ export default new Module('_system.session', {
   mutations: {
     init: async function(args, { session, user }) {
       // TODO: mark or track app load somewhere
-  
+
       return {
         session,
         user,

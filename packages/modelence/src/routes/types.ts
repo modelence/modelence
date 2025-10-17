@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'all' | 'use';
 
@@ -9,6 +9,8 @@ export type RouteParams = {
   headers: Record<string, string>;
   cookies: Record<string, string>;
   req: Request;
+  res: Response;
+  next: NextFunction;
 }
 
 export type RouteResponse<T = any> = {
@@ -18,7 +20,7 @@ export type RouteResponse<T = any> = {
   redirect?: string;
   // contentType?: string;
   // filename?: string;
-}
+} | null;
 
 export type RouteHandler<T = any> = (params: RouteParams) => Promise<RouteResponse<T>> | RouteResponse<T>;
 
