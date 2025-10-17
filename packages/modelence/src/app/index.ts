@@ -19,6 +19,7 @@ import { _createSystemMutation, _createSystemQuery, createMutation, createQuery 
 import { MigrationScript, default as migrationModule, runMigrations } from '../migration';
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
+import siteModule from '../site';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
@@ -66,7 +67,7 @@ export async function startApp({
     });
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule];
+  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule, siteModule];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
@@ -220,6 +221,7 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
+  MODELENCE_SITE_URL: '_system.site.url',
   // deprecated
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
