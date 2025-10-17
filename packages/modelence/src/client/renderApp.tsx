@@ -3,11 +3,16 @@ import ReactDOM from 'react-dom/client';
 import { AppProvider } from '../client';
 import { setErrorHandler, ErrorHandler } from './errorHandler';
 
-export function renderApp({ loadingElement, routesElement, favicon, errorHandler }: {
-  loadingElement: React.ReactNode,
-  routesElement: React.ReactNode,
-  favicon?: string,
-  errorHandler?: ErrorHandler
+export function renderApp({
+  loadingElement,
+  routesElement,
+  favicon,
+  errorHandler,
+}: {
+  loadingElement: React.ReactNode;
+  routesElement: React.ReactNode;
+  favicon?: string;
+  errorHandler?: ErrorHandler;
 }) {
   if (errorHandler) {
     setErrorHandler(errorHandler);
@@ -20,9 +25,7 @@ export function renderApp({ loadingElement, routesElement, favicon, errorHandler
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <AppProvider loadingElement={loadingElement}>
-        {routesElement}
-      </AppProvider>
+      <AppProvider loadingElement={loadingElement}>{routesElement}</AppProvider>
     </React.StrictMode>
   );
 

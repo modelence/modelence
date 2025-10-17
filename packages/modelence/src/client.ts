@@ -4,10 +4,11 @@ import { AppProvider as OriginalAppProvider } from './client/AppProvider';
 
 export { getConfig } from './config/client';
 
-export const AppProvider = 'useClient' in React
-  // @ts-ignore: React.useClient only exists in Next.js
-  ? React.useClient(OriginalAppProvider)
-  : OriginalAppProvider;
+export const AppProvider =
+  'useClient' in React
+    ? // @ts-ignore: React.useClient only exists in Next.js
+      React.useClient(OriginalAppProvider)
+    : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
 export { callMethod, type MethodArgs } from './client/method';
@@ -21,6 +22,10 @@ export {
   resetPassword,
   type UserInfo,
 } from './auth/client';
-export { getWebsocketClientProvider, setWebsocketClientProvider, startWebsockets } from './websocket/client';
+export {
+  getWebsocketClientProvider,
+  setWebsocketClientProvider,
+  startWebsockets,
+} from './websocket/client';
 export { ClientChannel } from './websocket/clientChannel';
 export { getLocalStorageSession } from './client/localStorage';

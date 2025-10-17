@@ -15,9 +15,9 @@ export function initRateLimits(rateLimits: RateLimitRule[]) {
 /**
  * This function will check all rate limit rules on the specified bucket and type,
  * throw an error if any of them are exceeded and increase the count of the rate limit record.
- * 
+ *
  * @category Rate Limits
- * 
+ *
  * @example
  * ```ts
  * await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
@@ -26,11 +26,13 @@ export function initRateLimits(rateLimits: RateLimitRule[]) {
  * @param options.type - The type of the rate limit.
  * @param options.value - The value for the rate limit.
  */
-export async function consumeRateLimit(
-  options: { bucket: string, type: RateLimitType, value: string }
-) {
+export async function consumeRateLimit(options: {
+  bucket: string;
+  type: RateLimitType;
+  value: string;
+}) {
   const { bucket, type, value } = options;
-  const rules = allRules.filter(rule => rule.bucket === bucket && rule.type === type);
+  const rules = allRules.filter((rule) => rule.bucket === bucket && rule.type === type);
 
   for (const rule of rules) {
     await checkRateLimitRule(rule, value);
@@ -40,7 +42,9 @@ export async function consumeRateLimit(
 // Two-bucket sliding window approximation to track rate limits.
 async function checkRateLimitRule(rule: RateLimitRule, value: string, createError?: () => Error) {
   const createRateLimitError = () => {
-    return createError ? createError() : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
+    return createError
+      ? createError()
+      : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
   };
 
   const record = await dbRateLimits.findOne({
@@ -56,16 +60,16 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
   const { count, modifier } = record
     ? getCount(record, currentWindowStart, now)
     : {
-      count: 0,
-      modifier: {
-        $setOnInsert: {
-          windowStart: new Date(currentWindowStart),
-          windowCount: 1,
-          prevWindowCount: 0,
-          expiresAt: new Date(currentWindowStart + rule.window + rule.window),
-        }
-      }
-    };
+        count: 0,
+        modifier: {
+          $setOnInsert: {
+            windowStart: new Date(currentWindowStart),
+            windowCount: 1,
+            prevWindowCount: 0,
+            expiresAt: new Date(currentWindowStart + rule.window + rule.window),
+          },
+        },
+      };
 
   if (count >= rule.limit) {
     throw createRateLimitError();
@@ -76,14 +80,14 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
     based on the expiration TTL index in between the check and the update
   */
   await dbRateLimits.upsertOne(
-    { bucket: rule.bucket, type: rule.type, value, windowMs: rule.window }, 
+    { bucket: rule.bucket, type: rule.type, value, windowMs: rule.window },
     modifier
   );
 }
 
-function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number, now: number) {
+function getCount(record: (typeof dbRateLimits)['Doc'], currentWindowStart: number, now: number) {
   const prevWindowStart = currentWindowStart - record.windowMs;
-  
+
   if (record.windowStart.getTime() === currentWindowStart) {
     const currentWindowCount = record.windowCount;
     const prevWindowCount = record.prevWindowCount;
@@ -96,11 +100,11 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
           windowStart: new Date(currentWindowStart),
           prevWindowCount: 0,
           expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        }
-      }
+        },
+      },
     };
   }
-  
+
   if (record.windowStart.getTime() === prevWindowStart) {
     const weight = 1 - (now - currentWindowStart) / record.windowMs;
     return {
@@ -111,11 +115,11 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
           windowCount: 1,
           prevWindowCount: record.windowCount,
           expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        }
-      }
+        },
+      },
     };
   }
-  
+
   return {
     count: 0,
     modifier: {
@@ -124,7 +128,7 @@ function getCount(record: typeof dbRateLimits['Doc'], currentWindowStart: number
         windowCount: 1,
         prevWindowCount: 0,
         expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-      }
-    }
+      },
+    },
   };
 }

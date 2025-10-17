@@ -9,5 +9,8 @@ export function requireServer() {
 }
 
 export function htmlToText(html: string) {
-  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

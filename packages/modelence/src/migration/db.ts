@@ -6,7 +6,5 @@ export const dbMigrations = new Store('_modelenceMigrations', {
     version: schema.number(),
     appliedAt: schema.date(),
   },
-  indexes: [
-    { key: { version: 1 }, unique: true },
-  ],
+  indexes: [{ key: { version: 1 }, unique: true }],
 });

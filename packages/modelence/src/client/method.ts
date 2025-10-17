@@ -5,7 +5,7 @@
   
   While this is specific to Next.js, it is simply ignored outside of Next.js and should not cause errors.
 */
-"use client";
+'use client';
 
 import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
@@ -13,7 +13,10 @@ import { reviveResponseTypes } from '../methods/serialize';
 
 export type MethodArgs = Record<string, unknown>;
 
-export async function callMethod<T = unknown>(methodName: string, args: MethodArgs = {}): Promise<T> {
+export async function callMethod<T = unknown>(
+  methodName: string,
+  args: MethodArgs = {}
+): Promise<T> {
   try {
     return await call<T>(`/api/_internal/method/${methodName}`, args);
   } catch (error) {
@@ -37,8 +40,8 @@ async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T>
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
         pixelRatio: window.devicePixelRatio,
-        orientation: window.screen.orientation?.type
-      }
+        orientation: window.screen.orientation?.type,
+      },
     }),
   });
 

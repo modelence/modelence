@@ -4,26 +4,34 @@
 import { logInfo, logError } from '@/telemetry';
 import process from 'process';
 
-type LogEntry = { log: string, timestamp: Date | null, sequenceId?: number };
+type LogEntry = { log: string; timestamp: Date | null; sequenceId?: number };
 type LogBuffer = LogEntry[];
 
-const buffer: { stdout: LogBuffer, stderr: LogBuffer } = {
+const buffer: { stdout: LogBuffer; stderr: LogBuffer } = {
   stdout: [{ log: '', timestamp: null }],
-  stderr: [{ log: '', timestamp: null }]
-}
+  stderr: [{ log: '', timestamp: null }],
+};
 
 let sequenceId = 1;
 
-export function startLoggerProcess({ elasticCloudId, elasticApiKey }: { elasticCloudId: string, elasticApiKey: string }) {
+export function startLoggerProcess({
+  elasticCloudId: _elasticCloudId,
+  elasticApiKey: _elasticApiKey,
+}: {
+  elasticCloudId: string;
+  elasticApiKey: string;
+}) {
   const originalStdoutWrite = process.stdout.write;
   const originalStderrWrite = process.stderr.write;
 
-  process.stdout.write = function(chunk: string | Uint8Array, ...args: any[]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  process.stdout.write = function (chunk: string | Uint8Array, ...args: any[]) {
     addToBuffer(chunk.toString(), buffer.stdout);
     return originalStdoutWrite.call(process.stdout, chunk, ...args);
   };
 
-  process.stderr.write = function(chunk: string | Uint8Array, ...args: any[]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  process.stderr.write = function (chunk: string | Uint8Array, ...args: any[]) {
     addToBuffer(chunk.toString(), buffer.stderr);
     return originalStderrWrite.call(process.stderr, chunk, ...args);
   };
@@ -85,7 +93,6 @@ function addToBuffer(chunk: string, buffer: LogBuffer) {
     }
   }
 }
-
 
 async function sendLogs() {
   const stdoutLogs = buffer.stdout.slice(0, -1);

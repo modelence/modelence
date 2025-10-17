@@ -12,7 +12,7 @@ export type AppConfig = {
   key: ConfigKey;
   value: ValueType<ConfigType>;
   type: ConfigType;
-}
+};
 
 export type ConfigSchema = {
   [key: string]: ConfigParams;
@@ -20,9 +20,14 @@ export type ConfigSchema = {
 
 export type Configs = Record<ConfigKey, AppConfig>;
 
-type ValueType<T> = T extends 'number' ? number :
-  T extends 'string' ? string :
-  T extends 'text' ? string :
-  T extends 'boolean' ? boolean :
-  T extends 'secret' ? string :
-  never;
+type ValueType<T> = T extends 'number'
+  ? number
+  : T extends 'string'
+    ? string
+    : T extends 'text'
+      ? string
+      : T extends 'boolean'
+        ? boolean
+        : T extends 'secret'
+          ? string
+          : never;

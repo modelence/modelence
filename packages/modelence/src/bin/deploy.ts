@@ -2,7 +2,7 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getStudioUrl, getBuildPath, getProjectPath } from './config';
+import { getStudioUrl, getProjectPath } from './config';
 import { build } from './build';
 
 export async function deploy(options: { app: string; env: string }) {
@@ -21,7 +21,13 @@ export async function deploy(options: { app: string; env: string }) {
 
   await fs.unlink(bundlePath);
 
-  await triggerDeployment(options.app, options.env, bundleName, join('.modelence', 'build', 'app.mjs'), token);
+  await triggerDeployment(
+    options.app,
+    options.env,
+    bundleName,
+    join('.modelence', 'build', 'app.mjs'),
+    token
+  );
 }
 
 async function createBundle(bundlePath: string) {
@@ -41,7 +47,7 @@ async function createBundle(bundlePath: string) {
 
   const output = createWriteStream(bundlePath);
   const archive = archiver('zip', {
-    zlib: { level: 9 } // Maximum compression
+    zlib: { level: 9 }, // Maximum compression
   });
 
   archive.on('warning', (err) => {
@@ -64,28 +70,28 @@ async function createBundle(bundlePath: string) {
 
   archive.pipe(output);
 
-  const bundleFiles = [
-    'package.json',
-    'next.config.js',
-    'next.config.ts',
-    'modelence.config.ts',
-  ];
+  const bundleFiles = ['package.json', 'next.config.js', 'next.config.ts', 'modelence.config.ts'];
 
-  const bundleDirs = [
-    'public',
-    'server',
-    join('.modelence', 'build'),
-    '.next',
-  ];
+  const bundleDirs = ['public', 'server', join('.modelence', 'build'), '.next'];
 
   for (const file of bundleFiles) {
-    if (await fs.access(getProjectPath(file)).then(() => true).catch(() => false)) {
+    if (
+      await fs
+        .access(getProjectPath(file))
+        .then(() => true)
+        .catch(() => false)
+    ) {
       archive.file(getProjectPath(file), { name: file });
     }
   }
 
   for (const dir of bundleDirs) {
-    if (await fs.access(getProjectPath(dir)).then(() => true).catch(() => false)) {
+    if (
+      await fs
+        .access(getProjectPath(dir))
+        .then(() => true)
+        .catch(() => false)
+    ) {
       archive.directory(getProjectPath(dir), dir);
     }
   }
@@ -94,7 +100,9 @@ async function createBundle(bundlePath: string) {
   await archiveComplete;
 
   const stats = await fs.stat(bundlePath);
-  console.log(`Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+  console.log(
+    `Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`
+  );
 }
 
 async function uploadBundle(appAlias: string, envAlias: string, bundlePath: string, token: string) {
@@ -102,7 +110,7 @@ async function uploadBundle(appAlias: string, envAlias: string, bundlePath: stri
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       appAlias,
@@ -120,7 +128,7 @@ async function uploadBundle(appAlias: string, envAlias: string, bundlePath: stri
   const fileBuffer = await fs.readFile(bundlePath);
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
-    body: fileBuffer,
+    body: new Uint8Array(fileBuffer),
     headers: {
       'Content-Type': 'application/zip',
     },
@@ -136,12 +144,18 @@ async function uploadBundle(appAlias: string, envAlias: string, bundlePath: stri
   return { bundleName };
 }
 
-async function triggerDeployment(appAlias: string, envAlias: string, bundleName: string, entryPoint: string, token: string) {
+async function triggerDeployment(
+  appAlias: string,
+  envAlias: string,
+  bundleName: string,
+  entryPoint: string,
+  token: string
+) {
   const response = await fetch(getStudioUrl(`/api/deploy`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       appAlias,

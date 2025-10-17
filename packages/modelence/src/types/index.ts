@@ -7,8 +7,8 @@ export interface ModelenceConfig {
 }
 
 export type ExpressMiddleware = (
-  req: Request, 
-  res: Response, 
+  req: Request,
+  res: Response,
   next: NextFunction
 ) => void | Promise<void>;
 
@@ -18,4 +18,4 @@ export interface AppServer {
   middlewares?: () => ExpressMiddleware[];
 }
 
-export type * from './email'
+export type * from './email';

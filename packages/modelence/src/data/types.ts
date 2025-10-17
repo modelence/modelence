@@ -45,23 +45,29 @@ export const schema = {
   userId(): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
-  ref(collection: string | Store<any, any>): z.ZodType<ObjectId> {
+  ref<T extends ModelSchema>(
+    _collection: string | Store<T, InferDocumentType<T>>
+  ): z.ZodType<ObjectId> {
     return z.instanceof(ObjectId);
   },
   union: z.union.bind(z),
-  infer<T extends SchemaTypeDefinition>(schema: T): InferDocumentType<T> {
+  infer<T extends SchemaTypeDefinition>(_schema: T): InferDocumentType<T> {
     return {} as InferDocumentType<T>;
-  }
+  },
 } as const;
 
 export type InferDocumentType<T extends SchemaTypeDefinition> = {
-  [K in keyof T as T[K] extends z.ZodOptional<any> ? K : never]?: (T[K] extends z.ZodType ? z.infer<T[K]> : never);
+  [K in keyof T as T[K] extends z.ZodOptional<z.ZodTypeAny> ? K : never]?: T[K] extends z.ZodType
+    ? z.infer<T[K]>
+    : never;
 } & {
-  [K in keyof T as T[K] extends z.ZodOptional<any> ? never : K]:
-    T[K] extends z.ZodType ? z.infer<T[K]> :
-    T[K] extends Array<infer ElementType extends SchemaTypeDefinition> ? Array<InferDocumentType<ElementType>> :
-    T[K] extends ObjectTypeDefinition ? InferDocumentType<T[K]> :
-    never;
+  [K in keyof T as T[K] extends z.ZodOptional<z.ZodTypeAny> ? never : K]: T[K] extends z.ZodType
+    ? z.infer<T[K]>
+    : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
+      ? Array<InferDocumentType<ElementType>>
+      : T[K] extends ObjectTypeDefinition
+        ? InferDocumentType<T[K]>
+        : never;
 };
 
 export namespace schema {

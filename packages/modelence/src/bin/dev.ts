@@ -4,13 +4,13 @@ import path from 'path';
 
 export function dev() {
   console.log('Starting Modelence dev server...');
-  
-  const serverPath = getServerPath();    
+
+  const serverPath = getServerPath();
   const tsxPath = path.resolve('./node_modules/.bin/tsx');
 
   execSync(`"${tsxPath}" watch "${serverPath}"`, {
     stdio: 'inherit',
     cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: 'development' }
-  });    
+    env: { ...process.env, NODE_ENV: 'development' },
+  });
 }

@@ -1,4 +1,4 @@
-import { WebsocketServerProvider } from "@/websocket/types";
+import { WebsocketServerProvider } from '@/websocket/types';
 
 export type WebsocketConfig = {
   provider?: WebsocketServerProvider;

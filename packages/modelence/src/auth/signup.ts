@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import bcrypt from 'bcrypt';
 
 import { Args, Context } from '../methods/types';
@@ -9,7 +8,10 @@ import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 
-export async function handleSignupWithPassword(args: Args, { user, session, connectionInfo }: Context) {
+export async function handleSignupWithPassword(
+  args: Args,
+  { user, session, connectionInfo }: Context
+) {
   try {
     const email = validateEmail(args.email as string);
     const password = validatePassword(args.password as string);
@@ -39,7 +41,7 @@ export async function handleSignupWithPassword(args: Args, { user, session, conn
     );
 
     if (existingUser) {
-      const existingEmail = existingUser.emails?.find(e => e.address === email);
+      const existingEmail = existingUser.emails?.find((e) => e.address === email);
       throw new Error(`User with email already exists: ${existingEmail?.address}`);
     }
 
@@ -56,21 +58,23 @@ export async function handleSignupWithPassword(args: Args, { user, session, conn
 
     const result = await usersCollection.insertOne({
       handle: email,
-      emails: [{
-        address: email,
-        verified: false,
-      }],
+      emails: [
+        {
+          address: email,
+          verified: false,
+        },
+      ],
       createdAt: new Date(),
       authMethods: {
         password: {
           hash,
-        }
-      }
+        },
+      },
     });
 
     const userDocument = await usersCollection.findOne(
       { _id: result.insertedId },
-      { readPreference: "primary" }
+      { readPreference: 'primary' }
     );
 
     if (!userDocument) {
@@ -92,7 +96,7 @@ export async function handleSignupWithPassword(args: Args, { user, session, conn
     getAuthConfig().signup?.onSuccess?.(userDocument);
 
     return result.insertedId;
-  } catch(error) {
+  } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().onSignupError?.({
         error,

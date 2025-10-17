@@ -1,4 +1,13 @@
-import { createServer, defineConfig, ViteDevServer, loadConfigFromFile, UserConfig, mergeConfig } from 'vite';
+import {
+  createServer,
+  defineConfig,
+  ViteDevServer,
+  loadConfigFromFile,
+  UserConfig,
+  mergeConfig,
+  Plugin,
+  PluginOption,
+} from 'vite';
 import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
@@ -13,7 +22,7 @@ class ViteServer implements AppServer {
     this.config = await getConfig();
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
-      this.viteServer = await createServer(this.config); 
+      this.viteServer = await createServer(this.config);
     }
   }
 
@@ -21,7 +30,7 @@ class ViteServer implements AppServer {
     if (this.isDev()) {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
-    
+
     const staticFolders = [express.static('./.modelence/build/client'.replace(/\\/g, '/'))];
     if (this.config?.publicDir) {
       staticFolders.push(express.static(this.config.publicDir));
@@ -49,9 +58,13 @@ class ViteServer implements AppServer {
 
 async function loadUserViteConfig() {
   const appDir = process.cwd();
-  
+
   try {
-    const result = await loadConfigFromFile({ command: 'serve', mode: 'development' }, undefined, appDir);
+    const result = await loadConfigFromFile(
+      { command: 'serve', mode: 'development' },
+      undefined,
+      appDir
+    );
     return result?.config || {};
   } catch (error) {
     console.warn(`Could not load vite config:`, error);
@@ -61,21 +74,24 @@ async function loadUserViteConfig() {
 
 function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
   const mergedConfig = mergeConfig(baseConfig, userConfig);
-  
+
   // Deduplicate plugins by name, keeping user plugins over framework plugins
   if (mergedConfig.plugins && Array.isArray(mergedConfig.plugins)) {
-    const seenPlugins = new Set();
-    mergedConfig.plugins = mergedConfig.plugins.flat().filter((plugin: any) => {
-      if (!plugin || typeof plugin !== 'object') {
+    const seenPlugins = new Set<string>();
+    mergedConfig.plugins = mergedConfig.plugins
+      .flat()
+      .filter((plugin: PluginOption) => {
+        if (!plugin || typeof plugin !== 'object' || Array.isArray(plugin)) {
+          return true;
+        }
+        const pluginName = (plugin as Plugin).name;
+        if (!pluginName || seenPlugins.has(pluginName)) {
+          return false;
+        }
+        seenPlugins.add(pluginName);
         return true;
-      }
-      const pluginName = plugin.name;
-      if (!pluginName || seenPlugins.has(pluginName)) {
-        return false;
-      }
-      seenPlugins.add(pluginName);
-      return true;
-    }).reverse(); // Reverse to prioritize user plugins over framework plugins
+      })
+      .reverse(); // Reverse to prioritize user plugins over framework plugins
     mergedConfig.plugins.reverse(); // Reverse back to maintain original order
   }
 
@@ -92,8 +108,8 @@ async function getConfig() {
     '.eslintrc',
     'eslint.config.js',
     '.eslintrc.yml',
-    '.eslintrc.yaml'
-  ].find(file => fs.existsSync(path.join(appDir, file)));
+    '.eslintrc.yaml',
+  ].find((file) => fs.existsSync(path.join(appDir, file)));
 
   const plugins = [reactPlugin(), modelenceAssetPlugin()];
 
@@ -104,7 +120,7 @@ async function getConfig() {
         failOnError: false,
         include: ['src/**/*.js', 'src/**/*.jsx', 'src/**/*.ts', 'src/**/*.tsx'],
         cwd: appDir,
-        overrideConfigFile: path.resolve(appDir, eslintConfigFile)
+        overrideConfigFile: path.resolve(appDir, eslintConfigFile),
       })
     );
   }
@@ -113,7 +129,7 @@ async function getConfig() {
     plugins,
     build: {
       outDir: '.modelence/build/client'.replace(/\\/g, '/'),
-      emptyOutDir: true
+      emptyOutDir: true,
     },
     server: {
       middlewareMode: true,
@@ -121,16 +137,16 @@ async function getConfig() {
     root: './src/client',
     resolve: {
       alias: {
-        '@': path.resolve(appDir, 'src').replace(/\\/g, '/')
-      }
+        '@': path.resolve(appDir, 'src').replace(/\\/g, '/'),
+      },
     },
   });
 
   return safelyMergeConfig(baseConfig, userConfig);
 }
 
-function modelenceAssetPlugin() {
-  return  {
+function modelenceAssetPlugin(): Plugin {
+  return {
     name: 'modelence-asset-handler',
     async transform(code: string, id: string) {
       const assetRegex = /\.(png|jpe?g|gif|svg|mpwebm|ogg|mp3|wav|flac|aac)$/;
@@ -143,9 +159,6 @@ function modelenceAssetPlugin() {
         return code;
       }
     },
-    async generateBundle(options: any, bundle: any) {
-      // Handle asset URLs in the final bundle
-    }
   };
 }
 

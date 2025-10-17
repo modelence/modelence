@@ -2,7 +2,7 @@ export type EmailAttachment = {
   filename: string;
   content: Buffer | string;
   contentType: string;
-}
+};
 
 export type EmailPayload = {
   from: string;

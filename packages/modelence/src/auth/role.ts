@@ -6,7 +6,10 @@ const defaultRoles: DefaultRoles = {
   unauthenticated: null,
 };
 
-export function initRoles(roles: Record<Role, RoleDefinition>, _defaultRoles: Record<string, Role>) {
+export function initRoles(
+  roles: Record<Role, RoleDefinition>,
+  _defaultRoles: Record<string, Role>
+) {
   defaultRoles.authenticated = _defaultRoles.authenticated;
   defaultRoles.unauthenticated = _defaultRoles.unauthenticated;
 
@@ -24,11 +27,13 @@ export function getDefaultAuthenticatedRoles() {
 }
 
 export function hasAccess(roles: Role[], requiredPermissions: Permission[]) {
-  return requiredPermissions.every(permission => hasPermission(roles, permission));
+  return requiredPermissions.every((permission) => hasPermission(roles, permission));
 }
 
 export function requireAccess(roles: Role[], requiredPermissions: Permission[]) {
-  const missingPermission = requiredPermissions.find(permission => !hasPermission(roles, permission));
+  const missingPermission = requiredPermissions.find(
+    (permission) => !hasPermission(roles, permission)
+  );
 
   if (missingPermission) {
     throw new Error(`Access denied - missing permission: '${missingPermission}'`);

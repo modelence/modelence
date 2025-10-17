@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { RouteHandler, ExpressHandler } from './types';
+import { RouteHandler } from './types';
 import { ModelenceError } from '../error';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
@@ -25,13 +25,13 @@ export function createRouteHandler(handler: RouteHandler) {
         if (response.redirect) {
           res.redirect(response.redirect);
         }
-  
+
         if (response.headers) {
           Object.entries(response.headers).forEach(([key, value]) => {
             res.setHeader(key, value);
           });
         }
-  
+
         res.send(response.data);
       }
     } catch (error) {

@@ -5,67 +5,51 @@ import { getLocalStorageSession } from '@/client/localStorage';
 
 let socketClient: Socket;
 
-function init(props: {
-  channels?: ClientChannel<unknown>[],
-}) {
+function init(props: { channels?: ClientChannel<unknown>[] }) {
   socketClient = io('/', {
     auth: {
       token: getLocalStorageSession()?.authToken,
     },
   });
 
-  props.channels?.forEach(channel => channel.init());
+  props.channels?.forEach((channel) => channel.init());
 }
 
-function on<T = any>({
+function on<T = unknown>({
   category,
   listener,
 }: {
-  category: string,
-  listener: (data: T) => void,
+  category: string;
+  listener: (data: T) => void;
 }) {
   socketClient.on(category, listener);
 }
 
-function once<T = any>({
+function once<T = unknown>({
   category,
   listener,
 }: {
-  category: string,
-  listener: (data: T) => void,
+  category: string;
+  listener: (data: T) => void;
 }) {
   socketClient.once(category, listener);
 }
 
-function off<T = any>({
+function off<T = unknown>({
   category,
   listener,
 }: {
-  category: string,
-  listener: (data: T) => void,
+  category: string;
+  listener: (data: T) => void;
 }) {
   socketClient.off(category, listener);
 }
 
-function emit({
-  eventName,
-  category,
-  id,
-}: {
-  eventName: string,
-  category: string,
-  id: string,
-}) {
-  socketClient.emit(eventName, `${category}:${id}`)
+function emit({ eventName, category, id }: { eventName: string; category: string; id: string }) {
+  socketClient.emit(eventName, `${category}:${id}`);
 }
 
-function joinChannel({
-  category,
-  id,
-}: {
-  category: string,
-  id: string,
-}) {
+function joinChannel({ category, id }: { category: string; id: string }) {
   emit({
     eventName: 'joinChannel',
     category,
@@ -73,13 +57,7 @@ function joinChannel({
   });
 }
 
-function leaveChannel({
-  category,
-  id,
-}: {
-  category: string,
-  id: string,
-}) {
+function leaveChannel({ category, id }: { category: string; id: string }) {
   emit({
     eventName: 'leaveChannel',
     category,

@@ -69,18 +69,20 @@ export async function loadEnv() {
 
     const jiti = createJiti(import.meta.url, {
       interopDefault: true,
-      requireCache: false
+      requireCache: false,
     });
-    
+
     const configModule = await jiti.import(configPath);
     if (typeof configModule !== 'object') {
       throw new Error('modelence.config.ts should export an object');
     }
-    config = z.object({
-      serverDir: z.string(),
-      serverEntry: z.string(),
-      postBuildCommand: z.string().optional()
-    }).parse(configModule);
+    config = z
+      .object({
+        serverDir: z.string(),
+        serverEntry: z.string(),
+        postBuildCommand: z.string().optional(),
+      })
+      .parse(configModule);
   } catch (error) {
     console.error(error);
     throw new Error('Unable to load modelence.config.ts');
@@ -88,7 +90,7 @@ export async function loadEnv() {
 
   try {
     const envContent = await fs.readFile(join(process.cwd(), '.modelence.env'), 'utf-8');
-    env = parseDotenv(envContent);    
+    env = parseDotenv(envContent);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       // .modelence.env is optional, may not exist in case of an offline setup
