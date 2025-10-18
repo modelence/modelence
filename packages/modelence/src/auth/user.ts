@@ -135,6 +135,21 @@ export default new Module('_system.user', {
       isPublic: false,
       default: '',
     },
+    'auth.github.enabled': {
+      type: 'boolean',
+      isPublic: true,
+      default: false,
+    },
+    'auth.github.clientId': {
+      type: 'string',
+      isPublic: false,
+      default: '',
+    },
+    'auth.github.clientSecret': {
+      type: 'secret',
+      isPublic: false,
+      default: '',
+    },
   },
   routes: [
     {

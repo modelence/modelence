@@ -38,6 +38,11 @@ export const usersCollection = new Store('_modelenceUsers', {
           id: schema.string(),
         })
         .optional(),
+      github: schema
+        .object({
+          id: schema.string(),
+        })
+        .optional(),
     }),
   },
   indexes: [

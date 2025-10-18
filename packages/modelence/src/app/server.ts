@@ -1,4 +1,5 @@
 import googleAuthRouter from '@/auth/providers/google';
+import githubAuthRouter from '@/auth/providers/github';
 import { runMethod } from '@/methods';
 import { getResponseTypeMap } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
@@ -7,7 +8,6 @@ import { logInfo } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
-import passport from 'passport';
 import z from 'zod';
 import type { AppServer } from '../types';
 import { authenticate } from '../auth';
@@ -47,9 +47,8 @@ export async function startServer(
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
 
-  app.use(passport.initialize());
-
   app.use(googleAuthRouter());
+  app.use(githubAuthRouter());
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
@@ -147,7 +146,15 @@ export async function getCallContext(req: Request) {
       pixelRatio: z.number(),
       orientation: z.string().nullable(),
     })
-    .parse(req.body.clientInfo);
+    .nullish()
+    .parse(req.body.clientInfo) ?? {
+    screenWidth: 0,
+    screenHeight: 0,
+    windowWidth: 0,
+    windowHeight: 0,
+    pixelRatio: 1,
+    orientation: null,
+  };
 
   const connectionInfo: ConnectionInfo = {
     ip: getClientIp(req),
