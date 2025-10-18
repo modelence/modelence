@@ -137,14 +137,17 @@ export async function getCallContext(req: Request) {
     .transform((val) => val ?? null)
     .parse(req.cookies.authToken || req.body.authToken);
 
-  const clientInfo = z.object({
-    screenWidth: z.number(),
-    screenHeight: z.number(),
-    windowWidth: z.number(),
-    windowHeight: z.number(),
-    pixelRatio: z.number(),
-    orientation: z.string().nullable(),
-  }).nullish().parse(req.body.clientInfo) ?? {
+  const clientInfo = z
+    .object({
+      screenWidth: z.number(),
+      screenHeight: z.number(),
+      windowWidth: z.number(),
+      windowHeight: z.number(),
+      pixelRatio: z.number(),
+      orientation: z.string().nullable(),
+    })
+    .nullish()
+    .parse(req.body.clientInfo) ?? {
     screenWidth: 0,
     screenHeight: 0,
     windowWidth: 0,

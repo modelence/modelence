@@ -28,15 +28,21 @@ export const usersCollection = new Store('_modelenceUsers', {
       .optional(),
     createdAt: schema.date(),
     authMethods: schema.object({
-      password: schema.object({
-        hash: schema.string(),
-      }).optional(),
-      google: schema.object({
-        id: schema.string(),
-      }).optional(),
-      github: schema.object({
-        id: schema.string(),
-      }).optional(),
+      password: schema
+        .object({
+          hash: schema.string(),
+        })
+        .optional(),
+      google: schema
+        .object({
+          id: schema.string(),
+        })
+        .optional(),
+      github: schema
+        .object({
+          id: schema.string(),
+        })
+        .optional(),
     }),
   },
   indexes: [

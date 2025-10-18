@@ -1,11 +1,11 @@
-import { getConfig } from "@/server";
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { getConfig } from '@/server';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
   validateOAuthCode,
-  type OAuthUserData
-} from "./oauth-common";
+  type OAuthUserData,
+} from './oauth-common';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -78,7 +78,12 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
   try {
     // Exchange code for tokens
-    const tokenData = await exchangeCodeForToken(code, googleClientId, googleClientSecret, redirectUri);
+    const tokenData = await exchangeCodeForToken(
+      code,
+      googleClientId,
+      googleClientSecret,
+      redirectUri
+    );
 
     // Fetch user info
     const googleUser = await fetchGoogleUserInfo(tokenData.access_token);
@@ -115,25 +120,29 @@ function getRouter() {
   };
 
   // Initiate OAuth flow
-  googleAuthRouter.get("/api/_internal/auth/google", checkGoogleEnabled, (req: Request, res: Response) => {
-    const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
-    const redirectUri = getRedirectUri(req, 'google');
+  googleAuthRouter.get(
+    '/api/_internal/auth/google',
+    checkGoogleEnabled,
+    (req: Request, res: Response) => {
+      const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
+      const redirectUri = getRedirectUri(req, 'google');
 
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.append('client_id', googleClientId);
-    authUrl.searchParams.append('redirect_uri', redirectUri);
-    authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('scope', 'profile email');
-    authUrl.searchParams.append('access_type', 'online');
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authUrl.searchParams.append('client_id', googleClientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('scope', 'profile email');
+      authUrl.searchParams.append('access_type', 'online');
 
-    res.redirect(authUrl.toString());
-  });
+      res.redirect(authUrl.toString());
+    }
+  );
 
   // Handle OAuth callback
   googleAuthRouter.get(
-    "/api/_internal/auth/google/callback",
+    '/api/_internal/auth/google/callback',
     checkGoogleEnabled,
-    handleGoogleAuthenticationCallback,
+    handleGoogleAuthenticationCallback
   );
 
   return googleAuthRouter;

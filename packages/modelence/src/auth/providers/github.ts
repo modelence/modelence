@@ -1,11 +1,11 @@
-import { getConfig } from "@/server";
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { getConfig } from '@/server';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
   validateOAuthCode,
-  type OAuthUserData
-} from "./oauth-common";
+  type OAuthUserData,
+} from './oauth-common';
 
 interface GitHubTokenResponse {
   access_token: string;
@@ -21,13 +21,6 @@ interface GitHubUserInfo {
   avatar_url: string;
 }
 
-interface GitHubEmail {
-  email: string;
-  primary: boolean;
-  verified: boolean;
-  visibility: string | null;
-}
-
 async function exchangeCodeForToken(
   code: string,
   clientId: string,
@@ -38,7 +31,7 @@ async function exchangeCodeForToken(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      Accept: 'application/json',
     },
     body: JSON.stringify({
       client_id: clientId,
@@ -70,21 +63,6 @@ async function fetchGitHubUserInfo(accessToken: string): Promise<GitHubUserInfo>
   return userInfoResponse.json();
 }
 
-async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]> {
-  const emailsResponse = await fetch('https://api.github.com/user/emails', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github.v3+json',
-    },
-  });
-
-  if (!emailsResponse.ok) {
-    throw new Error(`Failed to fetch user emails: ${emailsResponse.statusText}`);
-  }
-
-  return emailsResponse.json();
-}
-
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
@@ -99,7 +77,12 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
 
   try {
     // Exchange code for access token
-    const tokenData = await exchangeCodeForToken(code, githubClientId, githubClientSecret, redirectUri);
+    const tokenData = await exchangeCodeForToken(
+      code,
+      githubClientId,
+      githubClientSecret,
+      redirectUri
+    );
 
     // Fetch user info
     const githubUser = await fetchGitHubUserInfo(tokenData.access_token);
@@ -109,7 +92,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
 
     if (!githubEmail) {
       res.status(400).json({
-        error: 'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.'
+        error:
+          'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.',
       });
       return;
     }
@@ -146,27 +130,34 @@ function getRouter() {
   };
 
   // Initiate OAuth flow
-  githubAuthRouter.get("/api/_internal/auth/github", checkGitHubEnabled, (req: Request, res: Response) => {
-    const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
-    const redirectUri = getRedirectUri(req, 'github');
-    const githubScopes = getConfig('_system.user.auth.github.scopes');
-    const scopes = githubScopes
-      ? String(githubScopes).split(',').map(s => s.trim()).join(' ')
-      : 'user:email';
+  githubAuthRouter.get(
+    '/api/_internal/auth/github',
+    checkGitHubEnabled,
+    (req: Request, res: Response) => {
+      const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
+      const redirectUri = getRedirectUri(req, 'github');
+      const githubScopes = getConfig('_system.user.auth.github.scopes');
+      const scopes = githubScopes
+        ? String(githubScopes)
+            .split(',')
+            .map((s) => s.trim())
+            .join(' ')
+        : 'user:email';
 
-    const authUrl = new URL('https://github.com/login/oauth/authorize');
-    authUrl.searchParams.append('client_id', githubClientId);
-    authUrl.searchParams.append('redirect_uri', redirectUri);
-    authUrl.searchParams.append('scope', scopes);
+      const authUrl = new URL('https://github.com/login/oauth/authorize');
+      authUrl.searchParams.append('client_id', githubClientId);
+      authUrl.searchParams.append('redirect_uri', redirectUri);
+      authUrl.searchParams.append('scope', scopes);
 
-    res.redirect(authUrl.toString());
-  });
+      res.redirect(authUrl.toString());
+    }
+  );
 
   // Handle OAuth callback
   githubAuthRouter.get(
-    "/api/_internal/auth/github/callback",
+    '/api/_internal/auth/github/callback',
     checkGitHubEnabled,
-    handleGitHubAuthenticationCallback,
+    handleGitHubAuthenticationCallback
   );
 
   return githubAuthRouter;

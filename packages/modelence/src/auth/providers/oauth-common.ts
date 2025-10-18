@@ -1,9 +1,9 @@
-import { type Request, type Response } from "express";
-import { ObjectId } from "mongodb";
-import { usersCollection } from "../db";
-import { createSession } from "../session";
-import { getAuthConfig } from "@/app/authConfig";
-import { getCallContext } from "@/app/server";
+import { type Request, type Response } from 'express';
+import { ObjectId } from 'mongodb';
+import { usersCollection } from '../db';
+import { createSession } from '../session';
+import { getAuthConfig } from '@/app/authConfig';
+import { getCallContext } from '@/app/server';
 
 export interface OAuthUserData {
   id: string;
@@ -15,13 +15,13 @@ export interface OAuthUserData {
 export async function authenticateUser(res: Response, userId: ObjectId) {
   const { authToken } = await createSession(userId);
 
-  res.cookie("authToken", authToken, {
+  res.cookie('authToken', authToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
   });
   res.status(301);
-  res.redirect("/");
+  res.redirect('/');
 }
 
 export function getRedirectUri(req: Request, provider: string): string {
@@ -33,14 +33,11 @@ export async function handleOAuthUserAuthentication(
   res: Response,
   userData: OAuthUserData
 ): Promise<void> {
-  const existingUser = await usersCollection.findOne(
-    { [`authMethods.${userData.providerName}.id`]: userData.id },
-  );
+  const existingUser = await usersCollection.findOne({
+    [`authMethods.${userData.providerName}.id`]: userData.id,
+  });
 
-  const {
-    session,
-    connectionInfo,
-  } = await getCallContext(req);
+  const { session, connectionInfo } = await getCallContext(req);
 
   try {
     if (existingUser) {
@@ -55,7 +52,7 @@ export async function handleOAuthUserAuthentication(
 
       return;
     }
-  } catch(error) {
+  } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().login?.onError?.(error);
 
@@ -77,15 +74,15 @@ export async function handleOAuthUserAuthentication(
     }
 
     const existingUserByEmail = await usersCollection.findOne(
-      { 'emails.address': userData.email, },
-      { collation: { locale: 'en', strength: 2 } },
+      { 'emails.address': userData.email },
+      { collation: { locale: 'en', strength: 2 } }
     );
 
     // TODO: check if the email is verified
     if (existingUserByEmail) {
       // TODO: handle case with an HTML page
       res.status(400).json({
-        error: "User with this email already exists. Please log in instead.",
+        error: 'User with this email already exists. Please log in instead.',
       });
       return;
     }
@@ -93,10 +90,12 @@ export async function handleOAuthUserAuthentication(
     // If the user does not exist, create a new user
     const newUser = await usersCollection.insertOne({
       handle: userData.email,
-      emails: [{
-        address: userData.email,
-        verified: userData.emailVerified,
-      }],
+      emails: [
+        {
+          address: userData.email,
+          verified: userData.emailVerified,
+        },
+      ],
       createdAt: new Date(),
       authMethods: {
         [userData.providerName]: {
@@ -109,7 +108,7 @@ export async function handleOAuthUserAuthentication(
 
     const userDocument = await usersCollection.findOne(
       { _id: newUser.insertedId },
-      { readPreference: "primary" }
+      { readPreference: 'primary' }
     );
 
     if (userDocument) {
@@ -121,7 +120,7 @@ export async function handleOAuthUserAuthentication(
 
       getAuthConfig().signup?.onSuccess?.(userDocument);
     }
-  } catch(error) {
+  } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().onSignupError?.({
         error,
