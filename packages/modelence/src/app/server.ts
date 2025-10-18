@@ -31,13 +31,16 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
   }
 }
 
-export async function startServer(server: AppServer, {
-  combinedModules,
-  channels,
-}: {
-  combinedModules: Module[],
-  channels: ServerChannel[]
-}) {
+export async function startServer(
+  server: AppServer,
+  {
+    combinedModules,
+    channels,
+  }: {
+    combinedModules: Module[];
+    channels: ServerChannel[];
+  }
+) {
   const app = express();
 
   app.use(express.json());
@@ -66,7 +69,11 @@ export async function startServer(server: AppServer, {
 
       if (error instanceof ModelenceError) {
         res.status(error.status).send(error.message);
-      } else if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
+      } else if (
+        error instanceof Error &&
+        error?.constructor?.name === 'ZodError' &&
+        'errors' in error
+      ) {
         const zodError = error as z.ZodError;
         const flattened = zodError.flatten();
         const fieldMessages = Object.entries(flattened.fieldErrors)
@@ -98,16 +105,16 @@ export async function startServer(server: AppServer, {
     console.error(reason instanceof Error ? reason.stack : reason);
     console.error('Promise:', promise);
   });
-  
+
   // Global uncaught exceptions
   process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:');
-    console.error(error.stack);  // This gives you the full stack trace
-    console.trace('Full application stack:');  // Additional context
+    console.error(error.stack); // This gives you the full stack trace
+    console.trace('Full application stack:'); // Additional context
   });
 
   const httpServer = http.createServer(app);
-  
+
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
     websocketProvider.init({
@@ -124,7 +131,11 @@ export async function startServer(server: AppServer, {
 }
 
 export async function getCallContext(req: Request) {
-  const authToken = z.string().nullish().transform(val => val ?? null).parse(req.cookies.authToken || req.body.authToken);
+  const authToken = z
+    .string()
+    .nullish()
+    .transform((val) => val ?? null)
+    .parse(req.cookies.authToken || req.body.authToken);
 
   const clientInfo = z.object({
     screenWidth: z.number(),
@@ -184,6 +195,6 @@ function getClientIp(req: Request): string | undefined {
     // Remove IPv6-to-IPv4 mapping prefix
     return directIp.startsWith('::ffff:') ? directIp.substring(7) : directIp;
   }
-  
+
   return undefined;
 }

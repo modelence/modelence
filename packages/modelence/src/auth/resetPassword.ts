@@ -13,11 +13,11 @@ function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
     return baseUrl;
   }
-  
+
   if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
     return configuredUrl;
   }
-  
+
   // Handle relative URL
   return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
 }
@@ -33,7 +33,10 @@ function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; rese
   `;
 }
 
-const passwordResetSent = { success: true, message: 'If an account with that email exists, a password reset link has been sent' };
+const passwordResetSent = {
+  success: true,
+  message: 'If an account with that email exists, a password reset link has been sent',
+};
 
 export async function handleSendResetPasswordToken(args: Args, { connectionInfo }: Context) {
   const email = validateEmail(args.email as string);
@@ -92,7 +95,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   return passwordResetSent;
 }
 
-export async function handleResetPassword(args: Args, { }: Context) {
+export async function handleResetPassword(args: Args, {}: Context) {
   const token = z.string().parse(args.token);
   const password = validatePassword(args.password as string);
 
@@ -122,8 +125,8 @@ export async function handleResetPassword(args: Args, { }: Context) {
     { _id: userDoc._id },
     {
       $set: {
-        'authMethods.password.hash': hash
-      }
+        'authMethods.password.hash': hash,
+      },
     }
   );
 

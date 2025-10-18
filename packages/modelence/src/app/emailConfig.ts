@@ -1,24 +1,16 @@
-import type { EmailProvider } from "../types";
+import type { EmailProvider } from '../types';
 
 export type EmailConfig = {
   provider?: EmailProvider;
   from?: string;
   verification?: {
     subject?: string;
-    template?: (props: {
-      name: string;
-      email: string;
-      verificationUrl: string;
-    }) => string;
+    template?: (props: { name: string; email: string; verificationUrl: string }) => string;
     redirectUrl?: string;
   };
   passwordReset?: {
     subject?: string;
-    template?: (props: {
-      name: string;
-      email: string;
-      resetUrl: string;
-    }) => string;
+    template?: (props: { name: string; email: string; resetUrl: string }) => string;
     redirectUrl?: string;
   };
   // @deprecated use verification.redirectUrl instead

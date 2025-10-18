@@ -1,5 +1,5 @@
-import { Session, User } from "@/auth/types";
-import { ConnectionInfo } from "@/methods/types";
+import { Session, User } from '@/auth/types';
+import { ConnectionInfo } from '@/methods/types';
 
 /**
  * Callback options for authentication operations
@@ -9,7 +9,7 @@ export type AuthOption = {
   onSuccess?: (user: User) => void;
   /** Callback executed when authentication fails */
   onError?: (error: Error) => void;
-}
+};
 
 /**
  * Authentication configuration for the application
@@ -41,24 +41,24 @@ export type AuthOption = {
  */
 export type AuthConfig = {
   onAfterLogin?: (props: {
-    user: User,
-    session: Session | null,
-    connectionInfo: ConnectionInfo,
+    user: User;
+    session: Session | null;
+    connectionInfo: ConnectionInfo;
   }) => void;
   onLoginError?: (props: {
-    error: Error,
-    session: Session | null,
-    connectionInfo: ConnectionInfo,
+    error: Error;
+    session: Session | null;
+    connectionInfo: ConnectionInfo;
   }) => void;
   onAfterSignup?: (props: {
-    user: User,
-    session: Session | null,
-    connectionInfo: ConnectionInfo,
+    user: User;
+    session: Session | null;
+    connectionInfo: ConnectionInfo;
   }) => void;
   onSignupError?: (props: {
-    error: Error,
-    session: Session | null,
-    connectionInfo: ConnectionInfo,
+    error: Error;
+    session: Session | null;
+    connectionInfo: ConnectionInfo;
   }) => void;
 
   /** deprecated: use onAfterLogin and onLoginError */

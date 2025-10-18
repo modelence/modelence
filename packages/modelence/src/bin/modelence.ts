@@ -7,10 +7,7 @@ import { deploy } from './deploy';
 import { dev } from './dev';
 import { loadEnv } from './config';
 
-const program = new Command()
-  .name('modelence')
-  .description('Modelence CLI tool')
-  .version('0.2.1');
+const program = new Command().name('modelence').description('Modelence CLI tool').version('0.2.1');
 
 program
   .command('setup')

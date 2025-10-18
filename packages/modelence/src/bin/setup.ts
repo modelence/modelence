@@ -31,14 +31,17 @@ async function fetchServiceConfig(setupToken: string, host: string): Promise<Set
 async function confirmOverwrite(): Promise<boolean> {
   const rl = createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   return new Promise((resolve) => {
-    rl.question(`Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `, (answer) => {
-      rl.close();
-      resolve(answer.toLowerCase() === 'y');
-    });
+    rl.question(
+      `Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `,
+      (answer) => {
+        rl.close();
+        resolve(answer.toLowerCase() === 'y');
+      }
+    );
   });
 }
 
@@ -57,7 +60,7 @@ async function backupEnvFile(envPath: string): Promise<void> {
   }
 }
 
-export async function setup(options: { token: string, host: string }) {
+export async function setup(options: { token: string; host: string }) {
   try {
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
     let existingEnv = {};
@@ -76,7 +79,7 @@ export async function setup(options: { token: string, host: string }) {
         console.log('Setup canceled');
         process.exit(0);
       }
-    } catch (error) {
+    } catch {
       // File doesn't exist, we'll create it
     }
 
@@ -103,7 +106,6 @@ export async function setup(options: { token: string, host: string }) {
     // Write the file
     await fs.writeFile(envPath, envContent.trim() + '\n');
     console.log(`Successfully configured ${MODELENCE_ENV_FILE} file`);
-
   } catch (error: unknown) {
     console.error(`Setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     process.exit(1);

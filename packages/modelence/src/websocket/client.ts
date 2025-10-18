@@ -1,6 +1,6 @@
-import { ClientChannel } from "./clientChannel";
-import websocketProvider from "./socketio/client";
-import { WebsocketClientProvider } from "./types";
+import { ClientChannel } from './clientChannel';
+import websocketProvider from './socketio/client';
+import { WebsocketClientProvider } from './types';
 
 let websocketClientProvider: WebsocketClientProvider | null = null;
 
@@ -13,8 +13,8 @@ export function getWebsocketClientProvider() {
 }
 
 export function startWebsockets(props?: {
-  provider?: WebsocketClientProvider,
-  channels?: ClientChannel[],
+  provider?: WebsocketClientProvider;
+  channels?: ClientChannel[];
 }) {
   const provider = props?.provider || websocketProvider;
   provider.init({

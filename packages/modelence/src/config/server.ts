@@ -6,9 +6,9 @@ let isInitialized = false;
 
 /**
  * @sidebarTitle getConfig (server)
- * 
+ *
  * @param key
- * @returns 
+ * @returns
  */
 export function getConfig(key: ConfigKey) {
   return config[key]?.value;
@@ -16,17 +16,24 @@ export function getConfig(key: ConfigKey) {
 
 export function getPublicConfigs() {
   if (!isInitialized) {
-    throw new Error('Config is not initialized: an attempt was made to access configs before they were loaded');
+    throw new Error(
+      'Config is not initialized: an attempt was made to access configs before they were loaded'
+    );
   }
 
   return Object.fromEntries(
-    Object.entries(configSchema).filter(([_, schema]) => schema.isPublic).map(([key, schema]) => {
-      return [key, {
-        key,
-        type: schema.type,
-        value: config[key]?.value ?? schema.default,
-      }];
-    })
+    Object.entries(configSchema)
+      .filter(([_, schema]) => schema.isPublic)
+      .map(([key, schema]) => {
+        return [
+          key,
+          {
+            key,
+            type: schema.type,
+            value: config[key]?.value ?? schema.default,
+          },
+        ];
+      })
   );
 }
 
@@ -42,7 +49,7 @@ export function loadConfigs(configs: AppConfig[]) {
     config[key] = {
       key,
       type,
-      value
+      value,
     };
   });
 

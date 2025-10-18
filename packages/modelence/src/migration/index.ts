@@ -2,10 +2,10 @@ import { Module } from '../app/module';
 import { dbMigrations } from './db';
 
 export type MigrationScript = {
-  version: number,
-  description: string,
-  handler: () => Promise<void>,
-}
+  version: number;
+  description: string;
+  handler: () => Promise<void>;
+};
 
 export async function runMigrations(migrations: MigrationScript[]) {
   if (migrations.length === 0) {
@@ -33,5 +33,5 @@ export async function runMigrations(migrations: MigrationScript[]) {
 }
 
 export default new Module('_system.migration', {
-  stores: [dbMigrations]
+  stores: [dbMigrations],
 });

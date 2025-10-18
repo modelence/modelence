@@ -19,6 +19,7 @@ import { _createSystemMutation, _createSystemQuery, createMutation, createQuery 
 import { MigrationScript, default as migrationModule, runMigrations } from '../migration';
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
+import siteModule from '../site';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
@@ -30,15 +31,15 @@ import { AuthConfig, setAuthConfig } from './authConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
-  modules?: Module[],
-  server?: AppServer,
-  email?: EmailConfig,
-  auth?: AuthConfig,
-  roles?: Record<string, RoleDefinition>,
-  defaultRoles?: Record<string, string>,
-  migrations?: Array<MigrationScript>,
+  modules?: Module[];
+  server?: AppServer;
+  email?: EmailConfig;
+  auth?: AuthConfig;
+  roles?: Record<string, RoleDefinition>;
+  defaultRoles?: Record<string, string>;
+  migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
-}
+};
 
 export async function startApp({
   modules = [],
@@ -51,20 +52,29 @@ export async function startApp({
   websocket = {},
 }: AppOptions) {
   dotenv.config();
-  
+
   dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
-  trackAppStart().then(() => {
-    // Do nothing
-  }).catch(() => {
-    // Silently ignore tracking errors to not disrupt app startup
-  });
+  trackAppStart()
+    .then(() => {
+      // Do nothing
+    })
+    .catch(() => {
+      // Silently ignore tracking errors to not disrupt app startup
+    });
 
   // TODO: verify that user modules don't start with `_system.` prefix
-  const systemModules = [userModule, sessionModule, cronModule, migrationModule, rateLimitModule];
+  const systemModules = [
+    userModule,
+    sessionModule,
+    cronModule,
+    migrationModule,
+    rateLimitModule,
+    siteModule,
+  ];
   const combinedModules = [...systemModules, ...modules];
 
   markAppStarted();
@@ -87,11 +97,12 @@ export async function startApp({
   initRateLimits(rateLimits);
 
   if (hasRemoteBackend) {
-    const { configs, environmentId, appAlias, environmentAlias, telemetry } = await connectCloudBackend({
-      configSchema,
-      cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
-      stores
-    });
+    const { configs, environmentId, appAlias, environmentAlias, telemetry } =
+      await connectCloudBackend({
+        configSchema,
+        cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
+        stores,
+      });
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
   } else {
@@ -156,15 +167,15 @@ function initSystemMethods(modules: Module[]) {
 }
 
 function getStores(modules: Module[]) {
-  return modules.flatMap(module => module.stores);
+  return modules.flatMap((module) => module.stores);
 }
 
 function getChannels(modules: Module[]) {
-  return modules.flatMap(module => module.channels);
+  return modules.flatMap((module) => module.channels);
 }
 
 function getRateLimits(modules: Module[]) {
-  return modules.flatMap(module => module.rateLimits);
+  return modules.flatMap((module) => module.rateLimits);
 }
 
 function getConfigSchema(modules: Module[]): ConfigSchema {
@@ -174,9 +185,7 @@ function getConfigSchema(modules: Module[]): ConfigSchema {
     for (const [key, value] of Object.entries(module.configSchema)) {
       const absoluteKey = `${module.name}.${key}`;
       if (absoluteKey in merged) {
-        throw new Error(
-          `Duplicate config schema key: ${absoluteKey} (${module.name})`
-        );
+        throw new Error(`Duplicate config schema key: ${absoluteKey} (${module.name})`);
       }
 
       merged[absoluteKey] = value;
@@ -194,6 +203,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function initStores(stores: Store<any, any>[]) {
   const client = getClient();
   if (!client) {
@@ -222,6 +232,7 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
+  MODELENCE_SITE_URL: '_system.site.url',
   // deprecated
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
@@ -273,21 +284,21 @@ async function trackAppStart() {
   if (isTrackingEnabled) {
     const serviceEndpoint = process.env.MODELENCE_SERVICE_ENDPOINT ?? 'https://cloud.modelence.com';
     const environmentId = process.env.MODELENCE_ENVIRONMENT_ID;
-    
+
     const appDetails = await getAppDetails();
     const modelencePackageJson = await import('../../package.json');
-    
+
     await fetch(`${serviceEndpoint}/api/track/app-start`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         projectName: appDetails.name,
         version: modelencePackageJson.default.version,
         localHostname: os.hostname(),
-        environmentId
-      })
+        environmentId,
+      }),
     });
   }
 }
@@ -297,13 +308,13 @@ async function getAppDetails() {
     const packageJsonPath = path.join(process.cwd(), 'package.json');
     const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
     const packageJson = JSON.parse(packageJsonContent);
-    
+
     return {
-      name: packageJson.name || 'unknown'
+      name: packageJson.name || 'unknown',
     };
-  } catch (error) {
+  } catch {
     return {
-      name: 'unknown'
+      name: 'unknown',
     };
   }
 }

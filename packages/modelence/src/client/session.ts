@@ -31,14 +31,24 @@ export async function initSession() {
 
   isInitialized = true;
 
-  const { configs, session, user } = await callMethod<{ configs: Configs, session: object, user: object }>('_system.session.init');
+  const { configs, session, user } = await callMethod<{
+    configs: Configs;
+    session: object;
+    user: object;
+  }>('_system.session.init');
   _setConfig(configs);
   setLocalStorageSession(session);
-  
-  const parsedUser = user ? Object.freeze(z.object({
-    id: z.string(),
-    handle: z.string(),
-  }).parse(user)) : null;
+
+  const parsedUser = user
+    ? Object.freeze(
+        z
+          .object({
+            id: z.string(),
+            handle: z.string(),
+          })
+          .parse(user)
+      )
+    : null;
 
   useSessionStore.getState().setUser(parsedUser);
 
@@ -56,11 +66,11 @@ export function setCurrentUser(user: User | null) {
 
 /**
  * `useSession` is a hook that returns the current user, and in the future will also return other details about the current session.
- * 
+ *
  * @example
  * ```ts
  * import { useSession } from 'modelence/client';
- * 
+ *
  * function MyComponent() {
  *   const { user } = useSession();
  *   return <div>{user?.handle}</div>;
@@ -68,6 +78,6 @@ export function setCurrentUser(user: User | null) {
  * ```
  */
 export function useSession() {
-  const user = useSessionStore(state => state.user);
+  const user = useSessionStore((state) => state.user);
   return { user };
 }

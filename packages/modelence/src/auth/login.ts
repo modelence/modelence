@@ -10,7 +10,10 @@ import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 
-export async function handleLoginWithPassword(args: Args, { user, session, connectionInfo }: Context) {
+export async function handleLoginWithPassword(
+  args: Args,
+  { user, session, connectionInfo }: Context
+) {
   try {
     if (!session) {
       throw new Error('Session is not initialized');
@@ -45,7 +48,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
       throw incorrectCredentialsError();
     }
 
-    const emailDoc = userDoc.emails?.find(e => e.address === email);
+    const emailDoc = userDoc.emails?.find((e) => e.address === email);
 
     if (!emailDoc?.verified && getEmailConfig()?.provider) {
       if (ip) {
@@ -56,7 +59,9 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
             value: userDoc._id.toString(),
           });
         } catch {
-          throw new Error("Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox.");
+          throw new Error(
+            "Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox."
+          );
         }
       }
 
@@ -65,7 +70,9 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
         email,
         baseUrl: connectionInfo?.baseUrl,
       });
-      throw new Error("Your email address hasn't been verified yet. We've sent a new verification email to your inbox.");
+      throw new Error(
+        "Your email address hasn't been verified yet. We've sent a new verification email to your inbox."
+      );
     }
 
     const isValidPassword = await bcrypt.compare(password, passwordHash);
@@ -86,8 +93,8 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
       user: {
         id: userDoc._id,
         handle: userDoc.handle,
-      }
-    }
+      },
+    };
   } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().onLoginError?.({
@@ -101,7 +108,7 @@ export async function handleLoginWithPassword(args: Args, { user, session, conne
   }
 }
 
-export async function handleLogout(args: Args, { user, session }: Context) {
+export async function handleLogout(args: Args, { session }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
   }

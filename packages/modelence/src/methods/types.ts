@@ -27,16 +27,18 @@ export type Context = {
 
 export type Args = Record<string, unknown>;
 
-export type Handler<T extends any> = (args: Args, context: Context) => Promise<T> | T;
+export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
 
 export type MethodType = 'query' | 'mutation';
 
-export type MethodDefinition<T extends any> = {
-  permissions?: Permission[];
-  handler: Handler<T>;
-} | Handler<T>;
+export type MethodDefinition<T = unknown> =
+  | {
+      permissions?: Permission[];
+      handler: Handler<T>;
+    }
+  | Handler<T>;
 
-export type Method<T extends any[]> = {
+export type Method<T = unknown> = {
   type: MethodType;
   name: string;
   permissions: Permission[];

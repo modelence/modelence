@@ -3,27 +3,33 @@ import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 
-const methods: Record<string, Method<any>> = {};
+const methods: Record<string, Method<unknown>> = {};
 
-export function createQuery<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
+export function createQuery<T extends unknown[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateMethodName(name);
   return _createMethodInternal('query', name, methodDef);
 }
 
-export function createMutation<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
+export function createMutation<T extends unknown[]>(name: string, methodDef: MethodDefinition<T>) {
   requireServer();
   validateMethodName(name);
   return _createMethodInternal('mutation', name, methodDef);
 }
 
-export function _createSystemQuery<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
+export function _createSystemQuery<T extends unknown[]>(
+  name: string,
+  methodDef: MethodDefinition<T>
+) {
   requireServer();
   validateSystemMethodName(name);
   return _createMethodInternal('query', name, methodDef);
 }
 
-export function _createSystemMutation<T extends any[]>(name: string, methodDef: MethodDefinition<T>) {
+export function _createSystemMutation<T extends unknown[]>(
+  name: string,
+  methodDef: MethodDefinition<T>
+) {
   requireServer();
   validateSystemMethodName(name);
   return _createMethodInternal('mutation', name, methodDef);
@@ -41,7 +47,11 @@ function validateSystemMethodName(name: string) {
   }
 }
 
-function _createMethodInternal<T extends any>(type: MethodType, name: string, methodDef: MethodDefinition<T>) {
+function _createMethodInternal<T = unknown>(
+  type: MethodType,
+  name: string,
+  methodDef: MethodDefinition<T>
+) {
   requireServer();
 
   if (methods[name]) {
@@ -49,7 +59,7 @@ function _createMethodInternal<T extends any>(type: MethodType, name: string, me
   }
 
   const handler = typeof methodDef === 'function' ? methodDef : methodDef.handler;
-  const permissions = typeof methodDef === 'function' ? [] : methodDef.permissions ?? [];
+  const permissions = typeof methodDef === 'function' ? [] : (methodDef.permissions ?? []);
   methods[name] = { type, name, handler, permissions };
 }
 

@@ -3,8 +3,8 @@
 
 const buffer = {
   stdout: [{ log: '', timestamp: null }],
-  stderr: [{ log: '', timestamp: null }]
-}
+  stderr: [{ log: '', timestamp: null }],
+};
 
 process.stdin.setEncoding('utf8');
 
@@ -12,7 +12,7 @@ console.log('Starting logger...', process.env);
 
 process.stdin.on('data', (chunk) => {
   const isStderr = chunk.fd === 2;
-  
+
   if (isStderr) {
     // process.stderr.write(chunk);
     // addToBuffer(chunk, buffer.stderr);

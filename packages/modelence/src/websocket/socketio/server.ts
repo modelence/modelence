@@ -1,10 +1,10 @@
-import { Server } from "http";
+import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
-import { createAdapter } from "@socket.io/mongo-adapter";
-import { authenticate } from "@/auth";
-import { getClient } from "@/db/client";
-import { WebsocketServerProvider } from "../types";
-import { ServerChannel } from "../serverChannel";
+import { createAdapter } from '@socket.io/mongo-adapter';
+import { authenticate } from '@/auth';
+import { getClient } from '@/db/client';
+import { WebsocketServerProvider } from '../types';
+import { ServerChannel } from '../serverChannel';
 
 let socketServer: SocketServer | null = null;
 
@@ -17,7 +17,6 @@ export async function init({
   httpServer: Server;
   channels: ServerChannel[];
 }) {
-
   const mongodbClient = getClient();
 
   if (!mongodbClient) {
@@ -40,8 +39,8 @@ export async function init({
 
   socketServer = new SocketServer(httpServer, {
     cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
+      origin: '*',
+      methods: ['GET', 'POST'],
     },
     adapter: createAdapter(mongoCollection),
     transports: ['polling', 'websocket'],
@@ -65,7 +64,7 @@ export async function init({
 
   socketServer.on('connection', (socket: Socket) => {
     console.log(`Socket.IO client connected`);
-    
+
     socket.on('disconnect', () => {
       console.log(`Socket.IO client disconnected`);
     });
@@ -75,10 +74,7 @@ export async function init({
       for (const channel of channels) {
         if (
           channel.category === category &&
-          (
-            !channel.canAccessChannel ||
-            await channel.canAccessChannel(socket.data)
-          )
+          (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data)))
         ) {
           socket.join(channelName);
         }
@@ -96,18 +92,10 @@ export async function init({
     });
   });
 
-  console.log("Socket.IO server initialized");
+  console.log('Socket.IO server initialized');
 }
 
-function broadcast<T>({
-  category,
-  id,
-  data,
-}: {
-  category: string,
-  id: string,
-  data: T,
-}) {
+function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
   socketServer?.to(`${category}:${id}`).emit(category, data);
 }
 

@@ -19,28 +19,33 @@ type CloudBackendConnectOkResponse = {
 type CloudBackendConnectErrorResponse = {
   status: 'error';
   error: string;
-}
+};
 
-export type CloudBackendConnectResponse = CloudBackendConnectOkResponse | CloudBackendConnectErrorResponse;
+export type CloudBackendConnectResponse =
+  | CloudBackendConnectOkResponse
+  | CloudBackendConnectErrorResponse;
 
-export async function connectCloudBackend(
-  { configSchema, cronJobsMetadata, stores }: { 
-    configSchema?: ConfigSchema, 
-    cronJobsMetadata?: CronJobMetadata[], 
-    stores: Store<any, any>[] 
-  }
-): Promise<CloudBackendConnectOkResponse> {
+export async function connectCloudBackend({
+  configSchema,
+  cronJobsMetadata,
+  stores,
+}: {
+  configSchema?: ConfigSchema;
+  cronJobsMetadata?: CronJobMetadata[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  stores: Store<any, any>[];
+}): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
   }
 
   try {
-    const dataModels = Object.values(stores).map(store => {
+    const dataModels = Object.values(stores).map((store) => {
       return {
         name: store.getName(),
         schema: store.getSchema(),
-        collections: [store.getName()]
+        collections: [store.getName()],
       };
     });
 
@@ -72,7 +77,7 @@ export async function fetchConfigs() {
 
 export async function syncStatus() {
   const data = await callApi('/api/sync', 'POST', {
-    containerId: process.env.MODELENCE_CONTAINER_ID
+    containerId: process.env.MODELENCE_CONTAINER_ID,
   });
   return data;
 }
@@ -87,19 +92,23 @@ async function callApi(endpoint: string, method: string, payload?: object) {
   const response = await fetch(`${MODELENCE_SERVICE_ENDPOINT}${endpoint}`, {
     method,
     headers: {
-      'Authorization': `Bearer ${MODELENCE_SERVICE_TOKEN}`,
-      ...(payload ? { 'Content-Type': 'application/json' } : {})
+      Authorization: `Bearer ${MODELENCE_SERVICE_TOKEN}`,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
     },
-    body: payload ? JSON.stringify(payload) : undefined
+    body: payload ? JSON.stringify(payload) : undefined,
   });
 
   if (!response.ok) {
     const data = await response.text();
     try {
       const json = JSON.parse(data);
-      throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${json?.error}`);
-    } catch (error) {
-      throw new Error(`Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`);
+      throw new Error(
+        `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${json?.error}`
+      );
+    } catch {
+      throw new Error(
+        `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`
+      );
     }
   }
 

@@ -4,9 +4,9 @@ let config: Record<ConfigKey, AppConfig> = {};
 
 /**
  * @sidebarTitle getConfig (client)
- * 
+ *
  * @param key
- * @returns 
+ * @returns
  */
 export function getConfig(key: ConfigKey) {
   return config[key]?.value;
