@@ -23,6 +23,7 @@ import {
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
+import { serializeModelSchema } from './schemaSerializer';
 
 /**
  * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
@@ -105,7 +106,7 @@ export class Store<
 
   /** @internal */
   getSchema() {
-    return this.schema;
+    return serializeModelSchema(this.schema);
   }
 
   /** @internal */
