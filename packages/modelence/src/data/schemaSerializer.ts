@@ -6,7 +6,8 @@ type ObjectTypeDefinition = {
 };
 
 export interface SerializedModelSchema {
-  [key: string]: SerializedSchema | (SerializedSchema | SerializedModelSchema)[] | SerializedModelSchema;
+  version: 'v2';
+  [key: string]: SerializedSchema | (SerializedSchema | SerializedModelSchema)[] | SerializedModelSchema | 'v2';
 }
 
 // Type guards for Zod schema types
@@ -40,9 +41,9 @@ type BaseSerializedSchema =
   | { type: 'boolean' }
   | { type: 'date' }
   | { type: 'array'; items: SerializedSchema }
-  | { type: 'object'; shape: Record<string, SerializedSchema> }
-  | { type: 'enum'; values: readonly string[] }
-  | { type: 'union'; options: SerializedSchema[] }
+  | { type: 'object'; items: Record<string, SerializedSchema> }
+  | { type: 'enum'; items: readonly string[] }
+  | { type: 'union'; items: SerializedSchema[] }
   | { type: 'unknown'; typeName: string };
 
 type SerializedSchema = BaseSerializedSchema | (BaseSerializedSchema & { optional: true });
@@ -81,7 +82,7 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
     }
     return {
       type: 'object',
-      shape: serializedShape,
+      items: serializedShape,
     };
   }
   if (def.typeName === 'ZodOptional') {
@@ -95,14 +96,14 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
     const enumDef = def as ZodEnumDef;
     return {
       type: 'enum',
-      values: enumDef.values,
+      items: enumDef.values,
     };
   }
   if (def.typeName === 'ZodUnion') {
     const unionDef = def as ZodUnionDef;
     return {
       type: 'union',
-      options: unionDef.options.map(serializeZodSchema),
+      items: unionDef.options.map(serializeZodSchema),
     };
   }
 
@@ -114,7 +115,9 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
  * Serializes a model schema to a JSON-serializable format
  */
 export function serializeModelSchema(schema: ModelSchema): SerializedModelSchema {
-  const serialized: SerializedModelSchema = {};
+  const serialized: SerializedModelSchema = {
+    version: 'v2',
+  };
 
   for (const [key, value] of Object.entries(schema)) {
     if (Array.isArray(value)) {
