@@ -46,6 +46,7 @@ export async function connectCloudBackend({
         name: store.getName(),
         schema: store.getSchema(),
         collections: [store.getName()],
+        version: 2,
       };
     });
 

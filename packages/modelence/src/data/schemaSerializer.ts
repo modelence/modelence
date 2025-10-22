@@ -6,7 +6,6 @@ type ObjectTypeDefinition = {
 };
 
 export interface SerializedModelSchema {
-  version: 'v2';
   [key: string]: SerializedSchema | (SerializedSchema | SerializedModelSchema)[] | SerializedModelSchema | 'v2';
 }
 
@@ -115,9 +114,7 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
  * Serializes a model schema to a JSON-serializable format
  */
 export function serializeModelSchema(schema: ModelSchema): SerializedModelSchema {
-  const serialized: SerializedModelSchema = {
-    version: 'v2',
-  };
+  const serialized: SerializedModelSchema = {};
 
   for (const [key, value] of Object.entries(schema)) {
     if (Array.isArray(value)) {
