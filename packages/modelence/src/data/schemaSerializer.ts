@@ -34,6 +34,12 @@ type ZodUnionDef = ZodDefWithTypeName & {
   options: readonly [z.ZodType, z.ZodType, ...z.ZodType[]];
 };
 
+type ZodEffectsDef = ZodDefWithTypeName & {
+  schema: z.ZodType;
+  effect: { type: 'refinement' | 'transform' | 'preprocess' };
+  description?: string;
+};
+
 type BaseSerializedSchema =
   | { type: 'string' }
   | { type: 'number' }
@@ -43,7 +49,7 @@ type BaseSerializedSchema =
   | { type: 'object'; items: Record<string, SerializedSchema> }
   | { type: 'enum'; items: readonly string[] }
   | { type: 'union'; items: SerializedSchema[] }
-  | { type: 'unknown'; typeName: string };
+  | { type: 'custom'; typeName: string };
 
 type SerializedSchema = BaseSerializedSchema | (BaseSerializedSchema & { optional: true });
 
@@ -105,9 +111,21 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
       items: unionDef.options.map(serializeZodSchema),
     };
   }
+  if (def.typeName === 'ZodEffects') {
+    // ZodEffects is used for z.instanceof(ObjectId), z.refine(), etc.
+    const effectsDef = def as ZodEffectsDef;
+
+    // Check description for custom types
+    if (effectsDef.description) {
+      return { type: 'custom', typeName: effectsDef.description } as SerializedSchema;
+    }
+
+    // For other effects, try to serialize the underlying schema
+    return serializeZodSchema(effectsDef.schema);
+  }
 
   // For custom types like ObjectId, ref, etc.
-  return { type: 'unknown', typeName: def.typeName };
+  return { type: 'custom', typeName: def.typeName };
 }
 
 /**
