@@ -6,7 +6,11 @@ type ObjectTypeDefinition = {
 };
 
 export interface SerializedModelSchema {
-  [key: string]: SerializedSchema | (SerializedSchema | SerializedModelSchema)[] | SerializedModelSchema | 'v2';
+  [key: string]:
+    | SerializedSchema
+    | (SerializedSchema | SerializedModelSchema)[]
+    | SerializedModelSchema
+    | 'v2';
 }
 
 // Type guards for Zod schema types
