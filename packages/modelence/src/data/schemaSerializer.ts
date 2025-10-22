@@ -85,7 +85,7 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
   if (def.typeName === 'ZodObject') {
     const objectDef = def as ZodObjectDef;
     const shape = objectDef.shape();
-    const serializedShape: Record<string, any> = {};
+    const serializedShape: Record<string, SerializedSchema> = {};
     for (const [key, value] of Object.entries(shape)) {
       serializedShape[key] = serializeZodSchema(value as z.ZodType);
     }
