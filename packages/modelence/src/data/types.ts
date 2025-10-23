@@ -40,15 +40,15 @@ export const schema = {
     return z.array(z.number());
   },
   objectId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId);
+    return z.instanceof(ObjectId).describe('ObjectId');
   },
   userId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId);
+    return z.instanceof(ObjectId).describe('UserId');
   },
   ref<T extends ModelSchema>(
     _collection: string | Store<T, InferDocumentType<T>>
   ): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId);
+    return z.instanceof(ObjectId).describe('Ref');
   },
   union: z.union.bind(z),
   infer<T extends SchemaTypeDefinition>(_schema: T): InferDocumentType<T> {
