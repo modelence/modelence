@@ -198,5 +198,5 @@ export function parseModelSchema(schema: ModelSchema): z.ZodObject<z.ZodRawShape
     }
   }
 
-  return z.object(shape);
+  return z.object(shape).strict();
 }

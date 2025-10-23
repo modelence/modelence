@@ -7,7 +7,11 @@ export class SchemaValidationError extends Error {
   public readonly zodError: ZodError;
 
   constructor(message: string, zodError: ZodError) {
-    super(message);
+    // Include detailed validation errors in the main error message
+    const detailedErrors = zodError.errors
+      .map((err) => `  - ${err.path.join('.') || 'root'}: ${err.message}`)
+      .join('\n');
+    super(`${message}:\n${detailedErrors}`);
     this.name = 'SchemaValidationError';
     this.zodError = zodError;
 
