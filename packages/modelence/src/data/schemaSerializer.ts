@@ -169,3 +169,31 @@ export function serializeModelSchema(schema: ModelSchema): SerializedModelSchema
 
   return serialized;
 }
+
+/**
+ * Converts a ModelSchema to a Zod schema for validation
+ */
+export function parseModelSchema(schema: ModelSchema): z.ZodObject<z.ZodRawShape> {
+  const shape: z.ZodRawShape = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    if (Array.isArray(value)) {
+      // Handle array of schema definitions - create a union of the types
+      const zodTypes = value.map((item) => {
+        if (typeof item === 'object' && '_def' in item) {
+          return item as z.ZodType;
+        }
+        return parseModelSchema(item as ObjectTypeDefinition);
+      });
+      shape[key] = zodTypes.length === 1 ? zodTypes[0] : z.union(zodTypes as [z.ZodType, z.ZodType, ...z.ZodType[]]);
+    } else if (typeof value === 'object' && '_def' in value) {
+      // It's a Zod type
+      shape[key] = value as z.ZodType;
+    } else {
+      // It's a nested object definition
+      shape[key] = parseModelSchema(value as ObjectTypeDefinition);
+    }
+  }
+
+  return z.object(shape);
+}
