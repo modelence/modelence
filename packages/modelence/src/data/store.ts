@@ -23,7 +23,8 @@ import {
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
-import { serializeModelSchema } from './schemaSerializer';
+import { serializeModelSchema, parseModelSchema } from './schemaSerializer';
+import { SchemaValidationError } from './errors';
 
 /**
  * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
@@ -292,8 +293,20 @@ export class Store<
    *
    * @param document - The document to insert
    * @returns The result of the insert operation
+   * @throws SchemaValidationError if the document doesn't match the schema
    */
   async insertOne(document: OptionalUnlessRequiredId<this['_type']>): Promise<InsertOneResult> {
+    // Validate against schema if provided
+    const zodSchema = parseModelSchema(this.schema);
+    const result = zodSchema.safeParse(document);
+
+    if (!result.success) {
+      throw new SchemaValidationError(
+        `Document validation failed for collection "${this.name}"`,
+        result.error
+      );
+    }
+
     return await this.requireCollection().insertOne(document);
   }
 
@@ -302,10 +315,25 @@ export class Store<
    *
    * @param documents - The documents to insert
    * @returns The result of the insert operation
+   * @throws SchemaValidationError if any document doesn't match the schema
    */
   async insertMany(
     documents: OptionalUnlessRequiredId<this['_type']>[]
   ): Promise<InsertManyResult> {
+    // Validate all documents against schema if provided
+    const zodSchema = parseModelSchema(this.schema);
+
+    for (let i = 0; i < documents.length; i++) {
+      const result = zodSchema.safeParse(documents[i]);
+
+      if (!result.success) {
+        throw new SchemaValidationError(
+          `Document validation failed for collection "${this.name}" at index ${i}`,
+          result.error
+        );
+      }
+    }
+
     return await this.requireCollection().insertMany(documents);
   }
 
