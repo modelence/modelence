@@ -185,7 +185,10 @@ export function parseModelSchema(schema: ModelSchema): z.ZodObject<z.ZodRawShape
         }
         return parseModelSchema(item as ObjectTypeDefinition);
       });
-      shape[key] = zodTypes.length === 1 ? zodTypes[0] : z.union(zodTypes as [z.ZodType, z.ZodType, ...z.ZodType[]]);
+      shape[key] =
+        zodTypes.length === 1
+          ? zodTypes[0]
+          : z.union(zodTypes as [z.ZodType, z.ZodType, ...z.ZodType[]]);
     } else if (typeof value === 'object' && '_def' in value) {
       // It's a Zod type
       shape[key] = value as z.ZodType;
