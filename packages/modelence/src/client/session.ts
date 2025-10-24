@@ -9,6 +9,7 @@ import { Configs } from '../config/types';
 type User = {
   id: string;
   handle: string;
+  roles: string[];
 };
 
 type SessionStore = {
@@ -45,6 +46,7 @@ export async function initSession() {
           .object({
             id: z.string(),
             handle: z.string(),
+            roles: z.array(z.string()),
           })
           .parse(user)
       )
@@ -80,4 +82,13 @@ export function setCurrentUser(user: User | null) {
 export function useSession() {
   const user = useSessionStore((state) => state.user);
   return { user };
+}
+
+export function isAdmin(user: User | null): boolean {
+  return user?.roles?.includes('admin') ?? false;
+}
+
+export function useIsAdmin(): boolean {
+  const user = useSessionStore((state) => state.user);
+  return isAdmin(user);
 }

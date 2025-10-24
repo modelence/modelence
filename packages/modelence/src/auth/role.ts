@@ -51,3 +51,7 @@ export function hasPermission(roles: Role[], permission: Permission) {
 
   return false;
 }
+
+export function isAdmin(user: { roles?: string[] } | null): boolean {
+  return user?.roles?.includes('admin') ?? false;
+}

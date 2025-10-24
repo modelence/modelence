@@ -1,0 +1,76 @@
+# Admin Roles
+
+Modelence provides built-in support for user roles, including admin functionality.
+
+## Backend Usage
+
+### Checking Admin Status
+
+```typescript
+import { isAdmin } from 'modelence/server';
+
+createMutation('adminAction', {
+  handler: async (args, { user }) => {
+    if (!isAdmin(user)) {
+      throw new Error('Admin access required');
+    }
+    // Admin-only logic here
+  }
+});
+```
+
+### Assigning Admin Roles
+
+```typescript
+import { dbUsers, ObjectId } from 'modelence/server';
+
+// Make user admin
+await dbUsers.updateOne(
+  { _id: new ObjectId(userId) },
+  { $addToSet: { roles: 'admin' } }
+);
+```
+
+## Frontend Usage
+
+### React Hook
+
+```typescript
+import { useIsAdmin } from 'modelence/client';
+
+function AdminPanel() {
+  const isAdmin = useIsAdmin();
+
+  if (!isAdmin) {
+    return <div>Access denied</div>;
+  }
+
+  return <div>Admin content</div>;
+}
+```
+
+### Conditional Rendering
+
+```typescript
+import { isAdmin, useSession } from 'modelence/client';
+
+function Navigation() {
+  const { user } = useSession();
+
+  return (
+    <nav>
+      <a href="/">Home</a>
+      {isAdmin(user) && <a href="/admin">Admin Panel</a>}
+    </nav>
+  );
+}
+```
+
+## API Reference
+
+**Backend:**
+- `isAdmin(user: UserInfo | null): boolean`
+
+**Frontend:**
+- `useIsAdmin(): boolean` - React hook
+- `isAdmin(user: User | null): boolean` - Utility function

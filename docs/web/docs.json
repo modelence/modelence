@@ -25,6 +25,7 @@
             "group": "Features",
             "pages": [
               "authentication",
+              "admin-roles",
               "email",
               "stores",
               "websockets"
