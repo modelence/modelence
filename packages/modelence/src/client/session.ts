@@ -10,6 +10,8 @@ type User = {
   id: string;
   handle: string;
   roles: string[];
+  hasRole: (role: string) => boolean;
+  requireRole: (role: string) => void;
 };
 
 type SessionStore = {
@@ -41,15 +43,21 @@ export async function initSession() {
   setLocalStorageSession(session);
 
   const parsedUser = user
-    ? Object.freeze(
-        z
+    ? Object.freeze({
+        ...z
           .object({
             id: z.string(),
             handle: z.string(),
             roles: z.array(z.string()),
           })
-          .parse(user)
-      )
+          .parse(user),
+        hasRole: (role: string) => (user as any).roles?.includes(role) ?? false,
+        requireRole: (role: string) => {
+          if (!(user as any).roles?.includes(role)) {
+            throw new Error(`Access denied - role '${role}' required`);
+          }
+        },
+      })
     : null;
 
   useSessionStore.getState().setUser(parsedUser);
@@ -84,11 +92,3 @@ export function useSession() {
   return { user };
 }
 
-export function isAdmin(user: User | null): boolean {
-  return user?.roles?.includes('admin') ?? false;
-}
-
-export function useIsAdmin(): boolean {
-  const user = useSessionStore((state) => state.user);
-  return isAdmin(user);
-}
