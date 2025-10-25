@@ -4,6 +4,9 @@ import { callMethod } from '../../client/method';
 export type UserInfo = {
   id: string;
   handle: string;
+  roles: string[];
+  hasRole: (role: string) => boolean;
+  requireRole: (role: string) => void;
 };
 
 /**

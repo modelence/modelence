@@ -17,6 +17,13 @@ export async function authenticate(
     ? {
         id: userDoc._id.toString(),
         handle: userDoc.handle,
+        roles: userDoc.roles || [],
+        hasRole: (role: string) => (userDoc.roles || []).includes(role),
+        requireRole: (role: string) => {
+          if (!(userDoc.roles || []).includes(role)) {
+            throw new Error(`Access denied - role '${role}' required`);
+          }
+        },
       }
     : null;
 

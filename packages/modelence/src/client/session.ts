@@ -9,6 +9,9 @@ import { Configs } from '../config/types';
 type User = {
   id: string;
   handle: string;
+  roles: string[];
+  hasRole: (role: string) => boolean;
+  requireRole: (role: string) => void;
 };
 
 type SessionStore = {
@@ -40,14 +43,25 @@ export async function initSession() {
   setLocalStorageSession(session);
 
   const parsedUser = user
-    ? Object.freeze(
-        z
+    ? (() => {
+        const parsedData = z
           .object({
             id: z.string(),
             handle: z.string(),
+            roles: z.array(z.string()),
           })
-          .parse(user)
-      )
+          .parse(user);
+
+        return Object.freeze({
+          ...parsedData,
+          hasRole: (role: string) => parsedData.roles.includes(role),
+          requireRole: (role: string) => {
+            if (!parsedData.roles.includes(role)) {
+              throw new Error(`Access denied - role '${role}' required`);
+            }
+          },
+        });
+      })()
     : null;
 
   useSessionStore.getState().setUser(parsedUser);
