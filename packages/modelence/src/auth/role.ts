@@ -51,4 +51,3 @@ export function hasPermission(roles: Role[], permission: Permission) {
 
   return false;
 }
-
