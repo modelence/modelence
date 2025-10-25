@@ -106,7 +106,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 
 ## API Operations Reference
 
-### 1. Find One Document (`POST /api/findOne`)
+### 1. Find One Document (`POST /data/v1/action/findOne`)
 
 **Purpose**: Retrieve a single document from a collection
 
@@ -139,7 +139,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 2. Find Multiple Documents (`POST /api/find`)
+### 2. Find Multiple Documents (`POST /data/v1/action/find`)
 
 **Purpose**: Retrieve multiple documents from a collection
 
@@ -186,7 +186,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 3. Insert One Document (`POST /api/insertOne`)
+### 3. Insert One Document (`POST /data/v1/action/insertOne`)
 
 **Purpose**: Insert a single document into a collection
 
@@ -219,7 +219,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 4. Insert Multiple Documents (`POST /api/insertMany`)
+### 4. Insert Multiple Documents (`POST /data/v1/action/insertMany`)
 
 **Purpose**: Insert multiple documents into a collection
 
@@ -263,7 +263,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 5. Update One Document (`POST /api/updateOne`)
+### 5. Update One Document (`POST /data/v1/action/updateOne`)
 
 **Purpose**: Update a single document in a collection
 
@@ -299,7 +299,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 6. Update Multiple Documents (`POST /api/updateMany`)
+### 6. Update Multiple Documents (`POST /data/v1/action/updateMany`)
 
 **Purpose**: Update multiple documents in a collection
 
@@ -334,7 +334,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 7. Replace One Document (`POST /api/replaceOne`)
+### 7. Replace One Document (`POST /data/v1/action/replaceOne`)
 
 **Purpose**: Replace an entire document in a collection
 
@@ -372,7 +372,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 8. Delete One Document (`POST /api/deleteOne`)
+### 8. Delete One Document (`POST /data/v1/action/deleteOne`)
 
 **Purpose**: Delete a single document from a collection
 
@@ -400,7 +400,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 9. Delete Multiple Documents (`POST /api/deleteMany`)
+### 9. Delete Multiple Documents (`POST /data/v1/action/deleteMany`)
 
 **Purpose**: Delete multiple documents from a collection
 
@@ -432,7 +432,7 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-### 10. Aggregate (`POST /api/aggregate`)
+### 10. Aggregate (`POST /data/v1/action/aggregate`)
 
 **Purpose**: Perform aggregation operations on a collection
 
@@ -488,37 +488,608 @@ The API provides comprehensive MongoDB operations with full request/response spe
 }
 ```
 
-#### Advanced Operations
-- `POST /api/countDocuments` - Count documents
-- `POST /api/runCommand` - Execute database commands
+### 11. Count Documents (`POST /data/v1/action/countDocuments`)
 
-#### Database Management
-- `GET /api/listCollections` - List all collections
-- `POST /api/createCollection` - Create a new collection
-- `POST /api/dropCollection` - Drop a collection
-- `GET /api/listDatabases` - List databases
+**Purpose**: Count the number of documents matching a filter
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "filter": {}                     // Optional: Query filter object
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "users",
+  "filter": { "status": "active" }
+}
+```
+
+**Response**:
+```json
+{
+  "count": 1523
+}
+```
+
+### 12. Estimated Document Count (`POST /data/v1/action/estimatedDocumentCount`)
+
+**Purpose**: Get an estimated count of all documents in a collection (faster but less accurate than countDocuments)
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string"             // Required: Database name
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "users"
+}
+```
+
+**Response**:
+```json
+{
+  "count": 15432
+}
+```
+
+### 13. Distinct (`POST /data/v1/action/distinct`)
+
+**Purpose**: Get distinct values for a specific field across documents
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "key": "string",                 // Required: Field name to get distinct values for
+  "filter": {}                     // Optional: Query filter object
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "orders",
+  "key": "status",
+  "filter": { "year": 2024 }
+}
+```
+
+**Response**:
+```json
+{
+  "values": ["pending", "completed", "cancelled", "refunded"]
+}
+```
+
+### 14. Find One and Update (`POST /data/v1/action/findOneAndUpdate`)
+
+**Purpose**: Find a single document and update it atomically, returning either the original or updated document
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "filter": {},                    // Required: Query filter to match document
+  "update": {},                    // Required: Update operations (must contain update operators)
+  "projection": {},                // Optional: Fields to include/exclude in returned document
+  "sort": {},                      // Optional: Sort specification if multiple documents match
+  "upsert": false,                 // Optional: Create document if not found
+  "returnNewDocument": true        // Optional: Return updated document (true) or original (false)
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "inventory",
+  "filter": { "sku": "ABC123" },
+  "update": {
+    "$inc": { "quantity": -1 },
+    "$set": { "lastModified": "2024-01-15T10:30:00Z" }
+  },
+  "returnNewDocument": true
+}
+```
+
+**Response**:
+```json
+{
+  "document": {
+    "_id": "507f1f77bcf86cd799439011",
+    "sku": "ABC123",
+    "quantity": 49,
+    "lastModified": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### 15. Find One and Replace (`POST /data/v1/action/findOneAndReplace`)
+
+**Purpose**: Find a single document and replace it entirely, returning either the original or replacement document
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "filter": {},                    // Required: Query filter to match document
+  "replacement": {},               // Required: New document (cannot contain update operators)
+  "projection": {},                // Optional: Fields to include/exclude in returned document
+  "sort": {},                      // Optional: Sort specification if multiple documents match
+  "upsert": false,                 // Optional: Create document if not found
+  "returnNewDocument": true        // Optional: Return replacement document (true) or original (false)
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "profiles",
+  "filter": { "userId": "user123" },
+  "replacement": {
+    "userId": "user123",
+    "name": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "preferences": {
+      "theme": "dark",
+      "notifications": true
+    }
+  },
+  "returnNewDocument": true
+}
+```
+
+**Response**:
+```json
+{
+  "document": {
+    "_id": "507f1f77bcf86cd799439011",
+    "userId": "user123",
+    "name": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "preferences": {
+      "theme": "dark",
+      "notifications": true
+    }
+  }
+}
+```
+
+### 16. Find One and Delete (`POST /data/v1/action/findOneAndDelete`)
+
+**Purpose**: Find a single document and delete it atomically, returning the deleted document
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "filter": {},                    // Required: Query filter to match document
+  "projection": {},                // Optional: Fields to include/exclude in returned document
+  "sort": {}                       // Optional: Sort specification if multiple documents match
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "sessions",
+  "filter": { "sessionId": "sess_abc123" },
+  "projection": { "userId": 1, "expiredAt": 1 }
+}
+```
+
+**Response**:
+```json
+{
+  "document": {
+    "_id": "507f1f77bcf86cd799439011",
+    "userId": "user456",
+    "expiredAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### 17. Bulk Write (`POST /data/v1/action/bulkWrite`)
+
+**Purpose**: Perform multiple write operations (insert, update, replace, delete) in a single request
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "operations": [],                // Required: Array of write operations
+  "ordered": true                  // Optional: Execute operations in order (default true)
+}
+```
+
+**Operation Types**:
+- `insertOne`: `{ "insertOne": { "document": {...} } }`
+- `updateOne`: `{ "updateOne": { "filter": {...}, "update": {...}, "upsert": false } }`
+- `updateMany`: `{ "updateMany": { "filter": {...}, "update": {...}, "upsert": false } }`
+- `replaceOne`: `{ "replaceOne": { "filter": {...}, "replacement": {...}, "upsert": false } }`
+- `deleteOne`: `{ "deleteOne": { "filter": {...} } }`
+- `deleteMany`: `{ "deleteMany": { "filter": {...} } }`
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "products",
+  "operations": [
+    {
+      "insertOne": {
+        "document": { "name": "New Product", "price": 99.99 }
+      }
+    },
+    {
+      "updateMany": {
+        "filter": { "category": "electronics" },
+        "update": { "$mul": { "price": 0.9 } }
+      }
+    },
+    {
+      "deleteOne": {
+        "filter": { "discontinued": true }
+      }
+    }
+  ],
+  "ordered": true
+}
+```
+
+**Response**:
+```json
+{
+  "insertedCount": 1,
+  "matchedCount": 15,
+  "modifiedCount": 15,
+  "deletedCount": 1,
+  "upsertedCount": 0,
+  "upsertedIds": {}
+}
+```
+
+### 18. Create Index (`POST /data/v1/action/createIndex`)
+
+**Purpose**: Create an index on a collection to improve query performance
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "keys": {},                      // Required: Index specification (field: 1 or -1)
+  "options": {}                    // Optional: Index options (name, unique, sparse, etc.)
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "users",
+  "keys": { "email": 1 },
+  "options": {
+    "name": "email_index",
+    "unique": true,
+    "sparse": false
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "createdCollectionAutomatically": false,
+  "numIndexesBefore": 1,
+  "numIndexesAfter": 2,
+  "ok": 1
+}
+```
+
+### 19. Drop Index (`POST /data/v1/action/dropIndex`)
+
+**Purpose**: Remove an index from a collection
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string",            // Required: Database name
+  "name": "string"                 // Required: Index name to drop
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "users",
+  "name": "email_index"
+}
+```
+
+**Response**:
+```json
+{
+  "nIndexesWas": 2,
+  "ok": 1
+}
+```
+
+### 20. List Indexes (`POST /data/v1/action/listIndexes`)
+
+**Purpose**: List all indexes on a collection
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "collection": "string",          // Required: Collection name
+  "database": "string"             // Required: Database name
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "users"
+}
+```
+
+**Response**:
+```json
+{
+  "indexes": [
+    {
+      "v": 2,
+      "key": { "_id": 1 },
+      "name": "_id_"
+    },
+    {
+      "v": 2,
+      "key": { "email": 1 },
+      "name": "email_index",
+      "unique": true
+    }
+  ]
+}
+```
+
+### 21. List Collections (`POST /data/v1/action/listCollections`)
+
+**Purpose**: List all collections in a database
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "database": "string"             // Required: Database name
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb"
+}
+```
+
+**Response**:
+```json
+{
+  "collections": [
+    { "name": "users", "type": "collection" },
+    { "name": "products", "type": "collection" },
+    { "name": "orders", "type": "collection" }
+  ]
+}
+```
+
+### 22. Create Collection (`POST /data/v1/action/createCollection`)
+
+**Purpose**: Create a new collection in a database
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "database": "string",            // Required: Database name
+  "collection": "string"           // Required: Collection name to create
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "analytics"
+}
+```
+
+**Response**:
+```json
+{
+  "ok": 1
+}
+```
+
+### 23. Drop Collection (`POST /data/v1/action/dropCollection`)
+
+**Purpose**: Delete a collection and all its documents
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "database": "string",            // Required: Database name
+  "collection": "string"           // Required: Collection name to drop
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "collection": "temp_data"
+}
+```
+
+**Response**:
+```json
+{
+  "ok": 1
+}
+```
+
+### 24. List Databases (`POST /data/v1/action/listDatabases`)
+
+**Purpose**: List all available databases
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string"           // Required: Data source identifier
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main"
+}
+```
+
+**Response**:
+```json
+{
+  "databases": [
+    { "name": "admin", "sizeOnDisk": 32768, "empty": false },
+    { "name": "mydb", "sizeOnDisk": 8192000, "empty": false },
+    { "name": "test", "sizeOnDisk": 32768, "empty": true }
+  ],
+  "totalSize": 8256736,
+  "ok": 1
+}
+```
+
+### 25. Run Command (`POST /data/v1/action/runCommand`)
+
+**Purpose**: Execute arbitrary database commands
+
+**Request Fields**:
+```json
+{
+  "dataSource": "string",          // Required: Data source identifier
+  "database": "string",            // Required: Database name
+  "command": {}                    // Required: Command object
+}
+```
+
+**Example Request**:
+```json
+{
+  "dataSource": "main",
+  "database": "mydb",
+  "command": {
+    "dbStats": 1,
+    "scale": 1024
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "result": {
+    "db": "mydb",
+    "collections": 5,
+    "views": 0,
+    "objects": 1523,
+    "avgObjSize": 512,
+    "dataSize": 780288,
+    "storageSize": 1024000,
+    "ok": 1
+  }
+}
+```
 
 
 ## Quick cURL Examples
 
 ```bash
 # Insert a document
-curl -X POST http://localhost:3000/api/insertOne \
+curl -X POST http://localhost:3000/data/v1/action/insertOne \
   -H "Content-Type: application/json" \
   -H "apiKey: your-api-key" \
-  -d '{"collection": "users", "document": {"name": "John Doe"}}'
+  -d '{"dataSource": "main", "database": "mydb", "collection": "users", "document": {"name": "John Doe"}}'
 
 # Find documents
-curl -X POST http://localhost:3000/api/find \
+curl -X POST http://localhost:3000/data/v1/action/find \
   -H "Content-Type: application/json" \
   -H "apiKey: your-api-key" \
-  -d '{"collection": "users", "filter": {"name": "John Doe"}}'
+  -d '{"dataSource": "main", "database": "mydb", "collection": "users", "filter": {"name": "John Doe"}}'
 
 # Update a document
-curl -X POST http://localhost:3000/api/updateOne \
+curl -X POST http://localhost:3000/data/v1/action/updateOne \
   -H "Content-Type: application/json" \
   -H "apiKey: your-api-key" \
-  -d '{"collection": "users", "filter": {"name": "John Doe"}, "update": {"$set": {"active": true}}}'
+  -d '{"dataSource": "main", "database": "mydb", "collection": "users", "filter": {"name": "John Doe"}, "update": {"$set": {"active": true}}}'
+
+# Count documents
+curl -X POST http://localhost:3000/data/v1/action/countDocuments \
+  -H "Content-Type: application/json" \
+  -H "apiKey: your-api-key" \
+  -d '{"dataSource": "main", "database": "mydb", "collection": "users", "filter": {"status": "active"}}'
+
+# Aggregate data
+curl -X POST http://localhost:3000/data/v1/action/aggregate \
+  -H "Content-Type: application/json" \
+  -H "apiKey: your-api-key" \
+  -d '{"dataSource": "main", "database": "mydb", "collection": "orders", "pipeline": [{"$match": {"status": "completed"}}, {"$group": {"_id": "$customerId", "total": {"$sum": "$amount"}}}]}'
 ```
 
 ## Security Considerations
