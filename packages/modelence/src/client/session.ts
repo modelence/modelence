@@ -44,12 +44,14 @@ export async function initSession() {
 
   const parsedUser = user
     ? (() => {
-        const parsedData = z.object({
-          id: z.string(),
-          handle: z.string(),
-          roles: z.array(z.string()),
-        }).parse(user);
-        
+        const parsedData = z
+          .object({
+            id: z.string(),
+            handle: z.string(),
+            roles: z.array(z.string()),
+          })
+          .parse(user);
+
         return Object.freeze({
           ...parsedData,
           hasRole: (role: string) => parsedData.roles.includes(role),
