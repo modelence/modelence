@@ -43,21 +43,23 @@ export async function initSession() {
   setLocalStorageSession(session);
 
   const parsedUser = user
-    ? Object.freeze({
-        ...z
-          .object({
-            id: z.string(),
-            handle: z.string(),
-            roles: z.array(z.string()),
-          })
-          .parse(user),
-        hasRole: (role: string) => (user as any).roles?.includes(role) ?? false,
-        requireRole: (role: string) => {
-          if (!(user as any).roles?.includes(role)) {
-            throw new Error(`Access denied - role '${role}' required`);
-          }
-        },
-      })
+    ? (() => {
+        const parsedData = z.object({
+          id: z.string(),
+          handle: z.string(),
+          roles: z.array(z.string()),
+        }).parse(user);
+        
+        return Object.freeze({
+          ...parsedData,
+          hasRole: (role: string) => parsedData.roles.includes(role),
+          requireRole: (role: string) => {
+            if (!parsedData.roles.includes(role)) {
+              throw new Error(`Access denied - role '${role}' required`);
+            }
+          },
+        });
+      })()
     : null;
 
   useSessionStore.getState().setUser(parsedUser);
