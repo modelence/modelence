@@ -106,6 +106,10 @@ export class Store<
 
   /** @internal */
   getSchema() {
+    return this.schema;
+  }
+
+  getSerializedSchema() {
     return serializeModelSchema(this.schema);
   }
 
