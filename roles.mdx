@@ -1,0 +1,92 @@
+# Roles
+
+Modelence provides built-in support for user roles, allowing you to define custom roles and check user permissions.
+
+## Backend Usage
+
+### Checking User Roles
+
+```typescript
+createMutation('adminAction', {
+  handler: async (args, { user }) => {
+    if (!user?.hasRole('admin')) {
+      throw new Error('Admin access required');
+    }
+    // Admin-only logic here
+  }
+});
+
+// Or use requireRole for cleaner code
+createMutation('adminAction', {
+  handler: async (args, { user }) => {
+    user?.requireRole('admin'); // Throws error if not admin
+    // Admin-only logic here
+  }
+});
+```
+
+### Assigning Roles
+
+```typescript
+import { dbUsers, ObjectId } from 'modelence/server';
+
+// Make user admin
+await dbUsers.updateOne(
+  { _id: new ObjectId(userId) },
+  { $addToSet: { roles: 'admin' } }
+);
+
+// Add multiple roles
+await dbUsers.updateOne(
+  { _id: new ObjectId(userId) },
+  { $addToSet: { roles: { $each: ['moderator', 'editor'] } } }
+);
+
+// Remove a role
+await dbUsers.updateOne(
+  { _id: new ObjectId(userId) },
+  { $pull: { roles: 'admin' } }
+);
+```
+
+## Frontend Usage
+
+### Using User Methods
+
+```typescript
+import { useSession } from 'modelence/client';
+
+function AdminPanel() {
+  const { user } = useSession();
+
+  if (!user?.hasRole('admin')) {
+    return <div>Access denied</div>;
+  }
+
+  return <div>Admin content</div>;
+}
+```
+
+### Conditional Rendering
+
+```typescript
+import { useSession } from 'modelence/client';
+
+function Navigation() {
+  const { user } = useSession();
+
+  return (
+    <nav>
+      <a href="/">Home</a>
+      {user?.hasRole('admin') && <a href="/admin">Admin Panel</a>}
+      {user?.hasRole('moderator') && <a href="/moderate">Moderation</a>}
+    </nav>
+  );
+}
+```
+
+## API Reference
+
+**User Methods:**
+- `user.hasRole(role: string): boolean` - Check if user has a specific role
+- `user.requireRole(role: string): void` - Throw error if user doesn't have role
