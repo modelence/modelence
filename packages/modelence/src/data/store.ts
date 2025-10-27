@@ -26,6 +26,25 @@ import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 
 /**
+ * Helper type to preserve method types when extending a store.
+ * Maps each method to work with the extended schema while preserving signatures.
+ * @internal
+ */
+type PreserveMethodsForExtendedSchema<
+  TBaseMethods extends Record<string, (...args: never[]) => unknown>,
+  TExtendedSchema extends ModelSchema,
+> = {
+  [K in keyof TBaseMethods]: TBaseMethods[K] extends (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this: any,
+    ...args: infer Args
+  ) => infer Return
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this: WithId<InferDocumentType<TExtendedSchema>> & any, ...args: Args) => Return
+    : never;
+};
+
+/**
  * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
  *
  * @category Store
@@ -107,6 +126,62 @@ export class Store<
   /** @internal */
   getSchema() {
     return serializeModelSchema(this.schema);
+  }
+
+  /**
+   * Extends the store with additional fields and indexes.
+   * Returns a new Store instance with the extended schema and updated types.
+   * Methods from the original store are preserved with updated type signatures.
+   *
+   * @param config - Additional fields and indexes to add
+   * @returns A new Store instance with the extended schema
+   *
+   * @example
+   * ```ts
+   * // Extend the users collection
+   * export const dbUsers = baseUsersCollection.extend({
+   *   fields: {
+   *     firstName: schema.string(),
+   *     lastName: schema.string(),
+   *     companyId: schema.objectId().optional(),
+   *   },
+   *   indexes: [
+   *     { key: { companyId: 1 } },
+   *     { key: { lastName: 1, firstName: 1 } },
+   *   ]
+   * });
+   *
+   * // Now fully typed with new fields
+   * const user = await dbUsers.findOne({ firstName: 'John' });
+   * console.log(user?.companyId);
+   * ```
+   */
+  extend<TExtendedSchema extends ModelSchema>(config: {
+    fields?: TExtendedSchema;
+    indexes?: IndexDescription[];
+  }): Store<TSchema & TExtendedSchema, PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema>> {
+    const extendedSchema = {
+      ...this.schema,
+      ...(config.fields || {}),
+    } as TSchema & TExtendedSchema;
+
+    const extendedIndexes = [...this.indexes, ...(config.indexes || [])];
+
+    type ExtendedMethods = PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema>;
+
+    const extendedStore = new Store<TSchema & TExtendedSchema, ExtendedMethods>(this.name, {
+      schema: extendedSchema,
+      methods: this.methods as unknown as ExtendedMethods | undefined,
+      indexes: extendedIndexes,
+      searchIndexes: this.searchIndexes,
+    });
+
+    // If this store is already initialized, initialize the extended store too
+    if (this.client) {
+      extendedStore.init(this.client);
+    }
+
+    return extendedStore;
   }
 
   /** @internal */
