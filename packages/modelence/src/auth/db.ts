@@ -27,6 +27,7 @@ export const usersCollection = new Store('_modelenceUsers', {
       )
       .optional(),
     createdAt: schema.date(),
+    roles: schema.array(schema.string()).optional(),
     authMethods: schema.object({
       password: schema
         .object({

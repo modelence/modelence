@@ -5,6 +5,9 @@ export type User = Document;
 export type UserInfo = {
   id: string;
   handle: string;
+  roles: string[];
+  hasRole: (role: string) => boolean;
+  requireRole: (role: string) => void;
 };
 
 export type Role = string;
