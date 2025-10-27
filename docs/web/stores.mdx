@@ -375,15 +375,15 @@ Stores handle all MongoDB connection management automatically. Just define your 
 
 ## Extending Stores
 
-Use the `extend()` method to add custom fields and indexes to any store, including system collections:
+Use the `extend()` method to add custom schema fields, indexes, methods, and search indexes to any store, including system collections:
 
 ```typescript
 import { schema, type IndexDescription } from 'modelence/server';
 import { dbUsers } from 'modelence/server';
 
-// Extend the users collection with custom fields
+// Extend the users collection
 export const extendedDbUsers = dbUsers.extend({
-  fields: {
+  schema: {
     firstName: schema.string(),
     lastName: schema.string(),
     companyId: schema.objectId().optional(),
@@ -391,17 +391,23 @@ export const extendedDbUsers = dbUsers.extend({
   indexes: [
     { key: { companyId: 1 } },
     { key: { lastName: 1, firstName: 1 } },
-  ]
+  ],
+  methods: {
+    getFullName() {
+      return `${this.firstName} ${this.lastName}`;
+    }
+  }
 });
 
-// Fully typed with new fields!
+// Fully typed with new fields and methods!
 const user = await extendedDbUsers.findOne({ firstName: 'John' });
-console.log(user?.companyId); // ✅ Type-safe
-console.log(user?.handle);    // ✅ Original fields preserved
+console.log(user?.getFullName()); // ✅ Custom methods work
+console.log(user?.companyId);     // ✅ Type-safe fields
+console.log(user?.handle);        // ✅ Original fields preserved
 ```
 
 <Note>
-The `extend()` method creates a new Store instance with the merged schema. The extended store shares the same MongoDB collection as the original.
+The `extend()` method creates a new Store instance with merged schema, methods, indexes, and search indexes. The extended store shares the same MongoDB collection as the original.
 </Note>
 
 ## Best Practices

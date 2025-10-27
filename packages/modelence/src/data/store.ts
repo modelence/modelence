@@ -129,18 +129,18 @@ export class Store<
   }
 
   /**
-   * Extends the store with additional fields and indexes.
+   * Extends the store with additional schema fields, indexes, methods, and search indexes.
    * Returns a new Store instance with the extended schema and updated types.
    * Methods from the original store are preserved with updated type signatures.
    *
-   * @param config - Additional fields and indexes to add
+   * @param config - Additional schema fields, indexes, methods, and search indexes to add
    * @returns A new Store instance with the extended schema
    *
    * @example
    * ```ts
    * // Extend the users collection
    * export const dbUsers = baseUsersCollection.extend({
-   *   fields: {
+   *   schema: {
    *     firstName: schema.string(),
    *     lastName: schema.string(),
    *     companyId: schema.objectId().optional(),
@@ -148,32 +148,56 @@ export class Store<
    *   indexes: [
    *     { key: { companyId: 1 } },
    *     { key: { lastName: 1, firstName: 1 } },
-   *   ]
+   *   ],
+   *   methods: {
+   *     getFullName() {
+   *       return `${this.firstName} ${this.lastName}`;
+   *     }
+   *   }
    * });
    *
    * // Now fully typed with new fields
    * const user = await dbUsers.findOne({ firstName: 'John' });
-   * console.log(user?.companyId);
+   * console.log(user?.getFullName());
    * ```
    */
-  extend<TExtendedSchema extends ModelSchema>(config: {
-    fields?: TExtendedSchema;
+  extend<
+    TExtendedSchema extends ModelSchema,
+    TExtendedMethods extends Record<
+      string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this: WithId<InferDocumentType<TSchema & TExtendedSchema>> & any, ...args: any[]) => any
+    > = Record<string, never>
+  >(config: {
+    schema?: TExtendedSchema;
     indexes?: IndexDescription[];
-  }): Store<TSchema & TExtendedSchema, PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema>> {
+    methods?: TExtendedMethods;
+    searchIndexes?: SearchIndexDescription[];
+  }): Store<
+    TSchema & TExtendedSchema,
+    PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
+  > {
     const extendedSchema = {
       ...this.schema,
-      ...(config.fields || {}),
+      ...(config.schema || {}),
     } as TSchema & TExtendedSchema;
 
     const extendedIndexes = [...this.indexes, ...(config.indexes || [])];
+    const extendedSearchIndexes = [...this.searchIndexes, ...(config.searchIndexes || [])];
 
-    type ExtendedMethods = PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema>;
+    type CombinedMethods = PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> &
+      TExtendedMethods;
 
-    const extendedStore = new Store<TSchema & TExtendedSchema, ExtendedMethods>(this.name, {
+    const combinedMethods = {
+      ...(this.methods || {}),
+      ...(config.methods || {}),
+    } as CombinedMethods | undefined;
+
+    const extendedStore = new Store<TSchema & TExtendedSchema, CombinedMethods>(this.name, {
       schema: extendedSchema,
-      methods: this.methods as unknown as ExtendedMethods | undefined,
+      methods: combinedMethods as unknown as CombinedMethods | undefined,
       indexes: extendedIndexes,
-      searchIndexes: this.searchIndexes,
+      searchIndexes: extendedSearchIndexes,
     });
 
     // If this store is already initialized, initialize the extended store too
