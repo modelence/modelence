@@ -9,7 +9,6 @@ export {
   HttpMethod,
 } from './routes/types';
 export { ObjectId } from 'mongodb';
-export type { IndexDescription } from 'mongodb';
 
 export { createQuery } from './methods';
 

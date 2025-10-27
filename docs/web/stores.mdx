@@ -378,8 +378,7 @@ Stores handle all MongoDB connection management automatically. Just define your 
 Use the `extend()` method to add custom schema fields, indexes, methods, and search indexes to any store, including system collections:
 
 ```typescript
-import { schema, type IndexDescription } from 'modelence/server';
-import { dbUsers } from 'modelence/server';
+import { schema, dbUsers } from 'modelence/server';
 
 // Extend the users collection
 export const extendedDbUsers = dbUsers.extend({
