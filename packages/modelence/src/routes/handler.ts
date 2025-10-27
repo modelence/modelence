@@ -19,18 +19,21 @@ export function createRouteHandler(handler: RouteHandler) {
         // If authentication fails, context remains null
       }
     }
-  
+
     try {
-      const response = await handler({
-        query: req.query as Record<string, string>,
-        body: req.body,
-        params: req.params,
-        headers: req.headers as Record<string, string>,
-        cookies: req.cookies,
-        req,
-        res,
-        next,
-      }, context);
+      const response = await handler(
+        {
+          query: req.query as Record<string, string>,
+          body: req.body,
+          params: req.params,
+          headers: req.headers as Record<string, string>,
+          cookies: req.cookies,
+          req,
+          res,
+          next,
+        },
+        context
+      );
 
       // If the handler returns null, we expect it to handle the response itself
       if (response) {
