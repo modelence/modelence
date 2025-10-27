@@ -167,7 +167,7 @@ export class Store<
       string,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this: WithId<InferDocumentType<TSchema & TExtendedSchema>> & any, ...args: any[]) => any
-    > = Record<string, never>
+    > = Record<string, never>,
   >(config: {
     schema?: TExtendedSchema;
     indexes?: IndexDescription[];
