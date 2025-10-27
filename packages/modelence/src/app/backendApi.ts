@@ -44,7 +44,7 @@ export async function connectCloudBackend({
     const dataModels = Object.values(stores).map((store) => {
       return {
         name: store.getName(),
-        schema: store.getSchema(),
+        schema: store.getSerializedSchema(),
         collections: [store.getName()],
         version: 2,
       };
