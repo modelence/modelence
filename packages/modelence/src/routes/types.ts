@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import type { Context } from '../methods/types';
 
 export type HttpMethod =
   | 'get'
@@ -32,7 +33,8 @@ export type RouteResponse<T = unknown> = {
 } | null;
 
 export type RouteHandler<T = unknown> = (
-  params: RouteParams
+  params: RouteParams,
+  context: Pick<Context, 'session' | 'user'>
 ) => Promise<RouteResponse<T>> | RouteResponse<T>;
 
 export type RouteHandlers = {

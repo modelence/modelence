@@ -1,22 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
 import { RouteHandler } from './types';
 import { ModelenceError } from '../error';
+import { authenticate } from '../auth';
+import { getMongodbUri } from '../db/client';
+import type { Context } from '../methods/types';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
-
 export function createRouteHandler(handler: RouteHandler) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const authToken = req.headers['x-modelence-auth-token'];
+    let context: Pick<Context, 'session' | 'user'> = { session: null, user: null };
+
+    if (typeof authToken === 'string' && getMongodbUri()) {
+      try {
+        const { session, user } = await authenticate(authToken);
+        context = { session, user };
+      } catch (error) {
+        // If authentication fails, context remains null
+      }
+    }
+
     try {
-      const response = await handler({
-        query: req.query as Record<string, string>,
-        body: req.body,
-        params: req.params,
-        headers: req.headers as Record<string, string>,
-        cookies: req.cookies,
-        req,
-        res,
-        next,
-      });
+      const response = await handler(
+        {
+          query: req.query as Record<string, string>,
+          body: req.body,
+          params: req.params,
+          headers: req.headers as Record<string, string>,
+          cookies: req.cookies,
+          req,
+          res,
+          next,
+        },
+        context
+      );
 
       // If the handler returns null, we expect it to handle the response itself
       if (response) {

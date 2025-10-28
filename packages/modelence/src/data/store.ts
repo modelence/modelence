@@ -125,6 +125,11 @@ export class Store<
 
   /** @internal */
   getSchema() {
+    return this.schema;
+  }
+
+  /** @internal */
+  getSerializedSchema() {
     return serializeModelSchema(this.schema);
   }
 
@@ -393,7 +398,9 @@ export class Store<
    * @param document - The document to insert
    * @returns The result of the insert operation
    */
-  async insertOne(document: OptionalUnlessRequiredId<this['_type']>): Promise<InsertOneResult> {
+  async insertOne(
+    document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>
+  ): Promise<InsertOneResult> {
     return await this.requireCollection().insertOne(document);
   }
 
@@ -404,7 +411,7 @@ export class Store<
    * @returns The result of the insert operation
    */
   async insertMany(
-    documents: OptionalUnlessRequiredId<this['_type']>[]
+    documents: OptionalUnlessRequiredId<InferDocumentType<TSchema>>[]
   ): Promise<InsertManyResult> {
     return await this.requireCollection().insertMany(documents);
   }
