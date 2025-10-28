@@ -200,9 +200,10 @@ export class Store<
       searchIndexes: extendedSearchIndexes,
     });
 
-    // If this store is already initialized, initialize the extended store too
     if (this.client) {
-      extendedStore.init(this.client);
+      throw new Error(
+        `Store.extend() must be called before startApp(). Store '${this.name}' has already been initialized and cannot be extended.`
+      );
     }
 
     return extendedStore;
