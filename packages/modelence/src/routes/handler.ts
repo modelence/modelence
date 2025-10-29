@@ -4,9 +4,10 @@ import { ModelenceError } from '../error';
 import { authenticate } from '../auth';
 import { getMongodbUri } from '../db/client';
 import type { Context } from '../methods/types';
+import { startTransaction } from '../telemetry';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
-export function createRouteHandler(handler: RouteHandler) {
+export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const authToken = req.headers['x-modelence-auth-token'];
     let context: Pick<Context, 'session' | 'user'> = { session: null, user: null };
@@ -15,10 +16,18 @@ export function createRouteHandler(handler: RouteHandler) {
       try {
         const { session, user } = await authenticate(authToken);
         context = { session, user };
-      } catch (error) {
+      } catch {
         // If authentication fails, context remains null
       }
     }
+
+    const transaction = startTransaction('route', `route:${method.toLowerCase()}:${path}`, {
+      method,
+      path,
+      query: req.query,
+      body: req.body,
+      params: req.params,
+    });
 
     try {
       const response = await handler(
@@ -34,6 +43,8 @@ export function createRouteHandler(handler: RouteHandler) {
         },
         context
       );
+
+      transaction.end();
 
       // If the handler returns null, we expect it to handle the response itself
       if (response) {
@@ -52,6 +63,8 @@ export function createRouteHandler(handler: RouteHandler) {
         res.send(response.data);
       }
     } catch (error) {
+      transaction.end('error');
+
       if (error instanceof ModelenceError) {
         res.status(error.status).send(error.message);
       } else {

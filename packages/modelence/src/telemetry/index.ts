@@ -19,7 +19,7 @@ interface WrappedTransaction {
 }
 
 export function startTransaction(
-  type: 'method' | 'cron' | 'ai' | 'custom',
+  type: 'method' | 'cron' | 'ai' | 'custom' | 'route',
   name: string,
   context?: Record<string, unknown>
 ): WrappedTransaction {
