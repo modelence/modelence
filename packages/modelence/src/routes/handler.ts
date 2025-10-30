@@ -15,7 +15,7 @@ export function createRouteHandler(handler: RouteHandler) {
       try {
         const { session, user } = await authenticate(authToken);
         context = { session, user };
-      } catch (error) {
+      } catch {
         // If authentication fails, context remains null
       }
     }

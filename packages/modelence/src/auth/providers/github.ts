@@ -73,7 +73,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
 
   const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
   const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
-  const redirectUri = getRedirectUri(req, 'github');
+  const redirectUri = getRedirectUri('github');
 
   try {
     // Exchange code for access token
@@ -135,7 +135,7 @@ function getRouter() {
     checkGitHubEnabled,
     (req: Request, res: Response) => {
       const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
-      const redirectUri = getRedirectUri(req, 'github');
+      const redirectUri = getRedirectUri('github');
       const githubScopes = getConfig('_system.user.auth.github.scopes');
       const scopes = githubScopes
         ? String(githubScopes)

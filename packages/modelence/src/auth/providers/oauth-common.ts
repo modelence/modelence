@@ -4,6 +4,7 @@ import { usersCollection } from '../db';
 import { createSession } from '../session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
+import { getConfig } from '@/server';
 
 export interface OAuthUserData {
   id: string;
@@ -24,8 +25,8 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
   res.redirect('/');
 }
 
-export function getRedirectUri(req: Request, provider: string): string {
-  return `${req.protocol}://${req.get('host')}/api/_internal/auth/${provider}/callback`;
+export function getRedirectUri(provider: string): string {
+  return `${getConfig('_system.site.url')}/api/_internal/auth/${provider}/callback`;
 }
 
 export async function handleOAuthUserAuthentication(
