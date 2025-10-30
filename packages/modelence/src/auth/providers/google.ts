@@ -74,7 +74,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
-  const redirectUri = getRedirectUri(req, 'google');
+  const redirectUri = getRedirectUri('google');
 
   try {
     // Exchange code for tokens
@@ -125,7 +125,7 @@ function getRouter() {
     checkGoogleEnabled,
     (req: Request, res: Response) => {
       const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
-      const redirectUri = getRedirectUri(req, 'google');
+      const redirectUri = getRedirectUri('google');
 
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.append('client_id', googleClientId);
