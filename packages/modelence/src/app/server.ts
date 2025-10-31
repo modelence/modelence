@@ -25,7 +25,7 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
       const { path, handlers } = route;
 
       Object.entries(handlers).forEach(([method, handler]) => {
-        app[method as HttpMethod](path, createRouteHandler(handler));
+        app[method as HttpMethod](path, createRouteHandler(method, path, handler));
       });
     }
   }
