@@ -373,6 +373,42 @@ When your application starts, Modelence will:
 Stores handle all MongoDB connection management automatically. Just define your Store and include it in a module - Modelence takes care of the rest.
 </Tip>
 
+## Extending Stores
+
+Use the `extend()` method to add custom schema fields, indexes, methods, and search indexes to any store, including system collections:
+
+```typescript
+import { schema, dbUsers } from 'modelence/server';
+
+// Extend the users collection
+export const extendedDbUsers = dbUsers.extend({
+  schema: {
+    firstName: schema.string(),
+    lastName: schema.string(),
+    companyId: schema.objectId().optional(),
+  },
+  indexes: [
+    { key: { companyId: 1 } },
+    { key: { lastName: 1, firstName: 1 } },
+  ],
+  methods: {
+    getFullName() {
+      return `${this.firstName} ${this.lastName}`;
+    }
+  }
+});
+
+// Fully typed with new fields and methods!
+const user = await extendedDbUsers.findOne({ firstName: 'John' });
+console.log(user?.getFullName()); // ✅ Custom methods work
+console.log(user?.companyId);     // ✅ Type-safe fields
+console.log(user?.handle);        // ✅ Original fields preserved
+```
+
+<Note>
+The `extend()` method creates a new Store instance with merged schema, methods, indexes, and search indexes. The extended store shares the same MongoDB collection as the original.
+</Note>
+
 ## Best Practices
 
 1. **Define stores per domain** - Keep related data in the same module
@@ -380,6 +416,8 @@ Stores handle all MongoDB connection management automatically. Just define your 
 3. **Leverage custom methods** - Encapsulate business logic in document methods
 4. **Type safety** - Let TypeScript guide you with schema-based types
 5. **Search indexes for Atlas** - Use search indexes for advanced full-text search capabilities
+6. **Extend system collections early** - Extend system collections like `dbUsers` before using them in your application
+7. **Use sparse indexes** - For optional fields with low cardinality, use `sparse: true` to save space
 
 ## API Reference
 
