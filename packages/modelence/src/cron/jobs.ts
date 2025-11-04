@@ -10,7 +10,6 @@ import { Store } from '../data/store';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
-
 /**
  * Interval at which lock heartbeats are updated in the database
  */
@@ -29,7 +28,7 @@ let cronJobsInterval: NodeJS.Timeout;
  * Unique identifier for this cron instance.
  * Generated once per application instance to track which container owns which locks.
  */
-const containerId = randomBytes(32).toString('base64url')
+const containerId = randomBytes(32).toString('base64url');
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -157,7 +156,6 @@ export async function startCronJobs() {
   }
 }
 
-
 /**
  * Updates the heartbeat timestamp for all locks owned by this container
  */
@@ -188,7 +186,6 @@ async function verifyJobLock(alias: string): Promise<boolean> {
     alias,
     'lock.containerId': containerId,
   });
-  console.log("record", record);
   return record !== null;
 }
 
@@ -274,7 +271,6 @@ async function tickCronJobs() {
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
       // Verify we still own the lock before starting the job
       const ownsLock = await verifyJobLock(job.alias);
-      console.log("ownsLock", ownsLock);
       if (ownsLock) {
         await startCronJob(job);
       }
