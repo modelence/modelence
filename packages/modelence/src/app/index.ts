@@ -20,6 +20,7 @@ import { MigrationScript, default as migrationModule, runMigrations } from '../m
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import siteModule from '../site';
+import lockModule from '../lock';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
@@ -74,6 +75,7 @@ export async function startApp({
     migrationModule,
     rateLimitModule,
     siteModule,
+    lockModule,
   ];
   const combinedModules = [...systemModules, ...modules];
 

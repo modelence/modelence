@@ -26,8 +26,11 @@ export const locksCollection = new Store('_modelenceLocks', {
   },
   indexes: [
     {
-      key: { type: 1, containerId: 1 },
+      key: { type: 1 },
       unique: true,
+    },
+    {
+      key: { type: 1, containerId: 1 },
     },
   ],
 });
