@@ -10,8 +10,14 @@ import { acquireLock, verifyLockOwnership, startLockHeartbeat } from '../lock/he
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
+/**
+ * Interval at which we retry acquiring the cron lock if we don't have it
+ */
+const LOCK_RETRY_INTERVAL = time.seconds(30);
+
 const cronJobs: Record<string, CronJob> = {};
-let cronJobsInterval: NodeJS.Timeout;
+let cronJobsInterval: NodeJS.Timeout | null = null;
+let cronJobsStarted = false;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -54,44 +60,79 @@ export function defineCronJob(
   };
 }
 
+/**
+ * Initializes the cron job scheduler.
+ * Attempts to acquire the cron lock and start cron jobs.
+ * If the lock is held by another instance, periodically retries.
+ */
 export async function startCronJobs() {
-  if (cronJobsInterval) {
+  if (cronJobsStarted) {
     throw new Error('Cron jobs already started');
   }
 
   const aliasList = Object.keys(cronJobs);
-  if (aliasList.length > 0) {
-    // Try to acquire the cron lock
-    const lockAcquired = await acquireLock('cron');
+  if (aliasList.length === 0) {
+    return;
+  }
 
-    if (!lockAcquired) {
-      // There's another active instance holding the cron lock, DO NOT take it over
-      console.log('Cron jobs are already locked by another active instance');
+  cronJobsStarted = true;
+
+  await tryAcquireLockAndStartJobs();
+
+  setInterval(async () => {
+    if (!cronJobsInterval) {
+      // We don't have the lock, try to acquire it
+      await tryAcquireLockAndStartJobs();
+    }
+  }, LOCK_RETRY_INTERVAL);
+}
+
+/**
+ * Attempts to acquire the cron lock and start the cron job scheduler.
+ * If the lock is acquired, initializes job schedules and starts the tick interval.
+ */
+async function tryAcquireLockAndStartJobs() {
+  const aliasList = Object.keys(cronJobs);
+  if (aliasList.length === 0) {
+    return;
+  }
+
+  // Try to acquire the cron lock
+  const lockAcquired = await acquireLock('cron');
+
+  if (!lockAcquired) {
+    // There's another active instance holding the cron lock
+    if (!cronJobsInterval) {
+      console.log('Cron jobs are locked by another instance, will retry later');
+    }
+    return;
+  }
+
+  console.log('Acquired cron lock, starting cron jobs');
+
+  // Load job schedules from database
+  const cronJobRecords = await cronJobsCollection.fetch({
+    alias: { $in: aliasList },
+  });
+  const nowTimestamp = Date.now();
+  cronJobRecords.forEach((record) => {
+    const job = cronJobs[record.alias];
+    if (!job) {
       return;
     }
+    job.state.scheduledRunTs = record.lastStartDate
+      ? record.lastStartDate.getTime() + job.params.interval
+      : nowTimestamp;
+  });
+  Object.values(cronJobs).forEach((job) => {
+    if (!job.state.scheduledRunTs) {
+      job.state.scheduledRunTs = nowTimestamp;
+    }
+  });
 
-    const cronJobRecords = await cronJobsCollection.fetch({
-      alias: { $in: aliasList },
-    });
-    const nowTimestamp = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : nowTimestamp;
-    });
-    Object.values(cronJobs).forEach((job) => {
-      if (!job.state.scheduledRunTs) {
-        job.state.scheduledRunTs = nowTimestamp;
-      }
-    });
-
-    cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
-    startLockHeartbeat('cron');
-  }
+  // Start the cron job tick interval and heartbeat
+  cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
+  startLockHeartbeat('cron');
 }
 
 /**
@@ -103,55 +144,20 @@ async function verifyCronLock(): Promise<boolean> {
 
 /**
  * Checks if this container still owns the cron lock.
- * Also attempts to acquire the lock if it has become stale (from crashed instances).
+ * If the lock was lost, stops the cron job execution.
  */
-async function verifyAndAcquireLock() {
-  const aliasList = Object.keys(cronJobs);
-  if (aliasList.length === 0) {
-    return;
-  }
-
-  // Check if we still own the lock
+async function verifyLockOwnershipAndStop() {
   const ownsLock = await verifyCronLock();
 
-  if (ownsLock) {
-    // We still own the lock, nothing to do
-    return;
-  }
-
-  // We don't own the lock, try to acquire it if it's stale
-  const lockAcquired = await acquireLock('cron');
-
-  if (lockAcquired) {
-    console.log('Acquired stale cron lock from crashed instance');
-
-    // Reset all job states since we're taking over
-    const jobs = Object.values(cronJobs);
-    for (const job of jobs) {
-      job.state.isRunning = false;
-      job.state.startTs = undefined;
-    }
-
-    // Reschedule jobs based on their last start dates
-    const cronJobRecords = await cronJobsCollection.fetch({
-      alias: { $in: aliasList },
-    });
-
-    const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (job) {
-        job.state.scheduledRunTs = record.lastStartDate
-          ? record.lastStartDate.getTime() + job.params.interval
-          : now;
-      }
-    });
+  if (!ownsLock && cronJobsInterval) {
+    console.log('Lost cron lock, stopping job execution');
+    clearInterval(cronJobsInterval);
+    cronJobsInterval = null;
   }
 }
 
 async function tickCronJobs() {
-  // Periodically verify locks and acquire stale ones
-  await verifyAndAcquireLock();
+  await verifyLockOwnershipAndStop();
 
   const now = Date.now();
   const jobs = Object.values(cronJobs);
@@ -169,7 +175,6 @@ async function tickCronJobs() {
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      // Verify we still own the cron lock before starting the job
       const ownsLock = await verifyCronLock();
       if (ownsLock) {
         await startCronJob(job);
@@ -183,7 +188,6 @@ async function startCronJob(job: CronJob) {
   state.isRunning = true;
   state.startTs = Date.now();
 
-  // Update the database to record job start before executing
   await cronJobsCollection.updateOne(
     { alias },
     {
