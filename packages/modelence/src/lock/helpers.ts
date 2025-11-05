@@ -5,17 +5,17 @@ import { locksCollection } from './collection';
  * Unique identifier for this application instance.
  * Generated once per application instance to track which container owns which locks.
  */
-export const containerId = randomBytes(32).toString('base64url');
+const containerId = randomBytes(32).toString('base64url');
 
 /**
  * Time after which a lock is considered stale if no heartbeat update was received
  */
-export const LOCK_STALE_THRESHOLD_MS = 30000; // 30 seconds
+const LOCK_STALE_THRESHOLD_MS = 30000; // 30 seconds
 
 /**
  * Interval at which lock heartbeats are updated in the database
  */
-export const LOCK_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
+const LOCK_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 
 /**
  * Map of lock types to their heartbeat interval timers
@@ -101,7 +101,7 @@ export async function releaseLock(type: string): Promise<boolean> {
  * @param type - The type of lock to update
  * @returns true if heartbeat was updated, false if lock wasn't owned by this container
  */
-export async function updateLockHeartbeat(type: string): Promise<boolean> {
+async function updateLockHeartbeat(type: string): Promise<boolean> {
   const result = await locksCollection.updateOne(
     {
       type,
@@ -127,28 +127,6 @@ export async function verifyLockOwnership(type: string): Promise<boolean> {
   const lock = await locksCollection.findOne({
     type,
     containerId,
-  });
-
-  return lock !== null;
-}
-
-/**
- * Checks if a lock of the specified type exists and is stale.
- *
- * @param type - The type of lock to check
- * @param staleThreshold - Time in ms after which a lock is considered stale (default: 30s)
- * @returns true if a stale lock exists, false otherwise
- */
-export async function isStaleLock(
-  type: string,
-  staleThreshold: number = LOCK_STALE_THRESHOLD_MS
-): Promise<boolean> {
-  const staleThresholdDate = new Date(Date.now() - staleThreshold);
-
-  const lock = await locksCollection.findOne({
-    type,
-    containerId: { $ne: containerId },
-    heartbeatAt: { $lt: staleThresholdDate },
   });
 
   return lock !== null;
