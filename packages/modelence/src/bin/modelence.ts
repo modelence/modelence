@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { setup } from './setup';
 import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
 import { loadEnv } from './config';
 
-const program = new Command().name('modelence').description('Modelence CLI tool').version('0.2.1');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
+
+const program = new Command().name('modelence').description('Modelence CLI tool').version(packageJson.version);
 
 program
   .command('setup')
