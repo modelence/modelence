@@ -5,6 +5,7 @@ import { authenticate } from '@/auth';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
 import { ServerChannel } from '../serverChannel';
+import { Collection, Document } from 'mongodb';
 
 let socketServer: SocketServer | null = null;
 
@@ -19,22 +20,21 @@ export async function init({
 }) {
   const mongodbClient = getClient();
 
-  if (!mongodbClient) {
-    console.error('Socket.IO initialization failed: MongoDB client is not initialized');
-    throw new Error('Mongodb Client is not initialized');
-  }
-
   console.log('Initializing Socket.IO server...');
 
-  const mongoCollection = mongodbClient.db().collection(COLLECTION);
+  let mongoCollection: Collection<Document> | null = null;
 
-  try {
-    await mongoCollection.createIndex(
-      { createdAt: 1 },
-      { expireAfterSeconds: 3600, background: true }
-    );
-  } catch (error) {
-    console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+  if (mongodbClient) {
+    mongoCollection = mongodbClient.db().collection(COLLECTION);
+
+    try {
+      await mongoCollection.createIndex(
+        { createdAt: 1 },
+        { expireAfterSeconds: 3600, background: true }
+      );
+    } catch (error) {
+      console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+    }
   }
 
   socketServer = new SocketServer(httpServer, {
@@ -42,7 +42,7 @@ export async function init({
       origin: '*',
       methods: ['GET', 'POST'],
     },
-    adapter: createAdapter(mongoCollection),
+    adapter: mongoCollection ? createAdapter(mongoCollection) : undefined,
     transports: ['polling', 'websocket'],
     allowUpgrades: true,
     perMessageDeflate: false,
