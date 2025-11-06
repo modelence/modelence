@@ -5,7 +5,7 @@ import { authenticate } from '@/auth';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
 import { ServerChannel } from '../serverChannel';
-import { Collection, Document } from 'mongodb';
+import type { Collection, Document } from 'mongodb';
 
 let socketServer: SocketServer | null = null;
 
