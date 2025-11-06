@@ -14,7 +14,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 
-const program = new Command().name('modelence').description('Modelence CLI tool').version(packageJson.version);
+const program = new Command()
+  .name('modelence')
+  .description('Modelence CLI tool')
+  .version(packageJson.version);
 
 program
   .command('setup')

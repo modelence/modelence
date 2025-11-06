@@ -107,7 +107,13 @@ async function createBundle(bundlePath: string) {
   );
 }
 
-async function uploadBundle(appAlias: string, envAlias: string, bundlePath: string, token: string, host: string) {
+async function uploadBundle(
+  appAlias: string,
+  envAlias: string,
+  bundlePath: string,
+  token: string,
+  host: string
+) {
   const response = await fetch(`${host}/api/upload-bundle`, {
     method: 'POST',
     headers: {
