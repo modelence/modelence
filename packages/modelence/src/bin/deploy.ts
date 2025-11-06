@@ -16,7 +16,7 @@ export async function deploy(options: { app: string; env: string; host?: string 
 
   await createBundle(bundlePath);
 
-  const { token } = await authenticateCli();
+  const { token } = await authenticateCli(host);
 
   const { bundleName } = await uploadBundle(options.app, options.env, bundlePath, token, host);
 
