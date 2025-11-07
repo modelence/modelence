@@ -1,6 +1,10 @@
 ---
 sidebar_position: 1
-sidebarTitle: getConfig (server)
+sidebarTitle: |-
+  getConfig (server)
+
+  Retrieves a configuration value by key. Configuration values can be set via environment variables
+  or managed through the Modelence Cloud Backend.
 title: getConfig
 ---
 
@@ -8,18 +12,53 @@ title: getConfig
 
 > **getConfig**(`key`): `string` \| `number` \| `boolean`
 
-Defined in: [src/config/server.ts:13](https://github.com/modelence/modelence/blob/3c6ef78ab27461c42088e9fb28636eaac3b7f5eb/packages/modelence/src/config/server.ts#L13)
+Defined in: [src/config/server.ts:46](https://github.com/modelence/modelence/blob/5a43bca087f9c3d4223f83f5e962ea79c59da20b/packages/modelence/src/config/server.ts#L46)
 
 ## Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `key` | `string` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `key` | `string` | The configuration key to retrieve |
 
 ## Returns
 
 `string` \| `number` \| `boolean`
 
+The configuration value (string, number, or boolean)
+
 ## Sidebar Title
 
 getConfig (server)
+
+Retrieves a configuration value by key. Configuration values can be set via environment variables
+or managed through the Modelence Cloud Backend.
+
+## Examples
+
+```ts
+import { getConfig } from 'modelence/server';
+
+// Get the site URL
+const siteUrl = getConfig('_system.site.url');
+```
+
+Set via environment variable:
+```bash
+MODELENCE_SITE_URL=https://myapp.com
+```
+
+```ts
+import { getConfig } from 'modelence/server';
+
+// Get the current environment (e.g., 'development', 'staging', 'production')
+const env = getConfig('_system.site.env');
+
+if (env === 'production') {
+  // Enable production features
+}
+```
+
+Set via environment variable:
+```bash
+MODELENCE_SITE_ENV=production
+```
