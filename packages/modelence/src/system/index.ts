@@ -22,6 +22,5 @@ export default new Module('_system', {
       isPublic: false,
       default: 'info',
     },
-    
   },
 });
