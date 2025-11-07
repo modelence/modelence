@@ -7,5 +7,10 @@ export default new Module('_system.site', {
       isPublic: true,
       default: '',
     },
+    env: {
+      type: 'string',
+      isPublic: true,
+      default: '',
+    },
   },
 });
