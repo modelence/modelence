@@ -236,7 +236,7 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
   MODELENCE_LOG_LEVEL: '_system.log.level',
   MODELENCE_SITE_URL: '_system.site.url',
-  MODELENCE_SITE_ENV: '_system.site.env',
+  MODELENCE_ENV: '_system.env',
   // deprecated
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',

@@ -7,6 +7,11 @@ export default new Module('_system', {
       isPublic: false,
       default: '',
     },
+    env: {
+      type: 'string',
+      isPublic: true,
+      default: '',
+    },
     'site.url': {
       type: 'string',
       isPublic: true,
@@ -17,5 +22,6 @@ export default new Module('_system', {
       isPublic: false,
       default: 'info',
     },
+    
   },
 });
