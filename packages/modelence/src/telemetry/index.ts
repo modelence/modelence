@@ -1,15 +1,36 @@
 import { getLogger, getApm } from '@/app/metrics';
 import { isTelemetryEnabled } from '@/app/state';
+import { getConfig } from '@/config/server';
+
+function getLogLevel() {
+  return getConfig('_system.log.level') as 'debug' | 'info' | 'error';
+}
+
+export function logDebug(message: string, args: object) {
+  if (getLogLevel() === 'debug') {
+     if (isTelemetryEnabled()) {
+      getLogger().debug(message, args);
+    } else {
+      console.debug(message, args);
+    }
+  }
+}
 
 export function logInfo(message: string, args: object) {
-  if (isTelemetryEnabled()) {
-    getLogger().info(message, args);
+  if (['debug', 'info'].includes(getLogLevel())) {
+    if (isTelemetryEnabled()) {
+      getLogger().info(message, args);
+    } else {
+      console.info(message, args);
+    } 
   }
 }
 
 export function logError(message: string, args: object) {
   if (isTelemetryEnabled()) {
     getLogger().error(message, args);
+  } else {
+    console.error(message, args);
   }
 }
 

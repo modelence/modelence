@@ -1,1 +1,1 @@
-export { startTransaction, captureError, logInfo, logError } from './telemetry/index';
+export { startTransaction, captureError, logInfo, logError, logDebug } from './telemetry/index';

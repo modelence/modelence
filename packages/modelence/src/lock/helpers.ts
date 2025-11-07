@@ -1,5 +1,7 @@
 import { randomBytes } from 'crypto';
 import { locksCollection } from './collection';
+import { logDebug } from '../telemetry';
+import { time } from '@/time';
 
 /**
  * Unique identifier for this application instance.
@@ -8,87 +10,82 @@ import { locksCollection } from './collection';
 const containerId = randomBytes(32).toString('base64url');
 
 /**
- * Time after which a lock is considered stale if no heartbeat update was received
+ * Time after which a lock is expired
  */
-const LOCK_STALE_THRESHOLD_MS = 30000; // 30 seconds
+const DEFAULT_LOCK_DURATION = time.seconds(30);
 
 /**
- * Interval at which lock heartbeats are updated in the database
- */
-const LOCK_HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
-
-/**
- * Map of lock types to their heartbeat interval timers
- */
-const heartbeatIntervals = new Map<string, NodeJS.Timeout>();
-
-/**
- * Acquires a lock of the specified type.
+ * Acquires a lock of the specified resource.
  * If the lock already exists and is owned by another container, this will fail.
- * If the lock is stale (no recent heartbeat), it will be taken over.
+ * If the lock is expired (no recent heartbeat), it will be taken over.
  *
- * @param type - The type of lock to acquire
- * @param staleThreshold - Time in ms after which a lock is considered stale (default: 30s)
+ * @param resource - The type of lock to acquire
+ * @param lockDuration - Time in ms after which a lock is considered expired (default: 30s)
  * @returns true if lock was acquired, false otherwise
  */
 export async function acquireLock(
-  type: string,
-  staleThreshold: number = LOCK_STALE_THRESHOLD_MS
+  resource: string,
+  lockDuration: number = DEFAULT_LOCK_DURATION
 ): Promise<boolean> {
   const now = new Date();
-  const staleThresholdDate = new Date(now.getTime() - staleThreshold);
+  const staleThresholdDate = new Date(now.getTime() - lockDuration);
 
-  console.log(`Attempting to acquire lock: ${type}`);
+  logDebug(`Attempting to acquire lock: ${resource}`, {
+    source: 'lock',
+    resource,
+    containerId,
+  });
 
-  // Try to insert a new lock
   try {
-    await locksCollection.insertOne({
-      type,
-      containerId,
-      acquiredAt: now,
-      heartbeatAt: now,
-    });
-    return true;
-  } catch {
-    // Lock already exists, check if it's stale
-    const existingLock = await locksCollection.findOne({
-      type,
-      heartbeatAt: { $lt: staleThresholdDate },
+    const result = await locksCollection.upsertOne({
+      $or: [
+        { resource, containerId },
+        { resource, acquiredAt: { $lt: staleThresholdDate } },
+      ],
+    }, {
+      $set: {
+        resource,
+        containerId,
+        acquiredAt: now,
+      },
     });
 
-    if (!existingLock) {
-      // Lock exists and is not stale
-      return false;
+    const isLockAcquired = result.upsertedCount > 0 || result.modifiedCount > 0;
+
+    if (isLockAcquired) {
+      logDebug(`Lock acquired: ${resource}`, {
+        source: 'lock',
+        resource,
+        containerId,
+      });
+    } else {
+      logDebug(`Failed to acquire lock (already held): ${resource}`, {
+        source: 'lock',
+        resource,
+        containerId,
+      });
     }
 
-    // Try to acquire the stale lock
-    const result = await locksCollection.updateOne(
-      {
-        type,
-        heartbeatAt: { $lt: staleThresholdDate },
-      },
-      {
-        $set: {
-          containerId,
-          acquiredAt: now,
-          heartbeatAt: now,
-        },
-      }
-    );
-
-    return result.modifiedCount > 0;
+    return isLockAcquired;
+  } catch {
+    logDebug(`Failed to acquire lock (already held): ${resource}`, {
+      source: 'lock',
+      resource,
+      containerId,
+    });
+    return false;
   }
 }
 
 /**
- * Releases a lock of the specified type owned by this container.
+ * Releases a lock of the specified resource owned by this container.
  *
- * @param type - The type of lock to release
+ * @param resource - The resource to release the lock for
  * @returns true if lock was released, false if lock wasn't owned by this container
  */
-export async function releaseLock(type: string): Promise<boolean> {
+export async function releaseLock(resource: string): Promise<boolean> {
   const result = await locksCollection.deleteOne({
-    type,
+    resource,
     containerId,
   });
 
@@ -96,85 +93,16 @@ export async function releaseLock(type: string): Promise<boolean> {
 }
 
 /**
- * Updates the heartbeat timestamp for a lock owned by this container.
+ * Verifies that this container owns the lock of the specified resource.
  *
- * @param type - The type of lock to update
- * @returns true if heartbeat was updated, false if lock wasn't owned by this container
- */
-async function updateLockHeartbeat(type: string): Promise<boolean> {
-  const result = await locksCollection.updateOne(
-    {
-      type,
-      containerId,
-    },
-    {
-      $set: {
-        heartbeatAt: new Date(),
-      },
-    }
-  );
-
-  return result.modifiedCount > 0;
-}
-
-/**
- * Verifies that this container owns the lock of the specified type.
- *
- * @param type - The type of lock to verify
+ * @param resource - The resource to verify
  * @returns true if this container owns the lock, false otherwise
  */
-export async function verifyLockOwnership(type: string): Promise<boolean> {
+export async function verifyLockOwnership(resource: string): Promise<boolean> {
   const lock = await locksCollection.findOne({
-    type,
+    resource,
     containerId,
   });
 
   return lock !== null;
-}
-
-/**
- * Starts a periodic heartbeat update for a lock of the specified type.
- * The heartbeat will be updated every LOCK_HEARTBEAT_INTERVAL_MS.
- * If a heartbeat is already running for this lock type, this is a no-op.
- *
- * @param type - The type of lock to start heartbeat for
- * @param interval - Custom interval in ms (default: 5 seconds)
- */
-export function startLockHeartbeat(
-  type: string,
-  interval: number = LOCK_HEARTBEAT_INTERVAL_MS
-): void {
-  // Don't start if already running
-  if (heartbeatIntervals.has(type)) {
-    return;
-  }
-
-  const intervalId = setInterval(async () => {
-    await updateLockHeartbeat(type);
-  }, interval);
-
-  heartbeatIntervals.set(type, intervalId);
-}
-
-/**
- * Stops the periodic heartbeat update for a lock of the specified type.
- *
- * @param type - The type of lock to stop heartbeat for
- */
-export function stopLockHeartbeat(type: string): void {
-  const intervalId = heartbeatIntervals.get(type);
-  if (intervalId) {
-    clearInterval(intervalId);
-    heartbeatIntervals.delete(type);
-  }
-}
-
-/**
- * Stops all running lock heartbeats.
- */
-export function stopAllLockHeartbeats(): void {
-  for (const [type, intervalId] of heartbeatIntervals.entries()) {
-    clearInterval(intervalId);
-    heartbeatIntervals.delete(type);
-  }
 }

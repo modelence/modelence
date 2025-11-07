@@ -6,7 +6,7 @@ import { startTransaction, captureError } from '@/telemetry';
 import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
-import { acquireLock, verifyLockOwnership, startLockHeartbeat } from '../lock/helpers';
+import { acquireLock } from '../lock/helpers';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
@@ -101,14 +101,8 @@ async function tryAcquireLockAndStartJobs() {
   const lockAcquired = await acquireLock('cron');
 
   if (!lockAcquired) {
-    // There's another active instance holding the cron lock
-    if (!cronJobsInterval) {
-      console.log('Cron jobs are locked by another instance, will retry later');
-    }
     return;
   }
-
-  console.log('Acquired cron lock, starting cron jobs');
 
   // Load job schedules from database
   const cronJobRecords = await cronJobsCollection.fetch({
@@ -132,33 +126,9 @@ async function tryAcquireLockAndStartJobs() {
 
   // Start the cron job tick interval and heartbeat
   cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
-  startLockHeartbeat('cron');
-}
-
-/**
- * Verifies that this container owns the cron lock
- */
-async function verifyCronLock(): Promise<boolean> {
-  return verifyLockOwnership('cron');
-}
-
-/**
- * Checks if this container still owns the cron lock.
- * If the lock was lost, stops the cron job execution.
- */
-async function verifyLockOwnershipAndStop() {
-  const ownsLock = await verifyCronLock();
-
-  if (!ownsLock && cronJobsInterval) {
-    console.log('Lost cron lock, stopping job execution');
-    clearInterval(cronJobsInterval);
-    cronJobsInterval = null;
-  }
 }
 
 async function tickCronJobs() {
-  await verifyLockOwnershipAndStop();
-
   const now = Date.now();
   const jobs = Object.values(cronJobs);
 
@@ -175,7 +145,7 @@ async function tickCronJobs() {
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      const ownsLock = await verifyCronLock();
+      const ownsLock = await acquireLock('cron');
       if (ownsLock) {
         await startCronJob(job);
       }
