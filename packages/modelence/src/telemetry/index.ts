@@ -8,7 +8,7 @@ function getLogLevel() {
 
 export function logDebug(message: string, args: object) {
   if (getLogLevel() === 'debug') {
-     if (isTelemetryEnabled()) {
+    if (isTelemetryEnabled()) {
       getLogger().debug(message, args);
     } else {
       console.debug(message, args);
@@ -22,7 +22,7 @@ export function logInfo(message: string, args: object) {
       getLogger().info(message, args);
     } else {
       console.info(message, args);
-    } 
+    }
   }
 }
 

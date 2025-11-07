@@ -37,18 +37,21 @@ export async function acquireLock(
   });
 
   try {
-    const result = await locksCollection.upsertOne({
-      $or: [
-        { resource, containerId },
-        { resource, acquiredAt: { $lt: staleThresholdDate } },
-      ],
-    }, {
-      $set: {
-        resource,
-        containerId,
-        acquiredAt: now,
+    const result = await locksCollection.upsertOne(
+      {
+        $or: [
+          { resource, containerId },
+          { resource, acquiredAt: { $lt: staleThresholdDate } },
+        ],
       },
-    });
+      {
+        $set: {
+          resource,
+          containerId,
+          acquiredAt: now,
+        },
+      }
+    );
 
     const isLockAcquired = result.upsertedCount > 0 || result.modifiedCount > 0;
 

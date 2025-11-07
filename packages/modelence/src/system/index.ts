@@ -2,7 +2,7 @@ import { Module } from '../app/module';
 
 export default new Module('_system', {
   configSchema: {
-    'mongodbUrl': {
+    mongodbUrl: {
       type: 'string',
       isPublic: false,
       default: '',
