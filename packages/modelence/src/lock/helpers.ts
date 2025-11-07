@@ -43,10 +43,10 @@ export async function acquireLock(
     lockCacheDuration = DEFAULT_CACHE_DURATION,
     instanceId = INSTANCE_ID,
   }: {
-    lockDuration: number;
-    lockCacheDuration: number;
-    instanceId: string;
-  }
+    lockDuration?: number;
+    lockCacheDuration?: number;
+    instanceId?: string;
+  } = {}
 ): Promise<boolean> {
   const now = Date.now();
   if (lockCache[resource]) {
@@ -125,8 +125,8 @@ export async function releaseLock(
   {
     instanceId = INSTANCE_ID,
   }: {
-    instanceId: string;
-  }
+    instanceId?: string;
+  } = {}
 ): Promise<boolean> {
   const result = await locksCollection.deleteOne({
     resource,
