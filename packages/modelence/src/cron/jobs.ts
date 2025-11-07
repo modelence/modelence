@@ -10,7 +10,6 @@ import { acquireLock } from '../lock/helpers';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
-
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 
