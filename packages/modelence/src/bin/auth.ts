@@ -1,12 +1,11 @@
-import { getStudioUrl } from './config';
 import open from 'open';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
-export async function authenticateCli() {
+export async function authenticateCli(host: string) {
   // TODO: check if a token already exists in .modelence/auth.json
 
-  const response = await fetch(getStudioUrl('/api/cli/auth'), {
+  const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
   });
 
@@ -21,20 +20,20 @@ export async function authenticateCli() {
 
   await open(verificationUrl);
 
-  const token = await waitForAuth(code);
+  const token = await waitForAuth(host, code);
 
   writeFileSync(join(process.cwd(), '.modelence', 'auth.json'), JSON.stringify({ token }));
 
   return { token };
 }
 
-async function waitForAuth(code: string): Promise<string> {
+async function waitForAuth(host: string, code: string): Promise<string> {
   const pollInterval = 5 * 1000; // 5 seconds
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
   const pollExpireTs = Date.now() + pollTimeout;
   while (Date.now() < pollExpireTs) {
     try {
-      const token = await pollForToken(code);
+      const token = await pollForToken(host, code);
       if (token) {
         return token;
       }
@@ -47,8 +46,8 @@ async function waitForAuth(code: string): Promise<string> {
   throw new Error('Unable to authenticate CLI - timed out. Please try again.');
 }
 
-async function pollForToken(code: string) {
-  const response = await fetch(getStudioUrl(`/api/cli/token?code=${code}`), {
+async function pollForToken(host: string, code: string) {
+  const response = await fetch(`${host}/api/cli/token?code=${code}`, {
     method: 'GET',
   });
 

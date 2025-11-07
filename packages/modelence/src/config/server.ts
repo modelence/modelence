@@ -7,8 +7,41 @@ let isInitialized = false;
 /**
  * @sidebarTitle getConfig (server)
  *
- * @param key
- * @returns
+ * Retrieves a configuration value by key. Configuration values can be set via environment variables
+ * or managed through the Modelence Cloud Backend.
+ *
+ * @param key - The configuration key to retrieve
+ * @returns The configuration value (string, number, or boolean)
+ *
+ * @example
+ * ```ts
+ * import { getConfig } from 'modelence/server';
+ *
+ * // Get the site URL
+ * const siteUrl = getConfig('_system.site.url');
+ * ```
+ *
+ * Set via environment variable:
+ * ```bash
+ * MODELENCE_SITE_URL=https://myapp.com
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { getConfig } from 'modelence/server';
+ *
+ * // Get the current environment (e.g., 'development', 'staging', 'production')
+ * const env = getConfig('_system.site.env');
+ *
+ * if (env === 'production') {
+ *   // Enable production features
+ * }
+ * ```
+ *
+ * Set via environment variable:
+ * ```bash
+ * MODELENCE_SITE_ENV=production
+ * ```
  */
 export function getConfig(key: ConfigKey) {
   return config[key]?.value;
