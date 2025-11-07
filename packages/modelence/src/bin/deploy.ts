@@ -2,22 +2,23 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getStudioUrl, getProjectPath } from './config';
+import { getProjectPath, getStudioUrl } from './config';
 import { build } from './build';
 
-export async function deploy(options: { app: string; env: string }) {
+export async function deploy(options: { app: string; env: string; host?: string }) {
   const cwd = process.cwd();
   const modelenceDir = join(cwd, '.modelence');
 
   const bundlePath = join(modelenceDir, 'tmp', 'bundle.zip');
+  const host = options.host || getStudioUrl('');
 
   await build();
 
   await createBundle(bundlePath);
 
-  const { token } = await authenticateCli();
+  const { token } = await authenticateCli(host);
 
-  const { bundleName } = await uploadBundle(options.app, options.env, bundlePath, token);
+  const { bundleName } = await uploadBundle(options.app, options.env, bundlePath, token, host);
 
   await fs.unlink(bundlePath);
 
@@ -26,7 +27,8 @@ export async function deploy(options: { app: string; env: string }) {
     options.env,
     bundleName,
     join('.modelence', 'build', 'app.mjs'),
-    token
+    token,
+    host
   );
 }
 
@@ -105,8 +107,14 @@ async function createBundle(bundlePath: string) {
   );
 }
 
-async function uploadBundle(appAlias: string, envAlias: string, bundlePath: string, token: string) {
-  const response = await fetch(getStudioUrl(`/api/upload-bundle`), {
+async function uploadBundle(
+  appAlias: string,
+  envAlias: string,
+  bundlePath: string,
+  token: string,
+  host: string
+) {
+  const response = await fetch(`${host}/api/upload-bundle`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -149,9 +157,10 @@ async function triggerDeployment(
   envAlias: string,
   bundleName: string,
   entryPoint: string,
-  token: string
+  token: string,
+  host: string
 ) {
-  const response = await fetch(getStudioUrl(`/api/deploy`), {
+  const response = await fetch(`${host}/api/deploy`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
