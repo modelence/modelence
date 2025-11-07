@@ -10,14 +10,9 @@ import { acquireLock } from '../lock/helpers';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
-/**
- * Interval at which we retry acquiring the cron lock if we don't have it
- */
-const LOCK_RETRY_INTERVAL = time.seconds(30);
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
-let cronJobsStarted = false;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -60,97 +55,64 @@ export function defineCronJob(
   };
 }
 
-/**
- * Initializes the cron job scheduler.
- * Attempts to acquire the cron lock and start cron jobs.
- * If the lock is held by another instance, periodically retries.
- */
 export async function startCronJobs() {
-  if (cronJobsStarted) {
+  if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
   }
 
   const aliasList = Object.keys(cronJobs);
-  if (aliasList.length === 0) {
-    return;
+  if (aliasList.length > 0) {
+    const aliasSelector = { alias: { $in: aliasList } };
+
+    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+    const now = Date.now();
+    cronJobRecords.forEach((record) => {
+      const job = cronJobs[record.alias];
+      if (!job) {
+        return;
+      }
+      job.state.scheduledRunTs = record.lastStartDate
+        ? record.lastStartDate.getTime() + job.params.interval
+        : now;
+    });
+    Object.values(cronJobs).forEach((job) => {
+      if (!job.state.scheduledRunTs) {
+        job.state.scheduledRunTs = now;
+      }
+    });
+
+    cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
-
-  cronJobsStarted = true;
-
-  await tryAcquireLockAndStartJobs();
-
-  setInterval(async () => {
-    if (!cronJobsInterval) {
-      // We don't have the lock, try to acquire it
-      await tryAcquireLockAndStartJobs();
-    }
-  }, LOCK_RETRY_INTERVAL);
-}
-
-/**
- * Attempts to acquire the cron lock and start the cron job scheduler.
- * If the lock is acquired, initializes job schedules and starts the tick interval.
- */
-async function tryAcquireLockAndStartJobs() {
-  const aliasList = Object.keys(cronJobs);
-  if (aliasList.length === 0) {
-    return;
-  }
-
-  // Try to acquire the cron lock
-  const lockAcquired = await acquireLock('cron');
-
-  if (!lockAcquired) {
-    return;
-  }
-
-  // Load job schedules from database
-  const cronJobRecords = await cronJobsCollection.fetch({
-    alias: { $in: aliasList },
-  });
-  const nowTimestamp = Date.now();
-  cronJobRecords.forEach((record) => {
-    const job = cronJobs[record.alias];
-    if (!job) {
-      return;
-    }
-    job.state.scheduledRunTs = record.lastStartDate
-      ? record.lastStartDate.getTime() + job.params.interval
-      : nowTimestamp;
-  });
-  Object.values(cronJobs).forEach((job) => {
-    if (!job.state.scheduledRunTs) {
-      job.state.scheduledRunTs = nowTimestamp;
-    }
-  });
-
-  // Start the cron job tick interval and heartbeat
-  cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
 }
 
 async function tickCronJobs() {
   const now = Date.now();
-  const jobs = Object.values(cronJobs);
 
-  for (const job of jobs) {
+  const ownsLock = await acquireLock('cron', {
+    successfulLockCacheDuration: time.seconds(10),
+    failedLockCacheDuration: time.seconds(30),
+  });
+
+  if (!ownsLock) {
+    return;
+  }
+
+  Object.values(cronJobs).forEach(async (job) => {
     const { params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         // TODO: log cron trace timeout error
         state.isRunning = false;
       }
-      continue;
+      return;
     }
 
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      const ownsLock = await acquireLock('cron');
-      if (ownsLock) {
-        await startCronJob(job);
-      }
+      await startCronJob(job);
     }
-  }
+  });
 }
 
 async function startCronJob(job: CronJob) {

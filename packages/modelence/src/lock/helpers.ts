@@ -7,7 +7,13 @@ import { time } from '@/time';
  * In-memory cache to avoid frequent lock acquisition attempts
  * for the same resource within a short time frame.
  */
-const lockCache: Record<string, number> = {};
+const lockCache: Record<
+  string,
+  {
+    value: boolean;
+    expiresAt: number;
+  }
+> = {};
 
 /**
  * Time duration to consider a cached lock acquisition valid
@@ -40,24 +46,19 @@ export async function acquireLock(
   resource: string,
   {
     lockDuration = DEFAULT_LOCK_DURATION,
-    lockCacheDuration = DEFAULT_CACHE_DURATION,
+    successfulLockCacheDuration = DEFAULT_CACHE_DURATION,
+    failedLockCacheDuration = DEFAULT_CACHE_DURATION,
     instanceId = INSTANCE_ID,
   }: {
     lockDuration?: number;
-    lockCacheDuration?: number;
+    successfulLockCacheDuration?: number;
+    failedLockCacheDuration?: number;
     instanceId?: string;
   } = {}
 ): Promise<boolean> {
   const now = Date.now();
-  if (lockCache[resource]) {
-    if (now - lockCache[resource] < 0) {
-      logDebug(`Lock acquisition skipped (cached): ${resource}`, {
-        source: 'lock',
-        resource,
-        instanceId,
-      });
-      return true;
-    }
+  if (lockCache[resource] && now - lockCache[resource].expiresAt < 0) {
+    return lockCache[resource].value;
   }
 
   const staleThresholdDate = new Date(now - lockDuration);
@@ -87,8 +88,12 @@ export async function acquireLock(
 
     const isLockAcquired = result.upsertedCount > 0 || result.modifiedCount > 0;
 
+    lockCache[resource] = {
+      value: isLockAcquired,
+      expiresAt: now + (isLockAcquired ? successfulLockCacheDuration : failedLockCacheDuration),
+    };
+
     if (isLockAcquired) {
-      lockCache[resource] = now + lockCacheDuration;
       logDebug(`Lock acquired: ${resource}`, {
         source: 'lock',
         resource,
@@ -104,6 +109,10 @@ export async function acquireLock(
 
     return isLockAcquired;
   } catch {
+    lockCache[resource] = {
+      value: false,
+      expiresAt: now + failedLockCacheDuration,
+    };
     logDebug(`Failed to acquire lock (already held): ${resource}`, {
       source: 'lock',
       resource,
@@ -133,7 +142,7 @@ export async function releaseLock(
     instanceId,
   });
 
-  lockCache[resource] = 0;
+  delete lockCache[resource];
 
   return result.deletedCount > 0;
 }
