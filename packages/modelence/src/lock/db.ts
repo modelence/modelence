@@ -10,7 +10,7 @@ import { Store } from '../data/store';
 export const locksCollection = new Store('_modelenceLocks', {
   schema: {
     resource: schema.string(),
-    containerId: schema.string(),
+    instanceId: schema.string(),
     acquiredAt: schema.date(),
   },
   indexes: [
@@ -19,7 +19,7 @@ export const locksCollection = new Store('_modelenceLocks', {
       unique: true,
     },
     {
-      key: { resource: 1, containerId: 1 },
+      key: { resource: 1, instanceId: 1 },
     },
     {
       key: { resource: 1, acquiredAt: 1 },

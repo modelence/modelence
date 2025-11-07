@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { locksCollection } from './collection';
+import { locksCollection } from './db';
 import { logDebug } from '../telemetry';
 import { time } from '@/time';
 
@@ -7,7 +7,7 @@ import { time } from '@/time';
  * Unique identifier for this application instance.
  * Generated once per application instance to track which container owns which locks.
  */
-const containerId = randomBytes(32).toString('base64url');
+const INSTANCE_ID = randomBytes(32).toString('base64url');
 
 /**
  * Time after which a lock is expired
@@ -25,7 +25,8 @@ const DEFAULT_LOCK_DURATION = time.seconds(30);
  */
 export async function acquireLock(
   resource: string,
-  lockDuration: number = DEFAULT_LOCK_DURATION
+  lockDuration: number = DEFAULT_LOCK_DURATION,
+  instanceId: string = INSTANCE_ID,
 ): Promise<boolean> {
   const now = new Date();
   const staleThresholdDate = new Date(now.getTime() - lockDuration);
@@ -33,21 +34,21 @@ export async function acquireLock(
   logDebug(`Attempting to acquire lock: ${resource}`, {
     source: 'lock',
     resource,
-    containerId,
+    instanceId,
   });
 
   try {
     const result = await locksCollection.upsertOne(
       {
         $or: [
-          { resource, containerId },
+          { resource, instanceId },
           { resource, acquiredAt: { $lt: staleThresholdDate } },
         ],
       },
       {
         $set: {
           resource,
-          containerId,
+          instanceId,
           acquiredAt: now,
         },
       }
@@ -59,13 +60,13 @@ export async function acquireLock(
       logDebug(`Lock acquired: ${resource}`, {
         source: 'lock',
         resource,
-        containerId,
+        instanceId,
       });
     } else {
       logDebug(`Failed to acquire lock (already held): ${resource}`, {
         source: 'lock',
         resource,
-        containerId,
+        instanceId,
       });
     }
 
@@ -74,7 +75,7 @@ export async function acquireLock(
     logDebug(`Failed to acquire lock (already held): ${resource}`, {
       source: 'lock',
       resource,
-      containerId,
+      instanceId,
     });
     return false;
   }
@@ -89,7 +90,7 @@ export async function acquireLock(
 export async function releaseLock(resource: string): Promise<boolean> {
   const result = await locksCollection.deleteOne({
     resource,
-    containerId,
+    instanceId,
   });
 
   return result.deletedCount > 0;
@@ -104,7 +105,7 @@ export async function releaseLock(resource: string): Promise<boolean> {
 export async function verifyLockOwnership(resource: string): Promise<boolean> {
   const lock = await locksCollection.findOne({
     resource,
-    containerId,
+    instanceId,
   });
 
   return lock !== null;
