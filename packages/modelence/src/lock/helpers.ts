@@ -46,7 +46,7 @@ export async function acquireLock(
     lockDuration: number;
     lockCacheDuration: number;
     instanceId: string;
-  },
+  }
 ): Promise<boolean> {
   const now = Date.now();
   if (lockCache[resource]) {
@@ -120,11 +120,14 @@ export async function acquireLock(
  * @param options.instanceId - The unique identifier for this application instance
  * @returns true if lock was released, false if lock wasn't owned by this container
  */
-export async function releaseLock(resource: string, {
-  instanceId = INSTANCE_ID,
-}: {
-  instanceId: string;
-}): Promise<boolean> {
+export async function releaseLock(
+  resource: string,
+  {
+    instanceId = INSTANCE_ID,
+  }: {
+    instanceId: string;
+  }
+): Promise<boolean> {
   const result = await locksCollection.deleteOne({
     resource,
     instanceId,
