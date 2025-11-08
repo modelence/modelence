@@ -31,7 +31,7 @@ let isInitialized = false;
  * import { getConfig } from 'modelence/server';
  *
  * // Get the current environment (e.g., 'development', 'staging', 'production')
- * const env = getConfig('_system.site.env');
+ * const env = getConfig('_system.env');
  *
  * if (env === 'production') {
  *   // Enable production features

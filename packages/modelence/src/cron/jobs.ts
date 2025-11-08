@@ -6,29 +6,17 @@ import { startTransaction, captureError } from '@/telemetry';
 import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
+import { acquireLock } from '../lock/helpers';
 
 const DEFAULT_TIMEOUT = time.minutes(1);
 
-/**
- * Each cron instance acquires locks for the jobs it runs. If there was a pre-existing lock,
- * the lock is transferred to the new instance, but there is a delay to give the previous instance
- * a chance to see the new lock and gracefully finish remaining jobs.
- */
-const LOCK_TRANSFER_DELAY = time.seconds(10);
-
 const cronJobs: Record<string, CronJob> = {};
-let cronJobsInterval: NodeJS.Timeout;
+let cronJobsInterval: NodeJS.Timeout | null = null;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
-    lock: schema
-      .object({
-        containerId: schema.string(),
-        acquireDate: schema.date(),
-      })
-      .optional(),
   },
   indexes: [{ key: { alias: 1 }, unique: true, background: true }],
 });
@@ -75,33 +63,6 @@ export async function startCronJobs() {
   if (aliasList.length > 0) {
     const aliasSelector = { alias: { $in: aliasList } };
 
-    const existingLockedRecord = await cronJobsCollection.findOne({
-      ...aliasSelector,
-      'lock.containerId': { $exists: true },
-    });
-
-    // TODO: handle different application versions with different parameters for the same job alias
-
-    await Promise.all(
-      aliasList.map((alias) =>
-        cronJobsCollection.upsertOne(
-          { alias },
-          {
-            $set: {
-              lock: {
-                containerId: process.env.MODELENCE_CONTAINER_ID || 'unknown',
-                acquireDate: new Date(),
-              },
-            },
-          }
-        )
-      )
-    );
-
-    if (existingLockedRecord) {
-      await sleep(LOCK_TRANSFER_DELAY);
-    }
-
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
     const now = Date.now();
     cronJobRecords.forEach((record) => {
@@ -123,14 +84,18 @@ export async function startCronJobs() {
   }
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function tickCronJobs() {
-  // TODO: periodically check if the locks are still there
-
   const now = Date.now();
+
+  const ownsLock = await acquireLock('cron', {
+    successfulLockCacheDuration: time.seconds(10),
+    failedLockCacheDuration: time.seconds(30),
+  });
+
+  if (!ownsLock) {
+    return;
+  }
+
   Object.values(cronJobs).forEach(async (job) => {
     const { params, state } = job;
     if (state.isRunning) {
@@ -144,28 +109,16 @@ async function tickCronJobs() {
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      await startCronJob(job);
+      await runCronJob(job);
     }
   });
 }
 
-async function startCronJob(job: CronJob) {
+async function runCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
   state.isRunning = true;
   state.startTs = Date.now();
-  const transaction = startTransaction('cron', `cron:${alias}`);
-  // TODO: enforce job timeout
-  handler()
-    .then(() => {
-      handleCronJobCompletion(state, params);
-      transaction.end('success');
-    })
-    .catch((err) => {
-      handleCronJobCompletion(state, params);
-      captureError(err);
-      transaction.end('error');
-      console.error(`Error in cron job '${alias}':`, err);
-    });
+
   await cronJobsCollection.updateOne(
     { alias },
     {
@@ -174,6 +127,20 @@ async function startCronJob(job: CronJob) {
       },
     }
   );
+
+  const transaction = startTransaction('cron', `cron:${alias}`);
+  // TODO: enforce job timeout
+  try {
+    await handler();
+    handleCronJobCompletion(state, params);
+    transaction.end('success');
+  } catch (err) {
+    handleCronJobCompletion(state, params);
+    const error = err instanceof Error ? err : new Error(String(err));
+    captureError(error);
+    transaction.end('error');
+    console.error(`Error in cron job '${alias}':`, err);
+  }
 }
 
 function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
