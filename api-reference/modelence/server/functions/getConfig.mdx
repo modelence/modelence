@@ -12,7 +12,7 @@ title: getConfig
 
 > **getConfig**(`key`): `string` \| `number` \| `boolean`
 
-Defined in: [src/config/server.ts:46](https://github.com/modelence/modelence/blob/7aeae59b6e4ba07f1f0873b2b8539bd13e32ab22/packages/modelence/src/config/server.ts#L46)
+Defined in: [src/config/server.ts:46](https://github.com/modelence/modelence/blob/11c29a33e9a0f6cb7b053e11ad11994909ce3a21/packages/modelence/src/config/server.ts#L46)
 
 ## Parameters
 
@@ -51,7 +51,7 @@ MODELENCE_SITE_URL=https://myapp.com
 import { getConfig } from 'modelence/server';
 
 // Get the current environment (e.g., 'development', 'staging', 'production')
-const env = getConfig('_system.site.env');
+const env = getConfig('_system.env');
 
 if (env === 'production') {
   // Enable production features
