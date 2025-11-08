@@ -4,8 +4,8 @@ import { Store } from '../data/store';
 /**
  * Database collection for storing distributed locks.
  *
- * Locks are used to ensure that only one instance of the application can acquire
- * a lock for a specific container at a time.
+ * Locks are used to ensure that only one instance of the application can perform
+ * a specific action at a time, such as running cron jobs or migrations
  */
 export const locksCollection = new Store('_modelenceLocks', {
   schema: {

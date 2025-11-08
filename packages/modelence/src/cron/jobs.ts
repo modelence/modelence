@@ -109,12 +109,12 @@ async function tickCronJobs() {
     // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      await startCronJob(job);
+      await runCronJob(job);
     }
   });
 }
 
-async function startCronJob(job: CronJob) {
+async function runCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
   state.isRunning = true;
   state.startTs = Date.now();

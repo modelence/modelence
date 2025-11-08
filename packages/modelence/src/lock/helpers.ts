@@ -57,7 +57,7 @@ export async function acquireLock(
   } = {}
 ): Promise<boolean> {
   const now = Date.now();
-  if (lockCache[resource] && now - lockCache[resource].expiresAt < 0) {
+  if (lockCache[resource] && now < lockCache[resource].expiresAt) {
     return lockCache[resource].value;
   }
 
