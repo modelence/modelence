@@ -1,4 +1,4 @@
-import { acquireLock } from '@/lock';
+import { acquireLock, releaseLock } from '@/lock';
 import { Module } from '../app/module';
 import { dbMigrations } from './db';
 import { logInfo } from '../telemetry';
@@ -45,7 +45,7 @@ export async function runMigrations(migrations: MigrationScript[]) {
     });
     try {
       const output = await handler();
-      await dbMigrations.updateOne({
+      await dbMigrations.upsertOne({
         version,
       }, {
         $set: {
@@ -60,20 +60,24 @@ export async function runMigrations(migrations: MigrationScript[]) {
       });
     } catch (e) {
       if (e instanceof Error) {
-        await dbMigrations.updateOne({
+        await dbMigrations.upsertOne({
           version,
         }, {
-          status: 'failed',
-          version,
-          output: e.message || '',
-          appliedAt: new Date(),
+          $set: {
+            status: 'failed',
+            version,
+            output: e.message || '',
+            appliedAt: new Date(),
+          },
         });
-        logInfo(`Migration v${version} if failed: ${e.message}`, {
+        logInfo(`Migration v${version} is failed: ${e.message}`, {
           source: 'migrations',
         });
       }
     }
   }
+
+  await releaseLock('migrations')
 }
 
 export function startMigrations(migrations: MigrationScript[]) {
