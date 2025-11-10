@@ -1,5 +1,7 @@
+import { acquireLock } from '@/lock';
 import { Module } from '../app/module';
 import { dbMigrations } from './db';
+import { logInfo } from '../telemetry';
 
 export type MigrationScript = {
   version: number;
@@ -9,6 +11,15 @@ export type MigrationScript = {
 
 export async function runMigrations(migrations: MigrationScript[]) {
   if (migrations.length === 0) {
+    return;
+  }
+
+  const hasLock = await acquireLock('migrations');
+
+  if (!hasLock) {
+    logInfo('Another instance is running migrations. Skipping migration run.', {
+      source: 'migrations',
+    });
     return;
   }
 
@@ -22,14 +33,27 @@ export async function runMigrations(migrations: MigrationScript[]) {
     return;
   }
 
-  console.log(`Running migrations (${pendingMigrations.length})...`);
+  logInfo(`Running migrations (${pendingMigrations.length})...`, {
+    source: 'migrations',
+  });
   for (const { version, description, handler } of pendingMigrations) {
-    console.log(`Running migration v${version}: ${description}`);
-    // TODO: adjust to handle multiple containers and race conditions
+    logInfo(`Running migration v${version}: ${description}`, {
+      source: 'migrations',
+    });
     await dbMigrations.insertOne({ version, appliedAt: new Date() });
     await handler();
-    console.log(`Migration v${version} complete`);
+    logInfo(`Migration v${version} complete`, {
+      source: 'migrations',
+    });
   }
+}
+
+export function startMigrations(migrations: MigrationScript[]) {
+  setTimeout(() => {
+    runMigrations(migrations).catch((err) => {
+      console.error('Error running migrations:', err);
+    });
+  }, 0);
 }
 
 export default new Module('_system.migration', {
