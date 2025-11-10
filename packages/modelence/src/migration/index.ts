@@ -6,7 +6,7 @@ import { logInfo } from '../telemetry';
 export type MigrationScript = {
   version: number;
   description: string;
-  handler: () => Promise<void>;
+  handler: () => Promise<string | void>;
 };
 
 export async function runMigrations(migrations: MigrationScript[]) {
@@ -25,7 +25,10 @@ export async function runMigrations(migrations: MigrationScript[]) {
 
   const versions = migrations.map(({ version }) => version);
 
-  const existingVersions = await dbMigrations.fetch({ version: { $in: versions } });
+  const existingVersions = await dbMigrations.fetch({
+    version: { $in: versions }, 
+    status: { $ne: 'failed' },
+  });
   const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
   const pendingMigrations = migrations.filter(({ version }) => !existingVersionSet.has(version));
 
@@ -40,11 +43,36 @@ export async function runMigrations(migrations: MigrationScript[]) {
     logInfo(`Running migration v${version}: ${description}`, {
       source: 'migrations',
     });
-    await dbMigrations.insertOne({ version, appliedAt: new Date() });
-    await handler();
-    logInfo(`Migration v${version} complete`, {
-      source: 'migrations',
-    });
+    try {
+      const output = await handler();
+      await dbMigrations.updateOne({
+        version,
+      }, {
+        $set: {
+          status: 'completed',
+          version,
+          output: output || '',
+          appliedAt: new Date(),
+        },
+      });
+      logInfo(`Migration v${version} complete`, {
+        source: 'migrations',
+      });
+    } catch (e) {
+      if (e instanceof Error) {
+        await dbMigrations.updateOne({
+          version,
+        }, {
+          status: 'failed',
+          version,
+          output: e.message || '',
+          appliedAt: new Date(),
+        });
+        logInfo(`Migration v${version} if failed: ${e.message}`, {
+          source: 'migrations',
+        });
+      }
+    }
   }
 }
 
