@@ -8,8 +8,5 @@ export const dbMigrations = new Store('_modelenceMigrations', {
     output: schema.string().optional(),
     appliedAt: schema.date(),
   },
-  indexes: [
-    { key: { version: 1 }, unique: true },
-    { key: { version: 1, status: 1 }},
-  ],
+  indexes: [{ key: { version: 1 }, unique: true }, { key: { version: 1, status: 1 } }],
 });

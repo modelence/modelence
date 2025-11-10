@@ -83,7 +83,7 @@ export async function acquireLock(
           instanceId,
           acquiredAt: new Date(),
         },
-      },
+      }
     );
 
     const isLockAcquired = result.upsertedCount > 0 || result.modifiedCount > 0;

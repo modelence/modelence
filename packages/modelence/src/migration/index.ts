@@ -26,7 +26,7 @@ export async function runMigrations(migrations: MigrationScript[]) {
   const versions = migrations.map(({ version }) => version);
 
   const existingVersions = await dbMigrations.fetch({
-    version: { $in: versions }, 
+    version: { $in: versions },
     status: { $ne: 'failed' },
   });
   const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
@@ -45,31 +45,37 @@ export async function runMigrations(migrations: MigrationScript[]) {
     });
     try {
       const output = await handler();
-      await dbMigrations.upsertOne({
-        version,
-      }, {
-        $set: {
-          status: 'completed',
+      await dbMigrations.upsertOne(
+        {
           version,
-          output: output || '',
-          appliedAt: new Date(),
         },
-      });
+        {
+          $set: {
+            status: 'completed',
+            version,
+            output: output || '',
+            appliedAt: new Date(),
+          },
+        }
+      );
       logInfo(`Migration v${version} complete`, {
         source: 'migrations',
       });
     } catch (e) {
       if (e instanceof Error) {
-        await dbMigrations.upsertOne({
-          version,
-        }, {
-          $set: {
-            status: 'failed',
+        await dbMigrations.upsertOne(
+          {
             version,
-            output: e.message || '',
-            appliedAt: new Date(),
           },
-        });
+          {
+            $set: {
+              status: 'failed',
+              version,
+              output: e.message || '',
+              appliedAt: new Date(),
+            },
+          }
+        );
         logInfo(`Migration v${version} is failed: ${e.message}`, {
           source: 'migrations',
         });
@@ -77,7 +83,7 @@ export async function runMigrations(migrations: MigrationScript[]) {
     }
   }
 
-  await releaseLock('migrations')
+  await releaseLock('migrations');
 }
 
 export function startMigrations(migrations: MigrationScript[]) {
