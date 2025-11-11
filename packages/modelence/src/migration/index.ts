@@ -27,7 +27,6 @@ export async function runMigrations(migrations: MigrationScript[]) {
 
   const existingVersions = await dbMigrations.fetch({
     version: { $in: versions },
-    status: { $ne: 'failed' },
   });
   const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
   const pendingMigrations = migrations.filter(({ version }) => !existingVersionSet.has(version));
@@ -51,8 +50,9 @@ export async function runMigrations(migrations: MigrationScript[]) {
         },
         {
           $set: {
-            status: 'completed',
             version,
+            status: 'completed',
+            description,
             output: output || '',
             appliedAt: new Date(),
           },
@@ -69,8 +69,9 @@ export async function runMigrations(migrations: MigrationScript[]) {
           },
           {
             $set: {
-              status: 'failed',
               version,
+              status: 'failed',
+              description,
               output: e.message || '',
               appliedAt: new Date(),
             },
