@@ -11,7 +11,10 @@ export async function authenticate(
   const session = await obtainSession(authToken);
 
   const userDoc = session.userId
-    ? await usersCollection.findOne({ _id: new ObjectId(session.userId) })
+    ? await usersCollection.findOne({
+        _id: new ObjectId(session.userId),
+        deletedAt: { $exists: false },
+      })
     : null;
   const user = userDoc
     ? {
