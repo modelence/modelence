@@ -16,7 +16,7 @@ import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '.
 import { Store } from '../data/store';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
-import { MigrationScript, default as migrationModule, runMigrations } from '../migration';
+import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
@@ -125,7 +125,7 @@ export async function startApp({
   }
 
   if (isCronEnabled) {
-    await runMigrations(migrations);
+    startMigrations(migrations);
   }
 
   if (mongodbUri) {
