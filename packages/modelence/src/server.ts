@@ -15,6 +15,7 @@ export { createQuery } from './methods';
 // Auth
 export { usersCollection as dbUsers } from './auth/db';
 export type { UserInfo } from './auth/types';
+export { deleteUser, disableUser } from './auth/deleteUser';
 
 // Database
 export { schema } from './data/types';

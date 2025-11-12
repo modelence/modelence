@@ -1,10 +1,10 @@
 import { type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
-import { usersCollection } from '../db';
-import { createSession } from '../session';
+import { usersCollection } from '@/auth/db';
+import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
-import { getConfig } from '@/server';
+import { getConfig } from '@/config/server';
 
 export interface OAuthUserData {
   id: string;
@@ -91,6 +91,7 @@ export async function handleOAuthUserAuthentication(
     // If the user does not exist, create a new user
     const newUser = await usersCollection.insertOne({
       handle: userData.email,
+      status: 'active',
       emails: [
         {
           address: userData.email,

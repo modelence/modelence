@@ -27,6 +27,7 @@ export async function createGuestUser() {
 
   const result = await usersCollection.insertOne({
     handle,
+    status: 'active',
     createdAt: new Date(),
     authMethods: {},
   });
