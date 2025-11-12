@@ -39,7 +39,7 @@ export async function handleLoginWithPassword(
     }
 
     const userDoc = await usersCollection.findOne(
-      { 'emails.address': email, deletedAt: { $exists: false } },
+      { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
     );
 

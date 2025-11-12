@@ -43,7 +43,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Find user by email
   const userDoc = await usersCollection.findOne(
-    { 'emails.address': email, deletedAt: { $exists: false } },
+    { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
     { collation: { locale: 'en', strength: 2 } }
   );
 

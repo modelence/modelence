@@ -16,12 +16,13 @@ export async function clearTokens(userId: ObjectId) {
   });
 }
 
-export async function softDeleteUser(userId: ObjectId) {
+export async function disableUser(userId: ObjectId) {
   await clearTokens(userId);
 
   await usersCollection.updateOne(userId, {
     $set: {
-      deletedAt: new Date(),
+      status: 'disabled',
+      disabledAt: new Date(),
     },
   });
 }
@@ -36,6 +37,7 @@ export async function deleteUser(userId: ObjectId) {
     {
       $set: {
         handle: `deleted-${userId}-${randomUUID()}`,
+        status: 'deleted',
         deletedAt: new Date(),
         authMethods: {},
         emails: [],
