@@ -40,5 +40,5 @@ export function getTelemetryServiceName() {
 }
 
 export function isTelemetryEnabled() {
-  return Boolean(metadata?.telemetry?.isEnabled);
+  return false;
 }
