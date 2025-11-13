@@ -7,9 +7,6 @@ let isInitialized = false;
 /**
  * @sidebarTitle getConfig (server)
  *
- * Retrieves a configuration value by key. Configuration values can be set via environment variables
- * or managed through the Modelence Cloud Backend.
- *
  * @param key - The configuration key to retrieve
  * @returns The configuration value (string, number, or boolean)
  *
