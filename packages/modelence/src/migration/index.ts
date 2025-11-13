@@ -53,7 +53,7 @@ export async function runMigrations(migrations: MigrationScript[]) {
             version,
             status: 'completed',
             description,
-            output: output || '',
+            output: (output || '').toString(),
             appliedAt: new Date(),
           },
         }
