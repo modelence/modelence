@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-type CallMethodFn = typeof import('./method')['callMethod'];
+type CallMethodFn = (typeof import('./method'))['callMethod'];
 const mockCallMethod = jest.fn<CallMethodFn>();
 const mockSetConfig = jest.fn();
 const mockSetLocalStorageSession = jest.fn();

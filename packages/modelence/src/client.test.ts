@@ -45,11 +45,8 @@ describe('client', () => {
   });
 
   test('should export websocket functions', async () => {
-    const {
-      getWebsocketClientProvider,
-      setWebsocketClientProvider,
-      startWebsockets,
-    } = await import('./client');
+    const { getWebsocketClientProvider, setWebsocketClientProvider, startWebsockets } =
+      await import('./client');
 
     expect(typeof getWebsocketClientProvider).toBe('function');
     expect(typeof setWebsocketClientProvider).toBe('function');

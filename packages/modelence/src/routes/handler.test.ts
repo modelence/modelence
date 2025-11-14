@@ -41,7 +41,9 @@ describe('routes/handler', () => {
       status: jest.fn<(code: number) => Response>().mockReturnThis(),
       send: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
       redirect: jest.fn(),
-      setHeader: jest.fn<(name: string, value: string | number | readonly string[]) => Response>().mockReturnThis(),
+      setHeader: jest
+        .fn<(name: string, value: string | number | readonly string[]) => Response>()
+        .mockReturnThis(),
     } satisfies Partial<Response>;
 
     return response as unknown as Response;

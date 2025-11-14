@@ -295,10 +295,7 @@ describe('data/schemaSerializer', () => {
 
     test('serializes union with complex types', () => {
       const schema = {
-        value: z.union([
-          z.object({ type: z.string() }),
-          z.array(z.number()),
-        ]),
+        value: z.union([z.object({ type: z.string() }), z.array(z.number())]),
       };
 
       const result = serializeModelSchema(schema);
@@ -356,9 +353,11 @@ describe('data/schemaSerializer', () => {
 
     test('serializes optional object', () => {
       const schema = {
-        metadata: z.object({
-          key: z.string(),
-        }).optional(),
+        metadata: z
+          .object({
+            key: z.string(),
+          })
+          .optional(),
       };
 
       const result = serializeModelSchema(schema);
@@ -424,9 +423,11 @@ describe('data/schemaSerializer', () => {
 
     test('serializes nullable object', () => {
       const schema = {
-        config: z.object({
-          value: z.string(),
-        }).nullable(),
+        config: z
+          .object({
+            value: z.string(),
+          })
+          .nullable(),
       };
 
       const result = serializeModelSchema(schema);
@@ -706,7 +707,7 @@ describe('data/schemaSerializer', () => {
     test('handles special characters in field names', () => {
       const schema = {
         'field-name': z.string(),
-        'field_name': z.number(),
+        field_name: z.number(),
         'field.name': z.boolean(),
       };
 

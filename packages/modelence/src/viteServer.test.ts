@@ -5,10 +5,13 @@ import type { ExpressMiddleware } from './types';
 
 // Mock external dependencies
 const mockCreateServer = jest.fn<(config: UserConfig) => Promise<ViteDevServer>>();
-const mockLoadConfigFromFile = jest.fn<(
-  configEnv: { command: string; mode: string },
-  configFile?: string
-) => Promise<{ path: string; config: UserConfig; dependencies: string[] } | null>>();
+const mockLoadConfigFromFile =
+  jest.fn<
+    (
+      configEnv: { command: string; mode: string },
+      configFile?: string
+    ) => Promise<{ path: string; config: UserConfig; dependencies: string[] } | null>
+  >();
 const mockMergeConfig = jest.fn<(base: UserConfig, user: UserConfig) => UserConfig>();
 const mockReactPlugin = jest.fn();
 const mockExpressStatic = jest.fn<(root: string) => ExpressMiddleware>();
@@ -50,7 +53,7 @@ const createResponse = (): Response => {
   return response as unknown as Response;
 };
 
-const createRequest = (): Request => ({} as unknown as Request);
+const createRequest = (): Request => ({}) as unknown as Request;
 
 const createLoadConfigResult = (config: UserConfig = {}) => ({
   path: 'vite.config.ts',
@@ -164,9 +167,7 @@ describe('ViteServer', () => {
 
     test('initializes config during init', async () => {
       process.env.NODE_ENV = 'development';
-      mockLoadConfigFromFile.mockResolvedValue(
-        createLoadConfigResult({ publicDir: 'public' })
-      );
+      mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult({ publicDir: 'public' }));
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -183,7 +184,9 @@ describe('ViteServer', () => {
         jest.fn() as unknown as ExpressMiddleware,
         jest.fn() as unknown as ExpressMiddleware,
       ];
-      mockCreateServer.mockResolvedValue({ middlewares: mockMiddlewares } as unknown as ViteDevServer);
+      mockCreateServer.mockResolvedValue({
+        middlewares: mockMiddlewares,
+      } as unknown as ViteDevServer);
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -216,9 +219,7 @@ describe('ViteServer', () => {
 
     test('returns static middleware array in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      mockLoadConfigFromFile.mockResolvedValue(
-        createLoadConfigResult({ publicDir: './public' })
-      );
+      mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult({ publicDir: './public' }));
       const productionMiddleware = jest.fn() as unknown as ExpressMiddleware;
       mockExpressStatic.mockReturnValue(productionMiddleware);
 
@@ -331,15 +332,13 @@ describe('safelyMergeConfig', () => {
     const _baseConfig = { plugins: [plugin1, plugin3] };
     const _userConfig = { plugins: [plugin2] };
 
-    mockMergeConfig.mockImplementation(
-      (base: UserConfig, user: UserConfig) => {
-        const merged = { ...base, ...user };
-        if (base.plugins || user.plugins) {
-          merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
-        }
-        return merged;
+    mockMergeConfig.mockImplementation((base: UserConfig, user: UserConfig) => {
+      const merged = { ...base, ...user };
+      if (base.plugins || user.plugins) {
+        merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
       }
-    );
+      return merged;
+    });
 
     // Test through configuration loading
     expect(true).toBe(true);

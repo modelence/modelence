@@ -22,13 +22,15 @@ const mockSetAuthConfig = jest.fn();
 const mockSetWebsocketConfig = jest.fn();
 const mockMarkAppStarted = jest.fn();
 const mockSetMetadata = jest.fn();
-const mockConnectCloudBackend = jest.fn<(params: unknown) => Promise<{
-  configs: Array<{ key: string; type: string; value: unknown }>;
-  environmentId: string;
-  appAlias: string;
-  environmentAlias: string;
-  telemetry: Record<string, unknown>;
-}>>();
+const mockConnectCloudBackend = jest.fn<
+  (params: unknown) => Promise<{
+    configs: Array<{ key: string; type: string; value: unknown }>;
+    environmentId: string;
+    appAlias: string;
+    environmentAlias: string;
+    telemetry: Record<string, unknown>;
+  }>
+>();
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
 const mockStartMigrations = jest.fn();
@@ -314,11 +316,17 @@ describe('app/index', () => {
     const mockStore = createStoreMock();
 
     await startApp({
-      modules: [createTestModule({ stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>] })],
+      modules: [
+        createTestModule({
+          stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
+      ],
     });
 
     expect(mockConnect).toHaveBeenCalled();
-    expect(mockStore.init).toHaveBeenCalledWith(expect.objectContaining({ db: expect.any(Function) }));
+    expect(mockStore.init).toHaveBeenCalledWith(
+      expect.objectContaining({ db: expect.any(Function) })
+    );
     expect(mockStore.createIndexes).toHaveBeenCalled();
   });
 
@@ -357,8 +365,14 @@ describe('app/index', () => {
 
     await startApp({
       modules: [
-        createTestModule({ name: 'module1', stores: [store1 as unknown as Store<ModelSchema, Record<string, never>>] }),
-        createTestModule({ name: 'module2', stores: [store2 as unknown as Store<ModelSchema, Record<string, never>>] }),
+        createTestModule({
+          name: 'module1',
+          stores: [store1 as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
+        createTestModule({
+          name: 'module2',
+          stores: [store2 as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
       ],
     });
 

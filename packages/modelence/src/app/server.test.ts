@@ -44,9 +44,13 @@ const mockHasAccess = jest.fn();
 const mockHasPermission = jest.fn();
 const mockGetDefaultAuthenticatedRoles = jest.fn();
 const mockInitRoles = jest.fn();
-const mockRunMethod = jest.fn<(methodName: string, args: unknown, context: unknown) => Promise<Record<string, unknown>>>();
+const mockRunMethod =
+  jest.fn<
+    (methodName: string, args: unknown, context: unknown) => Promise<Record<string, unknown>>
+  >();
 const mockGetResponseTypeMap = jest.fn<(result: unknown) => Record<string, string>>();
-const mockCreateRouteHandler = jest.fn<(method: string, path: string, handler: unknown) => RequestHandler>();
+const mockCreateRouteHandler =
+  jest.fn<(method: string, path: string, handler: unknown) => RequestHandler>();
 const mockGoogleAuthRouter = jest.fn();
 const mockGithubAuthRouter = jest.fn();
 const mockLogInfo = jest.fn();
