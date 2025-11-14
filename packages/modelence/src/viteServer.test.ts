@@ -4,12 +4,15 @@ import type { Request, Response } from 'express';
 import type { ExpressMiddleware } from './types';
 
 // Mock external dependencies
-const mockCreateServer = jest.fn();
-const mockLoadConfigFromFile = jest.fn();
-const mockMergeConfig = jest.fn();
+const mockCreateServer = jest.fn<(config: UserConfig) => Promise<ViteDevServer>>();
+const mockLoadConfigFromFile = jest.fn<(
+  configEnv: { command: string; mode: string },
+  configFile?: string
+) => Promise<{ path: string; config: UserConfig; dependencies: string[] } | null>>();
+const mockMergeConfig = jest.fn<(base: UserConfig, user: UserConfig) => UserConfig>();
 const mockReactPlugin = jest.fn();
-const mockExpressStatic = jest.fn();
-const mockExistsSync = jest.fn();
+const mockExpressStatic = jest.fn<(root: string) => ExpressMiddleware>();
+const mockExistsSync = jest.fn<(path: string) => boolean>();
 
 jest.unstable_mockModule('vite', () => ({
   createServer: mockCreateServer,
@@ -37,6 +40,24 @@ jest.unstable_mockModule('fs', () => ({
 // Import after mocking
 await import('./viteServer');
 
+const createResponse = (): Response => {
+  const response = {
+    sendFile: jest.fn(),
+    status: jest.fn<(code: number) => Response>().mockReturnThis(),
+    send: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
+    json: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
+  } satisfies Partial<Response>;
+  return response as unknown as Response;
+};
+
+const createRequest = (): Request => ({} as unknown as Request);
+
+const createLoadConfigResult = (config: UserConfig = {}) => ({
+  path: 'vite.config.ts',
+  config,
+  dependencies: [],
+});
+
 type TestViteServer = {
   init(): Promise<void>;
   middlewares(): ExpressMiddleware[];
@@ -51,6 +72,7 @@ describe('ViteServer', () => {
   let ViteServer: TestViteServerConstructor;
   let viteServer: TestViteServer;
   let originalNodeEnv: string | undefined;
+  let staticMiddleware: ExpressMiddleware;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -60,9 +82,10 @@ describe('ViteServer', () => {
     jest.resetModules();
 
     mockReactPlugin.mockReturnValue({ name: 'vite:react' });
-    mockExpressStatic.mockReturnValue('static-middleware');
+    staticMiddleware = jest.fn() as unknown as ExpressMiddleware;
+    mockExpressStatic.mockReturnValue(staticMiddleware);
     mockExistsSync.mockReturnValue(false);
-    mockLoadConfigFromFile.mockResolvedValue({ config: {} });
+    mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult());
     mockMergeConfig.mockImplementation((base: UserConfig, user: UserConfig) => ({
       ...base,
       ...user,
@@ -87,7 +110,9 @@ describe('ViteServer', () => {
           if (this.isDev()) {
             return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
           }
-          const staticFolders = [mockExpressStatic('./.modelence/build/client')];
+          const staticFolders: ExpressMiddleware[] = [
+            mockExpressStatic('./.modelence/build/client'),
+          ];
           if (this.config?.publicDir) {
             staticFolders.push(mockExpressStatic(this.config.publicDir));
           }
@@ -119,7 +144,7 @@ describe('ViteServer', () => {
   describe('init', () => {
     test('creates dev server in development mode', async () => {
       process.env.NODE_ENV = 'development';
-      const mockViteServer = { middlewares: [] };
+      const mockViteServer = { middlewares: [] } as unknown as ViteDevServer;
       mockCreateServer.mockResolvedValue(mockViteServer);
 
       viteServer = new ViteServer();
@@ -139,7 +164,9 @@ describe('ViteServer', () => {
 
     test('initializes config during init', async () => {
       process.env.NODE_ENV = 'development';
-      mockLoadConfigFromFile.mockResolvedValue({ config: { publicDir: 'public' } });
+      mockLoadConfigFromFile.mockResolvedValue(
+        createLoadConfigResult({ publicDir: 'public' })
+      );
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -152,8 +179,11 @@ describe('ViteServer', () => {
   describe('middlewares', () => {
     test('returns vite middlewares in development mode', async () => {
       process.env.NODE_ENV = 'development';
-      const mockMiddlewares = [jest.fn(), jest.fn()];
-      mockCreateServer.mockResolvedValue({ middlewares: mockMiddlewares });
+      const mockMiddlewares: ExpressMiddleware[] = [
+        jest.fn() as unknown as ExpressMiddleware,
+        jest.fn() as unknown as ExpressMiddleware,
+      ];
+      mockCreateServer.mockResolvedValue({ middlewares: mockMiddlewares } as unknown as ViteDevServer);
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -173,20 +203,24 @@ describe('ViteServer', () => {
 
     test('returns static middleware in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      mockExpressStatic.mockReturnValue('static-middleware');
+      const productionMiddleware = jest.fn() as unknown as ExpressMiddleware;
+      mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
       await viteServer.init();
       const middlewares = viteServer.middlewares();
 
       expect(mockExpressStatic).toHaveBeenCalledWith('./.modelence/build/client');
-      expect(middlewares).toContain('static-middleware');
+      expect(middlewares).toContain(productionMiddleware);
     });
 
     test('returns static middleware array in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      mockLoadConfigFromFile.mockResolvedValue({ config: { publicDir: './public' } });
-      mockExpressStatic.mockReturnValue('static-middleware');
+      mockLoadConfigFromFile.mockResolvedValue(
+        createLoadConfigResult({ publicDir: './public' })
+      );
+      const productionMiddleware = jest.fn() as unknown as ExpressMiddleware;
+      mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -200,11 +234,8 @@ describe('ViteServer', () => {
   describe('handler', () => {
     test('serves index.html from src/client in development mode', async () => {
       process.env.NODE_ENV = 'development';
-      const mockReq = {} as Request;
-      const mockRes = {
-        sendFile: jest.fn(),
-        status: jest.fn(() => ({ send: jest.fn() })),
-      };
+      const mockReq = createRequest();
+      const mockRes = createResponse();
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -215,10 +246,8 @@ describe('ViteServer', () => {
 
     test('serves index.html from build dir in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      const mockReq = {} as Request;
-      const mockRes = {
-        sendFile: jest.fn(),
-      };
+      const mockReq = createRequest();
+      const mockRes = createResponse();
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -231,22 +260,21 @@ describe('ViteServer', () => {
 
     test('handles errors when serving index.html in development', async () => {
       process.env.NODE_ENV = 'development';
-      const mockReq = {} as Request;
-      const mockSend = jest.fn();
-      const mockStatus = jest.fn(() => ({ send: mockSend }));
-      const mockRes = {
-        sendFile: jest.fn(() => {
-          throw new Error('File not found');
-        }),
-        status: mockStatus,
-      };
+      const mockReq = createRequest();
+      const mockRes = createResponse();
+      const sendMock = jest.fn();
+      const statusMock = mockRes.status as jest.Mock;
+      statusMock.mockReturnValue({ send: sendMock } as unknown as Response);
+      (mockRes.sendFile as jest.Mock).mockImplementation(() => {
+        throw new Error('File not found');
+      });
 
       viteServer = new ViteServer();
       await viteServer.init();
       viteServer.handler(mockReq, mockRes);
 
-      expect(mockStatus).toHaveBeenCalledWith(500);
-      expect(mockSend).toHaveBeenCalledWith('Internal Server Error');
+      expect(statusMock).toHaveBeenCalledWith(500);
+      expect(sendMock).toHaveBeenCalledWith('Internal Server Error');
     });
   });
 
@@ -304,9 +332,11 @@ describe('safelyMergeConfig', () => {
     const _userConfig = { plugins: [plugin2] };
 
     mockMergeConfig.mockImplementation(
-      (base: { plugins?: Plugin[] }, user: { plugins?: Plugin[] }) => {
+      (base: UserConfig, user: UserConfig) => {
         const merged = { ...base, ...user };
-        merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
+        if (base.plugins || user.plugins) {
+          merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
+        }
         return merged;
       }
     );

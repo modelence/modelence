@@ -1,7 +1,8 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
-import type ioClientFactory, { Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
-import type { getLocalStorageSession as GetLocalStorageSession } from '@/client/localStorage';
+import type { getLocalStorageSession } from '@/client/localStorage';
 
 type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit'>;
 const mockSocket: jest.Mocked<SocketMethods> = {
@@ -13,17 +14,19 @@ const mockSocket: jest.Mocked<SocketMethods> = {
 
 type IoFactory = typeof ioClientFactory;
 const mockIo: jest.MockedFunction<IoFactory> = jest.fn(() => mockSocket as unknown as Socket);
-type LocalStorageSession = ReturnType<GetLocalStorageSession>;
-const mockGetLocalStorageSession = jest.fn<
-  LocalStorageSession,
-  Parameters<GetLocalStorageSession>
->();
+type LocalStorageSession = ReturnType<typeof getLocalStorageSession>;
+const mockGetLocalStorageSession = jest.fn<() => LocalStorageSession>();
 
-type MinimalChannel = Pick<ClientChannel, 'init' | 'category'>;
-const createMockChannel = (category: string): MinimalChannel => ({
-  category,
-  init: jest.fn(),
-});
+const createMockChannel = (category: string): ClientChannel => {
+  const channel = {
+    category,
+    init: jest.fn(),
+    joinChannel: jest.fn(),
+    leaveChannel: jest.fn(),
+  };
+  // Add private property via type assertion
+  return channel as unknown as ClientChannel;
+};
 
 jest.unstable_mockModule('socket.io-client', () => ({
   default: mockIo,
@@ -88,7 +91,9 @@ describe('websocket/socketio/client', () => {
       const mockChannel = {
         init: jest.fn(() => callOrder.push('channel.init')),
         category: 'test',
-      } satisfies MinimalChannel;
+        joinChannel: jest.fn(),
+        leaveChannel: jest.fn(),
+      } as unknown as ClientChannel;
 
       mockIo.mockImplementationOnce(() => {
         callOrder.push('io');
@@ -379,7 +384,7 @@ describe('websocket/socketio/client', () => {
     });
 
     test('handles multiple channels initialization', () => {
-      const channels: MinimalChannel[] = [
+      const channels: ClientChannel[] = [
         createMockChannel('messages'),
         createMockChannel('notifications'),
         createMockChannel('presence'),

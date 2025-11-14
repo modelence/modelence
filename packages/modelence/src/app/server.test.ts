@@ -1,9 +1,10 @@
 import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';
 import { ObjectId } from 'mongodb';
-import type { Request, Response } from 'express';
-import type { AppServer } from '../types';
+import type { Request, Response, RequestHandler } from 'express';
+import type { AppServer, ExpressMiddleware } from '../types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { Module } from './module';
+import type { RouteHandler } from '@/routes/types';
 
 // Type definitions for test mocks
 type MockExpressApp = {
@@ -21,14 +22,16 @@ type MockHttpServer = {
 };
 
 type MockAppServer = AppServer & {
-  init: jest.Mock<Promise<void>, []>;
-  handler: jest.Mock<void, Parameters<AppServer['handler']>>;
-  middlewares?: jest.Mock<ReturnType<NonNullable<AppServer['middlewares']>>>;
+  init: jest.MockedFunction<AppServer['init']>;
+  handler: jest.MockedFunction<AppServer['handler']>;
+  middlewares?: jest.MockedFunction<NonNullable<AppServer['middlewares']>>;
 };
+
+type ExpressRouteHandler = RequestHandler;
 
 const createMockServer = (): MockAppServer => ({
   init: jest.fn(async () => {}),
-  handler: jest.fn<void, Parameters<AppServer['handler']>>(),
+  handler: jest.fn<AppServer['handler']>(),
 });
 
 const mockAuthenticate = jest.fn();
@@ -41,9 +44,9 @@ const mockHasAccess = jest.fn();
 const mockHasPermission = jest.fn();
 const mockGetDefaultAuthenticatedRoles = jest.fn();
 const mockInitRoles = jest.fn();
-const mockRunMethod = jest.fn();
-const mockGetResponseTypeMap = jest.fn();
-const mockCreateRouteHandler = jest.fn();
+const mockRunMethod = jest.fn<(methodName: string, args: unknown, context: unknown) => Promise<Record<string, unknown>>>();
+const mockGetResponseTypeMap = jest.fn<(result: unknown) => Record<string, string>>();
+const mockCreateRouteHandler = jest.fn<(method: string, path: string, handler: unknown) => RequestHandler>();
 const mockGoogleAuthRouter = jest.fn();
 const mockGithubAuthRouter = jest.fn();
 const mockLogInfo = jest.fn();
@@ -414,9 +417,10 @@ describe('app/server startServer', () => {
   });
 
   test('initializes express app with middleware', async () => {
+    const viteMiddleware = jest.fn() as unknown as ExpressMiddleware;
     const mockServer = {
       ...createMockServer(),
-      middlewares: jest.fn(() => ['vite-middleware']),
+      middlewares: jest.fn(() => [viteMiddleware]),
     };
 
     await startServer(mockServer, {
@@ -459,11 +463,12 @@ describe('app/server startServer', () => {
 
   test('calls server init before adding middlewares', async () => {
     const callOrder: string[] = [];
+    const testMiddleware = jest.fn() as unknown as ExpressMiddleware;
     const mockServer = {
       ...createMockServer(),
       middlewares: jest.fn(() => {
         callOrder.push('middlewares');
-        return ['middleware'];
+        return [testMiddleware];
       }),
     };
     mockServer.init.mockImplementation(async () => {
@@ -479,7 +484,7 @@ describe('app/server startServer', () => {
   });
 
   test('registers catch-all route handler', async () => {
-    const mockHandler = jest.fn<void, Parameters<AppServer['handler']>>();
+    const mockHandler = jest.fn<AppServer['handler']>();
     const mockServer = createMockServer();
     mockServer.handler = mockHandler;
 
@@ -576,7 +581,7 @@ describe('app/server startServer', () => {
   });
 
   test('registers module routes', async () => {
-    const mockRouteHandler = jest.fn();
+    const mockRouteHandler = jest.fn() as unknown as ExpressRouteHandler;
     mockCreateRouteHandler.mockReturnValue(mockRouteHandler);
 
     const mockModule = new Module('testModule', {
@@ -584,8 +589,8 @@ describe('app/server startServer', () => {
         {
           path: '/api/test',
           handlers: {
-            get: jest.fn(),
-            post: jest.fn(),
+            get: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })),
+            post: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })),
           },
         },
       ],
@@ -605,14 +610,14 @@ describe('app/server startServer', () => {
   });
 
   test('handles multiple modules with routes', async () => {
-    mockCreateRouteHandler.mockReturnValue(jest.fn());
+    mockCreateRouteHandler.mockReturnValue(jest.fn() as unknown as ExpressRouteHandler);
 
     const modules = [
       new Module('module1', {
         routes: [
           {
             path: '/api/foo',
-            handlers: { get: jest.fn() },
+            handlers: { get: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
           },
         ],
       }),
@@ -620,7 +625,7 @@ describe('app/server startServer', () => {
         routes: [
           {
             path: '/api/bar',
-            handlers: { post: jest.fn() },
+            handlers: { post: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
           },
         ],
       }),

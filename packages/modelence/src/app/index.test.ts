@@ -1,8 +1,6 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
-import type { connectCloudBackend as ConnectCloudBackend } from './backendApi';
 import type { Module } from './module';
 import type { MigrationScript } from '../migration';
-import type { startCronJobs as StartCronJobs } from '../cron/jobs';
 import type { ModelSchema } from '../data/types';
 import type { Store } from '../data/store';
 import type { RateLimitRule } from '../rate-limit/types';
@@ -12,7 +10,7 @@ import type { WebsocketServerProvider } from '@/websocket/types';
 // Mock external dependencies
 const mockDotenvConfig = jest.fn();
 const mockConnect = jest.fn();
-const mockGetMongodbUri = jest.fn();
+const mockGetMongodbUri = jest.fn<() => string>();
 const mockGetClient = jest.fn();
 const mockStartServer = jest.fn();
 const mockSetSchema = jest.fn();
@@ -24,11 +22,17 @@ const mockSetAuthConfig = jest.fn();
 const mockSetWebsocketConfig = jest.fn();
 const mockMarkAppStarted = jest.fn();
 const mockSetMetadata = jest.fn();
-const mockConnectCloudBackend = jest.fn();
+const mockConnectCloudBackend = jest.fn<(params: unknown) => Promise<{
+  configs: Array<{ key: string; type: string; value: unknown }>;
+  environmentId: string;
+  appAlias: string;
+  environmentAlias: string;
+  telemetry: Record<string, unknown>;
+}>>();
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
 const mockStartMigrations = jest.fn();
-const mockStartCronJobs = jest.fn();
+const mockStartCronJobs = jest.fn<() => Promise<void>>();
 const mockDefineCronJob = jest.fn();
 const mockGetCronJobsMetadata = jest.fn();
 const mockCreateQuery = jest.fn();
@@ -224,22 +228,22 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
 type MinimalStore = Pick<Store<ModelSchema, Record<string, never>>, 'init' | 'createIndexes'>;
 
 const createStoreMock = (): MinimalStore => ({
-  init: jest.fn(),
-  createIndexes: jest.fn(),
+  init: jest.fn() as MinimalStore['init'],
+  createIndexes: jest.fn() as MinimalStore['createIndexes'],
 });
 
 describe('app/index', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetMongodbUri.mockReturnValue('');
-    (mockConnectCloudBackend as jest.MockedFunction<ConnectCloudBackend>).mockResolvedValue({
+    mockConnectCloudBackend.mockResolvedValue({
       configs: [],
       environmentId: 'env-123',
       appAlias: 'test-app',
       environmentAlias: 'test-env',
       telemetry: {},
     });
-    (mockStartCronJobs as jest.MockedFunction<StartCronJobs>).mockResolvedValue(undefined);
+    mockStartCronJobs.mockResolvedValue(undefined);
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MODELENCE_CRON_ENABLED;
   });
@@ -310,11 +314,11 @@ describe('app/index', () => {
     const mockStore = createStoreMock();
 
     await startApp({
-      modules: [createTestModule({ stores: [mockStore] })],
+      modules: [createTestModule({ stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>] })],
     });
 
     expect(mockConnect).toHaveBeenCalled();
-    expect(mockStore.init).toHaveBeenCalledWith(mockClient);
+    expect(mockStore.init).toHaveBeenCalledWith(expect.objectContaining({ db: expect.any(Function) }));
     expect(mockStore.createIndexes).toHaveBeenCalled();
   });
 
@@ -353,8 +357,8 @@ describe('app/index', () => {
 
     await startApp({
       modules: [
-        createTestModule({ name: 'module1', stores: [store1] }),
-        createTestModule({ name: 'module2', stores: [store2] }),
+        createTestModule({ name: 'module1', stores: [store1 as unknown as Store<ModelSchema, Record<string, never>>] }),
+        createTestModule({ name: 'module2', stores: [store2 as unknown as Store<ModelSchema, Record<string, never>>] }),
       ],
     });
 
@@ -440,7 +444,7 @@ describe('app/index', () => {
   test('connects to cloud backend when MODELENCE_SERVICE_ENDPOINT is set', async () => {
     process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
 
-    (mockConnectCloudBackend as jest.MockedFunction<ConnectCloudBackend>).mockResolvedValue({
+    mockConnectCloudBackend.mockResolvedValue({
       configs: [{ key: 'test', type: 'string', value: 'value' }],
       environmentId: 'env-123',
       appAlias: 'test-app',

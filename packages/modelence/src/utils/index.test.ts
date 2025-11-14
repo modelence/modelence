@@ -2,13 +2,13 @@ import { isServer, requireServer, htmlToText } from './index';
 
 type MutableGlobal = typeof globalThis & { window?: unknown };
 
-function setGlobalWindow(value: unknown | undefined) {
+function setGlobalWindow(value?: unknown) {
   const target = globalThis as MutableGlobal;
   if (value === undefined) {
-    delete target.window;
-  } else {
-    target.window = value;
+    target.window = undefined as unknown as Window & typeof globalThis;
+    return;
   }
+  target.window = value as unknown as Window & typeof globalThis;
 }
 
 describe('utils/index', () => {

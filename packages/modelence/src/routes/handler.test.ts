@@ -25,7 +25,7 @@ const { createRouteHandler } = await import('./handler');
 describe('routes/handler', () => {
   const transactionEnd = jest.fn();
 
-  const createRequest = (): Request =>
+  const createRequest = (overrides?: Partial<Request>): Request =>
     ({
       headers: {},
       query: {},
@@ -33,17 +33,18 @@ describe('routes/handler', () => {
       params: {},
       cookies: {},
       path: '/test',
+      ...overrides,
     }) as unknown as Request;
 
   const createResponse = (): Response => {
     const response = {
-      status: jest.fn().mockReturnThis(),
-      send: jest.fn().mockReturnThis(),
+      status: jest.fn<(code: number) => Response>().mockReturnThis(),
+      send: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
       redirect: jest.fn(),
-      setHeader: jest.fn(),
+      setHeader: jest.fn<(name: string, value: string | number | readonly string[]) => Response>().mockReturnThis(),
     } satisfies Partial<Response>;
 
-    return response as Response;
+    return response as unknown as Response;
   };
 
   const baseReq = createRequest();
@@ -75,10 +76,7 @@ describe('routes/handler', () => {
       data: { ok: true },
     }));
 
-    const authedReq = {
-      ...baseReq,
-      headers: { 'x-modelence-auth-token': 'token' },
-    } as Request;
+    const authedReq = createRequest({ headers: { 'x-modelence-auth-token': 'token' } });
 
     await handler(authedReq, res, next);
 

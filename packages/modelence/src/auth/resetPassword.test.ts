@@ -1,18 +1,29 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ObjectId } from 'mongodb';
 import type { Context } from '@/methods/types';
+import type { usersCollection, resetPasswordTokensCollection } from './db';
 
-const mockUsersFindOne = jest.fn();
-const mockUsersUpdateOne = jest.fn();
-const mockResetTokensInsertOne = jest.fn();
-const mockResetTokensFindOne = jest.fn();
-const mockResetTokensDeleteOne = jest.fn();
+type UsersCollection = typeof usersCollection;
+type ResetPasswordTokensCollection = typeof resetPasswordTokensCollection;
+
+const mockUsersFindOne: jest.MockedFunction<UsersCollection['findOne']> = jest.fn();
+const mockUsersUpdateOne: jest.MockedFunction<UsersCollection['updateOne']> = jest.fn();
+const mockResetTokensInsertOne: jest.MockedFunction<
+  ResetPasswordTokensCollection['insertOne']
+> = jest.fn();
+const mockResetTokensFindOne: jest.MockedFunction<
+  ResetPasswordTokensCollection['findOne']
+> = jest.fn();
+const mockResetTokensDeleteOne: jest.MockedFunction<
+  ResetPasswordTokensCollection['deleteOne']
+> = jest.fn();
 const mockGetEmailConfig = jest.fn();
-const mockHtmlToText = jest.fn();
-const mockValidateEmail = jest.fn();
-const mockValidatePassword = jest.fn();
+const mockHtmlToText: jest.MockedFunction<(html: string) => string> = jest.fn();
+const mockValidateEmail: jest.MockedFunction<(email: string) => string> = jest.fn();
+const mockValidatePassword: jest.MockedFunction<(password: string) => string> = jest.fn();
 const mockRandomBytes = jest.fn();
-const mockBcryptHash = jest.fn();
+const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => Promise<string>> =
+  jest.fn();
 const mockTime = { hours: jest.fn() };
 
 jest.unstable_mockModule('./db', () => ({
@@ -74,6 +85,40 @@ const createContext = (overrides: Partial<Context> = {}): Context => ({
   },
 });
 
+const createMockUser = (overrides: Partial<{
+  _id: ObjectId;
+  handle: string;
+  emails: { address: string; verified: boolean }[];
+  status: 'active' | 'disabled' | 'deleted';
+  createdAt: Date;
+  authMethods: {
+    password?: { hash: string };
+    google?: { id: string };
+    github?: { id: string };
+  };
+}> = {}) => ({
+  _id: overrides._id ?? new ObjectId(),
+  handle: overrides.handle ?? 'testuser',
+  emails: overrides.emails ?? [{ address: 'test@example.com', verified: true }],
+  status: overrides.status ?? 'active',
+  createdAt: overrides.createdAt ?? new Date(),
+  authMethods: overrides.authMethods ?? { password: { hash: 'hashedpassword' } },
+}) as Awaited<ReturnType<UsersCollection['findOne']>>;
+
+const createMockResetToken = (overrides: Partial<{
+  _id: ObjectId;
+  userId: ObjectId;
+  token: string;
+  expiresAt: Date;
+  createdAt: Date;
+}> = {}) => ({
+  _id: overrides._id ?? new ObjectId(),
+  userId: overrides.userId ?? new ObjectId(),
+  token: overrides.token ?? 'token123',
+  expiresAt: overrides.expiresAt ?? new Date(Date.now() + 1000000),
+  createdAt: overrides.createdAt ?? new Date(),
+}) as Awaited<ReturnType<ResetPasswordTokensCollection['findOne']>>;
+
 describe('auth/resetPassword', () => {
   const mockEmailProvider = {
     sendEmail: jest.fn(async (_message: unknown) => {}),
@@ -105,12 +150,12 @@ describe('auth/resetPassword', () => {
       const resetToken = 'abc123token';
 
       mockValidateEmail.mockReturnValue(email);
-      mockUsersFindOne.mockResolvedValue({
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         _id: userId,
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hashedpassword' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -167,12 +212,11 @@ describe('auth/resetPassword', () => {
       const email = 'oauth@example.com';
 
       mockValidateEmail.mockReturnValue(email);
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { google: { id: '12345' } }, // No password method
         status: 'active',
-      });
+      }));
 
       const result = await handleSendResetPasswordToken(
         { email },
@@ -192,12 +236,11 @@ describe('auth/resetPassword', () => {
 
       mockValidateEmail.mockReturnValue(email);
       mockGetEmailConfig.mockReturnValue({ provider: null });
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
 
       await expect(
         handleSendResetPasswordToken(
@@ -221,12 +264,11 @@ describe('auth/resetPassword', () => {
           redirectUrl: '/reset',
         },
       });
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -260,12 +302,11 @@ describe('auth/resetPassword', () => {
           redirectUrl: '/reset',
         },
       });
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -289,12 +330,11 @@ describe('auth/resetPassword', () => {
       process.env.MODELENCE_SITE_URL = 'https://custom.com';
 
       mockValidateEmail.mockReturnValue(email);
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -318,12 +358,11 @@ describe('auth/resetPassword', () => {
       delete process.env.MODELENCE_SITE_URL;
 
       mockValidateEmail.mockReturnValue(email);
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -353,12 +392,11 @@ describe('auth/resetPassword', () => {
           redirectUrl: 'https://external.com/custom-reset',
         },
       });
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => resetToken,
       });
@@ -381,12 +419,11 @@ describe('auth/resetPassword', () => {
 
       mockValidateEmail.mockReturnValue(email);
       mockTime.hours.mockReturnValue(oneHourMs);
-      mockUsersFindOne.mockResolvedValue({
-        _id: new ObjectId(),
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         emails: [{ address: email, verified: true }],
         authMethods: { password: { hash: 'hash' } },
         status: 'active',
-      });
+      }));
       mockRandomBytes.mockReturnValue({
         toString: () => 'token',
       });
@@ -402,7 +439,10 @@ describe('auth/resetPassword', () => {
         })
       );
 
-      const call = mockResetTokensInsertOne.mock.calls[0][0];
+      const call = mockResetTokensInsertOne.mock.calls[0]?.[0] as {
+        expiresAt: Date;
+        createdAt: Date;
+      };
       const expiresAt = call.expiresAt.getTime();
       const createdAt = call.createdAt.getTime();
       const diff = expiresAt - createdAt;
@@ -419,17 +459,17 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() + 1000000), // Not expired
         createdAt: new Date(),
-      });
-      mockUsersFindOne.mockResolvedValue({
+      }));
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         _id: userId,
         emails: [{ address: 'user@example.com', verified: true }],
         authMethods: { password: { hash: 'oldHash' } },
-      });
+      }));
       mockBcryptHash.mockResolvedValue(hashedPassword);
 
       const result = await handleResetPassword({ token, password }, createContext());
@@ -474,12 +514,12 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() - 1000), // Expired 1 second ago
         createdAt: new Date(Date.now() - 4000000),
-      });
+      }));
 
       await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'Reset token has expired'
@@ -496,12 +536,12 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() + 1000000),
         createdAt: new Date(),
-      });
+      }));
       mockUsersFindOne.mockResolvedValue(null);
 
       await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
@@ -521,12 +561,12 @@ describe('auth/resetPassword', () => {
       mockValidatePassword.mockImplementation(() => {
         throw new Error('Password must be at least 8 characters');
       });
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() + 1000000),
         createdAt: new Date(),
-      });
+      }));
 
       await expect(
         handleResetPassword({ token, password: weakPassword }, createContext())
@@ -542,16 +582,16 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() + 1000000),
         createdAt: new Date(),
-      });
-      mockUsersFindOne.mockResolvedValue({
+      }));
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         _id: userId,
         emails: [{ address: 'user@example.com', verified: true }],
-      });
+      }));
       mockBcryptHash.mockResolvedValue('hashResult');
 
       await handleResetPassword({ token, password }, createContext());
@@ -565,16 +605,16 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOne.mockResolvedValue(createMockResetToken({
         userId,
         token,
         expiresAt: new Date(Date.now() + 1000000),
         createdAt: new Date(),
-      });
-      mockUsersFindOne.mockResolvedValue({
+      }));
+      mockUsersFindOne.mockResolvedValue(createMockUser({
         _id: userId,
         emails: [{ address: 'user@example.com', verified: true }],
-      });
+      }));
       mockBcryptHash.mockResolvedValue('hashedPassword');
 
       await handleResetPassword({ token, password }, createContext());
