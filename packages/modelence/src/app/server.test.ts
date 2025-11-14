@@ -1,6 +1,6 @@
-import { describe, expect, jest, test, beforeEach } from '@jest/globals';
+import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';
 import { ObjectId } from 'mongodb';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 const mockAuthenticate = jest.fn();
 const mockGetUnauthenticatedRoles = jest.fn();
@@ -12,6 +12,17 @@ const mockHasAccess = jest.fn();
 const mockHasPermission = jest.fn();
 const mockGetDefaultAuthenticatedRoles = jest.fn();
 const mockInitRoles = jest.fn();
+const mockRunMethod = jest.fn();
+const mockGetResponseTypeMap = jest.fn();
+const mockCreateRouteHandler = jest.fn();
+const mockGoogleAuthRouter = jest.fn();
+const mockGithubAuthRouter = jest.fn();
+const mockLogInfo = jest.fn();
+const mockGetWebsocketConfig = jest.fn();
+const mockExpressJson = jest.fn();
+const mockExpressUrlencoded = jest.fn();
+const mockCookieParser = jest.fn();
+const mockHttpCreateServer = jest.fn();
 
 jest.unstable_mockModule('../auth', () => ({
   authenticate: mockAuthenticate,
@@ -32,7 +43,65 @@ jest.unstable_mockModule('../db/client', () => ({
   connect: mockConnect,
 }));
 
-const { getCallContext } = await import('./server');
+jest.unstable_mockModule('@/methods', () => ({
+  runMethod: mockRunMethod,
+}));
+
+jest.unstable_mockModule('@/methods/serialize', () => ({
+  getResponseTypeMap: mockGetResponseTypeMap,
+}));
+
+jest.unstable_mockModule('@/routes/handler', () => ({
+  createRouteHandler: mockCreateRouteHandler,
+}));
+
+jest.unstable_mockModule('@/auth/providers/google', () => ({
+  default: mockGoogleAuthRouter,
+}));
+
+jest.unstable_mockModule('@/auth/providers/github', () => ({
+  default: mockGithubAuthRouter,
+}));
+
+jest.unstable_mockModule('@/telemetry', () => ({
+  logInfo: mockLogInfo,
+}));
+
+jest.unstable_mockModule('./websocketConfig', () => ({
+  getWebsocketConfig: mockGetWebsocketConfig,
+}));
+
+let mockExpressApp: any;
+
+jest.unstable_mockModule('express', () => {
+  const express = jest.fn(() => {
+    // Return the app set in beforeEach
+    return mockExpressApp || {
+      use: jest.fn(),
+      post: jest.fn(),
+      get: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+      all: jest.fn(),
+    };
+  }) as any;
+  express.json = mockExpressJson;
+  express.urlencoded = mockExpressUrlencoded;
+  return { default: express };
+});
+
+jest.unstable_mockModule('cookie-parser', () => ({
+  default: mockCookieParser,
+}));
+
+jest.unstable_mockModule('http', () => ({
+  default: {
+    createServer: mockHttpCreateServer,
+  },
+}));
+
+const { getCallContext, startServer } = await import('./server');
 
 function createRequest(overrides: Partial<Request> & { headers?: Record<string, string> } = {}) {
   const headers = Object.entries(overrides.headers ?? {}).reduce(
@@ -51,6 +120,17 @@ function createRequest(overrides: Partial<Request> & { headers?: Record<string, 
     ...overrides,
     headers,
   } as Request;
+}
+
+function createResponse(): Response {
+  const res = {
+    json: jest.fn(),
+    send: jest.fn(),
+    status: jest.fn(),
+    sendFile: jest.fn(),
+  } as any;
+  res.status.mockReturnValue(res);
+  return res;
 }
 
 describe('app/server getCallContext', () => {
@@ -139,5 +219,648 @@ describe('app/server getCallContext', () => {
     const ctx = await getCallContext(req);
 
     expect(ctx.connectionInfo.ip).toBe('192.168.0.10');
+  });
+
+  test('uses authToken from request body when not in cookies', async () => {
+    const req = createRequest({
+      body: { authToken: 'body-token' },
+      headers: { host: 'localhost' },
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'body-token', expiresAt: new Date(), userId: new ObjectId() },
+      user: { id: '1', handle: 'testuser', roles: ['user'] },
+      roles: ['user'],
+    } as never);
+
+    const ctx = await getCallContext(req);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('body-token');
+    expect(ctx.session?.authToken).toBe('body-token');
+  });
+
+  test('handles null authToken', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost' },
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.session).toBeNull();
+    expect(ctx.roles).toEqual(['guest']);
+  });
+
+  test('provides default clientInfo when not provided', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost' },
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.clientInfo).toEqual({
+      screenWidth: 0,
+      screenHeight: 0,
+      windowWidth: 0,
+      windowHeight: 0,
+      pixelRatio: 1,
+      orientation: null,
+    });
+  });
+
+  test('parses connection info from request headers', async () => {
+    const req = createRequest({
+      headers: {
+        host: 'example.com',
+        'user-agent': 'Mozilla/5.0',
+        'accept-language': 'en-US,en;q=0.9',
+        referrer: 'https://google.com',
+      },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.connectionInfo).toEqual({
+      ip: undefined,
+      userAgent: 'Mozilla/5.0',
+      acceptLanguage: 'en-US,en;q=0.9',
+      referrer: 'https://google.com',
+      baseUrl: 'https://example.com',
+    });
+  });
+
+  test('handles X-Forwarded-For with multiple IPs', async () => {
+    const req = createRequest({
+      headers: {
+        'x-forwarded-for': '1.2.3.4, 5.6.7.8, 9.10.11.12',
+        host: 'localhost',
+      },
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+  });
+
+  test('handles X-Forwarded-For as array', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost' },
+    });
+    req.headers['x-forwarded-for'] = ['1.2.3.4', '5.6.7.8'];
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+  });
+
+  test('uses socket remoteAddress when ip is not available', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost' },
+    });
+    req.socket = { remoteAddress: '10.0.0.5' } as any;
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req);
+
+    expect(ctx.connectionInfo.ip).toBe('10.0.0.5');
+  });
+});
+
+describe('app/server startServer', () => {
+  let mockApp: any;
+  let mockHttpServer: any;
+  let originalEnv: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    originalEnv = { ...process.env };
+
+    mockApp = {
+      use: jest.fn(),
+      post: jest.fn(),
+      get: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+      all: jest.fn(),
+    };
+
+    // Set the app that will be returned by express()
+    mockExpressApp = mockApp;
+
+    mockHttpServer = {
+      listen: jest.fn((_port, callback?: () => void) => {
+        if (callback) callback();
+        return mockHttpServer;
+      }),
+    };
+
+    mockExpressJson.mockReturnValue('json-middleware');
+    mockExpressUrlencoded.mockReturnValue('urlencoded-middleware');
+    mockCookieParser.mockReturnValue('cookie-parser-middleware');
+    mockGoogleAuthRouter.mockReturnValue('google-router');
+    mockGithubAuthRouter.mockReturnValue('github-router');
+    mockHttpCreateServer.mockReturnValue(mockHttpServer);
+    mockGetWebsocketConfig.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('initializes express app with middleware', async () => {
+    const mockServer = {
+      init: jest.fn(),
+      middlewares: jest.fn(() => ['vite-middleware']),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.use).toHaveBeenCalledWith('json-middleware');
+    expect(mockApp.use).toHaveBeenCalledWith('urlencoded-middleware');
+    expect(mockApp.use).toHaveBeenCalledWith('cookie-parser-middleware');
+    expect(mockExpressJson).toHaveBeenCalledWith({ limit: '16mb' });
+    expect(mockExpressUrlencoded).toHaveBeenCalledWith({ extended: true, limit: '16mb' });
+  });
+
+  test('registers auth providers', async () => {
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.use).toHaveBeenCalledWith('google-router');
+    expect(mockApp.use).toHaveBeenCalledWith('github-router');
+  });
+
+  test('registers internal method endpoint', async () => {
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.post).toHaveBeenCalledWith(
+      '/api/_internal/method/:methodName(*)',
+      expect.any(Function)
+    );
+  });
+
+  test('calls server init before adding middlewares', async () => {
+    const callOrder: string[] = [];
+    const mockServer = {
+      init: jest.fn(() => callOrder.push('init')),
+      middlewares: jest.fn(() => {
+        callOrder.push('middlewares');
+        return ['middleware'];
+      }),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(callOrder).toEqual(['init', 'middlewares']);
+  });
+
+  test('registers catch-all route handler', async () => {
+    const mockHandler = jest.fn();
+    const mockServer = {
+      init: jest.fn(),
+      handler: mockHandler,
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.all).toHaveBeenCalledWith('*', expect.any(Function));
+  });
+
+  test('creates HTTP server and starts listening', async () => {
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockHttpCreateServer).toHaveBeenCalledWith(mockApp);
+    expect(mockHttpServer.listen).toHaveBeenCalled();
+  });
+
+  test('uses MODELENCE_PORT environment variable', async () => {
+    process.env.MODELENCE_PORT = '4000';
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockHttpServer.listen).toHaveBeenCalledWith('4000', expect.any(Function));
+  });
+
+  test('uses PORT environment variable as fallback', async () => {
+    process.env.PORT = '5000';
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockHttpServer.listen).toHaveBeenCalledWith('5000', expect.any(Function));
+  });
+
+  test('defaults to port 3000', async () => {
+    delete process.env.MODELENCE_PORT;
+    delete process.env.PORT;
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockHttpServer.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+  });
+
+  test('initializes websocket provider when configured', async () => {
+    const mockWebsocketProvider = {
+      init: jest.fn(),
+      broadcast: jest.fn(),
+    };
+    mockGetWebsocketConfig.mockReturnValue({ provider: mockWebsocketProvider });
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+    const channels = [{ name: 'test-channel' }] as any;
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels,
+    });
+
+    expect(mockWebsocketProvider.init).toHaveBeenCalledWith({
+      httpServer: mockHttpServer,
+      channels,
+    });
+  });
+
+  test('skips websocket initialization when not configured', async () => {
+    mockGetWebsocketConfig.mockReturnValue(null);
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    // Should complete without error
+    expect(mockHttpServer.listen).toHaveBeenCalled();
+  });
+
+  test('registers module routes', async () => {
+    const mockRouteHandler = jest.fn();
+    mockCreateRouteHandler.mockReturnValue(mockRouteHandler);
+
+    const mockModule = {
+      name: 'testModule',
+      routes: [
+        {
+          path: '/api/test',
+          handlers: {
+            get: jest.fn(),
+            post: jest.fn(),
+          },
+        },
+      ],
+    };
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [mockModule as any],
+      channels: [],
+    });
+
+    expect(mockCreateRouteHandler).toHaveBeenCalledWith('get', '/api/test', expect.any(Function));
+    expect(mockCreateRouteHandler).toHaveBeenCalledWith('post', '/api/test', expect.any(Function));
+    expect(mockApp.get).toHaveBeenCalledWith('/api/test', mockRouteHandler);
+    expect(mockApp.post).toHaveBeenCalledWith('/api/test', mockRouteHandler);
+  });
+
+  test('handles multiple modules with routes', async () => {
+    mockCreateRouteHandler.mockReturnValue(jest.fn());
+
+    const modules = [
+      {
+        name: 'module1',
+        routes: [
+          {
+            path: '/api/foo',
+            handlers: { get: jest.fn() },
+          },
+        ],
+      },
+      {
+        name: 'module2',
+        routes: [
+          {
+            path: '/api/bar',
+            handlers: { post: jest.fn() },
+          },
+        ],
+      },
+    ];
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: modules as any,
+      channels: [],
+    });
+
+    expect(mockApp.get).toHaveBeenCalledWith('/api/foo', expect.any(Function));
+    expect(mockApp.post).toHaveBeenCalledWith('/api/bar', expect.any(Function));
+  });
+
+  test('logs application startup', async () => {
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockLogInfo).toHaveBeenCalledWith('Application started', { source: 'app' });
+  });
+});
+
+describe('app/server method endpoint', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('handles successful method call', async () => {
+    const mockApp: any = {
+      use: jest.fn(),
+      post: jest.fn(),
+      all: jest.fn(),
+    };
+    mockExpressApp = mockApp;
+
+    (mockRunMethod as any).mockResolvedValue({ result: 'success' });
+    (mockGetResponseTypeMap as any).mockReturnValue({ result: 'string' });
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    // Get the method handler that was registered
+    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
+      call[0].includes('/api/_internal/method/')
+    )?.[1];
+
+    expect(methodHandler).toBeDefined();
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: { foo: 'bar' } },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(mockRunMethod).toHaveBeenCalledWith('testMethod', { foo: 'bar' }, expect.any(Object));
+    expect(res.json).toHaveBeenCalledWith({
+      data: { result: 'success' },
+      typeMap: { result: 'string' },
+    });
+  });
+
+  test('handles ModelenceError with custom status', async () => {
+    const mockApp: any = {
+      use: jest.fn(),
+      post: jest.fn(),
+      all: jest.fn(),
+    };
+    mockExpressApp = mockApp;
+
+    const { AuthError } = await import('../error');
+    (mockRunMethod as any).mockRejectedValue(new AuthError('Unauthorized'));
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
+      call[0].includes('/api/_internal/method/')
+    )?.[1];
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith('Unauthorized');
+  });
+
+  test('handles ZodError with validation messages', async () => {
+    const mockApp: any = {
+      use: jest.fn(),
+      post: jest.fn(),
+      all: jest.fn(),
+    };
+    mockExpressApp = mockApp;
+
+    const zodError = new Error('Validation failed') as any;
+    zodError.constructor = { name: 'ZodError' };
+    zodError.errors = [];
+    zodError.flatten = () => ({
+      fieldErrors: { email: ['Invalid email'], age: ['Must be positive'] },
+      formErrors: ['Form invalid'],
+    });
+
+    (mockRunMethod as any).mockRejectedValue(zodError);
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
+      call[0].includes('/api/_internal/method/')
+    )?.[1];
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      'email: Invalid email; age: Must be positive; Form invalid'
+    );
+  });
+
+  test('handles generic error with 500 status', async () => {
+    const mockApp: any = {
+      use: jest.fn(),
+      post: jest.fn(),
+      all: jest.fn(),
+    };
+    mockExpressApp = mockApp;
+
+    (mockRunMethod as any).mockRejectedValue(new Error('Something went wrong'));
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
+      call[0].includes('/api/_internal/method/')
+    )?.[1];
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('Something went wrong');
+  });
+
+  test('handles non-Error thrown values', async () => {
+    const mockApp: any = {
+      use: jest.fn(),
+      post: jest.fn(),
+      all: jest.fn(),
+    };
+    mockExpressApp = mockApp;
+
+    (mockRunMethod as any).mockRejectedValue('String error');
+
+    const mockServer = {
+      init: jest.fn(),
+      handler: jest.fn(),
+    };
+
+    await startServer(mockServer as any, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
+      call[0].includes('/api/_internal/method/')
+    )?.[1];
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('String error');
   });
 });
