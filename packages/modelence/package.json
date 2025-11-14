@@ -31,7 +31,9 @@
     "lint": "eslint src --ext .ts,.tsx --fix",
     "lint:check": "eslint src --ext .ts,.tsx",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "postversion": "git push && git push --tags"
   },
   "repository": {
@@ -50,6 +52,7 @@
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.5.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.1",
@@ -57,9 +60,12 @@
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "eslint": "^9.37.0",
+    "jest": "^30.2.0",
     "prettier": "^3.6.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "ts-jest": "^29.4.5",
+    "ts-node": "^10.9.2"
   },
   "dependencies": {
     "@socket.io/mongo-adapter": "^0.4.0",
