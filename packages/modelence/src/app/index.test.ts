@@ -1,6 +1,13 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import type { connectCloudBackend as ConnectCloudBackend } from './backendApi';
 import type { Module } from './module';
 import type { MigrationScript } from '../migration';
+import type { startCronJobs as StartCronJobs } from '../cron/jobs';
+import type { ModelSchema } from '../data/types';
+import type { Store } from '../data/store';
+import type { RateLimitRule } from '../rate-limit/types';
+import { ServerChannel } from '@/websocket/serverChannel';
+import type { WebsocketServerProvider } from '@/websocket/types';
 
 // Mock external dependencies
 const mockDotenvConfig = jest.fn();
@@ -214,18 +221,25 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
   } as Module;
 }
 
+type MinimalStore = Pick<Store<ModelSchema, Record<string, never>>, 'init' | 'createIndexes'>;
+
+const createStoreMock = (): MinimalStore => ({
+  init: jest.fn(),
+  createIndexes: jest.fn(),
+});
+
 describe('app/index', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetMongodbUri.mockReturnValue('');
-    (mockConnectCloudBackend as jest.MockedFunction<any>).mockResolvedValue({
+    (mockConnectCloudBackend as jest.MockedFunction<ConnectCloudBackend>).mockResolvedValue({
       configs: [],
       environmentId: 'env-123',
       appAlias: 'test-app',
       environmentAlias: 'test-env',
       telemetry: {},
     });
-    (mockStartCronJobs as jest.MockedFunction<any>).mockResolvedValue(undefined);
+    (mockStartCronJobs as jest.MockedFunction<StartCronJobs>).mockResolvedValue(undefined);
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MODELENCE_CRON_ENABLED;
   });
@@ -277,11 +291,10 @@ describe('app/index', () => {
   });
 
   test('uses custom websocket provider when specified', async () => {
-    const customProvider = {
-      listen: jest.fn(),
-      init: jest.fn(),
+    const customProvider: WebsocketServerProvider = {
+      init: jest.fn(async () => {}),
       broadcast: jest.fn(),
-    } as any;
+    };
     await startApp({ websocket: { provider: customProvider } });
 
     expect(mockSetWebsocketConfig).toHaveBeenCalledWith({
@@ -294,10 +307,7 @@ describe('app/index', () => {
     const mockClient = { db: jest.fn() };
     mockGetClient.mockReturnValue(mockClient);
 
-    const mockStore = {
-      init: jest.fn(),
-      createIndexes: jest.fn(),
-    } as any;
+    const mockStore = createStoreMock();
 
     await startApp({
       modules: [createTestModule({ stores: [mockStore] })],
@@ -335,8 +345,8 @@ describe('app/index', () => {
   });
 
   test('collects stores from all modules', async () => {
-    const store1 = { init: jest.fn(), createIndexes: jest.fn() } as any;
-    const store2 = { init: jest.fn(), createIndexes: jest.fn() } as any;
+    const store1 = createStoreMock();
+    const store2 = createStoreMock();
 
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
@@ -353,8 +363,8 @@ describe('app/index', () => {
   });
 
   test('collects rate limits from modules and initializes them', async () => {
-    const rateLimit1 = { name: 'limit1', limit: 100 } as any;
-    const rateLimit2 = { name: 'limit2', limit: 200 } as any;
+    const rateLimit1: RateLimitRule = { bucket: 'limit1', type: 'user', window: 60000, limit: 100 };
+    const rateLimit2: RateLimitRule = { bucket: 'limit2', type: 'user', window: 60000, limit: 200 };
 
     await startApp({
       modules: [
@@ -430,7 +440,7 @@ describe('app/index', () => {
   test('connects to cloud backend when MODELENCE_SERVICE_ENDPOINT is set', async () => {
     process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
 
-    (mockConnectCloudBackend as jest.MockedFunction<any>).mockResolvedValue({
+    (mockConnectCloudBackend as jest.MockedFunction<ConnectCloudBackend>).mockResolvedValue({
       configs: [{ key: 'test', type: 'string', value: 'value' }],
       environmentId: 'env-123',
       appAlias: 'test-app',
@@ -509,8 +519,8 @@ describe('app/index', () => {
   });
 
   test('starts server with combined modules and channels', async () => {
-    const channel1 = { name: 'channel1' } as any;
-    const channel2 = { name: 'channel2' } as any;
+    const channel1 = new ServerChannel('channel1');
+    const channel2 = new ServerChannel('channel2');
 
     await startApp({
       modules: [

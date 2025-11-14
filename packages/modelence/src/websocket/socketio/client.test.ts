@@ -1,16 +1,26 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
-import type { Socket } from 'socket.io-client';
+import type ioClientFactory, { Socket } from 'socket.io-client';
+import type { ClientChannel } from '../clientChannel';
+import type { getLocalStorageSession as GetLocalStorageSession } from '@/client/localStorage';
 
-// Mock dependencies
-const mockSocket = {
+type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit'>;
+const mockSocket: jest.Mocked<SocketMethods> = {
   on: jest.fn(),
   once: jest.fn(),
   off: jest.fn(),
   emit: jest.fn(),
-} as any as Socket;
+};
 
-const mockIo = jest.fn(() => mockSocket) as jest.MockedFunction<any>;
-const mockGetLocalStorageSession = jest.fn() as jest.MockedFunction<any>;
+type IoFactory = typeof ioClientFactory;
+const mockIo: jest.MockedFunction<IoFactory> = jest.fn(() => mockSocket as unknown as Socket);
+type LocalStorageSession = ReturnType<GetLocalStorageSession>;
+const mockGetLocalStorageSession = jest.fn<LocalStorageSession, Parameters<GetLocalStorageSession>>();
+
+type MinimalChannel = Pick<ClientChannel, 'init' | 'category'>;
+const createMockChannel = (category: string): MinimalChannel => ({
+  category,
+  init: jest.fn(),
+});
 
 jest.unstable_mockModule('socket.io-client', () => ({
   default: mockIo,
@@ -54,8 +64,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('initializes channels when provided', () => {
-      const mockChannel1 = { init: jest.fn(), category: 'channel1' } as any;
-      const mockChannel2 = { init: jest.fn(), category: 'channel2' } as any;
+      const mockChannel1 = createMockChannel('channel1');
+      const mockChannel2 = createMockChannel('channel2');
 
       websocketProvider.init({ channels: [mockChannel1, mockChannel2] });
 
@@ -75,11 +85,11 @@ describe('websocket/socketio/client', () => {
       const mockChannel = {
         init: jest.fn(() => callOrder.push('channel.init')),
         category: 'test',
-      } as any;
+      } satisfies MinimalChannel;
 
-      mockIo.mockImplementationOnce((...args: any[]) => {
+      mockIo.mockImplementationOnce(() => {
         callOrder.push('io');
-        return mockSocket;
+        return mockSocket as unknown as Socket;
       });
 
       websocketProvider.init({ channels: [mockChannel] });
@@ -289,15 +299,15 @@ describe('websocket/socketio/client', () => {
       websocketProvider.joinChannel({ category: 'lobby', id: 'main' });
       websocketProvider.leaveChannel({ category: 'lobby', id: 'main' });
 
-      const joinCall = (mockSocket.emit as any).mock.calls.find(
-        (call: any[]) => call[0] === 'joinChannel'
-      );
-      const leaveCall = (mockSocket.emit as any).mock.calls.find(
-        (call: any[]) => call[0] === 'leaveChannel'
+      const joinCall = mockSocket.emit.mock.calls.find(([eventName]) => eventName === 'joinChannel');
+      const leaveCall = mockSocket.emit.mock.calls.find(
+        ([eventName]) => eventName === 'leaveChannel'
       );
 
-      expect(joinCall[1]).toBe(leaveCall[1]);
-      expect(joinCall[1]).toBe('lobby:main');
+      expect(joinCall).toBeDefined();
+      expect(leaveCall).toBeDefined();
+      expect(joinCall?.[1]).toBe(leaveCall?.[1]);
+      expect(joinCall?.[1]).toBe('lobby:main');
     });
   });
 
@@ -364,15 +374,15 @@ describe('websocket/socketio/client', () => {
     });
 
     test('handles multiple channels initialization', () => {
-      const channels = [
-        { init: jest.fn(), category: 'messages' },
-        { init: jest.fn(), category: 'notifications' },
-        { init: jest.fn(), category: 'presence' },
-      ] as any;
+      const channels: MinimalChannel[] = [
+        createMockChannel('messages'),
+        createMockChannel('notifications'),
+        createMockChannel('presence'),
+      ];
 
       websocketProvider.init({ channels });
 
-      channels.forEach((channel: any) => {
+      channels.forEach((channel) => {
         expect(channel.init).toHaveBeenCalledTimes(1);
       });
     });

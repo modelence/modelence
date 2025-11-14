@@ -3,7 +3,7 @@ import { ClientChannel } from './clientChannel';
 describe('websocket/clientChannel', () => {
   describe('ClientChannel constructor', () => {
     test('should create instance with category and onMessage handler', () => {
-      const onMessage = (data: string) => {};
+      const onMessage = (_data: string) => {};
       const channel = new ClientChannel('test-category', onMessage);
 
       expect(channel.category).toBe('test-category');
@@ -16,7 +16,7 @@ describe('websocket/clientChannel', () => {
     });
 
     test('should work with typed data', () => {
-      const onMessage = (data: { message: string; timestamp: number }) => {};
+      const onMessage = (_data: { message: string; timestamp: number }) => {};
       const channel = new ClientChannel<{ message: string; timestamp: number }>(
         'messages',
         onMessage

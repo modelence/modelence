@@ -1,5 +1,16 @@
 import { isServer, requireServer, htmlToText } from './index';
 
+type MutableGlobal = typeof globalThis & { window?: unknown };
+
+function setGlobalWindow(value: unknown | undefined) {
+  const target = globalThis as MutableGlobal;
+  if (value === undefined) {
+    delete target.window;
+  } else {
+    target.window = value;
+  }
+}
+
 describe('utils/index', () => {
   describe('isServer', () => {
     test('should return true when window is not an object', () => {
@@ -8,17 +19,18 @@ describe('utils/index', () => {
     });
 
     test('should return false when window is an object', () => {
-      const originalWindow = global.window;
-      (global as any).window = {};
+      const target = globalThis as MutableGlobal;
+      const originalWindow = target.window;
+      setGlobalWindow({});
 
       const result = isServer();
       expect(result).toBe(false);
 
       // Cleanup
       if (originalWindow === undefined) {
-        delete (global as any).window;
+        setGlobalWindow(undefined);
       } else {
-        global.window = originalWindow;
+        setGlobalWindow(originalWindow);
       }
     });
   });
@@ -29,16 +41,17 @@ describe('utils/index', () => {
     });
 
     test('should throw error when running on client', () => {
-      const originalWindow = global.window;
-      (global as any).window = {};
+      const target = globalThis as MutableGlobal;
+      const originalWindow = target.window;
+      setGlobalWindow({});
 
       expect(() => requireServer()).toThrow('This function can only be called on the server');
 
       // Cleanup
       if (originalWindow === undefined) {
-        delete (global as any).window;
+        setGlobalWindow(undefined);
       } else {
-        global.window = originalWindow;
+        setGlobalWindow(originalWindow);
       }
     });
   });

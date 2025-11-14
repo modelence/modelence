@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import type { Request, Response, NextFunction } from 'express';
 
 const mockAuthenticate = jest.fn();
 const mockGetMongodbUri = jest.fn();
@@ -24,15 +25,30 @@ const { createRouteHandler } = await import('./handler');
 describe('routes/handler', () => {
   const transactionEnd = jest.fn();
 
-  const baseReq = {
-    headers: {},
-    query: {},
-    body: {},
-    params: {},
-    cookies: {},
-    path: '/test',
-  } as any;
-  let res: any;
+  const createRequest = (): Request =>
+    ({
+      headers: {},
+      query: {},
+      body: {},
+      params: {},
+      cookies: {},
+      path: '/test',
+    }) as unknown as Request;
+
+  const createResponse = (): Response => {
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn().mockReturnThis(),
+      redirect: jest.fn(),
+      setHeader: jest.fn(),
+    } satisfies Partial<Response>;
+
+    return response as Response;
+  };
+
+  const baseReq = createRequest();
+  let res: Response;
+  let next: NextFunction;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -42,12 +58,8 @@ describe('routes/handler', () => {
       end: transactionEnd,
       setContext: jest.fn(),
     }));
-    res = {
-      status: jest.fn().mockReturnThis(),
-      send: jest.fn().mockReturnThis(),
-      redirect: jest.fn(),
-      setHeader: jest.fn(),
-    };
+    res = createResponse();
+    next = jest.fn() as NextFunction;
   });
 
   test('executes handler with authenticated context', async () => {
@@ -63,7 +75,12 @@ describe('routes/handler', () => {
       data: { ok: true },
     }));
 
-    await handler({ ...baseReq, headers: { 'x-modelence-auth-token': 'token' } }, res, jest.fn());
+    const authedReq = {
+      ...baseReq,
+      headers: { 'x-modelence-auth-token': 'token' },
+    } as Request;
+
+    await handler(authedReq, res, next);
 
     expect(mockAuthenticate).toHaveBeenCalledWith('token');
     expect(res.status).toHaveBeenCalledWith(200);
@@ -76,7 +93,7 @@ describe('routes/handler', () => {
       throw new ValidationError('fail');
     });
 
-    await handler(baseReq, res, jest.fn());
+    await handler(baseReq, res, next);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith('fail');
@@ -87,7 +104,7 @@ describe('routes/handler', () => {
       throw new Error('boom');
     });
 
-    await handler(baseReq, res, jest.fn());
+    await handler(baseReq, res, next);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Error: boom');

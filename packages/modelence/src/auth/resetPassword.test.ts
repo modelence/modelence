@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ObjectId } from 'mongodb';
+import type { Context } from '@/methods/types';
 
-const mockUsersFindOne = jest.fn() as jest.MockedFunction<any>;
-const mockUsersUpdateOne = jest.fn() as jest.MockedFunction<any>;
-const mockResetTokensInsertOne = jest.fn() as jest.MockedFunction<any>;
-const mockResetTokensFindOne = jest.fn() as jest.MockedFunction<any>;
-const mockResetTokensDeleteOne = jest.fn() as jest.MockedFunction<any>;
-const mockGetEmailConfig = jest.fn() as jest.MockedFunction<any>;
-const mockHtmlToText = jest.fn() as jest.MockedFunction<any>;
-const mockValidateEmail = jest.fn() as jest.MockedFunction<any>;
-const mockValidatePassword = jest.fn() as jest.MockedFunction<any>;
-const mockRandomBytes = jest.fn() as jest.MockedFunction<any>;
-const mockBcryptHash = jest.fn() as jest.MockedFunction<any>;
-const mockTime = { hours: jest.fn() as jest.MockedFunction<any> };
+const mockUsersFindOne = jest.fn();
+const mockUsersUpdateOne = jest.fn();
+const mockResetTokensInsertOne = jest.fn();
+const mockResetTokensFindOne = jest.fn();
+const mockResetTokensDeleteOne = jest.fn();
+const mockGetEmailConfig = jest.fn();
+const mockHtmlToText = jest.fn();
+const mockValidateEmail = jest.fn();
+const mockValidatePassword = jest.fn();
+const mockRandomBytes = jest.fn();
+const mockBcryptHash = jest.fn();
+const mockTime = { hours: jest.fn() };
 
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
@@ -55,6 +56,24 @@ jest.unstable_mockModule('@/time', () => ({
 
 const { handleSendResetPasswordToken, handleResetPassword } = await import('./resetPassword');
 
+const createContext = (overrides: Partial<Context> = {}): Context => ({
+  session: overrides.session ?? null,
+  user: overrides.user ?? null,
+  roles: overrides.roles ?? [],
+  clientInfo: {
+    screenWidth: 0,
+    screenHeight: 0,
+    windowWidth: 0,
+    windowHeight: 0,
+    pixelRatio: 1,
+    orientation: null,
+    ...(overrides.clientInfo ?? {}),
+  },
+  connectionInfo: {
+    ...(overrides.connectionInfo ?? {}),
+  },
+});
+
 describe('auth/resetPassword', () => {
   const mockEmailProvider = {
     sendEmail: jest.fn(async (_message: unknown) => {}),
@@ -96,9 +115,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      const result = await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      const result = await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockValidateEmail).toHaveBeenCalledWith(email);
       expect(mockUsersFindOne).toHaveBeenCalledWith(
@@ -130,9 +150,10 @@ describe('auth/resetPassword', () => {
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(null);
 
-      const result = await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      const result = await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
       expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
@@ -153,9 +174,10 @@ describe('auth/resetPassword', () => {
         status: 'active',
       });
 
-      const result = await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      const result = await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
       expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
@@ -178,9 +200,10 @@ describe('auth/resetPassword', () => {
       });
 
       await expect(
-        handleSendResetPasswordToken({ email }, {
-          connectionInfo: { baseUrl: 'https://example.com' },
-        } as any)
+        handleSendResetPasswordToken(
+          { email },
+          createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+        )
       ).rejects.toThrow('Email provider is not configured');
     });
 
@@ -208,9 +231,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -222,7 +246,9 @@ describe('auth/resetPassword', () => {
     test('uses custom email template if provided', async () => {
       const email = 'user@example.com';
       const resetToken = 'customtoken';
-      const customTemplate = ({ email, resetUrl }: any) => `<p>Custom: ${email} - ${resetUrl}</p>`;
+      type TemplateProps = { email: string; resetUrl: string; name: string };
+      const customTemplate = ({ email: templateEmail, resetUrl }: TemplateProps) =>
+        `<p>Custom: ${templateEmail} - ${resetUrl}</p>`;
 
       mockValidateEmail.mockReturnValue(email);
       mockGetEmailConfig.mockReturnValue({
@@ -244,9 +270,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -272,9 +299,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://fallback.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://fallback.com' } })
+      );
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -300,9 +328,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://connection.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://connection.com' } })
+      );
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -334,9 +363,10 @@ describe('auth/resetPassword', () => {
         toString: () => resetToken,
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -361,9 +391,10 @@ describe('auth/resetPassword', () => {
         toString: () => 'token',
       });
 
-      await handleSendResetPasswordToken({ email }, {
-        connectionInfo: { baseUrl: 'https://example.com' },
-      } as any);
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
 
       expect(mockResetTokensInsertOne).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -401,7 +432,7 @@ describe('auth/resetPassword', () => {
       });
       mockBcryptHash.mockResolvedValue(hashedPassword);
 
-      const result = await handleResetPassword({ token, password }, {} as any);
+      const result = await handleResetPassword({ token, password }, createContext());
 
       expect(mockValidatePassword).toHaveBeenCalledWith(password);
       expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
@@ -429,7 +460,7 @@ describe('auth/resetPassword', () => {
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(null);
 
-      await expect(handleResetPassword({ token, password }, {} as any)).rejects.toThrow(
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'Invalid or expired reset token'
       );
 
@@ -450,7 +481,7 @@ describe('auth/resetPassword', () => {
         createdAt: new Date(Date.now() - 4000000),
       });
 
-      await expect(handleResetPassword({ token, password }, {} as any)).rejects.toThrow(
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'Reset token has expired'
       );
 
@@ -473,7 +504,7 @@ describe('auth/resetPassword', () => {
       });
       mockUsersFindOne.mockResolvedValue(null);
 
-      await expect(handleResetPassword({ token, password }, {} as any)).rejects.toThrow(
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'User not found'
       );
 
@@ -498,7 +529,7 @@ describe('auth/resetPassword', () => {
       });
 
       await expect(
-        handleResetPassword({ token, password: weakPassword }, {} as any)
+        handleResetPassword({ token, password: weakPassword }, createContext())
       ).rejects.toThrow('Password must be at least 8 characters');
 
       expect(mockBcryptHash).not.toHaveBeenCalled();
@@ -523,7 +554,7 @@ describe('auth/resetPassword', () => {
       });
       mockBcryptHash.mockResolvedValue('hashResult');
 
-      await handleResetPassword({ token, password }, {} as any);
+      await handleResetPassword({ token, password }, createContext());
 
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
     });
@@ -546,7 +577,7 @@ describe('auth/resetPassword', () => {
       });
       mockBcryptHash.mockResolvedValue('hashedPassword');
 
-      await handleResetPassword({ token, password }, {} as any);
+      await handleResetPassword({ token, password }, createContext());
 
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(mockResetTokensDeleteOne).toHaveBeenCalledTimes(1);

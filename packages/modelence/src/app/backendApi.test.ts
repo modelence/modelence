@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import os from 'os';
 import type { Store } from '../data/store';
+import type { ModelSchema } from '../data/types';
 import type { CronJobMetadata } from '../cron/types';
 import type { ConfigSchema } from '../config/types';
 import { connectCloudBackend, fetchConfigs, syncStatus } from './backendApi';
 
-type MockStore = Pick<Store<any, any>, 'getName' | 'getSerializedSchema'>;
+type BaseStore = Store<ModelSchema, Record<string, never>>;
+type MockStore = Pick<BaseStore, 'getName' | 'getSerializedSchema'>;
 
 const createStore = (name: string, schema: object = { fields: name }): MockStore =>
   ({
@@ -13,8 +15,7 @@ const createStore = (name: string, schema: object = { fields: name }): MockStore
     getSerializedSchema: () => schema,
   }) as MockStore;
 
-const asStoreArray = (stores: MockStore[]): Store<any, any>[] =>
-  stores as unknown as Store<any, any>[];
+const asStoreArray = (stores: MockStore[]): BaseStore[] => stores as unknown as BaseStore[];
 
 describe('app/backendApi', () => {
   const originalEnv = process.env;

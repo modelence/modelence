@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-import type { Request, Response } from 'express';
 import type { Server } from 'http';
 import type { Socket } from 'socket.io';
+import type { Session, User } from '@/auth/types';
 import { ServerChannel as ServerChannelClass } from '../serverChannel';
 
 const mockCreateIndex = jest.fn();
@@ -31,14 +31,14 @@ jest.unstable_mockModule('@/auth', () => ({
   authenticate: mockAuthenticate,
 }));
 
-const eventHandlers: Record<string, ((...args: any[]) => void) | undefined> = {};
+const eventHandlers: Record<string, ((...args: unknown[]) => void) | undefined> = {};
 const socketMiddlewares: Array<(socket: Socket, next: () => void) => void> = [];
 const toEmit = jest.fn();
 const mockTo = jest.fn(() => ({
   emit: toEmit,
 }));
 const serverInstance = {
-  on: jest.fn((event: string, handler: (...args: any[]) => void) => {
+  on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
     eventHandlers[event] = handler;
   }),
   use: jest.fn((handler: (socket: Socket, next: () => void) => void) => {
@@ -73,7 +73,7 @@ describe('websocket/socketio/server', () => {
   });
 
   function buildSocket() {
-    const socketEvents: Record<string, (...args: any[]) => void> = {};
+    const socketEvents: Record<string, (...args: unknown[]) => void> = {};
     const socket = {
       id: 'socket-1',
       data: { user: { id: '1' } },
@@ -81,7 +81,7 @@ describe('websocket/socketio/server', () => {
       join: jest.fn(),
       leave: jest.fn(),
       emit: jest.fn(),
-      on: jest.fn((event: string, handler: (...args: any[]) => void) => {
+      on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
         socketEvents[event] = handler;
       }),
     };
@@ -89,10 +89,12 @@ describe('websocket/socketio/server', () => {
   }
 
   test('init configures socket server, middleware, and channel handlers', async () => {
-    const accessSpy = jest.fn(async () => true);
+    const accessSpy = jest.fn(
+      async (_props: { user: User | null; session: Session | null; roles: string[] }) => true
+    );
     await websocketProvider.init({
       httpServer: {} as Server,
-      channels: [new ServerChannelClass('chat', accessSpy as any)],
+      channels: [new ServerChannelClass('chat', accessSpy)],
     });
 
     expect((mockCollectionFn as jest.Mock).mock.calls[0]?.[0]).toBe('_modelenceSocketio');
@@ -121,7 +123,7 @@ describe('websocket/socketio/server', () => {
     const joinHandler = socketEvents.joinChannel;
     expect(joinHandler).toBeDefined();
     await joinHandler?.('chat:room1');
-    expect((accessSpy as jest.Mock).mock.calls[0]?.[0]).toBe(socket.data);
+    expect(accessSpy).toHaveBeenCalledWith(socket.data);
     expect(socket.join).toHaveBeenCalledWith('chat:room1');
     expect(socket.emit).toHaveBeenCalledWith('joinedChannel', 'chat:room1');
 

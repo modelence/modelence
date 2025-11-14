@@ -1,18 +1,19 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import type { ViteDevServer, UserConfig, Plugin } from 'vite';
 import type { Request, Response } from 'express';
+import type { ExpressMiddleware } from './types';
 
 // Mock external dependencies
-const mockCreateServer = jest.fn() as jest.MockedFunction<any>;
-const mockLoadConfigFromFile = jest.fn() as jest.MockedFunction<any>;
-const mockMergeConfig = jest.fn() as jest.MockedFunction<any>;
-const mockReactPlugin = jest.fn() as jest.MockedFunction<any>;
-const mockExpressStatic = jest.fn() as jest.MockedFunction<any>;
-const mockExistsSync = jest.fn() as jest.MockedFunction<any>;
+const mockCreateServer = jest.fn();
+const mockLoadConfigFromFile = jest.fn();
+const mockMergeConfig = jest.fn();
+const mockReactPlugin = jest.fn();
+const mockExpressStatic = jest.fn();
+const mockExistsSync = jest.fn();
 
 jest.unstable_mockModule('vite', () => ({
   createServer: mockCreateServer,
-  defineConfig: (config: any) => config,
+  defineConfig: <T>(config: T) => config,
   loadConfigFromFile: mockLoadConfigFromFile,
   mergeConfig: mockMergeConfig,
 }));
@@ -34,11 +35,22 @@ jest.unstable_mockModule('fs', () => ({
 }));
 
 // Import after mocking
-const viteServerModule = await import('./viteServer');
+await import('./viteServer');
+
+type TestViteServer = {
+  init(): Promise<void>;
+  middlewares(): ExpressMiddleware[];
+  handler(req: Request, res: Response): void;
+};
+
+type TestViteServerConstructor = new () => TestViteServer;
+
+const invokeIsDev = (server: TestViteServer) =>
+  (server as unknown as { isDev(): boolean }).isDev();
 
 describe('ViteServer', () => {
-  let ViteServer: any;
-  let viteServer: any;
+  let ViteServer: TestViteServerConstructor;
+  let viteServer: TestViteServer;
   let originalNodeEnv: string | undefined;
 
   beforeEach(async () => {
@@ -52,12 +64,15 @@ describe('ViteServer', () => {
     mockExpressStatic.mockReturnValue('static-middleware');
     mockExistsSync.mockReturnValue(false);
     mockLoadConfigFromFile.mockResolvedValue({ config: {} });
-    mockMergeConfig.mockImplementation((base: any, user: any) => ({ ...base, ...user }));
+    mockMergeConfig.mockImplementation((base: UserConfig, user: UserConfig) => ({
+      ...base,
+      ...user,
+    }));
 
     // Re-import to get fresh class
-    const module = await import('./viteServer');
+    const module = (await import('./viteServer')) as { ViteServer?: TestViteServerConstructor };
     ViteServer =
-      (module as any).default?.ViteServer ||
+      module.ViteServer ||
       class {
         private viteServer?: ViteDevServer;
         private config?: UserConfig;
@@ -69,9 +84,9 @@ describe('ViteServer', () => {
           }
         }
 
-        middlewares() {
+        middlewares(): ExpressMiddleware[] {
           if (this.isDev()) {
-            return (this.viteServer?.middlewares ?? []) as any[];
+            return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
           }
           const staticFolders = [mockExpressStatic('./.modelence/build/client')];
           if (this.config?.publicDir) {
@@ -84,7 +99,7 @@ describe('ViteServer', () => {
           if (this.isDev()) {
             try {
               res.sendFile('index.html', { root: './src/client' });
-            } catch (e) {
+            } catch {
               res.status(500).send('Internal Server Error');
             }
           } else {
@@ -190,7 +205,7 @@ describe('ViteServer', () => {
       const mockRes = {
         sendFile: jest.fn(),
         status: jest.fn(() => ({ send: jest.fn() })),
-      } as any;
+      };
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -204,7 +219,7 @@ describe('ViteServer', () => {
       const mockReq = {} as Request;
       const mockRes = {
         sendFile: jest.fn(),
-      } as any;
+      };
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -219,13 +234,13 @@ describe('ViteServer', () => {
       process.env.NODE_ENV = 'development';
       const mockReq = {} as Request;
       const mockSend = jest.fn();
-      const mockStatus = jest.fn(() => ({ send: mockSend })) as any;
+      const mockStatus = jest.fn(() => ({ send: mockSend }));
       const mockRes = {
         sendFile: jest.fn(() => {
           throw new Error('File not found');
         }),
         status: mockStatus,
-      } as any;
+      };
 
       viteServer = new ViteServer();
       await viteServer.init();
@@ -240,19 +255,19 @@ describe('ViteServer', () => {
     test('returns true when NODE_ENV is not production', () => {
       process.env.NODE_ENV = 'development';
       viteServer = new ViteServer();
-      expect((viteServer as any).isDev()).toBe(true);
+      expect(invokeIsDev(viteServer)).toBe(true);
     });
 
     test('returns true when NODE_ENV is undefined', () => {
       delete process.env.NODE_ENV;
       viteServer = new ViteServer();
-      expect((viteServer as any).isDev()).toBe(true);
+      expect(invokeIsDev(viteServer)).toBe(true);
     });
 
     test('returns false when NODE_ENV is production', () => {
       process.env.NODE_ENV = 'production';
       viteServer = new ViteServer();
-      expect((viteServer as any).isDev()).toBe(false);
+      expect(invokeIsDev(viteServer)).toBe(false);
     });
   });
 });
@@ -270,9 +285,9 @@ describe('safelyMergeConfig', () => {
     jest.clearAllMocks();
   });
 
-  test('merges base and user configs', () => {
-    const baseConfig = { server: { port: 3000 } };
-    const userConfig = { server: { host: 'localhost' } };
+    test('merges base and user configs', () => {
+      const _baseConfig = { server: { port: 3000 } };
+      const _userConfig = { server: { host: 'localhost' } };
     const merged = { server: { port: 3000, host: 'localhost' } };
 
     mockMergeConfig.mockReturnValue(merged);
@@ -281,19 +296,21 @@ describe('safelyMergeConfig', () => {
     expect(mockMergeConfig).not.toHaveBeenCalled();
   });
 
-  test('deduplicates plugins by name', () => {
-    const plugin1: Plugin = { name: 'test-plugin', apply: 'build' };
-    const plugin2: Plugin = { name: 'test-plugin', apply: 'serve' };
-    const plugin3: Plugin = { name: 'other-plugin', apply: 'build' };
+    test('deduplicates plugins by name', () => {
+      const plugin1: Plugin = { name: 'test-plugin', apply: 'build' };
+      const plugin2: Plugin = { name: 'test-plugin', apply: 'serve' };
+      const plugin3: Plugin = { name: 'other-plugin', apply: 'build' };
 
-    const baseConfig = { plugins: [plugin1, plugin3] };
-    const userConfig = { plugins: [plugin2] };
+      const _baseConfig = { plugins: [plugin1, plugin3] };
+      const _userConfig = { plugins: [plugin2] };
 
-    mockMergeConfig.mockImplementation((base: any, user: any) => {
-      const merged = { ...base, ...user };
-      merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
-      return merged;
-    });
+    mockMergeConfig.mockImplementation(
+      (base: { plugins?: Plugin[] }, user: { plugins?: Plugin[] }) => {
+        const merged = { ...base, ...user };
+        merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
+        return merged;
+      }
+    );
 
     // Test through configuration loading
     expect(true).toBe(true);
