@@ -1,6 +1,8 @@
-// TODO: Add tests for dbLocks MongoDB store
+import { describe, expect, test } from '@jest/globals';
+import { locksCollection } from './db';
+
 describe('lock/db', () => {
-  test('placeholder', () => {
-    expect(true).toBe(true);
+  test('locksCollection should be defined', () => {
+    expect(locksCollection).toBeDefined();
   });
 });

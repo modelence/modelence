@@ -1,6 +1,8 @@
-// TODO: Add tests for dbRateLimits MongoDB store
+import { describe, expect, test } from '@jest/globals';
+import { dbRateLimits } from './db';
+
 describe('rate-limit/db', () => {
-  test('placeholder', () => {
-    expect(true).toBe(true);
+  test('dbRateLimits should be defined', () => {
+    expect(dbRateLimits).toBeDefined();
   });
 });

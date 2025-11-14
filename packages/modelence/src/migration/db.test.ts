@@ -1,6 +1,8 @@
-// TODO: Add tests for dbMigrations MongoDB store
+import { describe, expect, test } from '@jest/globals';
+import { dbMigrations } from './db';
+
 describe('migration/db', () => {
-  test('placeholder', () => {
-    expect(true).toBe(true);
+  test('dbMigrations should be defined', () => {
+    expect(dbMigrations).toBeDefined();
   });
 });
