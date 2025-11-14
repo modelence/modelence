@@ -44,6 +44,12 @@ export async function runMigrations(migrations: MigrationScript[]) {
     });
     try {
       const output = await handler();
+      const outputStr = (output || '').toString().trim();
+      const maxSize = 15 * 1024 * 1024; // 15MB (leaving 1MB buffer for other fields and MongoDB overhead)
+      const truncatedOutput =
+        outputStr.length > maxSize
+          ? outputStr.slice(0, maxSize) + '\n[Output truncated - exceeded size limit]'
+          : outputStr;
       await dbMigrations.upsertOne(
         {
           version,
@@ -53,7 +59,7 @@ export async function runMigrations(migrations: MigrationScript[]) {
             version,
             status: 'completed',
             description,
-            output: output || '',
+            output: truncatedOutput,
             appliedAt: new Date(),
           },
         }
