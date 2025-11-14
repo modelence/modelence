@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import type { ObjectId } from 'mongodb';
 
-const createObjectId = (value: string): ObjectId => ({
-  toString: () => value,
-}) as unknown as ObjectId;
+const createObjectId = (value: string): ObjectId =>
+  ({
+    toString: () => value,
+  }) as unknown as ObjectId;
 
 const mockConsumeRateLimit = jest.fn();
 const mockSendVerificationEmail = jest.fn();
@@ -93,15 +94,13 @@ describe('auth/signup', () => {
   test('creates user and triggers verification email', async () => {
     const insertedId = createObjectId('user-1');
     mockInsertOne.mockResolvedValue({ insertedId } as never);
-    mockFindOne
-      .mockResolvedValueOnce(null as never)
-      .mockResolvedValueOnce({
-        _id: insertedId,
-        handle: 'testuser',
-        createdAt: new Date(),
-        authMethods: {},
-        emails: [{ address: 'test@example.com', verified: false }],
-      } as never);
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: insertedId,
+      handle: 'testuser',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'test@example.com', verified: false }],
+    } as never);
 
     const result = await handleSignupWithPassword(
       { email: 'test@example.com', password: 'Secret123' },

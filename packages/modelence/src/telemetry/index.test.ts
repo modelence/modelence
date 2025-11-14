@@ -101,7 +101,9 @@ describe('telemetry/index', () => {
     const end = jest.fn();
     const transaction = { end };
     const apm = {
-      startTransaction: jest.fn<(name: string, type: string) => typeof transaction>(() => transaction),
+      startTransaction: jest.fn<(name: string, type: string) => typeof transaction>(
+        () => transaction
+      ),
       setCustomContext: jest.fn<(context: Record<string, unknown>) => void>(),
     };
     mockGetApm.mockReturnValue(apm);

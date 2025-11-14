@@ -1,8 +1,4 @@
-import {
-  setWebsocketClientProvider,
-  getWebsocketClientProvider,
-  startWebsockets,
-} from './client';
+import { setWebsocketClientProvider, getWebsocketClientProvider, startWebsockets } from './client';
 
 describe('websocket/client', () => {
   describe('setWebsocketClientProvider', () => {

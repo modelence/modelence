@@ -47,9 +47,7 @@ describe('migration/index', () => {
   test('skips execution when lock cannot be acquired', async () => {
     mockAcquireLock.mockResolvedValue(false as never);
 
-    await runMigrations([
-      { version: 1, description: 'one', handler: async () => undefined },
-    ]);
+    await runMigrations([{ version: 1, description: 'one', handler: async () => undefined }]);
 
     expect(mockAcquireLock).toHaveBeenCalledWith('migrations');
     expect(mockLogInfo).toHaveBeenCalledWith(

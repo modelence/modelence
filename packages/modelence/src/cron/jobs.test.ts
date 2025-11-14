@@ -56,7 +56,10 @@ describe('cron/jobs', () => {
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
-    setIntervalMock = jest.spyOn(global, 'setInterval').mockImplementation(((handler: TimerHandler, timeout?: number) => {
+    setIntervalMock = jest.spyOn(global, 'setInterval').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number
+    ) => {
       intervalCallback = handler as () => Promise<void>;
       intervalDelay = timeout;
       return 123 as unknown as NodeJS.Timeout;

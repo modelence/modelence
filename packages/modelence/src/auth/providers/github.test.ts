@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import type { Request, Response, NextFunction } from 'express';
 
-type RouteDef = { path: string; handlers: Array<(req: Request, res: Response, next?: NextFunction) => void> };
+type RouteDef = {
+  path: string;
+  handlers: Array<(req: Request, res: Response, next?: NextFunction) => void>;
+};
 const registeredRoutes: RouteDef[] = [];
 
 const RouterMock = jest.fn(() => ({
@@ -40,7 +43,9 @@ describe('auth/providers/github', () => {
     registeredRoutes.length = 0;
     fetchMock.mockReset();
     global.fetch = fetchMock as unknown as typeof fetch;
-    mockGetRedirectUri.mockReturnValue('https://app.example.com/api/_internal/auth/github/callback');
+    mockGetRedirectUri.mockReturnValue(
+      'https://app.example.com/api/_internal/auth/github/callback'
+    );
     mockValidateOAuthCode.mockReturnValue('auth-code');
     mockGetConfig.mockImplementation((key: string) => {
       const defaults: Record<string, unknown> = {
@@ -67,11 +72,14 @@ describe('auth/providers/github', () => {
   };
 
   test('check middleware responds 503 when GitHub auth disabled', () => {
-    mockGetConfig.mockImplementation((key: string) => ({
-      '_system.user.auth.github.enabled': false,
-      '_system.user.auth.github.clientId': 'client-id',
-      '_system.user.auth.github.clientSecret': 'client-secret',
-    }[key]));
+    mockGetConfig.mockImplementation(
+      (key: string) =>
+        ({
+          '_system.user.auth.github.enabled': false,
+          '_system.user.auth.github.clientId': 'client-id',
+          '_system.user.auth.github.clientSecret': 'client-secret',
+        })[key]
+    );
 
     registeredRoutes.length = 0;
     getRouter();
@@ -120,10 +128,13 @@ describe('auth/providers/github', () => {
         }),
       } as never);
 
-    await handler({ query: { code: 'code' } } as unknown as Request, {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-    } as unknown as Response);
+    await handler(
+      { query: { code: 'code' } } as unknown as Request,
+      {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      } as unknown as Response
+    );
 
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(
       expect.anything(),

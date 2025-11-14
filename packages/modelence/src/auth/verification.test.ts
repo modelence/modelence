@@ -9,9 +9,8 @@ const mockGetEmailConfig = jest.fn();
 const mockRandomBytes = jest.fn();
 const mockTimeHours = jest.fn();
 const mockHtmlToText = jest.fn<(html: string) => string>();
-const mockTemplate = jest.fn<
-  (args: { name?: string; email: string; verificationUrl: string }) => string
->();
+const mockTemplate =
+  jest.fn<(args: { name?: string; email: string; verificationUrl: string }) => string>();
 
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
@@ -151,7 +150,6 @@ describe('auth/verification', () => {
         redirect: '/verified?status=error&message=User%20not%20found',
       });
     });
-
   });
 
   describe('sendVerificationEmail', () => {

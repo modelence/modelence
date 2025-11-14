@@ -63,7 +63,9 @@ describe('client/session', () => {
 
     const { user: storedUser } = useSessionStore.getState();
     expect(storedUser?.hasRole('admin')).toBe(true);
-    expect(() => storedUser?.requireRole('missing')).toThrow("Access denied - role 'missing' required");
+    expect(() => storedUser?.requireRole('missing')).toThrow(
+      "Access denied - role 'missing' required"
+    );
     const sameRef = useSessionStore.getState().user;
     expect(storedUser).toBe(sameRef);
   });
@@ -76,7 +78,9 @@ describe('client/session', () => {
     } as never);
     mockCallMethod.mockResolvedValueOnce(undefined as never);
 
-    const { initSession: freshInitSession, useSessionStore: freshStore } = await import('./session');
+    const { initSession: freshInitSession, useSessionStore: freshStore } = await import(
+      './session'
+    );
     await freshInitSession();
 
     expect(freshStore.getState().user).toBeNull();
@@ -84,7 +88,13 @@ describe('client/session', () => {
   });
 
   test('setCurrentUser updates session store', () => {
-    const user = { id: '2', handle: 'other', roles: [], hasRole: () => false, requireRole: () => {} };
+    const user = {
+      id: '2',
+      handle: 'other',
+      roles: [],
+      hasRole: () => false,
+      requireRole: () => {},
+    };
     setCurrentUser(user);
     expect(useSessionStore.getState().user).toBe(user);
   });

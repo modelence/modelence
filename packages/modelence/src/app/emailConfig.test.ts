@@ -51,8 +51,13 @@ describe('emailConfig', () => {
   test('sets verification email configuration', async () => {
     const { setEmailConfig, getEmailConfig } = await import('./emailConfig');
 
-    const verificationTemplate = ({ name }: { name: string; email: string; verificationUrl: string }) =>
-      `Hello ${name}`;
+    const verificationTemplate = ({
+      name,
+    }: {
+      name: string;
+      email: string;
+      verificationUrl: string;
+    }) => `Hello ${name}`;
 
     setEmailConfig({
       verification: {
@@ -131,8 +136,13 @@ describe('emailConfig', () => {
       sendEmail: jest.fn(async () => {}),
     };
 
-    const verificationTemplate = ({ name }: { name: string; email: string; verificationUrl: string }) =>
-      `Verify ${name}`;
+    const verificationTemplate = ({
+      name,
+    }: {
+      name: string;
+      email: string;
+      verificationUrl: string;
+    }) => `Verify ${name}`;
     const resetTemplate = ({ name }: { name: string; email: string; resetUrl: string }) =>
       `Reset password for ${name}`;
 

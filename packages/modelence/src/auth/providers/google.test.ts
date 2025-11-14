@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import type { Request, Response, NextFunction } from 'express';
 
-type RouteDef = { path: string; handlers: Array<(req: Request, res: Response, next?: NextFunction) => void> };
+type RouteDef = {
+  path: string;
+  handlers: Array<(req: Request, res: Response, next?: NextFunction) => void>;
+};
 const registeredRoutes: RouteDef[] = [];
 
 const RouterMock = jest.fn(() => ({
@@ -40,7 +43,9 @@ describe('auth/providers/google', () => {
     registeredRoutes.length = 0;
     fetchMock.mockReset();
     global.fetch = fetchMock as unknown as typeof fetch;
-    mockGetRedirectUri.mockReturnValue('https://app.example.com/api/_internal/auth/google/callback');
+    mockGetRedirectUri.mockReturnValue(
+      'https://app.example.com/api/_internal/auth/google/callback'
+    );
     mockValidateOAuthCode.mockReturnValue('auth-code');
     mockGetConfig.mockImplementation((key: string) => {
       const defaults: Record<string, unknown> = {
@@ -134,10 +139,13 @@ describe('auth/providers/google', () => {
         }),
       } as never);
 
-    await handler({ query: { code: 'code' } } as unknown as Request, {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-    } as unknown as Response);
+    await handler(
+      { query: { code: 'code' } } as unknown as Request,
+      {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      } as unknown as Response
+    );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(

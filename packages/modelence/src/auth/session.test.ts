@@ -18,13 +18,8 @@ jest.unstable_mockModule('@/time', () => ({
 }));
 
 const sessionModule = await import('./session');
-const {
-  createSession,
-  obtainSession,
-  setSessionUser,
-  clearSessionUser,
-  sessionsCollection,
-} = sessionModule;
+const { createSession, obtainSession, setSessionUser, clearSessionUser, sessionsCollection } =
+  sessionModule;
 
 describe('auth/session', () => {
   const insertOneMock: jest.Mock = jest.fn();
@@ -33,9 +28,11 @@ describe('auth/session', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (sessionsCollection as unknown as { insertOne: typeof insertOneMock }).insertOne = insertOneMock;
+    (sessionsCollection as unknown as { insertOne: typeof insertOneMock }).insertOne =
+      insertOneMock;
     (sessionsCollection as unknown as { findOne: typeof findOneMock }).findOne = findOneMock;
-    (sessionsCollection as unknown as { updateOne: typeof updateOneMock }).updateOne = updateOneMock;
+    (sessionsCollection as unknown as { updateOne: typeof updateOneMock }).updateOne =
+      updateOneMock;
   });
 
   test('createSession inserts session with generated token and returns metadata', async () => {

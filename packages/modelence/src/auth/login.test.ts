@@ -136,7 +136,10 @@ describe('auth/login', () => {
     mockGetEmailConfig.mockReturnValue({ provider: 'resend' });
 
     await expect(
-      handleLoginWithPassword({ email: 'user@example.com', password: 'Secret123' }, baseContext as never)
+      handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      )
     ).rejects.toThrow(
       "Your email address hasn't been verified yet. We've sent a new verification email to your inbox."
     );

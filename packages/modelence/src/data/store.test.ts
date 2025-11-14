@@ -40,7 +40,7 @@ describe('data/store', () => {
       name: expect.anything(),
       age: expect.anything(),
     });
-    expect(((extended as unknown as { indexes: IndexDescription[] }).indexes).length).toBe(2);
+    expect((extended as unknown as { indexes: IndexDescription[] }).indexes.length).toBe(2);
 
     const mockClient = {
       db: () => ({

@@ -114,7 +114,12 @@ describe('auth/providers/oauth-common', () => {
     test('logs in existing user via provider id', async () => {
       const existingUser = { _id: new ObjectId(), handle: 'demo' };
       mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
-      const userData = { id: 'provider-id', email: 'user@example.com', emailVerified: true, providerName: 'google' as const };
+      const userData = {
+        id: 'provider-id',
+        email: 'user@example.com',
+        emailVerified: true,
+        providerName: 'google' as const,
+      };
 
       await moduleExports.handleOAuthUserAuthentication(req, res, userData);
 

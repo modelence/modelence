@@ -19,7 +19,13 @@ jest.unstable_mockModule('react-dom/client', () => ({
 }));
 
 jest.unstable_mockModule('../client', () => ({
-  AppProvider: ({ children, loadingElement }: { children: React.ReactNode; loadingElement: React.ReactNode }) => (
+  AppProvider: ({
+    children,
+    loadingElement,
+  }: {
+    children: React.ReactNode;
+    loadingElement: React.ReactNode;
+  }) => (
     <div data-testid="app-provider">
       <span data-testid="loading">{loadingElement}</span>
       {children}

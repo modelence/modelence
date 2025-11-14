@@ -44,9 +44,9 @@ describe('rate-limit/rules', () => {
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 1000, limit: 10 }]);
 
-    expect(() =>
-      initRateLimits([{ bucket: 'api', type: 'ip', window: 1000, limit: 10 }])
-    ).toThrow('Duplicate call to initRateLimits - already initialized');
+    expect(() => initRateLimits([{ bucket: 'api', type: 'ip', window: 1000, limit: 10 }])).toThrow(
+      'Duplicate call to initRateLimits - already initialized'
+    );
   });
 
   test('consumeRateLimit inserts new record when no existing entry', async () => {

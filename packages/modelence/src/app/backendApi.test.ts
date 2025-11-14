@@ -145,7 +145,9 @@ describe('app/backendApi', () => {
         connectCloudBackend({
           stores: [],
         })
-      ).rejects.toThrow('Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set');
+      ).rejects.toThrow(
+        'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
+      );
     });
   });
 

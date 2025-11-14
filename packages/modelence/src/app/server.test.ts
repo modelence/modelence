@@ -76,15 +76,17 @@ let mockExpressApp: any;
 jest.unstable_mockModule('express', () => {
   const express = jest.fn(() => {
     // Return the app set in beforeEach
-    return mockExpressApp || {
-      use: jest.fn(),
-      post: jest.fn(),
-      get: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
-      all: jest.fn(),
-    };
+    return (
+      mockExpressApp || {
+        use: jest.fn(),
+        post: jest.fn(),
+        get: jest.fn(),
+        put: jest.fn(),
+        patch: jest.fn(),
+        delete: jest.fn(),
+        all: jest.fn(),
+      }
+    );
   }) as any;
   express.json = mockExpressJson;
   express.urlencoded = mockExpressUrlencoded;

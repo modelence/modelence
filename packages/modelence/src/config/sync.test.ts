@@ -31,11 +31,11 @@ describe('config/sync', () => {
     jest.clearAllMocks();
     intervalCallback = null;
     intervalDelay = undefined;
-    global.setInterval = (((handler: TimerHandler, timeout?: number) => {
+    global.setInterval = ((handler: TimerHandler, timeout?: number) => {
       intervalCallback = handler as () => Promise<void>;
       intervalDelay = timeout;
       return 1 as unknown as NodeJS.Timeout;
-    }) as unknown) as typeof setInterval;
+    }) as unknown as typeof setInterval;
     mockAcquireLock.mockResolvedValue(true as never);
     mockSyncStatus.mockResolvedValue(undefined as never);
     ({ startConfigSync } = await import('./sync'));
@@ -46,7 +46,9 @@ describe('config/sync', () => {
   });
 
   test('startConfigSync schedules interval and performs sync steps', async () => {
-    mockFetchConfigs.mockResolvedValue({ configs: [{ key: 'demo', type: 'string', value: 'v' }] } as never);
+    mockFetchConfigs.mockResolvedValue({
+      configs: [{ key: 'demo', type: 'string', value: 'v' }],
+    } as never);
     await startConfigSync();
 
     expect(intervalDelay).toBe(5000);

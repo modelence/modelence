@@ -14,9 +14,7 @@ describe('config/server', () => {
     });
 
     it('should return config value when loaded for system configs', () => {
-      loadConfigs([
-        { key: '_system.testKey', value: 'testValue', type: 'string' },
-      ]);
+      loadConfigs([{ key: '_system.testKey', value: 'testValue', type: 'string' }]);
       expect(getConfig('_system.testKey')).toBe('testValue');
     });
   });
@@ -78,16 +76,12 @@ describe('config/server', () => {
     });
 
     it('should load system configs without schema', () => {
-      loadConfigs([
-        { key: '_system.test', value: 'systemValue', type: 'string' },
-      ]);
+      loadConfigs([{ key: '_system.test', value: 'systemValue', type: 'string' }]);
       expect(getConfig('_system.test')).toBe('systemValue');
     });
 
     it('should ignore unknown non-system configs', () => {
-      loadConfigs([
-        { key: 'unknown.key', value: 'value', type: 'string' },
-      ]);
+      loadConfigs([{ key: 'unknown.key', value: 'value', type: 'string' }]);
       expect(getConfig('unknown.key')).toBeUndefined();
     });
 
@@ -99,9 +93,7 @@ describe('config/server', () => {
           isPublic: true,
         },
       });
-      loadConfigs([
-        { key: 'known.key', value: 'customValue', type: 'string' },
-      ]);
+      loadConfigs([{ key: 'known.key', value: 'customValue', type: 'string' }]);
       expect(getConfig('known.key')).toBe('customValue');
     });
   });
@@ -167,9 +159,7 @@ describe('config/server', () => {
           isPublic: true,
         },
       });
-      loadConfigs([
-        { key: 'test.key', value: 'customValue', type: 'string' },
-      ]);
+      loadConfigs([{ key: 'test.key', value: 'customValue', type: 'string' }]);
 
       const publicConfigs = getPublicConfigs();
       expect(publicConfigs['test.key'].value).toBe('customValue');

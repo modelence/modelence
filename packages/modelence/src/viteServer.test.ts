@@ -56,44 +56,46 @@ describe('ViteServer', () => {
 
     // Re-import to get fresh class
     const module = await import('./viteServer');
-    ViteServer = (module as any).default?.ViteServer || class {
-      private viteServer?: ViteDevServer;
-      private config?: UserConfig;
+    ViteServer =
+      (module as any).default?.ViteServer ||
+      class {
+        private viteServer?: ViteDevServer;
+        private config?: UserConfig;
 
-      async init() {
-        this.config = {} as UserConfig;
-        if (this.isDev()) {
-          this.viteServer = await mockCreateServer(this.config) as ViteDevServer;
-        }
-      }
-
-      middlewares() {
-        if (this.isDev()) {
-          return (this.viteServer?.middlewares ?? []) as any[];
-        }
-        const staticFolders = [mockExpressStatic('./.modelence/build/client')];
-        if (this.config?.publicDir) {
-          staticFolders.push(mockExpressStatic(this.config.publicDir));
-        }
-        return staticFolders;
-      }
-
-      handler(req: Request, res: Response) {
-        if (this.isDev()) {
-          try {
-            res.sendFile('index.html', { root: './src/client' });
-          } catch (e) {
-            res.status(500).send('Internal Server Error');
+        async init() {
+          this.config = {} as UserConfig;
+          if (this.isDev()) {
+            this.viteServer = (await mockCreateServer(this.config)) as ViteDevServer;
           }
-        } else {
-          res.sendFile('index.html', { root: './.modelence/build/client' });
         }
-      }
 
-      private isDev() {
-        return process.env.NODE_ENV !== 'production';
-      }
-    };
+        middlewares() {
+          if (this.isDev()) {
+            return (this.viteServer?.middlewares ?? []) as any[];
+          }
+          const staticFolders = [mockExpressStatic('./.modelence/build/client')];
+          if (this.config?.publicDir) {
+            staticFolders.push(mockExpressStatic(this.config.publicDir));
+          }
+          return staticFolders;
+        }
+
+        handler(req: Request, res: Response) {
+          if (this.isDev()) {
+            try {
+              res.sendFile('index.html', { root: './src/client' });
+            } catch (e) {
+              res.status(500).send('Internal Server Error');
+            }
+          } else {
+            res.sendFile('index.html', { root: './.modelence/build/client' });
+          }
+        }
+
+        private isDev() {
+          return process.env.NODE_ENV !== 'production';
+        }
+      };
   });
 
   afterEach(() => {

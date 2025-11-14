@@ -9,8 +9,12 @@ describe('auth/validators', () => {
     });
 
     test('should throw error for password less than 8 characters', () => {
-      expect(() => validatePassword('short')).toThrow('Password must contain at least 8 characters');
-      expect(() => validatePassword('1234567')).toThrow('Password must contain at least 8 characters');
+      expect(() => validatePassword('short')).toThrow(
+        'Password must contain at least 8 characters'
+      );
+      expect(() => validatePassword('1234567')).toThrow(
+        'Password must contain at least 8 characters'
+      );
       expect(() => validatePassword('')).toThrow();
     });
 
