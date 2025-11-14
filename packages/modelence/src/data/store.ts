@@ -22,8 +22,11 @@ import {
   MongoError,
 } from 'mongodb';
 
+import { z } from 'zod';
+
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
+import { createZodValidator, validateInsert, validateInsertMany, validateUpdate } from './schemaValidator';
 
 /**
  * Helper type to preserve method types when extending a store.
@@ -92,6 +95,7 @@ export class Store<
   private readonly searchIndexes: SearchIndexDescription[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
+  private readonly validator: z.ZodObject<Record<string, z.ZodType>>;
 
   /**
    * Creates a new Store instance
@@ -117,6 +121,7 @@ export class Store<
     this.methods = options.methods;
     this.indexes = options.indexes;
     this.searchIndexes = options.searchIndexes || [];
+    this.validator = createZodValidator(options.schema);
   }
 
   getName() {
@@ -397,10 +402,12 @@ export class Store<
    *
    * @param document - The document to insert
    * @returns The result of the insert operation
+   * @throws {Error} if document validation fails
    */
   async insertOne(
     document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>
   ): Promise<InsertOneResult> {
+    validateInsert(this.validator, document);
     return await this.requireCollection().insertOne(document);
   }
 
@@ -409,10 +416,12 @@ export class Store<
    *
    * @param documents - The documents to insert
    * @returns The result of the insert operation
+   * @throws {Error} if any document validation fails
    */
   async insertMany(
     documents: OptionalUnlessRequiredId<InferDocumentType<TSchema>>[]
   ): Promise<InsertManyResult> {
+    validateInsertMany(this.validator, documents);
     return await this.requireCollection().insertMany(documents);
   }
 
@@ -422,11 +431,13 @@ export class Store<
    * @param selector - The selector to find the document to update
    * @param update - The update to apply to the document
    * @returns The result of the update operation
+   * @throws {Error} if update validation fails
    */
   async updateOne(
     selector: Filter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
+    validateUpdate(this.validator, update as Record<string, unknown>);
     return await this.requireCollection().updateOne(this.getSelector(selector), update);
   }
 
@@ -436,11 +447,13 @@ export class Store<
    * @param selector - The selector to find the document to update
    * @param update - The MongoDB modifier to apply to the document
    * @returns The result of the update operation
+   * @throws {Error} if update validation fails
    */
   async upsertOne(
     selector: Filter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
+    validateUpdate(this.validator, update as Record<string, unknown>);
     return await this.requireCollection().updateOne(this.getSelector(selector), update, {
       upsert: true,
     });
@@ -452,12 +465,14 @@ export class Store<
    * @param selector - The selector to find the documents to update
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
+   * @throws {Error} if update validation fails
    */
   async updateMany(
     selector: Filter<this['_type']>,
     update: UpdateFilter<this['_type']>,
     options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
+    validateUpdate(this.validator, update as Record<string, unknown>);
     return await this.requireCollection().updateMany(selector, update, options);
   }
 
@@ -467,11 +482,13 @@ export class Store<
    * @param selector - The selector to find the documents to update
    * @param update - The MongoDB modifier to apply to the documents
    * @returns The result of the update operation
+   * @throws {Error} if update validation fails
    */
   async upsertMany(
     selector: Filter<this['_type']>,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
+    validateUpdate(this.validator, update as Record<string, unknown>);
     return await this.requireCollection().updateMany(selector, update, { upsert: true });
   }
 
