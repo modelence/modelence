@@ -45,8 +45,7 @@ type TestViteServer = {
 
 type TestViteServerConstructor = new () => TestViteServer;
 
-const invokeIsDev = (server: TestViteServer) =>
-  (server as unknown as { isDev(): boolean }).isDev();
+const invokeIsDev = (server: TestViteServer) => (server as unknown as { isDev(): boolean }).isDev();
 
 describe('ViteServer', () => {
   let ViteServer: TestViteServerConstructor;
@@ -285,9 +284,9 @@ describe('safelyMergeConfig', () => {
     jest.clearAllMocks();
   });
 
-    test('merges base and user configs', () => {
-      const _baseConfig = { server: { port: 3000 } };
-      const _userConfig = { server: { host: 'localhost' } };
+  test('merges base and user configs', () => {
+    const _baseConfig = { server: { port: 3000 } };
+    const _userConfig = { server: { host: 'localhost' } };
     const merged = { server: { port: 3000, host: 'localhost' } };
 
     mockMergeConfig.mockReturnValue(merged);
@@ -296,13 +295,13 @@ describe('safelyMergeConfig', () => {
     expect(mockMergeConfig).not.toHaveBeenCalled();
   });
 
-    test('deduplicates plugins by name', () => {
-      const plugin1: Plugin = { name: 'test-plugin', apply: 'build' };
-      const plugin2: Plugin = { name: 'test-plugin', apply: 'serve' };
-      const plugin3: Plugin = { name: 'other-plugin', apply: 'build' };
+  test('deduplicates plugins by name', () => {
+    const plugin1: Plugin = { name: 'test-plugin', apply: 'build' };
+    const plugin2: Plugin = { name: 'test-plugin', apply: 'serve' };
+    const plugin3: Plugin = { name: 'other-plugin', apply: 'build' };
 
-      const _baseConfig = { plugins: [plugin1, plugin3] };
-      const _userConfig = { plugins: [plugin2] };
+    const _baseConfig = { plugins: [plugin1, plugin3] };
+    const _userConfig = { plugins: [plugin2] };
 
     mockMergeConfig.mockImplementation(
       (base: { plugins?: Plugin[] }, user: { plugins?: Plugin[] }) => {

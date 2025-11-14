@@ -23,8 +23,8 @@ describe('auth/types', () => {
       id: 'user123',
       handle: 'testuser',
       roles: ['admin', 'user'],
-      hasRole: (role: string) => true,
-      requireRole: (role: string) => {},
+      hasRole: (_role: string) => true,
+      requireRole: (_role: string) => {},
     };
     expect(userInfo.id).toBe('user123');
     expect(userInfo.handle).toBe('testuser');

@@ -1,6 +1,35 @@
 import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';
 import { ObjectId } from 'mongodb';
 import type { Request, Response } from 'express';
+import type { AppServer } from '../types';
+import { ServerChannel } from '@/websocket/serverChannel';
+import { Module } from './module';
+
+// Type definitions for test mocks
+type MockExpressApp = {
+  use: jest.Mock;
+  post: jest.Mock;
+  get: jest.Mock;
+  put: jest.Mock;
+  patch: jest.Mock;
+  delete: jest.Mock;
+  all: jest.Mock;
+};
+
+type MockHttpServer = {
+  listen: jest.Mock;
+};
+
+type MockAppServer = AppServer & {
+  init: jest.Mock<Promise<void>, []>;
+  handler: jest.Mock<void, Parameters<AppServer['handler']>>;
+  middlewares?: jest.Mock<ReturnType<NonNullable<AppServer['middlewares']>>>;
+};
+
+const createMockServer = (): MockAppServer => ({
+  init: jest.fn(async () => {}),
+  handler: jest.fn<void, Parameters<AppServer['handler']>>(),
+});
 
 const mockAuthenticate = jest.fn();
 const mockGetUnauthenticatedRoles = jest.fn();
@@ -71,23 +100,32 @@ jest.unstable_mockModule('./websocketConfig', () => ({
   getWebsocketConfig: mockGetWebsocketConfig,
 }));
 
-let mockExpressApp: any;
+let mockExpressApp: MockExpressApp;
+const createExpressAppMock = (): MockExpressApp => ({
+  use: jest.fn(),
+  post: jest.fn(),
+  get: jest.fn(),
+  put: jest.fn(),
+  patch: jest.fn(),
+  delete: jest.fn(),
+  all: jest.fn(),
+});
+
+const getRegisteredMethodHandler = (app: MockExpressApp) => {
+  const call = app.post.mock.calls.find(([path]) =>
+    String(path).includes('/api/_internal/method/')
+  );
+  if (!call) {
+    throw new Error('Method handler not registered');
+  }
+  return call[1] as (req: Request, res: Response) => Promise<unknown>;
+};
 
 jest.unstable_mockModule('express', () => {
   const express = jest.fn(() => {
     // Return the app set in beforeEach
-    return (
-      mockExpressApp || {
-        use: jest.fn(),
-        post: jest.fn(),
-        get: jest.fn(),
-        put: jest.fn(),
-        patch: jest.fn(),
-        delete: jest.fn(),
-        all: jest.fn(),
-      }
-    );
-  }) as any;
+    return mockExpressApp || createExpressAppMock();
+  }) as jest.Mock & { json: jest.Mock; urlencoded: jest.Mock };
   express.json = mockExpressJson;
   express.urlencoded = mockExpressUrlencoded;
   return { default: express };
@@ -130,8 +168,8 @@ function createResponse(): Response {
     send: jest.fn(),
     status: jest.fn(),
     sendFile: jest.fn(),
-  } as any;
-  res.status.mockReturnValue(res);
+  } as unknown as Response;
+  (res.status as jest.Mock).mockReturnValue(res);
   return res;
 }
 
@@ -324,7 +362,7 @@ describe('app/server getCallContext', () => {
     const req = createRequest({
       headers: { host: 'localhost' },
     });
-    req.socket = { remoteAddress: '10.0.0.5' } as any;
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
     mockGetMongodbUri.mockReturnValue('');
 
     const ctx = await getCallContext(req);
@@ -334,9 +372,9 @@ describe('app/server getCallContext', () => {
 });
 
 describe('app/server startServer', () => {
-  let mockApp: any;
-  let mockHttpServer: any;
-  let originalEnv: any;
+  let mockApp: MockExpressApp;
+  let mockHttpServer: MockHttpServer;
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -356,10 +394,10 @@ describe('app/server startServer', () => {
     mockExpressApp = mockApp;
 
     mockHttpServer = {
-      listen: jest.fn((_port, callback?: () => void) => {
+      listen: jest.fn(((_port: unknown, callback?: () => void) => {
         if (callback) callback();
         return mockHttpServer;
-      }),
+      }) as jest.Mock),
     };
 
     mockExpressJson.mockReturnValue('json-middleware');
@@ -377,12 +415,11 @@ describe('app/server startServer', () => {
 
   test('initializes express app with middleware', async () => {
     const mockServer = {
-      init: jest.fn(),
+      ...createMockServer(),
       middlewares: jest.fn(() => ['vite-middleware']),
-      handler: jest.fn(),
     };
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -395,12 +432,9 @@ describe('app/server startServer', () => {
   });
 
   test('registers auth providers', async () => {
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -410,12 +444,9 @@ describe('app/server startServer', () => {
   });
 
   test('registers internal method endpoint', async () => {
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -429,15 +460,17 @@ describe('app/server startServer', () => {
   test('calls server init before adding middlewares', async () => {
     const callOrder: string[] = [];
     const mockServer = {
-      init: jest.fn(() => callOrder.push('init')),
+      ...createMockServer(),
       middlewares: jest.fn(() => {
         callOrder.push('middlewares');
         return ['middleware'];
       }),
-      handler: jest.fn(),
     };
+    mockServer.init.mockImplementation(async () => {
+      callOrder.push('init');
+    });
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -446,13 +479,11 @@ describe('app/server startServer', () => {
   });
 
   test('registers catch-all route handler', async () => {
-    const mockHandler = jest.fn();
-    const mockServer = {
-      init: jest.fn(),
-      handler: mockHandler,
-    };
+    const mockHandler = jest.fn<void, Parameters<AppServer['handler']>>();
+    const mockServer = createMockServer();
+    mockServer.handler = mockHandler;
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -461,12 +492,9 @@ describe('app/server startServer', () => {
   });
 
   test('creates HTTP server and starts listening', async () => {
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -477,12 +505,9 @@ describe('app/server startServer', () => {
 
   test('uses MODELENCE_PORT environment variable', async () => {
     process.env.MODELENCE_PORT = '4000';
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -492,12 +517,9 @@ describe('app/server startServer', () => {
 
   test('uses PORT environment variable as fallback', async () => {
     process.env.PORT = '5000';
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -508,12 +530,9 @@ describe('app/server startServer', () => {
   test('defaults to port 3000', async () => {
     delete process.env.MODELENCE_PORT;
     delete process.env.PORT;
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -528,13 +547,10 @@ describe('app/server startServer', () => {
     };
     mockGetWebsocketConfig.mockReturnValue({ provider: mockWebsocketProvider });
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
-    const channels = [{ name: 'test-channel' }] as any;
+    const mockServer = createMockServer();
+    const channels = [new ServerChannel('test-channel')];
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels,
     });
@@ -548,12 +564,9 @@ describe('app/server startServer', () => {
   test('skips websocket initialization when not configured', async () => {
     mockGetWebsocketConfig.mockReturnValue(null);
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -566,8 +579,7 @@ describe('app/server startServer', () => {
     const mockRouteHandler = jest.fn();
     mockCreateRouteHandler.mockReturnValue(mockRouteHandler);
 
-    const mockModule = {
-      name: 'testModule',
+    const mockModule = new Module('testModule', {
       routes: [
         {
           path: '/api/test',
@@ -577,15 +589,12 @@ describe('app/server startServer', () => {
           },
         },
       ],
-    };
+    });
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
-      combinedModules: [mockModule as any],
+    await startServer(mockServer, {
+      combinedModules: [mockModule],
       channels: [],
     });
 
@@ -599,33 +608,28 @@ describe('app/server startServer', () => {
     mockCreateRouteHandler.mockReturnValue(jest.fn());
 
     const modules = [
-      {
-        name: 'module1',
+      new Module('module1', {
         routes: [
           {
             path: '/api/foo',
             handlers: { get: jest.fn() },
           },
         ],
-      },
-      {
-        name: 'module2',
+      }),
+      new Module('module2', {
         routes: [
           {
             path: '/api/bar',
             handlers: { post: jest.fn() },
           },
         ],
-      },
+      }),
     ];
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
-      combinedModules: modules as any,
+    await startServer(mockServer, {
+      combinedModules: modules,
       channels: [],
     });
 
@@ -634,12 +638,9 @@ describe('app/server startServer', () => {
   });
 
   test('logs application startup', async () => {
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
@@ -654,30 +655,21 @@ describe('app/server method endpoint', () => {
   });
 
   test('handles successful method call', async () => {
-    const mockApp: any = {
-      use: jest.fn(),
-      post: jest.fn(),
-      all: jest.fn(),
-    };
+    const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    (mockRunMethod as any).mockResolvedValue({ result: 'success' });
-    (mockGetResponseTypeMap as any).mockReturnValue({ result: 'string' });
+    mockRunMethod.mockResolvedValue({ result: 'success' });
+    mockGetResponseTypeMap.mockReturnValue({ result: 'string' });
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
 
     // Get the method handler that was registered
-    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
-      call[0].includes('/api/_internal/method/')
-    )?.[1];
+    const methodHandler = getRegisteredMethodHandler(mockApp);
 
     expect(methodHandler).toBeDefined();
 
@@ -700,29 +692,20 @@ describe('app/server method endpoint', () => {
   });
 
   test('handles ModelenceError with custom status', async () => {
-    const mockApp: any = {
-      use: jest.fn(),
-      post: jest.fn(),
-      all: jest.fn(),
-    };
+    const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
     const { AuthError } = await import('../error');
-    (mockRunMethod as any).mockRejectedValue(new AuthError('Unauthorized'));
+    mockRunMethod.mockRejectedValue(new AuthError('Unauthorized'));
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
 
-    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
-      call[0].includes('/api/_internal/method/')
-    )?.[1];
+    const methodHandler = getRegisteredMethodHandler(mockApp);
 
     const req = createRequest({
       params: { methodName: 'testMethod' },
@@ -740,14 +723,18 @@ describe('app/server method endpoint', () => {
   });
 
   test('handles ZodError with validation messages', async () => {
-    const mockApp: any = {
-      use: jest.fn(),
-      post: jest.fn(),
-      all: jest.fn(),
-    };
+    const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    const zodError = new Error('Validation failed') as any;
+    const zodError: Error & {
+      constructor: { name: string };
+      errors: unknown[];
+      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
+    } = new Error('Validation failed') as Error & {
+      constructor: { name: string };
+      errors: unknown[];
+      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
+    };
     zodError.constructor = { name: 'ZodError' };
     zodError.errors = [];
     zodError.flatten = () => ({
@@ -755,21 +742,16 @@ describe('app/server method endpoint', () => {
       formErrors: ['Form invalid'],
     });
 
-    (mockRunMethod as any).mockRejectedValue(zodError);
+    mockRunMethod.mockRejectedValue(zodError);
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
 
-    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
-      call[0].includes('/api/_internal/method/')
-    )?.[1];
+    const methodHandler = getRegisteredMethodHandler(mockApp);
 
     const req = createRequest({
       params: { methodName: 'testMethod' },
@@ -789,28 +771,19 @@ describe('app/server method endpoint', () => {
   });
 
   test('handles generic error with 500 status', async () => {
-    const mockApp: any = {
-      use: jest.fn(),
-      post: jest.fn(),
-      all: jest.fn(),
-    };
+    const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    (mockRunMethod as any).mockRejectedValue(new Error('Something went wrong'));
+    mockRunMethod.mockRejectedValue(new Error('Something went wrong'));
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
 
-    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
-      call[0].includes('/api/_internal/method/')
-    )?.[1];
+    const methodHandler = getRegisteredMethodHandler(mockApp);
 
     const req = createRequest({
       params: { methodName: 'testMethod' },
@@ -828,28 +801,19 @@ describe('app/server method endpoint', () => {
   });
 
   test('handles non-Error thrown values', async () => {
-    const mockApp: any = {
-      use: jest.fn(),
-      post: jest.fn(),
-      all: jest.fn(),
-    };
+    const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    (mockRunMethod as any).mockRejectedValue('String error');
+    mockRunMethod.mockRejectedValue('String error');
 
-    const mockServer = {
-      init: jest.fn(),
-      handler: jest.fn(),
-    };
+    const mockServer = createMockServer();
 
-    await startServer(mockServer as any, {
+    await startServer(mockServer, {
       combinedModules: [],
       channels: [],
     });
 
-    const methodHandler = mockApp.post.mock.calls.find((call: any) =>
-      call[0].includes('/api/_internal/method/')
-    )?.[1];
+    const methodHandler = getRegisteredMethodHandler(mockApp);
 
     const req = createRequest({
       params: { methodName: 'testMethod' },

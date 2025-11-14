@@ -14,7 +14,10 @@ const mockSocket: jest.Mocked<SocketMethods> = {
 type IoFactory = typeof ioClientFactory;
 const mockIo: jest.MockedFunction<IoFactory> = jest.fn(() => mockSocket as unknown as Socket);
 type LocalStorageSession = ReturnType<GetLocalStorageSession>;
-const mockGetLocalStorageSession = jest.fn<LocalStorageSession, Parameters<GetLocalStorageSession>>();
+const mockGetLocalStorageSession = jest.fn<
+  LocalStorageSession,
+  Parameters<GetLocalStorageSession>
+>();
 
 type MinimalChannel = Pick<ClientChannel, 'init' | 'category'>;
 const createMockChannel = (category: string): MinimalChannel => ({
@@ -299,7 +302,9 @@ describe('websocket/socketio/client', () => {
       websocketProvider.joinChannel({ category: 'lobby', id: 'main' });
       websocketProvider.leaveChannel({ category: 'lobby', id: 'main' });
 
-      const joinCall = mockSocket.emit.mock.calls.find(([eventName]) => eventName === 'joinChannel');
+      const joinCall = mockSocket.emit.mock.calls.find(
+        ([eventName]) => eventName === 'joinChannel'
+      );
       const leaveCall = mockSocket.emit.mock.calls.find(
         ([eventName]) => eventName === 'leaveChannel'
       );

@@ -108,8 +108,8 @@ describe('client/errorHandler', () => {
     test('should allow error handler that logs instead of throwing', () => {
       const logged: string[] = [];
       const originalError = console.error;
-      console.error = (...args: any[]) => {
-        logged.push(args.join(' '));
+      console.error = (...args: unknown[]) => {
+        logged.push(args.map(String).join(' '));
       };
 
       setErrorHandler((error, methodName) => {

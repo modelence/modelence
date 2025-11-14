@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import type { callMethod as CallMethod } from './method';
 
-const mockCallMethod: jest.Mock = jest.fn();
+const mockCallMethod = jest.fn<ReturnType<CallMethod>, Parameters<CallMethod>>();
 const mockSetConfig = jest.fn();
 const mockSetLocalStorageSession = jest.fn();
 const mockSeconds = jest.fn((value: number) => value * 1000);
@@ -35,7 +36,7 @@ describe('client/session', () => {
     mockCallMethod.mockReset();
     mockSetConfig.mockReset();
     mockSetLocalStorageSession.mockReset();
-    global.setTimeout = ((fn: (...args: any[]) => void, delay?: number) => {
+    global.setTimeout = ((fn: Parameters<typeof originalSetTimeout>[0], delay?: number) => {
       return originalSetTimeout(fn, delay);
     }) as typeof setTimeout;
   });

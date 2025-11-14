@@ -6,11 +6,12 @@ import {
   requireAccess,
   hasPermission,
 } from './role';
+import type { Role } from './types';
 
 describe('auth/role', () => {
   beforeEach(() => {
     // Reset roles for each test
-    initRoles({}, {} as any);
+    initRoles({}, {});
   });
 
   describe('initRoles', () => {
@@ -37,7 +38,7 @@ describe('auth/role', () => {
     });
 
     it('should return unauthenticated role when set', () => {
-      initRoles({}, { unauthenticated: 'guest' } as any);
+      initRoles({}, { unauthenticated: 'guest' } satisfies Record<string, Role>);
       expect(getUnauthenticatedRoles()).toEqual(['guest']);
     });
   });
@@ -48,7 +49,7 @@ describe('auth/role', () => {
     });
 
     it('should return authenticated role when set', () => {
-      initRoles({}, { authenticated: 'user' } as any);
+      initRoles({}, { authenticated: 'user' } satisfies Record<string, Role>);
       expect(getDefaultAuthenticatedRoles()).toEqual(['user']);
     });
   });
