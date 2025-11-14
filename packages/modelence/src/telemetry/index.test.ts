@@ -1,83 +1,141 @@
-import { logDebug, logInfo, logError, startTransaction } from './index';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+
+const mockGetLogger = jest.fn();
+const mockGetApm = jest.fn();
+const mockIsTelemetryEnabled = jest.fn();
+const mockGetConfig = jest.fn();
+
+jest.unstable_mockModule('@/app/metrics', () => ({
+  getLogger: mockGetLogger,
+  getApm: mockGetApm,
+}));
+
+jest.unstable_mockModule('@/app/state', () => ({
+  isTelemetryEnabled: mockIsTelemetryEnabled,
+}));
+
+jest.unstable_mockModule('@/config/server', () => ({
+  getConfig: mockGetConfig,
+}));
+
+const telemetry = await import('./index');
 
 describe('telemetry/index', () => {
-  describe('logDebug', () => {
-    it('should be a function', () => {
-      expect(typeof logDebug).toBe('function');
-    });
+  const consoleDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
+  const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+  const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    it('should not throw when called', () => {
-      expect(() => logDebug('test message', {})).not.toThrow();
-    });
-
-    it('should accept message and args', () => {
-      expect(() => logDebug('test', { key: 'value' })).not.toThrow();
-    });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetConfig.mockReturnValue('info');
   });
 
-  describe('logInfo', () => {
-    it('should be a function', () => {
-      expect(typeof logInfo).toBe('function');
-    });
-
-    it('should not throw when called', () => {
-      expect(() => logInfo('test message', {})).not.toThrow();
-    });
-
-    it('should accept message and args', () => {
-      expect(() => logInfo('test', { key: 'value' })).not.toThrow();
-    });
+  afterEach(() => {
+    consoleDebug.mockClear();
+    consoleInfo.mockClear();
+    consoleError.mockClear();
   });
 
-  describe('logError', () => {
-    it('should be a function', () => {
-      expect(typeof logError).toBe('function');
-    });
-
-    it('should not throw when called', () => {
-      expect(() => logError('test error', {})).not.toThrow();
-    });
-
-    it('should accept message and args', () => {
-      expect(() => logError('error', { error: 'details' })).not.toThrow();
-    });
+  afterAll(() => {
+    consoleDebug.mockRestore();
+    consoleInfo.mockRestore();
+    consoleError.mockRestore();
   });
 
-  describe('startTransaction', () => {
-    it('should be a function', () => {
-      expect(typeof startTransaction).toBe('function');
-    });
+  test('logDebug uses logger debug when telemetry enabled and level debug', () => {
+    mockGetConfig.mockReturnValue('debug');
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
 
-    it('should return a transaction object', () => {
-      const transaction = startTransaction('method', 'test');
-      expect(transaction).toBeDefined();
-      expect(typeof transaction.end).toBe('function');
-      expect(typeof transaction.setContext).toBe('function');
-    });
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
 
-    it('should accept different transaction types', () => {
-      expect(() => startTransaction('method', 'test')).not.toThrow();
-      expect(() => startTransaction('cron', 'test')).not.toThrow();
-      expect(() => startTransaction('ai', 'test')).not.toThrow();
-      expect(() => startTransaction('custom', 'test')).not.toThrow();
-      expect(() => startTransaction('route', 'test')).not.toThrow();
-    });
+    expect(logger.debug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+    expect(consoleDebug).not.toHaveBeenCalled();
+  });
 
-    it('should accept optional context', () => {
-      const transaction = startTransaction('method', 'test', { user: 'test' });
-      expect(transaction).toBeDefined();
-    });
+  test('logDebug falls back to console when telemetry disabled', () => {
+    mockGetConfig.mockReturnValue('debug');
+    mockIsTelemetryEnabled.mockReturnValue(false);
 
-    it('should allow calling end on transaction', () => {
-      const transaction = startTransaction('method', 'test');
-      expect(() => transaction.end()).not.toThrow();
-      expect(() => transaction.end('success')).not.toThrow();
-      expect(() => transaction.end('success', { result: 'ok' })).not.toThrow();
-    });
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
 
-    it('should allow calling setContext on transaction', () => {
-      const transaction = startTransaction('method', 'test');
-      expect(() => transaction.setContext({ key: 'value' })).not.toThrow();
-    });
+    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+  });
+
+  test('logInfo uses logger info when telemetry enabled and level allows', () => {
+    mockGetConfig.mockReturnValue('info');
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logInfo('info-msg', { foo: 'bar' });
+
+    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  test('logError uses console when telemetry disabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(false);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+  });
+
+  test('startTransaction returns noop handlers when telemetry disabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(false);
+
+    const txn = telemetry.startTransaction('method', 'noop');
+    expect(typeof txn.end).toBe('function');
+    expect(typeof txn.setContext).toBe('function');
+
+    txn.setContext({ key: 'value' });
+    txn.end();
+
+    expect(mockGetApm).not.toHaveBeenCalled();
+  });
+
+  test('startTransaction wires through to APM when telemetry enabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const end = jest.fn();
+    const transaction = { end };
+    const apm = {
+      startTransaction: jest.fn<(name: string, type: string) => typeof transaction>(() => transaction),
+      setCustomContext: jest.fn<(context: Record<string, unknown>) => void>(),
+    };
+    mockGetApm.mockReturnValue(apm);
+
+    const txn = telemetry.startTransaction('method', 'process', { initial: true });
+
+    expect(apm.startTransaction).toHaveBeenCalledWith('process', 'method');
+    expect(apm.setCustomContext).toHaveBeenCalledWith({ initial: true });
+
+    txn.setContext({ phase: 'mid' });
+    expect(apm.setCustomContext).toHaveBeenCalledWith({ phase: 'mid' });
+
+    txn.end('success', { endTime: 123, context: { phase: 'end' } });
+    expect(apm.setCustomContext).toHaveBeenCalledWith({ phase: 'end' });
+    expect(end).toHaveBeenCalledWith('success', 123);
+  });
+
+  test('captureError logs to console when telemetry disabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(false);
+    const error = new Error('boom');
+
+    telemetry.captureError(error);
+
+    expect(consoleError).toHaveBeenCalledWith(error);
+  });
+
+  test('captureError delegates to APM when telemetry enabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = jest.fn();
+    mockGetApm.mockReturnValue({ captureError });
+
+    const error = new Error('boom');
+    telemetry.captureError(error);
+
+    expect(captureError).toHaveBeenCalledWith(error);
   });
 });
