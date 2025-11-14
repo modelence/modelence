@@ -33,6 +33,10 @@ jobs:
         working-directory: ./packages/modelence
         run: npm run format:check
 
+      - name: Run tests
+        working-directory: ./packages/modelence
+        run: npm run test
+
       - name: Build modelence
         working-directory: ./packages/modelence
         run: npm run build 
