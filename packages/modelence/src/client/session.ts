@@ -26,6 +26,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
 let isInitialized = false;
 const SESSION_HEARTBEAT_INTERVAL = time.seconds(30);
+let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
 export async function initSession() {
   if (isInitialized) {
@@ -71,11 +72,22 @@ export async function initSession() {
 
 async function loopSessionHeartbeat() {
   await callMethod('_system.session.heartbeat');
-  setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
+  heartbeatTimer = setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
 export function setCurrentUser(user: User | null) {
   useSessionStore.getState().setUser(user);
+}
+
+export function getHeartbeatTimer() {
+  return heartbeatTimer;
+}
+
+export function stopHeartbeatTimer() {
+  if (heartbeatTimer) {
+    clearTimeout(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 /**
