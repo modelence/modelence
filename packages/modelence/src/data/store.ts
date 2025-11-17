@@ -231,7 +231,7 @@ export class Store<
         try {
           await this.requireCollection().createIndexes([index]);
         } catch (error) {
-          if (error instanceof MongoError && error.code === 68 && index.name) {
+          if (error instanceof MongoError && error.code === 86 && index.name) {
             await this.requireCollection().dropIndex(index.name);
             await this.requireCollection().createIndexes([index]);
           } else {
