@@ -17,10 +17,5 @@ export default new Module('_system', {
       isPublic: true,
       default: '',
     },
-    'log.level': {
-      type: 'string',
-      isPublic: false,
-      default: 'info',
-    },
   },
 });

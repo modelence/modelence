@@ -1,35 +1,33 @@
 import { getLogger, getApm } from '@/app/metrics';
 import { isTelemetryEnabled } from '@/app/state';
-import { getConfig } from '@/config/server';
 
 function getLogLevel() {
-  return getConfig('_system.log.level') as 'debug' | 'info' | 'error';
+  return process.env.MODELENCE_LOG_LEVEL as 'error' |  'info' | 'debug' | '';
 }
 
 export function logDebug(message: string, args: object) {
+  if (isTelemetryEnabled()) {
+    getLogger().debug(message, args);
+  }
   if (getLogLevel() === 'debug') {
-    if (isTelemetryEnabled()) {
-      getLogger().debug(message, args);
-    } else {
-      console.debug(message, args);
-    }
+    console.debug(message, args);
   }
 }
 
 export function logInfo(message: string, args: object) {
+  if (isTelemetryEnabled()) {
+    getLogger().info(message, args);
+  } 
   if (['debug', 'info'].includes(getLogLevel())) {
-    if (isTelemetryEnabled()) {
-      getLogger().info(message, args);
-    } else {
-      console.info(message, args);
-    }
+    console.info(message, args);
   }
 }
 
 export function logError(message: string, args: object) {
   if (isTelemetryEnabled()) {
     getLogger().error(message, args);
-  } else {
+  } 
+  if (['debug', 'info', 'error'].includes(getLogLevel())) {
     console.error(message, args);
   }
 }
