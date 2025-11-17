@@ -497,7 +497,10 @@ describe('app/index', () => {
     expect(mockConnectCloudBackend).not.toHaveBeenCalled();
     expect(mockLoadConfigs).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ key: '_system.mongodbUri', value: 'mongodb://localhost:27017/test' }),
+        expect.objectContaining({
+          key: '_system.mongodbUri',
+          value: 'mongodb://localhost:27017/test',
+        }),
         expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
       ])
     );

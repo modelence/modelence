@@ -1,8 +1,25 @@
 import { getLogger, getApm } from '@/app/metrics';
 import { isTelemetryEnabled } from '@/app/state';
 
-function getLogLevel() {
-  return process.env.MODELENCE_LOG_LEVEL as 'error' |  'info' | 'debug' | '';
+type LogLevel = 'error' | 'info' | 'debug' | '';
+
+/**
+ * Gets the logging level for console logs based on the MODELENCE_LOG_LEVEL environment variable.
+ *
+ * @returns The log level ('error' | 'info' | 'debug' | '')
+ *
+ * Behavior:
+ * - If MODELENCE_LOG_LEVEL is set, returns that value
+ * - If telemetry is disabled and MODELENCE_LOG_LEVEL is not set, defaults to 'info'
+ * - If telemetry is enabled and MODELENCE_LOG_LEVEL is not set, returns '' (no console logging)
+ */
+function getLogLevel(): LogLevel {
+  let defaultLoglevel: LogLevel = '';
+  if (!isTelemetryEnabled()) {
+    defaultLoglevel = 'info';
+  }
+
+  return (process.env.MODELENCE_LOG_LEVEL as LogLevel) || defaultLoglevel;
 }
 
 export function logDebug(message: string, args: object) {
@@ -17,7 +34,7 @@ export function logDebug(message: string, args: object) {
 export function logInfo(message: string, args: object) {
   if (isTelemetryEnabled()) {
     getLogger().info(message, args);
-  } 
+  }
   if (['debug', 'info'].includes(getLogLevel())) {
     console.info(message, args);
   }
@@ -26,7 +43,7 @@ export function logInfo(message: string, args: object) {
 export function logError(message: string, args: object) {
   if (isTelemetryEnabled()) {
     getLogger().error(message, args);
-  } 
+  }
   if (['debug', 'info', 'error'].includes(getLogLevel())) {
     console.error(message, args);
   }
