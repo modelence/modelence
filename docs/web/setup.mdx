@@ -23,36 +23,85 @@ If you want to skip this for now, feel free to ignore the "Connecting to Modelen
   
   <Step title="Create an Application">
     After you've logged in, create a new application and name it after your project.
-    Later, you can create production, local development and other environments (e.g. staging) for the same application.
   </Step>
   
   <Step title="Create an Environment">
-    After you've created an application, create a new environment.
-    Name your environment so it can uniquely identify your local development environment,
-    e.g. `dev-YourName` rather than just `dev` (unless you're sure there won't be anyone else working on the same project later).
+    After you've created an application, create a new environment. There are 2 types of environments: **cloud** and **local**. The cloud environment will provision and deploy your application to Modelence Cloud servers, while the local environment will only provision a remote MongoDB database for your local development.
+
+    <Note>
+    You can also connect to an external MongoDB database instead of using Modelence's provisioned database. See the "Setting up MongoDB" section below for more details.
+    </Note>
   </Step>
   
   <Step title="Connect Your Project">
-    After you've created a new environment, you will be redirected to the environment's dashboard and should see a setup card with a `Go to Setup` button, redirecting you to your environment's Setup page.
-    
-    In this page, you'll see a `Setup Local Environment` button,
-    which will show commands for either creating a new project or connecting an existing one.
-    Since you've already created a project, go with `Connect Existing Modelence Project`
-    and copy the corresponding shell command displayed in the popup.
-    
+    After you've created a new environment, open its Settings page and click on `Setup Local Environment` button.
+
+    It will open a modal with 2 steps. The first step creates a project (it's optional) by running the following command.
+
     ```bash
-    npx modelence setup --token <token>
+    npx create-modelence-app@latest testenv --template ai-chat
+    ```
+
+    The second command should be executed in the project directory and it connects the project to Modelence Cloud. Here is how the command looks like: 
+
+    ```bash
+    npx modelence@latest setup --token <token>
     ```
     
-    Once you run this command in your project's root directory, it will automatically create a `.modelence.env` file with the necessary environment variables.
+    It will automatically create a `.modelence.env` file with the necessary environment variables.
   </Step>
   
-  <Step title="Restart Your Development Server">
-    Stop and restart your `npm run dev` command after this step.
+  <Step title="Stating The Development Server">
+    Run the following command in the project directory `npm run dev` to start the development server.
     
     Now, if everything is set up correctly, you should see your environment status go from `inactive` to `active` in the Modelence Cloud dashboard.
   </Step>
 </Steps>
+
+## Deploy to Modelence Cloud
+
+To deploy your Modelence application to the cloud, follow these steps:
+
+<Steps>
+  <Step title="Create a Cloud Environment">
+    In your Modelence Cloud dashboard, navigate to your application and create a new environment. This time, select **cloud** as the environment type instead of local. Cloud environments will provision infrastructure and deploy your application to Modelence Cloud servers.
+  </Step>
+
+  <Step title="Open Environment Settings">
+    After creating the cloud environment, navigate to its Settings page. You'll find deployment configuration and commands here.
+  </Step>
+
+  <Step title="(Optional) Create a New Project">
+    If you don't have an existing project, you can create one using the command from Step 1 in the settings modal:
+
+    ```bash
+    npx create-modelence-app@latest my-app --template ai-chat
+    ```
+
+    Replace `my-app` with your preferred project name and choose the template that fits your needs.
+  </Step>
+
+  <Step title="Deploy Your Project">
+    Copy the deployment command from Step 2 in the settings page. The command will look like this:
+
+    ```bash
+    npx modelence@latest deploy --app <app-name> --env <env-name>
+    ```
+
+    Run this command in your project directory to deploy your application to Modelence Cloud. The deployment process will:
+    - Build your application
+    - Upload it to Modelence Cloud
+    - Provision necessary resources (MongoDB database, server infrastructure)
+    - Start your application
+
+    Once deployment completes, your environment status will change to `active` and you'll receive a URL to access your deployed application.
+  </Step>
+</Steps>
+
+<Note>
+Cloud deployments include automatic scaling, monitoring, and a production-ready MongoDB database. You can view logs, metrics, and manage your deployment from the Modelence Cloud dashboard.
+</Note>
+
 
 ## Setting up MongoDB
 
