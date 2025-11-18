@@ -61,7 +61,7 @@ describe('data/store', () => {
     });
 
     const indexError = new MongoError('duplicate') as MongoError & { code: number };
-    indexError.code = 68;
+    indexError.code = 86;
     const searchError = new MongoError('duplicate search') as MongoError & { code: number };
     searchError.code = 68;
 
