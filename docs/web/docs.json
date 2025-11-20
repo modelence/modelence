@@ -28,7 +28,8 @@
               "roles",
               "email",
               "stores",
-              "websockets"
+              "websockets",
+              "telemetry"
             ]
           },
           {

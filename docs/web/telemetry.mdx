@@ -1,0 +1,217 @@
+---
+title: 'Telemetry'
+description: 'Logging and monitoring your Modelence application'
+icon: 'chart-line'
+---
+
+Modelence includes built-in telemetry and logging functionality to help you monitor and debug your application. This guide covers the logging functions and environment variables you can use to control telemetry behavior.
+
+## Logging Functions
+
+Modelence provides three logging functions for different severity levels. These functions automatically integrate with your telemetry provider when enabled, while also supporting console output for local development.
+
+### logDebug
+
+Use `logDebug` for detailed debugging information that is typically only useful during development or troubleshooting.
+
+```typescript
+import { logDebug } from 'modelence/server';
+
+logDebug('Processing user request', {
+  userId: user.id,
+  action: 'profile_update'
+});
+```
+
+**When it logs:**
+- To telemetry provider: Always (when telemetry is enabled)
+- To console: Only when `MODELENCE_LOG_LEVEL=debug`
+
+### logInfo
+
+Use `logInfo` for general informational messages about application flow and important events.
+
+```typescript
+import { logInfo } from 'modelence/server';
+
+logInfo('User authenticated successfully', {
+  userId: user.id,
+  method: 'password'
+});
+```
+
+**When it logs:**
+- To telemetry provider: Always (when telemetry is enabled)
+- To console: When `MODELENCE_LOG_LEVEL=debug` or `MODELENCE_LOG_LEVEL=info`
+
+### logError
+
+Use `logError` for error conditions and exceptions that need attention.
+
+```typescript
+import { logError } from 'modelence/server';
+
+logError('Failed to process payment', {
+  userId: user.id,
+  error: error.message,
+  orderId: order.id
+});
+```
+
+**When it logs:**
+- To telemetry provider: Always (when telemetry is enabled)
+- To console: When `MODELENCE_LOG_LEVEL=debug`, `MODELENCE_LOG_LEVEL=info`, or `MODELENCE_LOG_LEVEL=error`
+
+## Function Signature
+
+All three logging functions accept the same parameters:
+
+```typescript
+logDebug(message: string, args: object)
+logInfo(message: string, args: object)
+logError(message: string, args: object)
+```
+
+- **message**: A descriptive string explaining what is being logged
+- **args**: An object containing contextual data (user IDs, request details, etc.)
+
+## Environment Variables
+
+### MODELENCE_LOG_LEVEL
+
+Controls the verbosity of console logging. This is especially useful during local development or when debugging production issues.
+
+**Valid values:**
+- `debug` - Logs all messages (debug, info, and error) to console
+- `info` - Logs info and error messages to console
+- `error` - Logs only error messages to console
+- Not set - No console logging (default when telemetry is enabled)
+
+**Default behavior:**
+- When telemetry is **enabled** and `MODELENCE_LOG_LEVEL` is **not set**: No console logging
+- When telemetry is **disabled** and `MODELENCE_LOG_LEVEL` is **not set**: Defaults to `info` level
+
+**Example usage:**
+
+```bash
+# In your .env file or shell
+MODELENCE_LOG_LEVEL=debug
+```
+
+```bash
+# For development - see all logs
+MODELENCE_LOG_LEVEL=debug npm run dev
+
+# For production debugging - see info and errors only
+MODELENCE_LOG_LEVEL=info npm start
+
+# For production monitoring - see only errors
+MODELENCE_LOG_LEVEL=error npm start
+```
+
+## Log Level Behavior Matrix
+
+| Log Level | logDebug console | logInfo console | logError console | Telemetry |
+|-----------|------------------|-----------------|------------------|-----------|
+| `debug` | ✓ | ✓ | ✓ | ✓ (if enabled) |
+| `info` | ✗ | ✓ | ✓ | ✓ (if enabled) |
+| `error` | ✗ | ✗ | ✓ | ✓ (if enabled) |
+| Not set (telemetry enabled) | ✗ | ✗ | ✗ | ✓ |
+| Not set (telemetry disabled) | ✗ | ✓ | ✓ | ✗ |
+
+## Additional Telemetry Functions
+
+Modelence also provides advanced telemetry functions for performance monitoring and error tracking:
+
+### startTransaction
+
+Track performance of operations like routes, methods, or background jobs:
+
+```typescript
+import { startTransaction } from 'modelence/server';
+
+const transaction = startTransaction('method', 'processOrder', {
+  orderId: order.id
+});
+
+try {
+  // Your operation here
+  await processOrder(order);
+
+  transaction.end('success');
+} catch (error) {
+  transaction.end('failure');
+  throw error;
+}
+```
+
+**Transaction types:**
+- `method` - API method calls
+- `route` - HTTP route handlers
+- `cron` - Scheduled jobs
+- `ai` - AI operations
+- `custom` - Custom operations
+
+### captureError
+
+Capture and report errors to your telemetry provider:
+
+```typescript
+import { captureError } from 'modelence/server';
+
+try {
+  await riskyOperation();
+} catch (error) {
+  captureError(error);
+  // Handle error...
+}
+```
+
+When telemetry is disabled, `captureError` falls back to `console.error`.
+
+## Best Practices
+
+1. **Use appropriate log levels**: Reserve `logError` for actual errors, use `logInfo` for important events, and `logDebug` for detailed troubleshooting information.
+
+2. **Include context**: Always provide relevant context in the `args` object to make debugging easier:
+   ```typescript
+   logInfo('Order processed', {
+     orderId: order.id,
+     userId: user.id,
+     amount: order.total,
+     paymentMethod: order.paymentMethod
+   });
+   ```
+
+3. **Avoid logging sensitive data**: Never log passwords, API keys, or personally identifiable information (PII):
+   ```typescript
+   // ❌ Bad
+   logDebug('User login', { password: user.password });
+
+   // ✓ Good
+   logDebug('User login', { userId: user.id, method: 'password' });
+   ```
+
+4. **Use transactions for performance tracking**: Wrap important operations in transactions to monitor their performance and success rates.
+
+5. **Configure log levels per environment**:
+   - **Development**: `MODELENCE_LOG_LEVEL=debug` for maximum visibility
+   - **Staging**: `MODELENCE_LOG_LEVEL=info` for important events
+   - **Production**: No `MODELENCE_LOG_LEVEL` set (rely on telemetry) or `MODELENCE_LOG_LEVEL=error` for critical issues only
+
+## Telemetry Integration
+
+By default, Modelence logs are sent to your configured telemetry provider (like Modelence Cloud). To configure telemetry for your application:
+
+1. Visit [cloud.modelence.com](https://cloud.modelence.com)
+2. Select your project and environment
+3. Navigate to **Application** → **Telemetry** settings
+4. Configure your telemetry preferences
+
+All logging functions (`logDebug`, `logInfo`, `logError`) automatically send data to your telemetry provider when it's enabled, giving you centralized visibility into your application's behavior.
+
+## Next Steps
+
+- Learn about [Authentication](/docs/authentication) to add user management
+- Explore [Email](/docs/email) configuration for transactional emails
+- Review [WebSockets](/docs/websockets) for real-time features

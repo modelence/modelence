@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 const mockGetLogger = jest.fn();
 const mockGetApm = jest.fn();
 const mockIsTelemetryEnabled = jest.fn();
-const mockGetConfig = jest.fn();
 
 jest.unstable_mockModule('@/app/metrics', () => ({
   getLogger: mockGetLogger,
@@ -12,10 +11,6 @@ jest.unstable_mockModule('@/app/metrics', () => ({
 
 jest.unstable_mockModule('@/app/state', () => ({
   isTelemetryEnabled: mockIsTelemetryEnabled,
-}));
-
-jest.unstable_mockModule('@/config/server', () => ({
-  getConfig: mockGetConfig,
 }));
 
 const telemetry = await import('./index');
@@ -27,7 +22,7 @@ describe('telemetry/index', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetConfig.mockReturnValue('info');
+    delete process.env.MODELENCE_LOG_LEVEL;
   });
 
   afterEach(() => {
@@ -42,8 +37,29 @@ describe('telemetry/index', () => {
     consoleError.mockRestore();
   });
 
-  test('logDebug uses logger debug when telemetry enabled and level debug', () => {
-    mockGetConfig.mockReturnValue('debug');
+  test('logDebug uses logger when telemetry enabled and console when log level is debug', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'debug';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
+
+    expect(logger.debug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+  });
+
+  test('logDebug uses only console when telemetry disabled and log level is debug', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'debug';
+    mockIsTelemetryEnabled.mockReturnValue(false);
+
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
+
+    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+  });
+
+  test('logDebug does not log to console when log level is not debug', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'info';
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
@@ -54,17 +70,32 @@ describe('telemetry/index', () => {
     expect(consoleDebug).not.toHaveBeenCalled();
   });
 
-  test('logDebug falls back to console when telemetry disabled', () => {
-    mockGetConfig.mockReturnValue('debug');
-    mockIsTelemetryEnabled.mockReturnValue(false);
+  test('logInfo uses logger when telemetry enabled and console when log level allows', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'info';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
 
-    telemetry.logDebug('debug-msg', { foo: 'bar' });
+    telemetry.logInfo('info-msg', { foo: 'bar' });
 
-    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+    expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
   });
 
-  test('logInfo uses logger info when telemetry enabled and level allows', () => {
-    mockGetConfig.mockReturnValue('info');
+  test('logInfo logs to console when log level is debug', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'debug';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logInfo('info-msg', { foo: 'bar' });
+
+    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+    expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+  });
+
+  test('logInfo does not log to console when log level is error', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'error';
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
@@ -75,12 +106,48 @@ describe('telemetry/index', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
   });
 
-  test('logError uses console when telemetry disabled', () => {
+  test('logError uses logger when telemetry enabled and console when log level allows', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'error';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+  });
+
+  test('logError uses console when telemetry disabled and log level allows', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'error';
     mockIsTelemetryEnabled.mockReturnValue(false);
 
     telemetry.logError('error-msg', { foo: 'bar' });
 
     expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+  });
+
+  test('logError logs to console for debug and info levels', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'info';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+  });
+
+  test('logError does not log to console when log level is not set', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    mockGetLogger.mockReturnValue(logger);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   test('startTransaction returns noop handlers when telemetry disabled', () => {
