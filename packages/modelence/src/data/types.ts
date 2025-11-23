@@ -1,6 +1,8 @@
-import { ObjectId } from 'mongodb';
 import { z, ZodArray, ZodNumber } from 'zod';
-import { Store } from './store';
+
+type ObjectId = {
+  toString(): string;
+};
 
 type ObjectTypeDefinition = {
   [key: string]: SchemaTypeDefinition;
@@ -39,16 +41,26 @@ export const schema = {
   embedding(): ZodArray<ZodNumber> {
     return z.array(z.number());
   },
-  objectId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('ObjectId');
+  objectId(): z.ZodType<string, z.ZodTypeDef, string | ObjectId> {
+    return z
+      .union([
+        z.string().min(24).max(24),
+        z.object({ toString: z.function().returns(z.string()) }).transform((val) => val.toString()),
+      ])
+      .describe('ObjectId');
   },
-  userId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('UserId');
+  userId(): z.ZodType<string, z.ZodTypeDef, string | ObjectId> {
+    return z
+      .union([
+        z.string().min(24).max(24),
+        z.object({ toString: z.function().returns(z.string()) }).transform((val) => val.toString()),
+      ])
+      .describe('UserId');
   },
-  ref<T extends ModelSchema>(
-    _collection: string | Store<T, InferDocumentType<T>>
-  ): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('Ref');
+  ref(
+    _collection: string
+  ): z.ZodType<string> {
+    return z.string().describe('Ref');
   },
   union: z.union.bind(z),
   infer<T extends SchemaTypeDefinition>(_schema: T): InferDocumentType<T> {
