@@ -5,6 +5,7 @@ import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
 import { execSync } from 'child_process';
 import pkg from '../../package.json';
+import { generateStores } from '../codegen';
 
 async function buildClient() {
   const postBuildCommand = getPostBuildCommand();
@@ -69,6 +70,15 @@ export async function build() {
   try {
     const buildDir = getBuildPath();
     await fs.rm(buildDir, { recursive: true, force: true });
+
+    // Generate zustand stores before building
+    console.log('\n🔧 Generating zustand stores...');
+    try {
+      await generateStores();
+    } catch (error) {
+      console.warn('\n⚠️  Store generation failed, continuing anyway...');
+      console.warn(error);
+    }
 
     await buildServer();
     await buildClient();
