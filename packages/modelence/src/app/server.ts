@@ -126,7 +126,8 @@ export async function startServer(
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
-    console.log(`\nApplication started on http://localhost:${port}\n`);
+    const siteUrl = process.env.MODELENCE_SITE_URL || `http://localhost:${port}`;
+    console.log(`\nApplication started on ${siteUrl}\n`);
   });
 }
 
