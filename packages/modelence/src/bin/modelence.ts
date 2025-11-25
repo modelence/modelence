@@ -52,7 +52,7 @@ program
   .description('Start development server')
   .action(async () => {
     await loadEnv();
-    dev();
+    await dev();
   });
 
 program.parse(process.argv);
