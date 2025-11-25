@@ -248,6 +248,8 @@ describe('app/index', () => {
     mockStartCronJobs.mockResolvedValue(undefined);
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MODELENCE_CRON_ENABLED;
+    delete process.env.MONGODB_URI;
+    delete process.env.MODELENCE_SITE_URL;
   });
 
   test('marks app as started', async () => {
@@ -486,25 +488,20 @@ describe('app/index', () => {
 
   test('loads local configs when cloud backend is not configured', async () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
-    process.env.MODELENCE_LOG_LEVEL = 'debug';
+    process.env.MODELENCE_SITE_URL = 'https://example.com';
 
     await startApp({
-      modules: [
-        createTestModule({
-          name: 'test',
-          configSchema: {
-            mongodbUri: { type: 'string', default: '', isPublic: false },
-            'log.level': { type: 'string', default: 'info', isPublic: false },
-          },
-        }),
-      ],
+      modules: [createTestModule()],
     });
 
     expect(mockConnectCloudBackend).not.toHaveBeenCalled();
     expect(mockLoadConfigs).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ key: '_system.mongodbUri' }),
-        expect.objectContaining({ key: '_system.log.level', value: 'debug' }),
+        expect.objectContaining({
+          key: '_system.mongodbUri',
+          value: 'mongodb://localhost:27017/test',
+        }),
+        expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
       ])
     );
     expect(mockInitMetrics).not.toHaveBeenCalled();

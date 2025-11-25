@@ -234,7 +234,6 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
-  MODELENCE_LOG_LEVEL: '_system.log.level',
   MODELENCE_SITE_URL: '_system.site.url',
   MODELENCE_ENV: '_system.env',
   // deprecated
