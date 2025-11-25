@@ -45,6 +45,26 @@ npm run dev
 
 Your Data API will be available at `http://localhost:3000`
 
+### 4. Deploy to Modelence Cloud
+
+To deploy your Data API to cloud:
+
+1. **Create a Cloud Environment**: In your Modelence Cloud dashboard, navigate to your application and create a new environment, selecting **cloud** as the environment type.
+
+2. **Get the Deployment Command**: Go to your cloud environment's settings page and copy the deployment command:
+
+```bash
+npx modelence@latest deploy --app <app-name> --env <env-name>
+```
+
+3. **Deploy**: Run the deployment command in your project directory. The deployment process will:
+   - Build your application
+   - Upload it to Modelence Cloud
+   - Provision resources including MongoDB database and server infrastructure
+   - Launch your application
+
+Once deployment completes, your environment status will become `active` and you'll receive a URL to access your deployed Data API.
+
 ## Core Components
 
 ### DB Access
