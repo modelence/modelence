@@ -69,11 +69,9 @@ Once deployment completes, your environment status will become `active` and you'
 
 ### DB Access
 
-The MongoDB URL for Data API can be configured via the `dataApi.mongodbUri` setting in Application → Configuration at https://cloud.modelence.com/.
-
-<Note>
-The Modelence framework uses the `_system.mongodbUri` configuration to connect to MongoDB. You can configure two different MongoDB instances to separate Modelence-specific collections from those accessible via Data API. 
-</Note>
+MongoDB is configured when you create an environment. During environment creation, you can choose to:
+- Create a new MongoDB database, or
+- Connect to an existing MongoDB instance
 
 ### Authentication
 
