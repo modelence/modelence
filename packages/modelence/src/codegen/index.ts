@@ -15,12 +15,6 @@ export interface CodegenOptions {
    * Default: .modelence/stores
    */
   outputDir?: string;
-
-  /**
-   * Whether to generate TypeScript definition files
-   * Default: true
-   */
-  generateTypes?: boolean;
 }
 
 /**
@@ -31,7 +25,6 @@ export async function generateStores(options: CodegenOptions = {}) {
   const {
     serverPath = await findServerPath(),
     outputDir = path.join(process.cwd(), '.modelence/stores'),
-    generateTypes = true,
   } = options;
 
   console.log('🔄 Generating zustand stores from modules...');
@@ -59,12 +52,6 @@ export async function generateStores(options: CodegenOptions = {}) {
       const storePath = path.join(outputDir, store.fileName);
       await fs.writeFile(storePath, store.content, 'utf-8');
       console.log(`   ✓ Generated: ${store.fileName}`);
-
-      if (generateTypes) {
-        const typesPath = path.join(outputDir, store.fileName.replace('.ts', '.types.ts'));
-        await fs.writeFile(typesPath, store.typesContent, 'utf-8');
-        console.log(`   ✓ Generated: ${store.fileName.replace('.ts', '.types.ts')}`);
-      }
     }
 
     // Generate index file
