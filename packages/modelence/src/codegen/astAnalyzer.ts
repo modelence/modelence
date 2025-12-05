@@ -1,12 +1,6 @@
-import { parse } from '@babel/parser';
-import babelTraverse from '@babel/traverse';
+import * as ts from 'typescript';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import type { ObjectProperty } from '@babel/types';
-
-// Handle default export for traverse (CommonJS/ESM compatibility)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const traverse = (babelTraverse as any).default || babelTraverse;
 
 export interface ModuleMetadata {
   name: string;
@@ -39,54 +33,59 @@ export async function analyzeModulesFromServerFile(serverPath: string): Promise<
   // Read the server file
   const serverCode = await fs.readFile(serverPath, 'utf-8');
 
-  // Parse the file into an AST
-  const ast = parse(serverCode, {
-    sourceType: 'module',
-    plugins: ['typescript', 'jsx'],
-  });
+  // Parse the file into an AST using TypeScript compiler
+  const sourceFile = ts.createSourceFile(
+    serverPath,
+    serverCode,
+    ts.ScriptTarget.Latest,
+    true
+  );
 
   // Find all module imports and their sources
   const moduleImports = new Map<string, string>(); // localName -> importPath
   const foundModules: ModuleInfo[] = [];
 
-  traverse(ast, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ImportDeclaration(nodePath: any) {
-      const importPath = nodePath.node.source.value;
-      for (const specifier of nodePath.node.specifiers) {
-        if (specifier.type === 'ImportDefaultSpecifier') {
-          moduleImports.set(specifier.local.name, importPath);
-        } else if (specifier.type === 'ImportSpecifier') {
-          moduleImports.set(specifier.local.name, importPath);
+  // Visit all nodes to find imports
+  function visitNode(node: ts.Node) {
+    if (ts.isImportDeclaration(node)) {
+      const importPath = (node.moduleSpecifier as ts.StringLiteral).text;
+
+      if (node.importClause) {
+        // Handle default import: import Foo from './foo'
+        if (node.importClause.name) {
+          moduleImports.set(node.importClause.name.text, importPath);
+        }
+
+        // Handle named imports: import { Foo } from './foo'
+        if (node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
+          for (const element of node.importClause.namedBindings.elements) {
+            moduleImports.set(element.name.text, importPath);
+          }
         }
       }
-    },
-  });
+    }
 
-  // Find the startApp call and extract modules array
-  traverse(ast, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    CallExpression(nodePath: any) {
-      const callee = nodePath.node.callee;
-      if (callee.type === 'Identifier' && callee.name === 'startApp') {
-        const args = nodePath.node.arguments;
-        if (args.length > 0 && args[0].type === 'ObjectExpression') {
-          const modulesProperty = args[0].properties.find(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (prop: any): prop is ObjectProperty =>
-              prop.type === 'ObjectProperty' &&
-              prop.key.type === 'Identifier' &&
-              prop.key.name === 'modules'
+    // Find the startApp call
+    if (ts.isCallExpression(node)) {
+      if (ts.isIdentifier(node.expression) && node.expression.text === 'startApp') {
+        // Get the first argument (config object)
+        const configArg = node.arguments[0];
+        if (configArg && ts.isObjectLiteralExpression(configArg)) {
+          // Find the modules property
+          const modulesProperty = configArg.properties.find(
+            (prop): prop is ts.PropertyAssignment =>
+              ts.isPropertyAssignment(prop) &&
+              ts.isIdentifier(prop.name) &&
+              prop.name.text === 'modules'
           );
 
-          if (modulesProperty && modulesProperty.value.type === 'ArrayExpression') {
-            // Extract module names from the array
-            for (const element of modulesProperty.value.elements) {
-              if (element?.type === 'Identifier') {
-                const moduleName = element.name;
+          if (modulesProperty && ts.isArrayLiteralExpression(modulesProperty.initializer)) {
+            // Extract module identifiers from the array
+            for (const element of modulesProperty.initializer.elements) {
+              if (ts.isIdentifier(element)) {
+                const moduleName = element.text;
                 const importPath = moduleImports.get(moduleName);
                 if (importPath) {
-                  // Found a module! Now we need to analyze its file
                   foundModules.push({
                     name: moduleName,
                     importPath,
@@ -98,8 +97,12 @@ export async function analyzeModulesFromServerFile(serverPath: string): Promise<
           }
         }
       }
-    },
-  });
+    }
+
+    ts.forEachChild(node, visitNode);
+  }
+
+  visitNode(sourceFile);
 
   // Analyze each module file to extract queries and mutations
   const analyzedModules: ModuleMetadata[] = [];
@@ -132,98 +135,103 @@ async function analyzeModuleFile(
     const moduleCode = await fs.readFile(fullPath, 'utf-8');
 
     // Parse the module file
-    const ast = parse(moduleCode, {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
-    });
+    const sourceFile = ts.createSourceFile(
+      fullPath,
+      moduleCode,
+      ts.ScriptTarget.Latest,
+      true
+    );
 
     let moduleName = '';
     const queries: QueryMetadata[] = [];
     const mutations: MutationMetadata[] = [];
 
-    // Find the Module constructor call (can be in export default or a variable)
-    traverse(ast, {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      NewExpression(nodePath: any) {
-        const callee = nodePath.node.callee;
-        if (callee.type === 'Identifier' && callee.name === 'Module') {
-          const args = nodePath.node.arguments;
+    // Find the Module constructor call
+    function visitNode(node: ts.Node) {
+      if (ts.isNewExpression(node)) {
+        if (ts.isIdentifier(node.expression) && node.expression.text === 'Module') {
+          const args = node.arguments;
 
           // First argument is the module name
-          if (args.length > 0 && args[0].type === 'StringLiteral') {
-            moduleName = args[0].value;
+          if (args && args.length > 0 && ts.isStringLiteral(args[0])) {
+            moduleName = args[0].text;
           }
 
           // Second argument is the config object
-          if (args.length > 1 && args[1].type === 'ObjectExpression') {
+          if (args && args.length > 1 && ts.isObjectLiteralExpression(args[1])) {
             const config = args[1];
 
             // Find queries property
             const queriesProperty = config.properties.find(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (prop: any): prop is ObjectProperty =>
-                prop.type === 'ObjectProperty' &&
-                prop.key.type === 'Identifier' &&
-                prop.key.name === 'queries'
+              (prop): prop is ts.PropertyAssignment =>
+                ts.isPropertyAssignment(prop) &&
+                ts.isIdentifier(prop.name) &&
+                prop.name.text === 'queries'
             );
 
-            if (queriesProperty && queriesProperty.value.type === 'ObjectExpression') {
-              for (const prop of queriesProperty.value.properties) {
-                // Handle both ObjectProperty and ObjectMethod (async methods)
-                if (
-                  (prop.type === 'ObjectProperty' || prop.type === 'ObjectMethod') &&
-                  (prop.key.type === 'Identifier' || prop.key.type === 'StringLiteral')
-                ) {
-                  const queryName = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value;
+            if (queriesProperty && ts.isObjectLiteralExpression(queriesProperty.initializer)) {
+              for (const prop of queriesProperty.initializer.properties) {
+                if (ts.isPropertyAssignment(prop) || ts.isMethodDeclaration(prop)) {
+                  const queryName = ts.isIdentifier(prop.name)
+                    ? prop.name.text
+                    : ts.isStringLiteral(prop.name)
+                    ? prop.name.text
+                    : '';
 
-                  // Extract type information from the method
-                  const typeInfo = extractMethodTypes(prop, moduleCode);
+                  if (queryName) {
+                    // Extract type information
+                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile);
 
-                  queries.push({
-                    name: queryName,
-                    fullName: `${moduleName}.${queryName}`,
-                    argsType: typeInfo.argsType,
-                    returnType: typeInfo.returnType,
-                  });
+                    queries.push({
+                      name: queryName,
+                      fullName: `${moduleName}.${queryName}`,
+                      argsType: typeInfo.argsType,
+                      returnType: typeInfo.returnType,
+                    });
+                  }
                 }
               }
             }
 
             // Find mutations property
             const mutationsProperty = config.properties.find(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (prop: any): prop is ObjectProperty =>
-                prop.type === 'ObjectProperty' &&
-                prop.key.type === 'Identifier' &&
-                prop.key.name === 'mutations'
+              (prop): prop is ts.PropertyAssignment =>
+                ts.isPropertyAssignment(prop) &&
+                ts.isIdentifier(prop.name) &&
+                prop.name.text === 'mutations'
             );
 
-            if (mutationsProperty && mutationsProperty.value.type === 'ObjectExpression') {
-              for (const prop of mutationsProperty.value.properties) {
-                // Handle both ObjectProperty and ObjectMethod (async methods)
-                if (
-                  (prop.type === 'ObjectProperty' || prop.type === 'ObjectMethod') &&
-                  (prop.key.type === 'Identifier' || prop.key.type === 'StringLiteral')
-                ) {
-                  const mutationName =
-                    prop.key.type === 'Identifier' ? prop.key.name : prop.key.value;
+            if (mutationsProperty && ts.isObjectLiteralExpression(mutationsProperty.initializer)) {
+              for (const prop of mutationsProperty.initializer.properties) {
+                if (ts.isPropertyAssignment(prop) || ts.isMethodDeclaration(prop)) {
+                  const mutationName = ts.isIdentifier(prop.name)
+                    ? prop.name.text
+                    : ts.isStringLiteral(prop.name)
+                    ? prop.name.text
+                    : '';
 
-                  // Extract type information from the method
-                  const typeInfo = extractMethodTypes(prop, moduleCode);
+                  if (mutationName) {
+                    // Extract type information
+                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile);
 
-                  mutations.push({
-                    name: mutationName,
-                    fullName: `${moduleName}.${mutationName}`,
-                    argsType: typeInfo.argsType,
-                    returnType: typeInfo.returnType,
-                  });
+                    mutations.push({
+                      name: mutationName,
+                      fullName: `${moduleName}.${mutationName}`,
+                      argsType: typeInfo.argsType,
+                      returnType: typeInfo.returnType,
+                    });
+                  }
                 }
               }
             }
           }
         }
-      },
-    });
+      }
+
+      ts.forEachChild(node, visitNode);
+    }
+
+    visitNode(sourceFile);
 
     if (moduleName) {
       return {
@@ -242,26 +250,26 @@ async function analyzeModuleFile(
 }
 
 /**
- * Extracts type information from a method (ObjectProperty or ObjectMethod)
+ * Extracts type information from a method (PropertyAssignment or MethodDeclaration)
  * Analyzes Zod schemas and return statements to infer types
  */
 function extractMethodTypes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  prop: any,
-  sourceCode: string
+  prop: ts.PropertyAssignment | ts.MethodDeclaration,
+  sourceCode: string,
+  sourceFile: ts.SourceFile
 ): { argsType?: string; returnType?: string } {
   let argsType: string | undefined;
   let returnType: string | undefined;
 
   // Get the function body
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let functionBody: any;
-  if (prop.type === 'ObjectMethod') {
+  let functionBody: ts.Node | undefined;
+
+  if (ts.isMethodDeclaration(prop) && prop.body) {
     functionBody = prop.body;
-  } else if (prop.type === 'ObjectProperty') {
-    const value = prop.value;
-    if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression') {
-      functionBody = value.body;
+  } else if (ts.isPropertyAssignment(prop)) {
+    const initializer = prop.initializer;
+    if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+      functionBody = initializer.body;
     }
   }
 
@@ -270,29 +278,27 @@ function extractMethodTypes(
   }
 
   // Extract the source code for this method
-  const start = functionBody.start;
-  const end = functionBody.end;
-  if (start !== undefined && end !== undefined) {
-    const methodSource = sourceCode.substring(start, end);
+  const start = functionBody.getStart(sourceFile);
+  const end = functionBody.getEnd();
+  const methodSource = sourceCode.substring(start, end);
 
-    // Look for Zod schema parsing patterns
-    // Pattern: z.object({ field: z.string(), ... }).parse(args)
-    const zodObjectPattern =
-      /z\.object\(\s*\{([^}]+)\}\s*\)\.parse\(|\.object\(\s*\{([^}]+)\}\s*\)\.parse\(/g;
-    const zodMatch = zodObjectPattern.exec(methodSource);
+  // Look for Zod schema parsing patterns
+  // Pattern: z.object({ field: z.string(), ... }).parse(args)
+  const zodObjectPattern =
+    /z\.object\(\s*\{([^}]+)\}\s*\)\.parse\(|\.object\(\s*\{([^}]+)\}\s*\)\.parse\(/g;
+  const zodMatch = zodObjectPattern.exec(methodSource);
 
-    if (zodMatch) {
-      const schemaContent = zodMatch[1] || zodMatch[2];
-      argsType = convertZodSchemaToTypeScript(schemaContent);
-    }
+  if (zodMatch) {
+    const schemaContent = zodMatch[1] || zodMatch[2];
+    argsType = convertZodSchemaToTypeScript(schemaContent);
+  }
 
-    // Look for explicit return statements to infer return type
-    // This is basic - in reality, we'd need full type inference
-    if (methodSource.includes('return {')) {
-      returnType = 'Record<string, unknown>'; // Generic object type
-    } else if (methodSource.includes('return [')) {
-      returnType = 'unknown[]'; // Array type
-    }
+  // Look for explicit return statements to infer return type
+  // This is basic - in reality, we'd need full type inference
+  if (methodSource.includes('return {')) {
+    returnType = 'Record<string, unknown>'; // Generic object type
+  } else if (methodSource.includes('return [')) {
+    returnType = 'unknown[]'; // Array type
   }
 
   return { argsType, returnType };
