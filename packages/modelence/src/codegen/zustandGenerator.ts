@@ -26,12 +26,10 @@ function generateStoreForModule(module: ModuleMetadata): GeneratedStore {
 import { create } from 'zustand';
 import { callMethod } from 'modelence/client';
 
-/**
- * Zustand store for ${module.name} module
- * Auto-generated from module queries and mutations
- */
-
 export const ${hookName} = create((set, get) => ({
+${queriesSection.dataFields}
+${mutationsSection.dataFields}
+
 ${queriesSection.implementations}
 ${mutationsSection.implementations}
 }));
@@ -44,24 +42,38 @@ ${mutationsSection.implementations}
 }
 
 interface SectionContent {
+  dataFields: string;
   implementations: string;
 }
 
 function generateQueriesSection(queries: QueryMetadata[]): SectionContent {
   if (queries.length === 0) {
     return {
-      implementations: '  // No queries',
+      dataFields: '',
+      implementations: '',
     };
   }
+
+  const dataFields = queries
+    .map((q) => {
+      const returnType = q.returnType || 'unknown';
+      return `  ${q.name}Data: null as ${returnType} | null,`;
+    })
+    .join('\n');
 
   const implementations = queries
     .map((q) => {
       const argsType = q.argsType || 'Record<string, unknown>';
-      return `  ${q.name}: async (args = {} as ${argsType}) => callMethod('${q.fullName}', args),`;
+      return `  ${q.name}: async (args = {} as ${argsType}) => {
+    const result = await callMethod('${q.fullName}', args);
+    set({ ${q.name}Data: result });
+    return result;
+  },`;
     })
     .join('\n');
 
   return {
+    dataFields,
     implementations,
   };
 }
@@ -69,18 +81,31 @@ function generateQueriesSection(queries: QueryMetadata[]): SectionContent {
 function generateMutationsSection(mutations: MutationMetadata[]): SectionContent {
   if (mutations.length === 0) {
     return {
-      implementations: '  // No mutations',
+      dataFields: '',
+      implementations: '',
     };
   }
+
+  const dataFields = mutations
+    .map((m) => {
+      const returnType = m.returnType || 'unknown';
+      return `  ${m.name}Data: null as ${returnType} | null,`;
+    })
+    .join('\n');
 
   const implementations = mutations
     .map((m) => {
       const argsType = m.argsType || 'Record<string, unknown>';
-      return `  ${m.name}: async (args = {} as ${argsType}) => callMethod('${m.fullName}', args),`;
+      return `  ${m.name}: async (args = {} as ${argsType}) => {
+    const result = await callMethod('${m.fullName}', args);
+    set({ ${m.name}Data: result });
+    return result;
+  },`;
     })
     .join('\n');
 
   return {
+    dataFields,
     implementations,
   };
 }
