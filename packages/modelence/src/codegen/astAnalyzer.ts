@@ -34,12 +34,7 @@ export async function analyzeModulesFromServerFile(serverPath: string): Promise<
   const serverCode = await fs.readFile(serverPath, 'utf-8');
 
   // Parse the file into an AST using TypeScript compiler
-  const sourceFile = ts.createSourceFile(
-    serverPath,
-    serverCode,
-    ts.ScriptTarget.Latest,
-    true
-  );
+  const sourceFile = ts.createSourceFile(serverPath, serverCode, ts.ScriptTarget.Latest, true);
 
   // Find all module imports and their sources
   const moduleImports = new Map<string, string>(); // localName -> importPath
@@ -135,12 +130,7 @@ async function analyzeModuleFile(
     const moduleCode = await fs.readFile(fullPath, 'utf-8');
 
     // Parse the module file
-    const sourceFile = ts.createSourceFile(
-      fullPath,
-      moduleCode,
-      ts.ScriptTarget.Latest,
-      true
-    );
+    const sourceFile = ts.createSourceFile(fullPath, moduleCode, ts.ScriptTarget.Latest, true);
 
     let moduleName = '';
     const queries: QueryMetadata[] = [];
@@ -175,8 +165,8 @@ async function analyzeModuleFile(
                   const queryName = ts.isIdentifier(prop.name)
                     ? prop.name.text
                     : ts.isStringLiteral(prop.name)
-                    ? prop.name.text
-                    : '';
+                      ? prop.name.text
+                      : '';
 
                   if (queryName) {
                     // Extract type information
@@ -207,8 +197,8 @@ async function analyzeModuleFile(
                   const mutationName = ts.isIdentifier(prop.name)
                     ? prop.name.text
                     : ts.isStringLiteral(prop.name)
-                    ? prop.name.text
-                    : '';
+                      ? prop.name.text
+                      : '';
 
                   if (mutationName) {
                     // Extract type information
