@@ -299,24 +299,29 @@ function extractMethodTypes(
 
   // Try to use TypeScript's type checker for return type inference
   if (functionNode) {
-    const signature = typeChecker.getSignatureFromDeclaration(functionNode);
-    if (signature) {
-      const returnTypeNode = signature.getReturnType();
-      if (returnTypeNode) {
-        // Get the type string, removing Promise wrapper if present
-        let typeString = typeChecker.typeToString(returnTypeNode);
+    try {
+      const signature = typeChecker.getSignatureFromDeclaration(functionNode);
+      if (signature) {
+        const returnTypeNode = signature.getReturnType();
+        if (returnTypeNode) {
+          // Get the type string, removing Promise wrapper if present
+          let typeString = typeChecker.typeToString(returnTypeNode);
 
-        // Remove Promise wrapper: Promise<Type> -> Type
-        const promiseMatch = typeString.match(/^Promise<(.+)>$/);
-        if (promiseMatch) {
-          typeString = promiseMatch[1];
-        }
+          // Remove Promise wrapper: Promise<Type> -> Type
+          const promiseMatch = typeString.match(/^Promise<(.+)>$/);
+          if (promiseMatch) {
+            typeString = promiseMatch[1];
+          }
 
-        // Only use the inferred type if it's not 'any' or 'void'
-        if (typeString !== 'any' && typeString !== 'void') {
-          returnType = typeString;
+          // Only use the inferred type if it's not 'any' or 'void'
+          if (typeString !== 'any' && typeString !== 'void') {
+            returnType = typeString;
+          }
         }
       }
+    } catch {
+      // If type checker fails, fall back to basic pattern matching
+      // This can happen with certain syntax patterns
     }
   }
 
