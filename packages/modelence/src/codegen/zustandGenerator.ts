@@ -31,12 +31,8 @@ import { callMethod } from 'modelence/client';
  * Auto-generated from module queries and mutations
  */
 
-// Create the store
 export const ${hookName} = create((set, get) => ({
-  // Query implementations
 ${queriesSection.implementations}
-
-  // Mutation implementations
 ${mutationsSection.implementations}
 }));
 `;
