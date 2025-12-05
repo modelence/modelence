@@ -132,6 +132,16 @@ async function analyzeModuleFile(
     // Parse the module file
     const sourceFile = ts.createSourceFile(fullPath, moduleCode, ts.ScriptTarget.Latest, true);
 
+    // Create TypeScript program and type checker for type inference
+    const program = ts.createProgram([fullPath], {
+      noEmit: true,
+      target: ts.ScriptTarget.Latest,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+      allowJs: true,
+      checkJs: false,
+    });
+    const typeChecker = program.getTypeChecker();
+
     let moduleName = '';
     const queries: QueryMetadata[] = [];
     const mutations: MutationMetadata[] = [];
@@ -170,7 +180,7 @@ async function analyzeModuleFile(
 
                   if (queryName) {
                     // Extract type information
-                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile);
+                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile, typeChecker);
 
                     queries.push({
                       name: queryName,
@@ -202,7 +212,7 @@ async function analyzeModuleFile(
 
                   if (mutationName) {
                     // Extract type information
-                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile);
+                    const typeInfo = extractMethodTypes(prop, moduleCode, sourceFile, typeChecker);
 
                     mutations.push({
                       name: mutationName,
@@ -246,20 +256,24 @@ async function analyzeModuleFile(
 function extractMethodTypes(
   prop: ts.PropertyAssignment | ts.MethodDeclaration,
   sourceCode: string,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
+  typeChecker: ts.TypeChecker
 ): { argsType?: string; returnType?: string } {
   let argsType: string | undefined;
   let returnType: string | undefined;
 
   // Get the function body
   let functionBody: ts.Node | undefined;
+  let functionNode: ts.FunctionLikeDeclaration | undefined;
 
-  if (ts.isMethodDeclaration(prop) && prop.body) {
+  if (ts.isMethodDeclaration(prop)) {
     functionBody = prop.body;
+    functionNode = prop;
   } else if (ts.isPropertyAssignment(prop)) {
     const initializer = prop.initializer;
     if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
       functionBody = initializer.body;
+      functionNode = initializer;
     }
   }
 
@@ -283,12 +297,36 @@ function extractMethodTypes(
     argsType = convertZodSchemaToTypeScript(schemaContent);
   }
 
-  // Look for explicit return statements to infer return type
-  // This is basic - in reality, we'd need full type inference
-  if (methodSource.includes('return {')) {
-    returnType = 'Record<string, unknown>'; // Generic object type
-  } else if (methodSource.includes('return [')) {
-    returnType = 'unknown[]'; // Array type
+  // Try to use TypeScript's type checker for return type inference
+  if (functionNode) {
+    const signature = typeChecker.getSignatureFromDeclaration(functionNode);
+    if (signature) {
+      const returnTypeNode = signature.getReturnType();
+      if (returnTypeNode) {
+        // Get the type string, removing Promise wrapper if present
+        let typeString = typeChecker.typeToString(returnTypeNode);
+
+        // Remove Promise wrapper: Promise<Type> -> Type
+        const promiseMatch = typeString.match(/^Promise<(.+)>$/);
+        if (promiseMatch) {
+          typeString = promiseMatch[1];
+        }
+
+        // Only use the inferred type if it's not 'any' or 'void'
+        if (typeString !== 'any' && typeString !== 'void') {
+          returnType = typeString;
+        }
+      }
+    }
+  }
+
+  // Fallback to basic pattern matching if type checker didn't work
+  if (!returnType) {
+    if (methodSource.includes('return {')) {
+      returnType = 'Record<string, unknown>';
+    } else if (methodSource.includes('return [')) {
+      returnType = 'unknown[]';
+    }
   }
 
   return { argsType, returnType };
