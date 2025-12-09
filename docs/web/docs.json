@@ -16,7 +16,6 @@
           {
             "group": "Get Started",
             "pages": [
-              "index",
               "quickstart",
               "setup"
             ]
@@ -24,7 +23,14 @@
           {
             "group": "Features",
             "pages": [
-              "authentication",
+              {
+                "group": "Authentication",
+                "icon": "shield",
+                "pages": [
+                  "authentication/index",
+                  "authentication/google-sign-in"
+                ]
+              },
               "roles",
               "email",
               "stores",
@@ -104,21 +110,7 @@
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "GitHub",
-          "href": "https://github.com/modelence/modelence",
-          "icon": "github"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://modelence.medium.com",
-          "icon": "newspaper"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/logo/light.svg",
