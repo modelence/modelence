@@ -11,20 +11,38 @@ Modelence provides built-in support for user roles, allowing you to define custo
 ### Checking User Roles
 
 ```typescript
-createMutation('adminAction', {
-  handler: async (args, { user }) => {
-    if (!user?.hasRole('admin')) {
-      throw new Error('Admin access required');
-    }
-    // Admin-only logic here
-  }
-});
+import { Module } from 'modelence/server';
+import { AuthError } from 'modelence';
 
-// Or use requireRole for cleaner code
-createMutation('adminAction', {
-  handler: async (args, { user }) => {
-    user?.requireRole('admin'); // Throws error if not admin
-    // Admin-only logic here
+export default new Module('myModule', {
+  mutations: {
+    adminAction: {
+      handler: async (args, { user }) => {
+        if (!user) {
+          throw new AuthError('Not authenticated');
+        }
+
+        // Throws exception if the user doesn't have an "admin" role
+        user.requireRole('admin');
+
+        // Admin-only logic here
+      }
+    },
+
+    anotherAdminAction: {
+      handler: async (args, { user }) => {
+        if (!user) {
+          throw new AuthError('Not authenticated');
+        }
+
+        // Alternatively, manually check for the role for custom error handling
+        if (!user.hasRole('admin')) {
+          throw new Error('Admin access required');
+        }
+
+        // Admin-only logic here
+      }
+    }
   }
 });
 ```
