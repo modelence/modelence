@@ -28,6 +28,11 @@
                 "icon": "shield",
                 "pages": [
                   "authentication/index",
+                  "authentication/user-management",
+                  "authentication/email-verification",
+                  "authentication/password-reset",
+                  "authentication/hooks",
+                  "authentication/rate-limiting",
                   "authentication/google-sign-in"
                 ]
               },

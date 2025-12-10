@@ -1,0 +1,31 @@
+---
+title: 'Auth Hooks'
+---
+
+The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    onAfterLogin: ({ user, session, connectionInfo }) => {
+      // Called after successful login
+      console.log(`${user.handle} logged in from ${connectionInfo.ip}`);
+    },
+    onLoginError: ({ error, session, connectionInfo }) => {
+      // Called when login fails
+      console.error('Login error:', error.message);
+    },
+    onAfterSignup: ({ user, session, connectionInfo }) => {
+      // Called after successful signup
+      // Perfect place to send welcome emails or analytics
+    },
+    onSignupError: ({ error, session, connectionInfo }) => {
+      // Called when signup fails
+      console.error('Signup error:', error.message);
+    },
+  },
+});
+```
+

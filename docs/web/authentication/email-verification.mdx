@@ -1,0 +1,82 @@
+---
+title: 'Email Verification'
+---
+
+Email verification adds an extra layer of security by ensuring users own the email address they register with.
+
+## Enabling Email Verification
+
+First, configure your email provider (see [Email Configuration](/email)):
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Verify your email',
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+## How It Works
+
+1. When a user signs up, a verification token is generated and stored
+2. An email with a verification link is sent to the user's email address
+3. The link contains the token: `https://yourapp.com/api/_internal/auth/verify-email?token=...`
+4. When clicked, the token is validated and the user's email is marked as verified
+5. The user is redirected to your configured `redirectUrl`
+
+## Custom Verification Templates
+
+You can customize the verification email template:
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Welcome! Please verify your email',
+      template: ({ name, email, verificationUrl }) => `
+        <html>
+          <body>
+            <h1>Welcome to Our App!</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>Please click the button below to verify your email address:</p>
+            <a href="${verificationUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Verify Email
+            </a>
+            <p>Or copy and paste this link: ${verificationUrl}</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+  },
+});
+```
+
+## Manual Verification
+
+You can also manually complete email verification from the client using a verification token:
+
+```typescript
+import { verifyEmail } from 'modelence/client';
+
+async function handleVerification(token: string) {
+  try {
+    await verifyEmail({ token });
+    console.log('Email verified successfully!');
+  } catch (error) {
+    console.error('Verification failed:', error.message);
+  }
+}
+```
+

@@ -1,0 +1,36 @@
+---
+title: 'Rate Limiting'
+---
+
+Modelence includes built-in rate limiting to protect against brute force attacks and abuse. Rate limits are automatically applied to authentication endpoints.
+
+## Default Rate Limits
+
+- **Signup**: 20 attempts per 15 minutes, 200 per day (per IP)
+- **Login**: 50 attempts per 15 minutes, 500 per day (per IP)
+- **Email Verification**: 3 attempts per 15 minutes, 10 per day (per user)
+
+These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
+
+## Handling Rate Limit Errors
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+import { RateLimitError } from 'modelence';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    await loginWithPassword({ email, password });
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      console.error('Too many attempts. Please try again later.');
+    } else {
+      console.error('Login failed:', error.message);
+    }
+  }
+}
+```
+
+## Disposable Email Detection
+Aside from rate limiting, Modelence also includes automatic protection against 100k+ disposable email services,
+and keeps a periodically updated dataset of all disposable email providers.
