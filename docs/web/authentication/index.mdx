@@ -1,0 +1,149 @@
+---
+title: 'Auth Overview'
+---
+
+Modelence provides a comprehensive built-in authentication system with support for email/password authentication, email verification, password reset, and session management. This guide explains how authentication works in Modelence and how to implement it in your application.
+
+## Overview
+
+Modelence authentication includes:
+
+- **Email/Password Authentication** - User signup and login with email and password
+- **Session Management** - Secure session handling with automatic token rotation
+- **[User Management](/authentication/user-management)** - User profile and role management
+- **[Email Verification](/authentication/email-verification)** - Optional email verification for new signups
+- **[Password Reset](/authentication/password-reset)** - Secure password reset flow with email tokens
+- **[Hooks](/authentication/hooks)** - Add custom handlers that run after login or signup
+- **[Rate Limiting](/authentication/rate-limiting)** - Built-in protection against brute force attacks
+- **[Google Sign-In](/authentication/google-sign-in)** - OAuth authentication with Google accounts
+
+## How Authentication Works
+
+### Session Management
+
+When a user visits your application, Modelence automatically creates a session:
+
+1. **Session Creation** - A secure session token is generated using cryptographically random bytes
+2. **Token Storage** - The session token is stored in the database and sent to the client
+3. **Automatic Expiration** - Sessions expire after 7 days of inactivity
+4. **Heartbeat Updates** - Active sessions are automatically renewed through periodic heartbeat requests
+
+Sessions are stored in the `_modelenceSessions` collection and tracked with the following properties:
+
+```typescript
+{
+  authToken: string;      // Secure random token
+  createdAt: Date;        // Session creation timestamp
+  expiresAt: Date;        // Automatic expiration date
+  userId: ObjectId | null; // Associated user (null for guest sessions)
+}
+```
+
+### User Authentication Flow
+
+#### Signup Process
+
+When a user signs up with email and password:
+
+1. **Validation** - Email format and password strength are validated
+2. **Duplicate Check** - System checks if email already exists
+3. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+4. **User Creation** - User record is created in the `_modelenceUsers` collection
+5. **Session Linking** - The session is linked to the new user
+6. **Email Verification** (Optional) - If enabled, a verification email is sent
+
+#### Login Process
+
+When a user logs in:
+
+1. **Credential Verification** - Email and password are validated against stored credentials
+2. **Session Update** - Current session is linked to the authenticated user
+3. **User Data** - User information is returned to the client
+4. **State Update** - Client-side session state is updated
+
+## Basic Implementation
+
+### Client-Side Usage
+
+#### Signup
+
+```typescript
+import { signupWithPassword } from 'modelence/client';
+
+async function handleSignup(email: string, password: string) {
+  try {
+    await signupWithPassword({ email, password });
+    // User is now signed up
+    // If email verification is disabled, user is automatically logged in
+  } catch (error) {
+    console.error('Signup failed:', error.message);
+  }
+}
+```
+
+#### Login
+
+```typescript
+import { loginWithPassword } from 'modelence/client';
+
+async function handleLogin(email: string, password: string) {
+  try {
+    const user = await loginWithPassword({ email, password });
+    console.log('Logged in as:', user.handle);
+  } catch (error) {
+    console.error('Login failed:', error.message);
+  }
+}
+```
+
+#### Logout
+
+```typescript
+import { logout } from 'modelence/client';
+
+async function handleLogout() {
+  await logout();
+  // User is now logged out
+}
+```
+
+#### Accessing Current User
+
+```typescript
+import { useSession } from 'modelence/client';
+
+function MyComponent() {
+  const { user } = useSession();
+
+  if (!user) {
+    return <div>Please log in</div>;
+  }
+
+  return <div>Welcome, {user.handle}!</div>;
+}
+```
+
+## API Reference
+
+### Client Functions
+
+- [signupWithPassword](/api-reference/modelence/client/functions/signupWithPassword) - Sign up with email and password
+- [loginWithPassword](/api-reference/modelence/client/functions/loginWithPassword) - Log in with email and password
+- [logout](/api-reference/modelence/client/functions/logout) - Log out current user
+- [useSession](/api-reference/modelence/client/functions/useSession) - Access current user session
+- [verifyEmail](/api-reference/modelence/client/functions/verifyEmail) - Verify email with token
+- [sendResetPasswordToken](/api-reference/modelence/client/functions/sendResetPasswordToken) - Request password reset
+- [resetPassword](/api-reference/modelence/client/functions/resetPassword) - Reset password with token
+
+### Server Types
+
+- [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) - Authentication configuration
+- [UserInfo](/api-reference/modelence/server/type-aliases/UserInfo) - User information type
+- [dbUsers](/api-reference/modelence/server/variables/dbUsers) - User database collection
+
+### Error Types
+
+- [AuthError](/api-reference/modelence/index/classes/AuthError) - Authentication errors
+- [ValidationError](/api-reference/modelence/index/classes/ValidationError) - Validation errors
+- [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) - Rate limit errors
+
