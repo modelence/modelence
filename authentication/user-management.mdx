@@ -1,0 +1,62 @@
+---
+title: 'User Management'
+---
+
+Modelence stores user data in the `dbUsers` collection, which you can query and update directly from your server-side code.
+
+## Finding Users
+
+```typescript
+import { dbUsers, ObjectId } from 'modelence/server';
+
+// Find user by ID
+const user = await dbUsers.findById(userId);
+
+// Find user by email
+const user = await dbUsers.findOne({
+  'emails.address': 'john@example.com'
+});
+
+// Find all users with a specific role
+const admins = await dbUsers.fetch({
+  roles: 'admin'
+});
+```
+
+## Accessing the current user in method calls
+
+Use the `user` object from the context in your query/mutation handler to access the currently authenticated user:
+
+```typescript
+import { Module } from 'modelence/server';
+
+export default new Module('profile', {
+  queries: {
+    getMyProfile: async (args, { user }) => {
+      if (!user) {
+        return null;
+      }
+      
+      return {
+        id: user.id,
+        handle: user.handle,
+        roles: user.roles,
+      };
+    }
+  }
+});
+```
+
+## Disabling & Deleting Users
+
+Modelence provides helper functions for safely disabling or deleting users:
+
+```typescript
+import { disableUser, deleteUser, ObjectId } from 'modelence/server';
+
+// Set user's status to `disabled` and clears all sessions (preserves data, prevents login)
+await disableUser(new ObjectId(userId));
+
+// Delete a user (anonymizes data, clears all login methods)
+await deleteUser(new ObjectId(userId));
+```
