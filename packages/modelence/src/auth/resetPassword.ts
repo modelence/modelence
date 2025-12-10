@@ -64,13 +64,15 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Generate reset token
   const resetToken = randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + time.hours(1)); // 1 hour expiry
+  const now = Date.now();
+  const createdAt = new Date(now);
+  const expiresAt = new Date(now + time.hours(1)); // 1 hour expiry
 
   // Store reset token
   await resetPasswordTokensCollection.insertOne({
     userId: userDoc._id,
     token: resetToken,
-    createdAt: new Date(),
+    createdAt,
     expiresAt,
   });
 
