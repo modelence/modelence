@@ -15,7 +15,7 @@ Modelence provides three logging functions for different severity levels. These 
 Use `logDebug` for detailed debugging information that is typically only useful during development or troubleshooting.
 
 ```typescript
-import { logDebug } from 'modelence/server';
+import { logDebug } from 'modelence/telemetry';
 
 logDebug('Processing user request', {
   userId: user.id,
@@ -32,7 +32,7 @@ logDebug('Processing user request', {
 Use `logInfo` for general informational messages about application flow and important events.
 
 ```typescript
-import { logInfo } from 'modelence/server';
+import { logInfo } from 'modelence/telemetry';
 
 logInfo('User authenticated successfully', {
   userId: user.id,
@@ -49,7 +49,7 @@ logInfo('User authenticated successfully', {
 Use `logError` for error conditions and exceptions that need attention.
 
 ```typescript
-import { logError } from 'modelence/server';
+import { logError } from 'modelence/telemetry';
 
 logError('Failed to process payment', {
   userId: user.id,
@@ -128,7 +128,7 @@ Modelence also provides advanced telemetry functions for performance monitoring 
 Track performance of operations like routes, methods, or background jobs:
 
 ```typescript
-import { startTransaction } from 'modelence/server';
+import { startTransaction } from 'modelence/telemetry';
 
 const transaction = startTransaction('method', 'processOrder', {
   orderId: order.id
@@ -157,7 +157,7 @@ try {
 Capture and report errors to your telemetry provider:
 
 ```typescript
-import { captureError } from 'modelence/server';
+import { captureError } from 'modelence/telemetry';
 
 try {
   await riskyOperation();
