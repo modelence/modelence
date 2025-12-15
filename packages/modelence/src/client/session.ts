@@ -71,7 +71,11 @@ export async function initSession() {
 }
 
 async function loopSessionHeartbeat() {
-  await callMethod('_system.session.heartbeat');
+  try {
+    await callMethod('_system.session.heartbeat', {}, { errorHandler: () => {} });
+  } catch {
+    // Silently ignore heartbeat errors - they're expected during HMR/reconnects
+  }
   heartbeatTimer = setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
