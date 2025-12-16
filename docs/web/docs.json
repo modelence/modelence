@@ -14,19 +14,18 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Core Concepts",
-            "icon": "lightbulb",
-            "pages": [
-              "core-concepts/project-structure",
-              "core-concepts/modules",
-              "core-concepts/configuration"
-            ]
-          },
-          {
             "group": "Get Started",
             "pages": [
               "quickstart",
               "setup"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/project-structure",
+              "core-concepts/modules",
+              "core-concepts/configuration"
             ]
           },
           {
