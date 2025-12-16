@@ -33,7 +33,8 @@
                   "authentication/password-reset",
                   "authentication/hooks",
                   "authentication/rate-limiting",
-                  "authentication/google-sign-in"
+                  "authentication/google-sign-in",
+                  "authentication/github-sign-in"
                 ]
               },
               "roles",
