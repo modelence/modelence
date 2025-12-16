@@ -13,14 +13,20 @@ import { reviveResponseTypes } from '../methods/serialize';
 
 export type MethodArgs = Record<string, unknown>;
 
+export type CallMethodOptions = {
+  errorHandler?: (error: Error, methodName: string) => void;
+};
+
 export async function callMethod<T = unknown>(
   methodName: string,
-  args: MethodArgs = {}
+  args: MethodArgs = {},
+  options: CallMethodOptions = {}
 ): Promise<T> {
   try {
     return await call<T>(`/api/_internal/method/${methodName}`, args);
   } catch (error) {
-    handleError(error as Error, methodName);
+    const handler = options.errorHandler ?? handleError;
+    handler(error as Error, methodName);
     throw error;
   }
 }
