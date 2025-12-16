@@ -1,0 +1,200 @@
+---
+title: 'Project Structure'
+icon: 'folder-tree'
+---
+
+A Modelence project follows a well-organized structure that clearly separates client and server code, making it easy to build full-stack applications with TypeScript.
+
+## Directory Overview
+
+When you create a new Modelence project, you'll see the following structure:
+
+```
+my-app/
+├── src/
+│   ├── client/          # Frontend code
+│   ├── server/          # Backend code
+│   └── shared/          # (Optional) Shared code
+├── assets/              # Static assets (images, fonts)
+├── .modelence.env       # Environment variables
+├── package.json         # Project dependencies
+└── tsconfig.json        # TypeScript configuration
+```
+
+## Client Directory
+
+The `src/client` directory contains all your frontend React application code.
+
+### Key Files
+
+- **`index.html`** - The main HTML template for your application. You typically don't need to modify this file unless you want to add meta tags, external scripts, or customize the root template.
+
+- **`index.tsx`** - The React application entry point. This is where you initialize your client-side app using `renderApp()` and configure providers.
+
+  ```typescript
+  import { renderApp } from 'modelence/client';
+  import routes from './routes';
+  import './index.css';
+
+  renderApp({
+    routes,
+  });
+  ```
+
+- **`index.css`** - Global CSS styles for your application. This file typically includes Tailwind CSS imports and any global style customizations.
+
+- **`routes.ts`** - Client-side routing configuration that maps URL paths to React components.
+
+  ```typescript
+  import { createBrowserRouter } from 'react-router-dom';
+  import Home from './pages/Home';
+  import About from './pages/About';
+
+  export default createBrowserRouter([
+    { path: '/', element: <Home /> },
+    { path: '/about', element: <About /> },
+  ]);
+  ```
+
+### Organizing Client Code
+
+Within the `client` directory, you can organize your code into subdirectories:
+
+```
+src/client/
+├── components/       # Reusable React components
+├── pages/           # Page-level components
+├── hooks/           # Custom React hooks
+└── utils/           # Client-side utilities
+```
+
+## Server Directory
+
+The `src/server` directory contains all your backend code, including API logic, database models, and business logic.
+
+### Key Files
+
+- **`app.ts`** - The server entry point where you configure and start your Modelence application.
+
+  ```typescript
+  import { startApp } from 'modelence/server';
+  import todoModule from './todo';
+
+  startApp({
+    modules: [todoModule],
+  });
+  ```
+
+### Organizing Server Code by Modules
+
+The recommended approach is to organize server code into **modules** - self-contained units of functionality:
+
+```
+src/server/
+├── todo/
+│   ├── index.ts      # Module definition
+│   ├── db.ts         # Database stores
+│   └── utils.ts      # Module utilities
+├── users/
+│   ├── index.ts
+│   └── db.ts
+└── app.ts            # Main server file
+```
+
+Each module typically contains:
+- **Module definition** - Queries, mutations, and configuration
+- **Database stores** - MongoDB collection definitions
+- **Business logic** - Domain-specific utilities and helpers
+
+<Tip>
+Grouping code by modules (domains/features) rather than by type (controllers, models, etc.) makes your codebase more maintainable and easier to understand as it grows.
+</Tip>
+
+## Shared Code
+
+You can create a `src/shared` directory (or any other name) for code that needs to be used by both client and server:
+
+```
+src/
+├── client/
+├── server/
+└── shared/
+    ├── types.ts      # Shared TypeScript types
+    ├── constants.ts  # Shared constants
+    └── utils.ts      # Shared utilities
+```
+
+<Warning>
+Be careful when importing server code into client code or vice versa.
+</Warning>
+
+## Configuration Files
+
+### .modelence.env
+
+Environment-specific configuration for your application. This file should never be committed to version control.
+
+```env
+# MongoDB connection
+MONGODB_URI="mongodb+srv://..."
+
+# Other configuration
+PORT=3000
+```
+
+<Warning>
+Always add `.modelence.env` to your `.gitignore` file to prevent committing sensitive credentials.
+</Warning>
+
+### package.json
+
+Standard Node.js package configuration. Modelence projects include these key scripts:
+
+```json
+{
+  "scripts": {
+    "dev": "modelence dev",
+    "build": "modelence build",
+    "start": "node dist/server/app.js"
+  }
+}
+```
+
+### tsconfig.json
+
+TypeScript configuration for your project. Modelence sets up appropriate defaults for both client and server code with path aliases and module resolution.
+
+## Build Output
+
+When you build your application with `npm run build`, Modelence generates a `dist` directory:
+
+```
+dist/
+├── client/          # Built frontend assets
+│   ├── index.html
+│   ├── assets/
+│   └── ...
+└── server/          # Compiled server code
+    └── app.js
+```
+
+The built application is ready for deployment to any Node.js hosting platform.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Modules"
+    icon="puzzle-piece"
+    href="/core-concepts/modules"
+  >
+    Learn how to organize your application logic into modules
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/core-concepts/configuration"
+  >
+    Understand how to configure your Modelence application
+  </Card>
+</CardGroup>
