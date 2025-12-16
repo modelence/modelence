@@ -1,0 +1,238 @@
+---
+title: 'GitHub Sign-In'
+---
+
+Modelence supports OAuth authentication with GitHub, allowing users to sign in with their GitHub accounts.
+
+## Prerequisites
+
+Before implementing GitHub Sign-In, you need to:
+
+1. Have a GitHub account
+2. Register a new OAuth application on GitHub
+3. Obtain OAuth credentials (Client ID and Client Secret)
+4. Configure authorization callback URLs
+
+## GitHub OAuth App Setup
+
+1. **Create an OAuth App**
+   - Go to [GitHub Developer Settings](https://github.com/settings/developers)
+   - Click "OAuth Apps" in the left sidebar
+   - Click "New OAuth App"
+
+2. **Configure Application Details**
+   - **Application name**: Enter your application's name
+   - **Homepage URL**:
+     - For local development: `http://localhost:3000`
+     - For production: `https://yourdomain.com`
+   - **Application description**: (Optional) Describe your application
+   - **Authorization callback URL**: This is critical for OAuth to work
+     - For local development: `http://localhost:3000/api/_internal/auth/github/callback`
+     - For production: `https://yourdomain.com/api/_internal/auth/github/callback`
+
+3. **Register Application**
+   - Click "Register application"
+
+4. **Generate Client Secret**
+   - After registration, you'll see your **Client ID**
+   - Click "Generate a new client secret"
+   - Copy and save the **Client Secret** immediately (it won't be shown again)
+
+5. **Save Credentials**
+   - Store your **Client ID** and **Client Secret** securely
+   - Use environment variables or Modelence Cloud config
+   - Never commit these credentials to version control
+
+## Server-Side Configuration
+
+GitHub Sign-In is built into Modelence and requires no additional packages.
+
+### Option 1: Modelence Cloud (Recommended)
+
+The preferred way to configure GitHub authentication is through [Modelence Cloud](https://cloud.modelence.com/):
+
+1. Go to [https://cloud.modelence.com/](https://cloud.modelence.com/)
+2. Navigate to your project
+3. Go to **Authentication → Providers → GitHub**
+4. Enable GitHub authentication
+5. Enter your **Client ID** and **Client Secret** from GitHub
+6. Save the configuration
+
+This approach allows you to manage your configuration centrally through an intuitive UI and keeps sensitive credentials secure.
+
+### Option 2: Environment Variables
+
+Alternatively, you can use environment variables. Create a `.env` file in your project root:
+
+```bash
+MODELENCE_AUTH_GITHUB_ENABLED=true
+MODELENCE_AUTH_GITHUB_CLIENT_ID=your-github-client-id
+MODELENCE_AUTH_GITHUB_CLIENT_SECRET=your-github-client-secret
+MODELENCE_AUTH_GITHUB_CLIENT_SCOPES=user:email,read:user
+```
+
+**Optional Configuration:**
+- `MODELENCE_AUTH_GITHUB_CLIENT_SCOPES`: Comma-separated list of OAuth scopes to request from GitHub. Defaults to `user:email` if not specified.
+
+Make sure to add `.env` to your `.gitignore` file to keep credentials secure.
+
+The GitHub authentication is automatically enabled when these configurations are set. No additional server code is needed.
+
+## Client-Side Implementation
+
+### Using @modelence/auth-ui (Recommended)
+
+The easiest way to add GitHub Sign-In is using the `@modelence/auth-ui` package, which provides a complete `LoginForm` component with built-in GitHub authentication support:
+
+```bash
+npm install @modelence/auth-ui
+```
+
+Then use the `LoginForm` component:
+
+```typescript
+import { LoginForm } from '@modelence/auth-ui';
+
+function LoginPage() {
+  return <LoginForm />;
+}
+```
+
+The `LoginForm` component automatically displays a "Sign in with GitHub" button when GitHub authentication is enabled from the **Authentication → GitHub** section in [cloud.modelence.com](https://cloud.modelence.com) or via the `MODELENCE_AUTH_GITHUB_ENABLED` environment variable. The component includes:
+- Pre-styled button with GitHub branding and icon
+- Automatic redirect handling
+- Email/password login form
+- Responsive design with dark mode support
+- Forgot password and sign-up links
+
+You can customize the form with various props:
+
+```typescript
+<LoginForm
+  buttonVariant="outline"     // or "default", "secondary", "ghost"
+  buttonSize="lg"             // or "default", "sm"
+  cardClassName="shadow-lg"   // Custom card styling
+  onSignup={() => navigate('/signup')}
+  onForgotPassword={() => navigate('/forgot-password')}
+/>
+```
+
+## How GitHub Sign-In Works
+
+1. **Initiation** - User clicks "Sign in with GitHub" button
+2. **Redirect** - User is redirected to GitHub's OAuth authorization page
+3. **Authorization** - User grants permission to your app
+4. **Callback** - GitHub redirects back to your app with an authorization code
+5. **Token Exchange** - Your server exchanges the code for an access token and user information
+6. **User Creation/Login** - If user doesn't exist, a new account is created; otherwise, user is logged in
+7. **Session Creation** - A session is established and the user is authenticated
+
+## User Data Handling
+
+When a user signs in with GitHub, Modelence automatically:
+
+- Creates a user account if one doesn't exist
+- Links the GitHub account to the user profile
+- Retrieves profile information (username, email, avatar, name)
+- Marks the email as verified if GitHub has verified it
+
+The user object will contain:
+
+```typescript
+{
+  email: string;           // GitHub account email
+  handle: string;          // Generated from GitHub username or email
+  emailVerified: boolean;  // true if GitHub email is verified
+  githubId: string;        // GitHub user ID
+  name?: string;           // Full name from GitHub profile
+  picture?: string;        // Avatar URL from GitHub
+}
+```
+
+## Requesting Additional Scopes
+
+By default, Modelence requests basic profile information (`user:email` scope). If you need additional data from GitHub, you can configure additional scopes using the `MODELENCE_AUTH_GITHUB_CLIENT_SCOPES` environment variable or through Modelence Cloud.
+
+### Configuring Scopes
+
+**Via Environment Variables:**
+
+```bash
+# Request multiple scopes (comma-separated)
+MODELENCE_AUTH_GITHUB_CLIENT_SCOPES=user:email,read:user,repo
+```
+
+**Via Modelence Cloud:**
+
+1. Go to [cloud.modelence.com](https://cloud.modelence.com)
+2. Navigate to **Authentication → Providers → GitHub**
+3. Add the desired scopes in the scopes configuration field
+
+### Common GitHub Scopes
+
+- `user:email` - Access to user's email addresses (default, required for authentication)
+- `read:user` - Read access to user profile data
+- `user` - Full access to user profile data (includes read and write)
+- `repo` - Access to public and private repositories
+- `public_repo` - Access to public repositories only
+- `gist` - Access to gists
+- `read:org` - Read-only access to organization membership
+
+For a complete list of available scopes, see the [GitHub OAuth scopes documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps).
+
+**Note:** Only request the scopes your application actually needs. Users are more likely to authorize your app if it requests minimal permissions.
+
+## Manual Implementation (Alternative)
+
+If you prefer not to use `@modelence/auth-ui`, you can manually implement GitHub Sign-In by redirecting to the authentication endpoint:
+
+```typescript
+function handleGitHubSignIn() {
+  // Redirect to GitHub OAuth flow
+  window.location.href = '/api/_internal/auth/github';
+}
+```
+
+Example with a custom button:
+
+```typescript
+function LoginForm() {
+  return (
+    <div>
+      <h2>Sign In</h2>
+      <button onClick={() => window.location.href = '/api/_internal/auth/github'}>
+        Sign in with GitHub
+      </button>
+    </div>
+  );
+}
+```
+
+## Troubleshooting
+
+**Authorization callback URL mismatch**
+- Ensure the callback URL in your GitHub OAuth App settings exactly matches your application URL
+- Check for trailing slashes and http vs https
+- Common format: `https://yourdomain.com/api/_internal/auth/github/callback`
+- You can only register one callback URL per OAuth App
+
+**Application suspended error**
+- Check your GitHub app settings to ensure it hasn't been suspended
+- Verify your account is in good standing
+
+**Invalid client credentials**
+- Verify your Client ID and Client Secret are correct
+- Check that environment variables are properly loaded
+- Ensure you copied the Client Secret correctly (it's only shown once)
+- Make sure credentials are from the correct GitHub OAuth App
+
+**No email address returned**
+- Some GitHub users have private email addresses
+- Users must have at least one public email or primary email set
+- You may need to handle cases where email is not provided
+- Consider prompting users to provide an email if not available from GitHub
+
+**Rate limiting errors**
+- GitHub enforces rate limits on OAuth endpoints
+- If developing locally, avoid making too many authentication requests in quick succession
+- Production apps typically don't hit these limits under normal usage
