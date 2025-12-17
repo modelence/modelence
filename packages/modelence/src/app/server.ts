@@ -19,13 +19,60 @@ import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getWebsocketConfig } from './websocketConfig';
 
+function getBodyParserMiddleware(config?: {
+  json?: boolean | { limit?: string };
+  urlencoded?: boolean | { limit?: string; extended?: boolean };
+  raw?: boolean | { limit?: string; type?: string | string[] };
+}) {
+  const middlewares: express.RequestHandler[] = [];
+
+  if (!config) {
+    // Default: apply JSON and urlencoded parsing
+    middlewares.push(express.json({ limit: '16mb' }));
+    middlewares.push(express.urlencoded({ extended: true, limit: '16mb' }));
+    return middlewares;
+  }
+
+  // Handle JSON parsing
+  if (config.json !== false) {
+    const jsonOptions = typeof config.json === 'object' ? config.json : { limit: '16mb' };
+    middlewares.push(express.json(jsonOptions));
+  }
+
+  // Handle URL-encoded parsing
+  if (config.urlencoded !== false) {
+    const urlencodedOptions =
+      typeof config.urlencoded === 'object'
+        ? config.urlencoded
+        : { extended: true, limit: '16mb' };
+    middlewares.push(express.urlencoded(urlencodedOptions));
+  }
+
+  // Handle raw body parsing
+  if (config.raw) {
+    const rawOptions = typeof config.raw === 'object' ? config.raw : {};
+    const defaultRawOptions = {
+      limit: rawOptions.limit || '16mb',
+      type: rawOptions.type || '*/*',
+    };
+    middlewares.push(express.raw(defaultRawOptions));
+  }
+
+  return middlewares;
+}
+
 function registerModuleRoutes(app: express.Application, modules: Module[]) {
   for (const module of modules) {
     for (const route of module.routes) {
-      const { path, handlers } = route;
+      const { path, handlers, body } = route;
+      const middlewares = getBodyParserMiddleware(body);
 
       Object.entries(handlers).forEach(([method, handler]) => {
-        app[method as HttpMethod](path, createRouteHandler(method, path, handler));
+        app[method as HttpMethod](
+          path,
+          ...middlewares,
+          createRouteHandler(method, path, handler)
+        );
       });
     }
   }
@@ -43,9 +90,14 @@ export async function startServer(
 ) {
   const app = express();
 
+  app.use(cookieParser());
+
+  // Register module routes first (with per-route body parser config)
+  registerModuleRoutes(app, combinedModules);
+
+  // Apply global body parsing for remaining routes
   app.use(express.json({ limit: '16mb' }));
   app.use(express.urlencoded({ extended: true, limit: '16mb' }));
-  app.use(cookieParser());
 
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
@@ -87,8 +139,6 @@ export async function startServer(
       }
     }
   });
-
-  registerModuleRoutes(app, combinedModules);
 
   await server.init();
 

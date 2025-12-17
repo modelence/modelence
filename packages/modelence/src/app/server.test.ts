@@ -57,6 +57,7 @@ const mockLogInfo = jest.fn();
 const mockGetWebsocketConfig = jest.fn();
 const mockExpressJson = jest.fn();
 const mockExpressUrlencoded = jest.fn();
+const mockExpressRaw = jest.fn();
 const mockCookieParser = jest.fn();
 const mockHttpCreateServer = jest.fn();
 
@@ -132,9 +133,10 @@ jest.unstable_mockModule('express', () => {
   const express = jest.fn(() => {
     // Return the app set in beforeEach
     return mockExpressApp || createExpressAppMock();
-  }) as jest.Mock & { json: jest.Mock; urlencoded: jest.Mock };
+  }) as jest.Mock & { json: jest.Mock; urlencoded: jest.Mock; raw: jest.Mock };
   express.json = mockExpressJson;
   express.urlencoded = mockExpressUrlencoded;
+  express.raw = mockExpressRaw;
   return { default: express };
 });
 
@@ -609,8 +611,9 @@ describe('app/server startServer', () => {
 
     expect(mockCreateRouteHandler).toHaveBeenCalledWith('get', '/api/test', expect.any(Function));
     expect(mockCreateRouteHandler).toHaveBeenCalledWith('post', '/api/test', expect.any(Function));
-    expect(mockApp.get).toHaveBeenCalledWith('/api/test', mockRouteHandler);
-    expect(mockApp.post).toHaveBeenCalledWith('/api/test', mockRouteHandler);
+    // Routes now include body parser middleware
+    expect(mockApp.get).toHaveBeenCalledWith('/api/test', 'json-middleware', 'urlencoded-middleware', mockRouteHandler);
+    expect(mockApp.post).toHaveBeenCalledWith('/api/test', 'json-middleware', 'urlencoded-middleware', mockRouteHandler);
   });
 
   test('handles multiple modules with routes', async () => {
@@ -642,8 +645,9 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
-    expect(mockApp.get).toHaveBeenCalledWith('/api/foo', expect.any(Function));
-    expect(mockApp.post).toHaveBeenCalledWith('/api/bar', expect.any(Function));
+    // Routes now include body parser middleware
+    expect(mockApp.get).toHaveBeenCalledWith('/api/foo', 'json-middleware', 'urlencoded-middleware', expect.any(Function));
+    expect(mockApp.post).toHaveBeenCalledWith('/api/bar', 'json-middleware', 'urlencoded-middleware', expect.any(Function));
   });
 
   test('logs application startup', async () => {

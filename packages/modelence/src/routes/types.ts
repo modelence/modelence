@@ -18,6 +18,7 @@ export type RouteParams<T = unknown> = {
   params: Record<string, string>;
   headers: Record<string, string>;
   cookies: Record<string, string>;
+  rawBody?: Buffer;
   req: Request;
   res: Response;
   next: NextFunction;
@@ -41,10 +42,25 @@ export type RouteHandlers = {
   [key in HttpMethod]?: RouteHandler;
 };
 
+export type BodyConfig = {
+  json?: boolean | {
+    limit?: string;
+  };
+  urlencoded?: boolean | {
+    limit?: string;
+    extended?: boolean;
+  };
+  raw?: boolean | {
+    limit?: string;
+    type?: string | string[];
+  };
+};
+
 export type RouteDefinition = {
   path: string;
   handlers: RouteHandlers;
   errorHandler?: RouteHandler;
+  body?: BodyConfig;
 };
 
 export type ExpressHandler = (req: Request, res: Response) => Promise<void> | void;
