@@ -43,17 +43,23 @@ export type RouteHandlers = {
 };
 
 export type BodyConfig = {
-  json?: boolean | {
-    limit?: string;
-  };
-  urlencoded?: boolean | {
-    limit?: string;
-    extended?: boolean;
-  };
-  raw?: boolean | {
-    limit?: string;
-    type?: string | string[];
-  };
+  json?:
+    | boolean
+    | {
+        limit?: string;
+      };
+  urlencoded?:
+    | boolean
+    | {
+        limit?: string;
+        extended?: boolean;
+      };
+  raw?:
+    | boolean
+    | {
+        limit?: string;
+        type?: string | string[];
+      };
 };
 
 export type RouteDefinition = {

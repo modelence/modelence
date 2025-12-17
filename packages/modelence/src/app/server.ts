@@ -42,9 +42,7 @@ function getBodyParserMiddleware(config?: {
   // Handle URL-encoded parsing
   if (config.urlencoded !== false) {
     const urlencodedOptions =
-      typeof config.urlencoded === 'object'
-        ? config.urlencoded
-        : { extended: true, limit: '16mb' };
+      typeof config.urlencoded === 'object' ? config.urlencoded : { extended: true, limit: '16mb' };
     middlewares.push(express.urlencoded(urlencodedOptions));
   }
 
@@ -68,11 +66,7 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
       const middlewares = getBodyParserMiddleware(body);
 
       Object.entries(handlers).forEach(([method, handler]) => {
-        app[method as HttpMethod](
-          path,
-          ...middlewares,
-          createRouteHandler(method, path, handler)
-        );
+        app[method as HttpMethod](path, ...middlewares, createRouteHandler(method, path, handler));
       });
     }
   }
