@@ -37,6 +37,7 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
           params: req.params,
           headers: req.headers as Record<string, string>,
           cookies: req.cookies,
+          rawBody: Buffer.isBuffer(req.body) ? req.body : undefined,
           req,
           res,
           next,
