@@ -21,11 +21,88 @@ export default new Module('todo', {
 
 A typical module includes:
 
+- **Stores** - MongoDB collection definitions
 - **Queries** - Read operations that fetch data
 - **Mutations** - Write operations that modify data
-- **Stores** - MongoDB collection definitions
 - **Configuration** - Module-specific settings
 - **Cron Jobs** - Scheduled tasks (optional)
+
+## Stores
+
+Stores define your MongoDB collections with schemas, indexes, and custom methods. Including stores in your module ensures they're automatically provisioned when the server starts.
+
+```typescript
+import { Store, schema } from 'modelence/server';
+
+export const dbTodos = new Store('todos', {
+  schema: {
+    title: schema.string(),
+    isCompleted: schema.boolean(),
+    userId: schema.userId(),
+    createdAt: schema.date()
+  },
+  indexes: [
+    { key: { userId: 1 } }
+  ]
+});
+
+export default new Module('todo', {
+  // Register the store with the module
+  stores: [dbTodos],
+
+  queries: {
+    async getAll({}, { user }) {
+      return await dbTodos.fetch({ userId: user.id });
+    }
+  }
+});
+```
+
+<Tip>
+Learn more about working with Stores in the [Stores documentation](/stores).
+</Tip>
+
+## Authentication & Authorization
+
+You can restrict access to queries and mutations using authentication requirements:
+
+```typescript
+export default new Module('todo', {
+  queries: {
+    getAll: {
+      // Require authentication for this query
+      auth: true,
+      async handler({}, { user }) {
+        // user is guaranteed to exist here
+        return await dbTodos.fetch({ userId: user.id });
+      }
+    },
+
+    getPublic: {
+      // No authentication required
+      auth: false,
+      async handler() {
+        return await dbTodos.fetch({ isPublic: true });
+      }
+    }
+  },
+
+  mutations: {
+    adminDelete: {
+      // Custom authorization check
+      auth: true,
+      authorize: ({ user }) => {
+        if (!user.roles?.includes('admin')) {
+          throw new Error('Admin access required');
+        }
+      },
+      async handler({ id }) {
+        return await dbTodos.deleteOne({ id });
+      }
+    }
+  }
+});
+```
 
 ## Queries
 
@@ -165,83 +242,6 @@ function CreateTodo() {
 
   return <button onClick={handleSubmit}>Create Todo</button>;
 }
-```
-
-## Stores
-
-Stores define your MongoDB collections with schemas, indexes, and custom methods. Including stores in your module ensures they're automatically provisioned when the server starts.
-
-```typescript
-import { Store, schema } from 'modelence/server';
-
-export const dbTodos = new Store('todos', {
-  schema: {
-    title: schema.string(),
-    isCompleted: schema.boolean(),
-    userId: schema.userId(),
-    createdAt: schema.date()
-  },
-  indexes: [
-    { key: { userId: 1 } }
-  ]
-});
-
-export default new Module('todo', {
-  // Register the store with the module
-  stores: [dbTodos],
-
-  queries: {
-    async getAll({}, { user }) {
-      return await dbTodos.fetch({ userId: user.id });
-    }
-  }
-});
-```
-
-<Tip>
-Learn more about working with Stores in the [Stores documentation](/stores).
-</Tip>
-
-## Authentication & Authorization
-
-You can restrict access to queries and mutations using authentication requirements:
-
-```typescript
-export default new Module('todo', {
-  queries: {
-    getAll: {
-      // Require authentication for this query
-      auth: true,
-      async handler({}, { user }) {
-        // user is guaranteed to exist here
-        return await dbTodos.fetch({ userId: user.id });
-      }
-    },
-
-    getPublic: {
-      // No authentication required
-      auth: false,
-      async handler() {
-        return await dbTodos.fetch({ isPublic: true });
-      }
-    }
-  },
-
-  mutations: {
-    adminDelete: {
-      // Custom authorization check
-      auth: true,
-      authorize: ({ user }) => {
-        if (!user.roles?.includes('admin')) {
-          throw new Error('Admin access required');
-        }
-      },
-      async handler({ id }) {
-        return await dbTodos.deleteOne({ id });
-      }
-    }
-  }
-});
 ```
 
 ## Rate Limiting
