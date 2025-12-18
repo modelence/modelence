@@ -1,0 +1,113 @@
+---
+title: 'Configuration'
+icon: 'gear'
+---
+
+Modelence provides flexible configuration options for your application. You can configure your app through the `startApp()` function, environment variables, and Modelence Cloud settings.
+
+## Configuration Methods
+
+There are three ways to configure your Modelence application, listed in order of precedence:
+
+1. **Environment Variables** - Highest priority, overrides everything
+2. **Modelence Cloud** - Synced configuration from cloud.modelence.com
+3. **startApp() Options** - Direct code configuration, lowest priority
+
+<Tip>
+Environment variables always take precedence, allowing you to override any configuration when deploying to different environments.
+</Tip>
+
+## Basic Configuration with startApp()
+
+The `startApp()` function is your application's entry point where you configure core settings:
+
+```typescript title="src/server/app.ts"
+import { startApp } from 'modelence/server';
+import todoModule from './todo';
+import userModule from './users';
+
+startApp({
+  // Register your modules
+  modules: [todoModule, userModule],
+
+  // Email configuration
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourapp.com'
+  }
+});
+```
+
+## Environment Variables
+
+Environment variables provide a way to configure your application without hardcoding values. They override all other configuration methods.
+
+### Core Environment Variables
+
+```env title=".modelence.env"
+# MongoDB connection string
+MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/myapp"
+
+# Server configuration
+PORT=3000
+MODELENCE_SITE_URL=http://localhost
+
+## Modelence Cloud Configuration
+
+When connected to Modelence Cloud, you can manage configuration through the cloud dashboard at [cloud.modelence.com](https://cloud.modelence.com):
+
+1. Navigate to your application
+2. Select your environment
+3. Open the **Application** tab
+4. Configure settings like:
+   - Email providers
+   - Environment variables
+   - Database connections
+   - Custom configuration
+
+Changes made in the cloud dashboard are automatically synced to your application when it starts.
+
+### Connecting to Modelence Cloud
+
+```bash
+npx modelence@latest setup --token <your_token>
+```
+
+This command creates a `.modelence.env` file with your cloud connection token.
+
+<Tip>
+See the [Setup documentation](/setup) for detailed instructions on connecting to Modelence Cloud.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Authentication"
+    icon="shield"
+    href="/authentication/index"
+  >
+    Configure authentication and user management
+  </Card>
+  <Card
+    title="Email Setup"
+    icon="envelope"
+    href="/email"
+  >
+    Set up email providers for transactional emails
+  </Card>
+  <Card
+    title="Roles & Permissions"
+    icon="users-gear"
+    href="/roles"
+  >
+    Define user roles and permissions
+  </Card>
+  <Card
+    title="WebSockets"
+    icon="tower-broadcast"
+    href="/websockets"
+  >
+    Enable real-time communication
+  </Card>
+</CardGroup>

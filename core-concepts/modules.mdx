@@ -1,0 +1,419 @@
+---
+title: 'Modules'
+icon: 'puzzle-piece'
+---
+
+Modules are the fundamental building blocks of a Modelence application. They help you organize your backend functionality into cohesive, self-contained units that encapsulate queries, mutations, stores, and configuration.
+
+## What is a Module?
+
+A Module in Modelence is similar to a feature module in other frameworks. It groups related functionality together, making your codebase more maintainable and easier to reason about.
+
+```typescript
+import { Module } from 'modelence/server';
+
+export default new Module('todo', {
+  // Module configuration goes here
+});
+```
+
+## Module Structure
+
+A typical module includes:
+
+- **Stores** - MongoDB collection definitions
+- **Queries** - Read operations that fetch data
+- **Mutations** - Write operations that modify data
+- **Configuration** - Module-specific settings
+- **Cron Jobs** - Scheduled tasks (optional)
+
+## Stores
+
+Stores define your MongoDB collections with schemas, indexes, and custom methods. Including stores in your module ensures they're automatically provisioned when the server starts.
+
+```typescript
+import { Store, schema } from 'modelence/server';
+
+export const dbTodos = new Store('todos', {
+  schema: {
+    title: schema.string(),
+    isCompleted: schema.boolean(),
+    userId: schema.userId(),
+    createdAt: schema.date()
+  },
+  indexes: [
+    { key: { userId: 1 } }
+  ]
+});
+
+export default new Module('todo', {
+  // Register the store with the module
+  stores: [dbTodos],
+
+  queries: {
+    async getAll({}, { user }) {
+      return await dbTodos.fetch({ userId: user.id });
+    }
+  }
+});
+```
+
+<Tip>
+Learn more about working with Stores in the [Stores documentation](/stores).
+</Tip>
+
+## Authentication & Authorization
+
+You can restrict access to queries and mutations using authentication requirements:
+
+```typescript
+export default new Module('todo', {
+  queries: {
+    getAll: {
+      // Require authentication for this query
+      auth: true,
+      async handler({}, { user }) {
+        // user is guaranteed to exist here
+        return await dbTodos.fetch({ userId: user.id });
+      }
+    },
+
+    getPublic: {
+      // No authentication required
+      auth: false,
+      async handler() {
+        return await dbTodos.fetch({ isPublic: true });
+      }
+    }
+  },
+
+  mutations: {
+    adminDelete: {
+      // Custom authorization check
+      auth: true,
+      authorize: ({ user }) => {
+        if (!user.roles?.includes('admin')) {
+          throw new Error('Admin access required');
+        }
+      },
+      async handler({ id }) {
+        return await dbTodos.deleteOne({ id });
+      }
+    }
+  }
+});
+```
+
+## Queries
+
+Queries are functions that retrieve data without modifying it. They're similar to GET endpoints in REST or queries in GraphQL.
+
+```typescript
+import { Module } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  queries: {
+    // Get a single todo by ID
+    async getOne({ id }) {
+      return await dbTodos.findById(id);
+    },
+
+    // Get all todos for the current user
+    async getAll({}, { user }) {
+      return await dbTodos.fetch({ userId: user.id });
+    },
+
+    // Get todos with filtering
+    async getCompleted({}, { user }) {
+      return await dbTodos.fetch({
+        userId: user.id,
+        isCompleted: true
+      });
+    }
+  }
+});
+```
+
+### Query Parameters
+
+Queries receive two arguments:
+
+1. **Input parameters** - Data passed from the client
+2. **Context** - Server-side context including:
+   - `user` - Current authenticated user (if logged in)
+   - `req` - Express request object
+   - `res` - Express response object
+
+### Calling Queries from the Client
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+// Call a query
+const todos = await callMethod('todo.getAll');
+
+// Call with parameters
+const todo = await callMethod('todo.getOne', { id: '123' });
+```
+
+With React Query:
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { modelenceQuery } from '@modelence/react-query';
+
+function TodoList() {
+  const { data: todos } = useQuery(
+    modelenceQuery('todo.getAll')
+  );
+
+  return <div>{/* render todos */}</div>;
+}
+```
+
+## Mutations
+
+Mutations are functions that modify data. They're similar to POST/PUT/DELETE endpoints in REST or mutations in GraphQL.
+
+```typescript
+export default new Module('todo', {
+  mutations: {
+    // Create a new todo
+    async create({ title, dueDate }, { user }) {
+      const { insertedId } = await dbTodos.insertOne({
+        title,
+        dueDate,
+        userId: user.id,
+        isCompleted: false,
+        createdAt: new Date()
+      });
+      return insertedId;
+    },
+
+    // Update a todo
+    async update({ id, title, isCompleted }) {
+      return await dbTodos.updateOne(
+        { id },
+        { $set: { title, isCompleted } }
+      );
+    },
+
+    // Delete a todo
+    async delete({ id }) {
+      return await dbTodos.deleteOne({ id });
+    }
+  }
+});
+```
+
+### Calling Mutations from the Client
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+// Call a mutation
+const todoId = await callMethod('todo.create', {
+  title: 'Buy groceries',
+  dueDate: new Date('2024-12-31')
+});
+```
+
+With React Query:
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { modelenceMutation } from '@modelence/react-query';
+
+function CreateTodo() {
+  const queryClient = useQueryClient();
+
+  const { mutate: createTodo } = useMutation({
+    ...modelenceMutation('todo.create'),
+    onSuccess: () => {
+      // Invalidate and refetch todos after creation
+      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+    }
+  });
+
+  const handleSubmit = () => {
+    createTodo({ title: 'New todo', dueDate: new Date() });
+  };
+
+  return <button onClick={handleSubmit}>Create Todo</button>;
+}
+```
+
+## Rate Limiting
+
+Protect your queries and mutations from abuse with rate limiting:
+
+```typescript
+export default new Module('todo', {
+  mutations: {
+    create: {
+      rateLimit: {
+        points: 10,      // 10 requests
+        duration: 60,    // per 60 seconds
+        keyPrefix: 'todo-create'
+      },
+      async handler({ title }, { user }) {
+        // Rate limit is automatically enforced
+        const { insertedId } = await dbTodos.insertOne({
+          title,
+          userId: user.id,
+          isCompleted: false,
+          createdAt: new Date()
+        });
+        return insertedId;
+      }
+    }
+  }
+});
+```
+
+<Tip>
+Learn more about rate limiting in the [Rate Limiting documentation](/authentication/rate-limiting).
+</Tip>
+
+## Best Practices
+
+### 1. Keep Modules Focused
+
+Each module should represent a single domain or feature:
+
+```typescript
+// Good: Focused todo module
+export default new Module('todo', {
+  // Only todo-related functionality
+});
+
+// Good: Separate user module
+export default new Module('users', {
+  // Only user-related functionality
+});
+```
+
+### 2. Use Clear Naming
+
+Name your queries and mutations descriptively:
+
+```typescript
+// Good
+queries: {
+  getAll() { },
+  getByStatus({ status }) { },
+  getOverdue() { }
+}
+
+// Avoid
+queries: {
+  get() { },           // Too generic
+  fetchData() { },     // Unclear what data
+  q1() { }            // Meaningless name
+}
+```
+
+### 3. Handle Errors Gracefully
+
+Always handle potential errors and provide meaningful messages:
+
+```typescript
+mutations: {
+  async delete({ id }, { user }) {
+    const todo = await dbTodos.findById(id);
+
+    if (!todo) {
+      throw new Error('Todo not found');
+    }
+
+    if (todo.userId !== user.id) {
+      throw new Error('Not authorized to delete this todo');
+    }
+
+    return await dbTodos.deleteOne({ id });
+  }
+}
+```
+
+### 4. Keep Business Logic in Modules
+
+Don't put business logic directly in your database stores. Keep it in your module methods:
+
+```typescript
+// Good: Business logic in module
+export default new Module('todo', {
+  mutations: {
+    async complete({ id }, { user }) {
+      const todo = await dbTodos.findById(id);
+
+      // Business logic
+      if (todo.isCompleted) {
+        throw new Error('Todo is already completed');
+      }
+
+      await dbTodos.updateOne({ id }, {
+        $set: {
+          isCompleted: true,
+          completedAt: new Date()
+        }
+      });
+
+      // Trigger side effects
+      await callMethod('notifications.send', {
+        userId: user.id,
+        message: 'Todo completed!'
+      });
+    }
+  }
+});
+```
+
+### 5. Use TypeScript Types
+
+Leverage TypeScript for type safety across your modules:
+
+```typescript
+import { schema } from 'modelence/server';
+
+type TodoPriority = 'low' | 'medium' | 'high';
+
+export default new Module('todo', {
+  mutations: {
+    create: {
+      input: {
+        title: schema.string(),
+        priority: schema.enum<TodoPriority>(['low', 'medium', 'high'])
+      },
+      async handler(input, { user }) {
+        // input is fully typed
+        const { insertedId } = await dbTodos.insertOne({
+          ...input,
+          userId: user.id,
+          createdAt: new Date()
+        });
+        return insertedId;
+      }
+    }
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/core-concepts/configuration"
+  >
+    Learn how to configure your Modelence application
+  </Card>
+  <Card
+    title="Stores"
+    icon="database"
+    href="/stores"
+  >
+    Deep dive into working with MongoDB stores
+  </Card>
+</CardGroup>

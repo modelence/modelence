@@ -21,6 +21,14 @@
             ]
           },
           {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/project-structure",
+              "core-concepts/modules",
+              "core-concepts/configuration"
+            ]
+          },
+          {
             "group": "Features",
             "pages": [
               {
