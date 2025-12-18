@@ -83,41 +83,30 @@ The Google authentication is automatically enabled when these configurations are
 
 ## Client-Side Implementation
 
-### Using @modelence/auth-ui (Recommended)
-
-The easiest way to add Google Sign-In is using the `@modelence/auth-ui` package, which provides a complete `LoginForm` component with built-in Google authentication support:
-
-```bash
-npm install @modelence/auth-ui
-```
-
-Then use the `LoginForm` component:
+To initiate Google Sign-In, redirect the user to the Google authentication endpoint:
 
 ```typescript
-import { LoginForm } from '@modelence/auth-ui';
-
-function LoginPage() {
-  return <LoginForm />;
+function handleGoogleSignIn() {
+  // Redirect to Google OAuth flow
+  window.location.href = '/api/_internal/auth/google';
 }
 ```
 
-The `LoginForm` component automatically displays a "Sign in with Google" button when Google authentication is enabled from the **Authentication → Google** section in [cloud.modelence.com](https://cloud.modelence.com) or via the `MODELENCE_AUTH_GOOGLE_ENABLED` environment variable. The component includes:
-- Pre-styled button with Google branding and icon
-- Automatic redirect handling
-- Email/password login form
-- Responsive design with dark mode support
-- Forgot password and sign-up links
+## UI Integration
 
-You can customize the form with various props:
+Add a Google Sign-In button to your UI:
 
 ```typescript
-<LoginForm
-  buttonVariant="outline"     // or "default", "secondary", "ghost"
-  buttonSize="lg"             // or "default", "sm"
-  cardClassName="shadow-lg"   // Custom card styling
-  onSignup={() => navigate('/signup')}
-  onForgotPassword={() => navigate('/forgot-password')}
-/>
+function LoginForm() {
+  return (
+    <div>
+      <h2>Sign In</h2>
+      <button onClick={() => window.location.href = '/api/_internal/auth/google'}>
+        Sign in with Google
+      </button>
+    </div>
+  );
+}
 ```
 
 ## How Google Sign-In Works
@@ -152,27 +141,48 @@ The user object will contain:
 }
 ```
 
-## Manual Implementation (Alternative)
+## Combining with Email/Password Authentication
 
-If you prefer not to use `@modelence/auth-ui`, you can manually implement Google Sign-In by redirecting to the authentication endpoint:
-
-```typescript
-function handleGoogleSignIn() {
-  // Redirect to Google OAuth flow
-  window.location.href = '/api/_internal/auth/google';
-}
-```
-
-Example with a custom button:
+Users can have both Google and email/password authentication on the same account:
 
 ```typescript
-function LoginForm() {
+import { loginWithPassword, logout } from 'modelence/client';
+import { useState } from 'react';
+
+function LoginOptions() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   return (
     <div>
       <h2>Sign In</h2>
+
+      {/* Google Sign-In */}
       <button onClick={() => window.location.href = '/api/_internal/auth/google'}>
         Sign in with Google
       </button>
+
+      <div>or</div>
+
+      {/* Email/Password Sign-In */}
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        await loginWithPassword({ email, password });
+      }}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+        />
+        <button type="submit">Sign In</button>
+      </form>
     </div>
   );
 }
