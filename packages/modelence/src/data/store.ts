@@ -48,7 +48,7 @@ type StrictRootFilterOperators<TSchema> = {
     $caseSensitive?: boolean;
     $diacriticSensitive?: boolean;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   $where?: string | ((this: TSchema) => boolean);
   $comment?: string | Document;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,12 +100,12 @@ type StrictRootFilterOperators<TSchema> = {
 export type TypedFilter<T> = {
   [K in keyof WithId<T>]?: WithId<T>[K] | FilterOperators<WithId<T>[K]>;
 } & StrictRootFilterOperators<T> & {
-  // Support for MongoDB dot notation (e.g., 'emails.address', 'profile.settings.theme')
-  // Only strings containing dots are allowed, which provides better type safety
-  // while still enabling MongoDB's nested field query syntax
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [K: DottedString]: any;
-};
+    // Support for MongoDB dot notation (e.g., 'emails.address', 'profile.settings.theme')
+    // Only strings containing dots are allowed, which provides better type safety
+    // while still enabling MongoDB's nested field query syntax
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [K: DottedString]: any;
+  };
 
 /**
  * Helper type to preserve method types when extending a store.
