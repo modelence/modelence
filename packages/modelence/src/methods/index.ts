@@ -1,7 +1,8 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
-import { Method, MethodDefinition, MethodType, Args, Context } from './types';
+import { AuthError } from '@/error';
+import { Method, MethodDefinition, MethodType, Args, Context, AuthenticatedContext, Handler, AuthenticatedHandler } from './types';
 
 const methods: Record<string, Method<unknown>> = {};
 
@@ -60,7 +61,8 @@ function _createMethodInternal<T = unknown>(
 
   const handler = typeof methodDef === 'function' ? methodDef : methodDef.handler;
   const permissions = typeof methodDef === 'function' ? [] : (methodDef.permissions ?? []);
-  methods[name] = { type, name, handler, permissions };
+  const requireAuth = typeof methodDef === 'function' ? false : (methodDef.requireAuth ?? false);
+  methods[name] = { type, name, handler, permissions, requireAuth };
 }
 
 export async function runMethod(name: string, args: Args, context: Context) {
@@ -76,8 +78,15 @@ export async function runMethod(name: string, args: Args, context: Context) {
 
   let response;
   try {
+    if (method.requireAuth && !context.user) {
+      throw new AuthError('Not authenticated');
+    }
     requireAccess(context.roles, method.permissions);
-    response = await handler(args, context);
+    if (method.requireAuth) {
+      response = await (handler as AuthenticatedHandler)(args, context as AuthenticatedContext);
+    } else {
+      response = await (handler as Handler)(args, context);
+    }
   } catch (error) {
     // TODO: log error and associate it with the transaction
     transaction.end('error');
