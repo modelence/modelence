@@ -20,10 +20,92 @@ import {
   ClientSession,
   SearchIndexDescription,
   MongoError,
+  FilterOperators,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
+
+/**
+ * Helper type to match strings containing dots (for MongoDB dot notation)
+ * @internal
+ */
+type DottedString = `${string}.${string}`;
+
+/**
+ * Top-level query operators (logical and evaluation) - custom version without Document index signature
+ * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
+ * @internal
+ */
+type StrictRootFilterOperators<TSchema> = {
+  $and?: TypedFilter<TSchema>[];
+  $or?: TypedFilter<TSchema>[];
+  $nor?: TypedFilter<TSchema>[];
+  $not?: TypedFilter<TSchema>;
+  $text?: {
+    $search: string;
+    $language?: string;
+    $caseSensitive?: boolean;
+    $diacriticSensitive?: boolean;
+  };
+
+  $where?: string | ((this: TSchema) => boolean);
+  $comment?: string | Document;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  $expr?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  $jsonSchema?: any;
+};
+
+/**
+ * Type-safe MongoDB filter that ensures only schema fields can be queried
+ * while supporting all MongoDB query operators and dot notation for nested fields.
+ *
+ * This type combines:
+ * - MongoDB's native `FilterOperators<T>` for field-level operators (comprehensive operator support)
+ * - Custom `StrictRootFilterOperators<T>` for top-level operators without index signature
+ * - Custom restriction: only strings containing dots are allowed for nested field queries
+ *
+ * @example
+ * ```ts
+ * const dbUsers = new Store('users', {
+ *   schema: {
+ *     name: schema.string(),
+ *     age: schema.number(),
+ *     tags: schema.array(schema.string()),
+ *     address: schema.object({
+ *       street: schema.string(),
+ *       city: schema.string(),
+ *     }),
+ *   },
+ *   indexes: []
+ * });
+ *
+ * // ✅ Valid - field exists in schema
+ * await dbUsers.findOne({ name: 'John' });
+ *
+ * // ✅ Valid - using MongoDB operators (from FilterOperators)
+ * await dbUsers.findOne({ age: { $gt: 18 } });
+ * await dbUsers.findOne({ tags: { $in: ['typescript', 'mongodb'] } });
+ * await dbUsers.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] });
+ *
+ * // ✅ Valid - dot notation for nested fields (must contain a dot)
+ * await dbUsers.findOne({ 'address.city': 'New York' });
+ * await dbUsers.findOne({ 'emails.0.address': 'test@example.com' });
+ *
+ * // ❌ TypeScript error - 'id' is not in schema and doesn't contain a dot
+ * await dbUsers.findOne({ id: '123' });
+ * ```
+ */
+export type TypedFilter<T> = {
+  [K in keyof WithId<T>]?: WithId<T>[K] | FilterOperators<WithId<T>[K]>;
+} & StrictRootFilterOperators<T> & {
+    // Support for MongoDB dot notation (e.g., 'emails.address', 'profile.settings.theme')
+    // Only strings containing dots are allowed, which provides better type safety
+    // while still enabling MongoDB's nested field query syntax
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [K: DottedString]: any;
+  };
 
 /**
  * Helper type to preserve method types when extending a store.
@@ -275,7 +357,7 @@ export class Store<
   /**
    * For convenience, to also allow directy passing a string or ObjectId as the selector
    */
-  private getSelector(selector: Filter<this['_type']> | string | ObjectId) {
+  private getSelector(selector: TypedFilter<this['_type']> | string | ObjectId) {
     if (typeof selector === 'string') {
       return { _id: new ObjectId(selector) } as Filter<this['_type']>;
     }
@@ -284,7 +366,7 @@ export class Store<
       return { _id: selector } as Filter<this['_type']>;
     }
 
-    return selector;
+    return selector as Filter<this['_type']>;
   }
 
   /** @internal */
@@ -305,13 +387,37 @@ export class Store<
     return this.client;
   }
 
-  async findOne(query: Filter<this['_type']>, options?: FindOptions) {
-    const document = await this.requireCollection().findOne<this['_rawDoc']>(query, options);
+  /**
+   * Finds a single document matching the query
+   *
+   * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
+   * @param options - Find options
+   * @returns The document, or null if not found
+   *
+   * @example
+   * ```ts
+   * // ✅ Valid queries:
+   * await store.findOne({ name: 'John' })
+   * await store.findOne({ age: { $gt: 18 } })
+   * await store.findOne({ _id: new ObjectId('...') })
+   * await store.findOne({ tags: { $in: ['typescript', 'mongodb'] } })
+   * await store.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] })
+   * await store.findOne({ 'emails.address': 'test@example.com' }) // dot notation
+   *
+   * // ❌ TypeScript error - 'id' is not in schema:
+   * await store.findOne({ id: '123' })
+   * ```
+   */
+  async findOne(query: TypedFilter<this['_type']>, options?: FindOptions) {
+    const document = await this.requireCollection().findOne<this['_rawDoc']>(
+      query as Filter<this['_type']>,
+      options
+    );
     return document ? this.wrapDocument(document) : null;
   }
 
   async requireOne(
-    query: Filter<this['_type']>,
+    query: TypedFilter<this['_type']>,
     options?: FindOptions,
     errorHandler?: () => Error
   ): Promise<this['_doc']> {
@@ -323,10 +429,10 @@ export class Store<
   }
 
   private find(
-    query: Filter<this['_type']>,
+    query: TypedFilter<this['_type']>,
     options?: { sort?: Document; limit?: number; skip?: number }
   ) {
-    const cursor = this.requireCollection().find(query);
+    const cursor = this.requireCollection().find(query as Filter<this['_type']>);
     if (options?.sort) {
       cursor.sort(options.sort);
     }
@@ -347,7 +453,7 @@ export class Store<
    */
   async findById(id: string | ObjectId): Promise<this['_doc'] | null> {
     const idSelector = typeof id === 'string' ? { _id: new ObjectId(id) } : { _id: id };
-    return await this.findOne(idSelector as Filter<this['_type']>);
+    return await this.findOne(idSelector as TypedFilter<this['_type']>);
   }
 
   /**
@@ -373,8 +479,8 @@ export class Store<
    * @param query - The query to filter documents
    * @returns The number of documents that match the query
    */
-  countDocuments(query: Filter<this['_type']>): Promise<number> {
-    return this.requireCollection().countDocuments(query);
+  countDocuments(query: TypedFilter<this['_type']>): Promise<number> {
+    return this.requireCollection().countDocuments(query as Filter<this['_type']>);
   }
 
   /**
@@ -385,7 +491,7 @@ export class Store<
    * @returns The documents
    */
   async fetch(
-    query: Filter<this['_type']>,
+    query: TypedFilter<this['_type']>,
     options?: { sort?: Document; limit?: number; skip?: number }
   ): Promise<this['_doc'][]> {
     const cursor = this.find(query, options);
@@ -424,7 +530,7 @@ export class Store<
    * @returns The result of the update operation
    */
   async updateOne(
-    selector: Filter<this['_type']> | string | ObjectId,
+    selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(this.getSelector(selector), update);
@@ -438,7 +544,7 @@ export class Store<
    * @returns The result of the update operation
    */
   async upsertOne(
-    selector: Filter<this['_type']> | string | ObjectId,
+    selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(this.getSelector(selector), update, {
@@ -454,11 +560,15 @@ export class Store<
    * @returns The result of the update operation
    */
   async updateMany(
-    selector: Filter<this['_type']>,
+    selector: TypedFilter<this['_type']>,
     update: UpdateFilter<this['_type']>,
     options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateMany(selector, update, options);
+    return await this.requireCollection().updateMany(
+      selector as Filter<this['_type']>,
+      update,
+      options
+    );
   }
 
   /**
@@ -469,10 +579,12 @@ export class Store<
    * @returns The result of the update operation
    */
   async upsertMany(
-    selector: Filter<this['_type']>,
+    selector: TypedFilter<this['_type']>,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateMany(selector, update, { upsert: true });
+    return await this.requireCollection().updateMany(selector as Filter<this['_type']>, update, {
+      upsert: true,
+    });
   }
 
   /**
@@ -481,8 +593,8 @@ export class Store<
    * @param selector - The selector to find the document to delete
    * @returns The result of the delete operation
    */
-  async deleteOne(selector: Filter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteOne(selector);
+  async deleteOne(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
+    return await this.requireCollection().deleteOne(selector as Filter<this['_type']>);
   }
 
   /**
@@ -491,8 +603,8 @@ export class Store<
    * @param selector - The selector to find the documents to delete
    * @returns The result of the delete operation
    */
-  async deleteMany(selector: Filter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteMany(selector);
+  async deleteMany(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
+    return await this.requireCollection().deleteMany(selector as Filter<this['_type']>);
   }
 
   /**
