@@ -144,7 +144,7 @@ function getRouter() {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: time.minutes(10) // 10 minutes
+        maxAge: time.minutes(10), // 10 minutes
       });
 
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');

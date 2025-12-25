@@ -32,7 +32,6 @@ jest.unstable_mockModule('./oauth-common', () => ({
   validateOAuthCode: mockValidateOAuthCode,
 }));
 
-const originalFetch = global.fetch;
 const fetchMock = jest.fn();
 
 const { default: getRouter } = await import('./github');
@@ -128,7 +127,10 @@ describe('auth/providers/github', () => {
       } as never);
 
     await handler(
-      { query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request,
+      {
+        query: { code: 'code', state: 's' },
+        cookies: { authStateGithub: 's' },
+      } as unknown as Request,
       {
         status: jest.fn().mockReturnThis(),
         json: jest.fn(),
@@ -166,9 +168,19 @@ describe('auth/providers/github', () => {
         }),
       } as never);
 
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request, res);
+    await handler(
+      {
+        query: { code: 'code', state: 's' },
+        cookies: { authStateGithub: 's' },
+      } as unknown as Request,
+      res
+    );
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
@@ -195,14 +207,20 @@ describe('auth/providers/github', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 'a' }, cookies: { authStateGithub: 'b' } } as unknown as Request, res);
+    await handler(
+      {
+        query: { code: 'code', state: 'a' },
+        cookies: { authStateGithub: 'b' },
+      } as unknown as Request,
+      res
+    );
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid OAuth state - possible CSRF attack' });
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad request',
@@ -210,9 +228,19 @@ describe('auth/providers/github', () => {
 
     const route = findRoute('/api/_internal/auth/github/callback');
     const handler = route.handlers[1];
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request, res);
+    await handler(
+      {
+        query: { code: 'code', state: 's' },
+        cookies: { authStateGithub: 's' },
+      } as unknown as Request,
+      res
+    );
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });

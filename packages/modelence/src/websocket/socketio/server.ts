@@ -72,7 +72,7 @@ export async function init({
     socket.on('joinChannel', async (channelName) => {
       const [category] = channelName.split(':');
       let authorized = false;
-      
+
       for (const channel of channels) {
         if (channel.category === category) {
           if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {

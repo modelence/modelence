@@ -150,9 +150,9 @@ function getRouter() {
       const githubScopes = getConfig('_system.user.auth.github.scopes');
       const scopes = githubScopes
         ? String(githubScopes)
-          .split(',')
-          .map((s) => s.trim())
-          .join(' ')
+            .split(',')
+            .map((s) => s.trim())
+            .join(' ')
         : 'user:email';
 
       const state = randomBytes(32).toString('hex');
@@ -161,7 +161,7 @@ function getRouter() {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: time.minutes(10) // 10 minutes
+        maxAge: time.minutes(10), // 10 minutes
       });
 
       const authUrl = new URL('https://github.com/login/oauth/authorize');
