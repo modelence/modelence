@@ -99,7 +99,7 @@ describe('auth/providers/github', () => {
 
     handler({} as Request, { redirect, cookie } as unknown as Response);
 
-    expect(cookie).toHaveBeenCalledWith('oauth_state', expect.any(String), expect.any(Object));
+    expect(cookie).toHaveBeenCalledWith('authStateGithub', expect.any(String), expect.any(Object));
     const redirectUrl = redirect.mock.calls[0][0] as string;
     const url = new URL(redirectUrl);
     expect(url.origin).toBe('https://github.com');
@@ -128,7 +128,7 @@ describe('auth/providers/github', () => {
       } as never);
 
     await handler(
-      { query: { code: 'code', state: 's' }, cookies: { oauth_state: 's' } } as unknown as Request,
+      { query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request,
       {
         status: jest.fn().mockReturnThis(),
         json: jest.fn(),
@@ -168,7 +168,7 @@ describe('auth/providers/github', () => {
 
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 's' }, cookies: { oauth_state: 's' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
@@ -195,7 +195,7 @@ describe('auth/providers/github', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 'a' }, cookies: { oauth_state: 'b' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 'a' }, cookies: { authStateGithub: 'b' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid OAuth state - possible CSRF attack' });
@@ -212,7 +212,7 @@ describe('auth/providers/github', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 's' }, cookies: { oauth_state: 's' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGithub: 's' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
