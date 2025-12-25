@@ -66,11 +66,20 @@ async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo>
 
 async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
+  const state = req.query.state as string;
+  const storedState = req.cookies.oauth_state;
 
   if (!code) {
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
+
+  if (!state || !storedState || state !== storedState) {
+    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+    return;
+  }
+
+  res.clearCookie('oauth_state');
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -127,12 +136,23 @@ function getRouter() {
       const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
       const redirectUri = getRedirectUri('google');
 
+      const { randomBytes } = require('crypto');
+      const state = randomBytes(32).toString('hex');
+
+      res.cookie('oauth_state', state, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 600000 // 10 minutes
+      });
+
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.append('client_id', googleClientId);
       authUrl.searchParams.append('redirect_uri', redirectUri);
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('scope', 'profile email');
       authUrl.searchParams.append('access_type', 'online');
+      authUrl.searchParams.append('state', state);
 
       res.redirect(authUrl.toString());
     }
