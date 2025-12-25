@@ -60,9 +60,8 @@ describe('auth/providers/google', () => {
     getRouter();
   });
 
-  afterAll(() => {
-    global.fetch = originalFetch;
-  });
+  // afterAll removed to avoid import issues
+  // global.fetch = originalFetch;
 
   function findRoute(path: string) {
     const route = registeredRoutes.find((r) => r.path === path);
@@ -98,10 +97,12 @@ describe('auth/providers/google', () => {
     const route = findRoute('/api/_internal/auth/google');
     const handler = route.handlers[1];
     const redirectMock = jest.fn();
-    const res = { redirect: redirectMock } as unknown as Response;
+    const cookieMock = jest.fn();
+    const res = { redirect: redirectMock, cookie: cookieMock } as unknown as Response;
 
     handler({} as Request, res);
 
+    expect(cookieMock).toHaveBeenCalledWith('authStateGoogle', expect.any(String), expect.any(Object));
     expect(redirectMock).toHaveBeenCalledWith(
       expect.stringContaining('https://accounts.google.com/o/oauth2/v2/auth')
     );
@@ -111,6 +112,7 @@ describe('auth/providers/google', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(
       'https://app.example.com/api/_internal/auth/google/callback'
     );
+    expect(url.searchParams.get('state')).toBeDefined();
   });
 
   test('callback handler invokes OAuth flow when successful', async () => {
@@ -140,10 +142,11 @@ describe('auth/providers/google', () => {
       } as never);
 
     await handler(
-      { query: { code: 'code' } } as unknown as Request,
+      { query: { code: 'code', state: 'valid-state' }, cookies: { authStateGoogle: 'valid-state' } } as unknown as Request,
       {
         status: jest.fn().mockReturnThis(),
         json: jest.fn(),
+        clearCookie: jest.fn(),
       } as unknown as Response
     );
 
@@ -166,23 +169,34 @@ describe('auth/providers/google', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
 
-    await handler({ query: {} } as Request, res);
+    await handler({ query: {}, cookies: {} } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Missing authorization code' });
   });
 
+  test('callback handler returns 400 when state invalid', async () => {
+    const route = findRoute('/api/_internal/auth/google/callback');
+    const handler = route.handlers[1];
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+
+    await handler({ query: { code: 'code', state: 'bad' }, cookies: { authStateGoogle: 'good' } } as unknown as Request, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid OAuth state - possible CSRF attack' });
+  });
+
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad Request',
     } as never);
     const route = findRoute('/api/_internal/auth/google/callback');
     const handler = route.handlers[1];
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGoogle: 's' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
