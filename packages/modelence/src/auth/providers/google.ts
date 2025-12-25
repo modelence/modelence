@@ -1,4 +1,5 @@
 import { getConfig } from '@/server';
+import { randomBytes } from 'crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import {
   getRedirectUri,
@@ -67,7 +68,7 @@ async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo>
 async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
   const state = req.query.state as string;
-  const storedState = req.cookies.oauth_state;
+  const storedState = req.cookies.authStateGoogle;
 
   if (!code) {
     res.status(400).json({ error: 'Missing authorization code' });
@@ -79,7 +80,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
-  res.clearCookie('oauth_state');
+  res.clearCookie('authStateGoogle');
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -136,10 +137,9 @@ function getRouter() {
       const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
       const redirectUri = getRedirectUri('google');
 
-      const { randomBytes } = require('crypto');
       const state = randomBytes(32).toString('hex');
 
-      res.cookie('oauth_state', state, {
+      res.cookie('authStateGoogle', state, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
