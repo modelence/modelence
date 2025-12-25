@@ -65,11 +65,20 @@ async function fetchGitHubUserInfo(accessToken: string): Promise<GitHubUserInfo>
 
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
+  const state = req.query.state as string;
+  const storedState = req.cookies.oauth_state;
 
   if (!code) {
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
+
+  if (!state || !storedState || state !== storedState) {
+    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+    return;
+  }
+
+  res.clearCookie('oauth_state');
 
   const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
   const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
@@ -139,15 +148,26 @@ function getRouter() {
       const githubScopes = getConfig('_system.user.auth.github.scopes');
       const scopes = githubScopes
         ? String(githubScopes)
-            .split(',')
-            .map((s) => s.trim())
-            .join(' ')
+          .split(',')
+          .map((s) => s.trim())
+          .join(' ')
         : 'user:email';
+
+      const { randomBytes } = require('crypto');
+      const state = randomBytes(32).toString('hex');
+
+      res.cookie('oauth_state', state, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 600000 // 10 minutes
+      });
 
       const authUrl = new URL('https://github.com/login/oauth/authorize');
       authUrl.searchParams.append('client_id', githubClientId);
       authUrl.searchParams.append('redirect_uri', redirectUri);
       authUrl.searchParams.append('scope', scopes);
+      authUrl.searchParams.append('state', state);
 
       res.redirect(authUrl.toString());
     }
