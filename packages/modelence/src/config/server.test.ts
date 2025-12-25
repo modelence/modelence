@@ -17,6 +17,54 @@ describe('config/server', () => {
       loadConfigs([{ key: '_system.testKey', value: 'testValue', type: 'string' }]);
       expect(getConfig('_system.testKey')).toBe('testValue');
     });
+
+    it('should return default value when config is not loaded but schema exists', () => {
+      setSchema({
+        'module.configKey': {
+          type: 'string',
+          default: 'defaultValue',
+          isPublic: false,
+        },
+      });
+      loadConfigs([]);
+      expect(getConfig('module.configKey')).toBe('defaultValue');
+    });
+
+    it('should return loaded value over default when both exist', () => {
+      setSchema({
+        'module.configKey2': {
+          type: 'string',
+          default: 'defaultValue',
+          isPublic: false,
+        },
+      });
+      loadConfigs([{ key: 'module.configKey2', value: 'loadedValue', type: 'string' }]);
+      expect(getConfig('module.configKey2')).toBe('loadedValue');
+    });
+
+    it('should return default value for different config types', () => {
+      setSchema({
+        'module.stringConfig': {
+          type: 'string',
+          default: 'defaultString',
+          isPublic: false,
+        },
+        'module.numberConfig': {
+          type: 'number',
+          default: 42,
+          isPublic: false,
+        },
+        'module.booleanConfig': {
+          type: 'boolean',
+          default: true,
+          isPublic: false,
+        },
+      });
+      loadConfigs([]);
+      expect(getConfig('module.stringConfig')).toBe('defaultString');
+      expect(getConfig('module.numberConfig')).toBe(42);
+      expect(getConfig('module.booleanConfig')).toBe(true);
+    });
   });
 
   describe('setSchema', () => {

@@ -41,7 +41,7 @@ let isInitialized = false;
  * ```
  */
 export function getConfig(key: ConfigKey) {
-  return config[key]?.value;
+  return config[key]?.value ?? configSchema[key]?.default;
 }
 
 export function getPublicConfigs() {
