@@ -1,4 +1,5 @@
 import { getConfig } from '@/server';
+import { time } from '@/time';
 import { randomBytes } from 'crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import {
@@ -160,7 +161,7 @@ function getRouter() {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 600000 // 10 minutes
+        maxAge: time.minutes(10) // 10 minutes
       });
 
       const authUrl = new URL('https://github.com/login/oauth/authorize');
