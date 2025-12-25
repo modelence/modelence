@@ -59,9 +59,6 @@ describe('auth/providers/github', () => {
     getRouter();
   });
 
-  // afterAll removed
-  // global.fetch = originalFetch;
-
   const findRoute = (path: string) => {
     const route = registeredRoutes.find((r) => r.path === path);
     if (!route) {
