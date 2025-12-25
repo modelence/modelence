@@ -102,7 +102,7 @@ describe('auth/providers/google', () => {
 
     handler({} as Request, res);
 
-    expect(cookieMock).toHaveBeenCalledWith('oauth_state', expect.any(String), expect.any(Object));
+    expect(cookieMock).toHaveBeenCalledWith('authStateGoogle', expect.any(String), expect.any(Object));
     expect(redirectMock).toHaveBeenCalledWith(
       expect.stringContaining('https://accounts.google.com/o/oauth2/v2/auth')
     );
@@ -142,7 +142,7 @@ describe('auth/providers/google', () => {
       } as never);
 
     await handler(
-      { query: { code: 'code', state: 'valid-state' }, cookies: { oauth_state: 'valid-state' } } as unknown as Request,
+      { query: { code: 'code', state: 'valid-state' }, cookies: { authStateGoogle: 'valid-state' } } as unknown as Request,
       {
         status: jest.fn().mockReturnThis(),
         json: jest.fn(),
@@ -180,7 +180,7 @@ describe('auth/providers/google', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 'bad' }, cookies: { oauth_state: 'good' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 'bad' }, cookies: { authStateGoogle: 'good' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invalid OAuth state - possible CSRF attack' });
@@ -196,7 +196,7 @@ describe('auth/providers/google', () => {
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn(), clearCookie: jest.fn() } as unknown as Response;
 
-    await handler({ query: { code: 'code', state: 's' }, cookies: { oauth_state: 's' } } as unknown as Request, res);
+    await handler({ query: { code: 'code', state: 's' }, cookies: { authStateGoogle: 's' } } as unknown as Request, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
