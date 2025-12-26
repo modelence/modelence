@@ -8,6 +8,7 @@ import { setup } from './setup';
 import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
+import { start } from './start';
 import { loadEnv } from './config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,6 +54,14 @@ program
   .action(async () => {
     await loadEnv();
     dev();
+  });
+
+program
+  .command('start')
+  .description('Start production server')
+  .action(async () => {
+    await loadEnv();
+    start();
   });
 
 program.parse(process.argv);
