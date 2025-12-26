@@ -13,10 +13,18 @@ export class NextServer implements AppServer {
 
   /**
    * Initialize the Next.js application and prepare the request handler.
+   * Supports both standard and standalone Next.js builds.
    */
   async init() {
     const isDev = process.env.NODE_ENV !== 'production';
-    const nextApp = next({ dev: isDev });
+
+    // In production with standalone mode, Next.js expects to run from .next/standalone
+    // The standalone build includes its own server.js that should be used
+    const nextApp = next({
+      dev: isDev,
+      dir: isDev ? process.cwd() : process.cwd(),
+    });
+
     this.nextHandler = nextApp.getRequestHandler();
     await nextApp.prepare();
   }

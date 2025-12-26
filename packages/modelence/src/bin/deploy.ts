@@ -74,7 +74,36 @@ async function createBundle(bundlePath: string) {
 
   const bundleFiles = ['package.json', 'next.config.js', 'next.config.ts', 'modelence.config.ts'];
 
-  const bundleDirs = ['public', 'server', join('.modelence', 'build'), '.next'];
+  // Check if Next.js standalone mode is used
+  const nextStandaloneExists = await fs
+    .access(getProjectPath(join('.next', 'standalone')))
+    .then(() => true)
+    .catch(() => false);
+
+  let bundleDirs: string[];
+
+  if (nextStandaloneExists) {
+    console.log('Detected Next.js standalone build - using optimized bundle');
+    bundleDirs = [
+      'server',
+      join('.modelence', 'build'),
+      join('.next', 'standalone'),
+      join('.next', 'static'),
+    ];
+
+    // For standalone mode, also include public assets in the standalone directory
+    const publicExists = await fs
+      .access(getProjectPath('public'))
+      .then(() => true)
+      .catch(() => false);
+
+    if (publicExists) {
+      bundleDirs.push('public');
+    }
+  } else {
+    console.log('Using standard Next.js build (consider enabling standalone mode for smaller bundles)');
+    bundleDirs = ['public', 'server', join('.modelence', 'build'), '.next', 'node_modules'];
+  }
 
   for (const file of bundleFiles) {
     if (
