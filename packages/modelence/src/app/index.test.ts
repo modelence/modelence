@@ -536,16 +536,19 @@ describe('app/index', () => {
   test('starts server with combined modules and channels', async () => {
     const channel1 = new ServerChannel('channel1');
     const channel2 = new ServerChannel('channel2');
+    const mockServer = { listen: jest.fn() };
 
     await startApp({
       modules: [
         createTestModule({ name: 'module1', channels: [channel1] }),
         createTestModule({ name: 'module2', channels: [channel2] }),
       ],
+      server: mockServer as never,
+      shouldStartServer: true,
     });
 
     expect(mockStartServer).toHaveBeenCalledWith(
-      expect.anything(),
+      mockServer,
       expect.objectContaining({
         combinedModules: expect.any(Array),
         channels: [channel1, channel2],
