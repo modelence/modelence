@@ -1,4 +1,3 @@
-import bcrypt from 'bcrypt';
 import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
@@ -9,6 +8,7 @@ import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { comparePassword } from './password';
 
 export async function handleLoginWithPassword(
   args: Args,
@@ -75,7 +75,7 @@ export async function handleLoginWithPassword(
       );
     }
 
-    const isValidPassword = await bcrypt.compare(password, passwordHash);
+    const isValidPassword = await comparePassword(password, passwordHash);
     if (!isValidPassword) {
       throw incorrectCredentialsError();
     }

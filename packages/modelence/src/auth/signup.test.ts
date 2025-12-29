@@ -11,7 +11,7 @@ const mockSendVerificationEmail = jest.fn();
 const mockValidateEmail = jest.fn();
 const mockValidatePassword = jest.fn();
 const mockIsDisposableEmail = jest.fn();
-const mockHash = jest.fn();
+const mockHashPassword = jest.fn();
 const mockGetAuthConfig = jest.fn();
 const mockFindOne = jest.fn();
 const mockInsertOne = jest.fn();
@@ -33,11 +33,8 @@ jest.unstable_mockModule('./disposableEmails', () => ({
   isDisposableEmail: mockIsDisposableEmail,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
-  default: {
-    hash: mockHash,
-  },
-  hash: mockHash,
+jest.unstable_mockModule('./password', () => ({
+  hashPassword: mockHashPassword,
 }));
 
 jest.unstable_mockModule('@/app/authConfig', () => ({
@@ -86,7 +83,7 @@ describe('auth/signup', () => {
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockSendVerificationEmail.mockResolvedValue(undefined as never);
     mockFindOne.mockResolvedValue(null as never);
-    mockHash.mockResolvedValue('hash' as never);
+    mockHashPassword.mockResolvedValue('hash' as never);
     mockIsDisposableEmail.mockResolvedValue(false as never);
     mockInsertOne.mockResolvedValue({ insertedId: createObjectId('generated') } as never);
   });
@@ -114,7 +111,7 @@ describe('auth/signup', () => {
       type: 'ip',
       value: '1.1.1.1',
     });
-    expect(mockHash).toHaveBeenCalled();
+    expect(mockHashPassword).toHaveBeenCalled();
     expect(mockSendVerificationEmail).toHaveBeenCalledWith({
       userId: insertedId,
       email: 'test@example.com',

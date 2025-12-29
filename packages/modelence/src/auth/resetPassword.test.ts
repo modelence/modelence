@@ -19,8 +19,7 @@ const mockHtmlToText: jest.MockedFunction<(html: string) => string> = jest.fn();
 const mockValidateEmail: jest.MockedFunction<(email: string) => string> = jest.fn();
 const mockValidatePassword: jest.MockedFunction<(password: string) => string> = jest.fn();
 const mockRandomBytes = jest.fn();
-const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => Promise<string>> =
-  jest.fn();
+const mockHashPassword: jest.MockedFunction<(password: string) => Promise<string>> = jest.fn();
 const mockTime = { hours: jest.fn() };
 
 jest.unstable_mockModule('./db', () => ({
@@ -52,10 +51,8 @@ jest.unstable_mockModule('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
-  default: {
-    hash: mockBcryptHash,
-  },
+jest.unstable_mockModule('./password', () => ({
+  hashPassword: mockHashPassword,
 }));
 
 jest.unstable_mockModule('@/time', () => ({
@@ -495,14 +492,14 @@ describe('auth/resetPassword', () => {
           authMethods: { password: { hash: 'oldHash' } },
         })
       );
-      mockBcryptHash.mockResolvedValue(hashedPassword);
+      mockHashPassword.mockResolvedValue(hashedPassword);
 
       const result = await handleResetPassword({ token, password }, createContext());
 
       expect(mockValidatePassword).toHaveBeenCalledWith(password);
       expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
-      expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
+      expect(mockHashPassword).toHaveBeenCalledWith(password);
       expect(mockUsersUpdateOne).toHaveBeenCalledWith(
         { _id: userId },
         {
@@ -529,7 +526,7 @@ describe('auth/resetPassword', () => {
         'Invalid or expired reset token'
       );
 
-      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockHashPassword).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
@@ -553,7 +550,7 @@ describe('auth/resetPassword', () => {
       );
 
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
-      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockHashPassword).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
@@ -577,7 +574,7 @@ describe('auth/resetPassword', () => {
         'User not found'
       );
 
-      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockHashPassword).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
       expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
     });
@@ -603,11 +600,11 @@ describe('auth/resetPassword', () => {
         handleResetPassword({ token, password: weakPassword }, createContext())
       ).rejects.toThrow('Password must be at least 8 characters');
 
-      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockHashPassword).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
-    test('uses bcrypt with salt rounds 10', async () => {
+    test('hashes password using native crypto scrypt', async () => {
       const token = 'validtoken';
       const password = 'SecureP@ssw0rd';
       const userId = new ObjectId();
@@ -627,11 +624,11 @@ describe('auth/resetPassword', () => {
           emails: [{ address: 'user@example.com', verified: true }],
         })
       );
-      mockBcryptHash.mockResolvedValue('hashResult');
+      mockHashPassword.mockResolvedValue('hashResult');
 
       await handleResetPassword({ token, password }, createContext());
 
-      expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
+      expect(mockHashPassword).toHaveBeenCalledWith(password);
     });
 
     test('deletes reset token after successful password reset', async () => {
@@ -654,7 +651,7 @@ describe('auth/resetPassword', () => {
           emails: [{ address: 'user@example.com', verified: true }],
         })
       );
-      mockBcryptHash.mockResolvedValue('hashedPassword');
+      mockHashPassword.mockResolvedValue('hashedPassword');
 
       await handleResetPassword({ token, password }, createContext());
 

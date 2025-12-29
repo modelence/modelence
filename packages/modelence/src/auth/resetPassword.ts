@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 
 import { Args, Context } from '@/methods/types';
@@ -8,6 +7,7 @@ import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
+import { hashPassword } from './password';
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
@@ -120,7 +120,7 @@ export async function handleResetPassword(args: Args, {}: Context) {
   }
 
   // Hash the new password
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await hashPassword(password);
 
   // Update user's password
   await usersCollection.updateOne(

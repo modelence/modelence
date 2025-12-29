@@ -9,7 +9,7 @@ const mockSendVerificationEmail = jest.fn();
 const mockValidateEmail = jest.fn();
 const mockGetEmailConfig = jest.fn();
 const mockGetAuthConfig = jest.fn();
-const mockCompare = jest.fn();
+const mockComparePassword = jest.fn();
 
 jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
@@ -42,11 +42,8 @@ jest.unstable_mockModule('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
-  default: {
-    compare: mockCompare,
-  },
-  compare: mockCompare,
+jest.unstable_mockModule('./password', () => ({
+  comparePassword: mockComparePassword,
 }));
 
 const { handleLoginWithPassword, handleLogout } = await import('./login');
@@ -74,7 +71,7 @@ describe('auth/login', () => {
     mockGetEmailConfig.mockReturnValue({ provider: null });
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockSendVerificationEmail.mockResolvedValue(undefined as never);
-    mockCompare.mockResolvedValue(true as never);
+    mockComparePassword.mockResolvedValue(true as never);
 
     authConfig = {
       onAfterLogin: jest.fn(),
@@ -107,7 +104,7 @@ describe('auth/login', () => {
       type: 'ip',
       value: '203.0.113.1',
     });
-    expect(mockCompare).toHaveBeenCalledWith('Secret123', 'hashed');
+    expect(mockComparePassword).toHaveBeenCalledWith('Secret123', 'hashed');
     expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
     expect(authConfig.onAfterLogin).toHaveBeenCalledWith({
       user: expect.objectContaining({ _id: userId }),
@@ -175,7 +172,7 @@ describe('auth/login', () => {
       authMethods: { password: { hash: 'hashed' } },
       emails: [{ address: 'user@example.com', verified: true }],
     } as never);
-    mockCompare.mockResolvedValue(false as never);
+    mockComparePassword.mockResolvedValue(false as never);
 
     await expect(
       handleLoginWithPassword(
