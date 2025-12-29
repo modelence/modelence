@@ -21,7 +21,6 @@ import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
 import lockModule from '../lock';
-import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { Module } from './module';
@@ -40,17 +39,19 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
+  shouldStartServer?: boolean;
 };
 
 export async function startApp({
   modules = [],
   roles = {},
   defaultRoles = {},
-  server = viteServer,
+  server = undefined,
   migrations = [],
   email = {},
   auth = {},
   websocket = {},
+  shouldStartServer = false,
 }: AppOptions) {
   dotenv.config();
 
@@ -143,7 +144,9 @@ export async function startApp({
     startCronJobs().catch(console.error);
   }
 
-  await startServer(server, { combinedModules, channels });
+  if (shouldStartServer && server) {
+    await startServer(server, { combinedModules, channels });
+  }
 }
 
 function initCustomMethods(modules: Module[]) {

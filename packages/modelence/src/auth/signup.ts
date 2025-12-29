@@ -1,5 +1,3 @@
-import bcrypt from 'bcrypt';
-
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
@@ -7,6 +5,7 @@ import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { hashPassword } from './password';
 
 export async function handleSignupWithPassword(
   args: Args,
@@ -58,8 +57,8 @@ export async function handleSignupWithPassword(
       });
     }
 
-    // Hash password with bcrypt (salt is automatically generated)
-    const hash = await bcrypt.hash(password, 10);
+    // Hash password with native crypto scrypt (salt is automatically generated)
+    const hash = await hashPassword(password);
 
     const result = await usersCollection.insertOne({
       handle: email,

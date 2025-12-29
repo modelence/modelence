@@ -14,9 +14,11 @@
     "jsx": "react-jsx",
     "resolveJsonModule": true,
     "declaration": true,
-    "declarationDir": "./dist",
     "declarationMap": true,
-    "emitDeclarationOnly": false
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "sourceMap": true
   },
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

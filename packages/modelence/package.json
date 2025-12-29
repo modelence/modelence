@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.8.0",
+  "version": "0.9.0-dev.1",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -24,8 +24,8 @@
     "modelence": "./dist/bin/modelence.js"
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "rm -rf dist && tsc && tsc-alias",
+    "dev": "tsc --watch",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "lint": "eslint src --ext .ts,.tsx --fix",
@@ -48,7 +48,6 @@
   "homepage": "https://modelence.com",
   "devDependencies": {
     "@types/archiver": "^6.0.3",
-    "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
@@ -65,13 +64,13 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ts-jest": "^29.4.5",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16"
   },
   "dependencies": {
     "@socket.io/mongo-adapter": "^0.4.0",
     "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
-    "bcrypt": "^5.1.1",
     "commander": "^12.0.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
