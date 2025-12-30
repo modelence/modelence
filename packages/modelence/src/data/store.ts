@@ -25,6 +25,7 @@ import {
 
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
+import { getCurrentLiveQueryContext } from './liveQueryContext';
 
 /**
  * Helper type to match strings containing dots (for MongoDB dot notation)
@@ -496,6 +497,49 @@ export class Store<
   ): Promise<this['_doc'][]> {
     const cursor = this.find(query, options);
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));
+  }
+
+  /**
+   * Fetches multiple documents and registers them for live updates.
+   * When called within a live query context, changes to matching documents
+   * will trigger re-execution of the query handler.
+   *
+   * This method behaves identically to `fetch()` but additionally tracks
+   * the query for MongoDB change stream notifications when used in a
+   * live query subscription.
+   *
+   * @param query - The query to filter documents
+   * @param options - Options (sort, limit, skip)
+   * @returns The documents
+   *
+   * @example
+   * ```ts
+   * // In a query handler
+   * queries: {
+   *   getTodos: async ({ userId }) => {
+   *     return await dbTodos.fetchLive({ userId });
+   *   },
+   * }
+   *
+   * // Client - live subscription (WebSocket, auto-updates on changes)
+   * const { data } = useQuery(modelenceLiveQuery('todo.getTodos', { userId }));
+   * ```
+   */
+  async fetchLive(
+    query: TypedFilter<this['_type']>,
+    options?: { sort?: Document; limit?: number; skip?: number }
+  ): Promise<this['_doc'][]> {
+    const ctx = getCurrentLiveQueryContext();
+    if (!ctx) {
+      throw new Error('Store.fetchLive() can only be called from a live query');
+    }
+
+    ctx.trackedQueries.push({
+      store: this,
+      filter: query as Filter<Document>,
+      options,
+    });
+    return await this.fetch(query, options);
   }
 
   /**
