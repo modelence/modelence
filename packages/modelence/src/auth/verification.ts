@@ -7,6 +7,8 @@ import { randomBytes } from 'crypto';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
+import { getAuthConfig } from '@/app/authConfig';
+import { User } from './types';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = process.env.MODELENCE_SITE_URL;
@@ -62,9 +64,37 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     // Delete the used token
     await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+
+    const authConfig = getAuthConfig();
+    authConfig.onAfterEmailVerification?.({
+      provider: 'email',
+      user: (await usersCollection.findOne({ 'emails.address': tokenDoc?.email })) as User,
+      session: null,
+      connectionInfo: {
+        baseUrl,
+        ip: params.req.ip || params.req.socket.remoteAddress,
+        userAgent: params.headers['user-agent'],
+        acceptLanguage: params.headers['accept-language'],
+        referrer: params.headers['referer'],
+      },
+    });
   } catch (error) {
     if (error instanceof Error) {
+      const authConfig = getAuthConfig();
+      authConfig.onEmailVerificationError?.({
+        provider: 'email',
+        error,
+        session: null,
+        connectionInfo: {
+          baseUrl,
+          ip: params.req.ip || params.req.socket.remoteAddress,
+          userAgent: params.headers['user-agent'],
+          acceptLanguage: params.headers['accept-language'],
+          referrer: params.headers['referer'],
+        },
+      });
       console.error('Error verifying email:', error);
+
       return {
         status: 301,
         redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(error.message)}`,

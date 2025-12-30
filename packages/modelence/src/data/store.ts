@@ -27,12 +27,6 @@ import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 
 /**
- * Helper type to match strings containing dots (for MongoDB dot notation)
- * @internal
- */
-type DottedString = `${string}.${string}`;
-
-/**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
  * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
  * @internal
@@ -104,7 +98,7 @@ export type TypedFilter<T> = {
     // Only strings containing dots are allowed, which provides better type safety
     // while still enabling MongoDB's nested field query syntax
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [K: DottedString]: any;
+    [K: `${string}.${string}`]: any;
   };
 
 /**

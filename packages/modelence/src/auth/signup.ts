@@ -94,6 +94,7 @@ export async function handleSignupWithPassword(
     });
 
     getAuthConfig().onAfterSignup?.({
+      provider: 'email',
       user: userDocument,
       session,
       connectionInfo,
@@ -105,6 +106,7 @@ export async function handleSignupWithPassword(
   } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().onSignupError?.({
+        provider: 'email',
         error,
         session,
         connectionInfo,
