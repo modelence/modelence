@@ -58,14 +58,40 @@ type StrictRootFilterOperators<TSchema> = {
 type ArrayElement<T> = T extends (infer E)[] ? E : never;
 
 /**
+ * Helper type for $in/$nin that accepts any array/tuple where elements are assignable to T
+ * This solves the issue where TypeScript infers ['a', 'b'] as a tuple instead of ('a' | 'b')[]
+ * and where Array<Union> gets distributed into Union1[] | Union2[] | ...
+ * We wrap the Exclude in a tuple check to prevent distribution
+ * @internal
+ */
+type NonUndefined<T> = T extends undefined ? never : T;
+type ArrayLikeOfUnion<T> = [NonUndefined<T>] extends [never]
+  ? never
+  : ReadonlyArray<NonUndefined<T>> | Array<NonUndefined<T>>;
+
+/**
+ * Enhanced FilterOperators that fixes $in and $nin to properly accept arrays of union types
+ * MongoDB's native FilterOperators has issues with union types in $in/$nin arrays
+ * because TypeScript distributes Array<Union> into Array1 | Array2 | ...
+ * @internal
+ */
+type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
+  $in?: ArrayLikeOfUnion<T>;
+  $nin?: ArrayLikeOfUnion<T>;
+};
+
+/**
  * Custom filter value type that handles array fields specially:
  * - For array fields: allows element type, full array type, or FilterOperators
  * - For non-array fields: allows exact type or FilterOperators
+ * We use [T] to prevent distribution when T is a union type
  * @internal
  */
-type FilterValue<T> = T extends unknown[]
-  ? ArrayElement<T> | T | FilterOperators<T>
-  : T | FilterOperators<T>;
+type FilterValue<T> = [T] extends [unknown[]]
+  ? ArrayElement<T> | T | EnhancedFilterOperators<T>
+  : [T] extends [never]
+    ? never
+    : T | EnhancedFilterOperators<[T] extends [never] ? never : T>;
 
 /**
  * Type-safe MongoDB filter that ensures only schema fields can be queried
