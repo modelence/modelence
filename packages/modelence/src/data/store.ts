@@ -52,12 +52,29 @@ type StrictRootFilterOperators<TSchema> = {
 };
 
 /**
+ * Helper type to extract array element type
+ * @internal
+ */
+type ArrayElement<T> = T extends (infer E)[] ? E : never;
+
+/**
+ * Custom filter value type that handles array fields specially:
+ * - For array fields: allows element type, full array type, or FilterOperators
+ * - For non-array fields: allows exact type or FilterOperators
+ * @internal
+ */
+type FilterValue<T> = T extends unknown[]
+  ? ArrayElement<T> | T | FilterOperators<T>
+  : T | FilterOperators<T>;
+
+/**
  * Type-safe MongoDB filter that ensures only schema fields can be queried
  * while supporting all MongoDB query operators and dot notation for nested fields.
  *
  * This type combines:
  * - MongoDB's native `FilterOperators<T>` for field-level operators (comprehensive operator support)
  * - Custom `StrictRootFilterOperators<T>` for top-level operators without index signature
+ * - Custom array field handling: allows passing single element when field is an array
  * - Custom restriction: only strings containing dots are allowed for nested field queries
  *
  * @example
@@ -67,6 +84,7 @@ type StrictRootFilterOperators<TSchema> = {
  *     name: schema.string(),
  *     age: schema.number(),
  *     tags: schema.array(schema.string()),
+ *     collections: schema.array(schema.string()),
  *     address: schema.object({
  *       street: schema.string(),
  *       city: schema.string(),
@@ -83,6 +101,9 @@ type StrictRootFilterOperators<TSchema> = {
  * await dbUsers.findOne({ tags: { $in: ['typescript', 'mongodb'] } });
  * await dbUsers.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] });
  *
+ * // ✅ Valid - array field with single element (checks if array contains the element)
+ * await dbUsers.findOne({ collections: 'users' });
+ *
  * // ✅ Valid - dot notation for nested fields (must contain a dot)
  * await dbUsers.findOne({ 'address.city': 'New York' });
  * await dbUsers.findOne({ 'emails.0.address': 'test@example.com' });
@@ -92,7 +113,7 @@ type StrictRootFilterOperators<TSchema> = {
  * ```
  */
 export type TypedFilter<T> = {
-  [K in keyof WithId<T>]?: WithId<T>[K] | FilterOperators<WithId<T>[K]>;
+  [K in keyof WithId<T>]?: FilterValue<WithId<T>[K]>;
 } & StrictRootFilterOperators<T> & {
     // Support for MongoDB dot notation (e.g., 'emails.address', 'profile.settings.theme')
     // Only strings containing dots are allowed, which provides better type safety
