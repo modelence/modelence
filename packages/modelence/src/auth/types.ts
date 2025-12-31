@@ -1,4 +1,5 @@
 import { Document, ObjectId } from 'mongodb';
+import { ConnectionInfo } from '@/methods/types';
 
 export type User = Document;
 
@@ -25,4 +26,20 @@ export type Permission = string;
 export type RoleDefinition = {
   description?: string;
   permissions: Permission[];
+};
+
+export type AuthProvider = 'google' | 'github' | 'email';
+
+export type AuthSuccessProps = {
+  provider: AuthProvider;
+  user: User;
+  session: Session | null;
+  connectionInfo: ConnectionInfo;
+};
+
+export type AuthErrorProps = {
+  provider: AuthProvider;
+  error: Error;
+  session: Session | null;
+  connectionInfo: ConnectionInfo;
 };

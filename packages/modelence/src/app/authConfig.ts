@@ -1,5 +1,4 @@
-import { Session, User } from '@/auth/types';
-import { ConnectionInfo } from '@/methods/types';
+import { AuthErrorProps, AuthSuccessProps, User } from '@/auth/types';
 
 /**
  * Callback options for authentication operations
@@ -40,26 +39,12 @@ export type AuthOption = {
  * ```
  */
 export type AuthConfig = {
-  onAfterLogin?: (props: {
-    user: User;
-    session: Session | null;
-    connectionInfo: ConnectionInfo;
-  }) => void;
-  onLoginError?: (props: {
-    error: Error;
-    session: Session | null;
-    connectionInfo: ConnectionInfo;
-  }) => void;
-  onAfterSignup?: (props: {
-    user: User;
-    session: Session | null;
-    connectionInfo: ConnectionInfo;
-  }) => void;
-  onSignupError?: (props: {
-    error: Error;
-    session: Session | null;
-    connectionInfo: ConnectionInfo;
-  }) => void;
+  onAfterLogin?: (props: AuthSuccessProps) => void;
+  onLoginError?: (props: AuthErrorProps) => void;
+  onAfterSignup?: (props: AuthSuccessProps) => void;
+  onSignupError?: (props: AuthErrorProps) => void;
+  onAfterEmailVerification?: (props: AuthSuccessProps) => void;
+  onEmailVerificationError?: (props: AuthErrorProps) => void;
 
   /** deprecated: use onAfterLogin and onLoginError */
   login?: AuthOption;
