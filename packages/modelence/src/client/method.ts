@@ -31,6 +31,20 @@ export async function callMethod<T = unknown>(
   }
 }
 
+export async function callLiveMethod<T = unknown>(
+  methodName: string,
+  args: MethodArgs = {},
+  options: CallMethodOptions = {}
+): Promise<T> {
+  try {
+    return await call<T>(`/api/_internal/method/${methodName}/live`, args);
+  } catch (error) {
+    const handler = options.errorHandler ?? handleError;
+    handler(error as Error, methodName);
+    throw error;
+  }
+}
+
 async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T> {
   const response = await fetch(endpoint, {
     method: 'POST',

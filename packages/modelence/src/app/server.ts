@@ -1,6 +1,6 @@
 import googleAuthRouter from '@/auth/providers/google';
 import githubAuthRouter from '@/auth/providers/github';
-import { runMethod } from '@/methods';
+import { runMethod, runLiveMethod } from '@/methods';
 import { getResponseTypeMap } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
@@ -96,6 +96,32 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
+  // Note: Live method route must come BEFORE the regular method route
+  // because Express matches in order and the wildcard would capture /live
+  app.post('/api/_internal/method/:methodName(*)/live', async (req: Request, res: Response) => {
+    const { methodName } = req.params;
+    const context = await getCallContext(req);
+
+    try {
+      const { result, trackedQueries } = await runLiveMethod(methodName, req.body.args, context);
+
+      // Log tracked queries for now (change stream subscription will be added later)
+      if (trackedQueries.length > 0) {
+        console.log(
+          `[LiveQuery] ${methodName} tracking ${trackedQueries.length} queries:`,
+          trackedQueries.map((q) => q.store.getName())
+        );
+      }
+
+      res.json({
+        data: result,
+        typeMap: getResponseTypeMap(result),
+      });
+    } catch (error) {
+      handleMethodError(res, methodName, error);
+    }
+  });
+
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
     const context = await getCallContext(req);
@@ -107,30 +133,7 @@ export async function startServer(
         typeMap: getResponseTypeMap(result),
       });
     } catch (error) {
-      // TODO: introduce error codes and handle them differently
-      // TODO: support multiple errors
-
-      // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
-      console.error(`Error in method ${methodName}:`, error);
-
-      if (error instanceof ModelenceError) {
-        res.status(error.status).send(error.message);
-      } else if (
-        error instanceof Error &&
-        error?.constructor?.name === 'ZodError' &&
-        'errors' in error
-      ) {
-        const zodError = error as z.ZodError;
-        const flattened = zodError.flatten();
-        const fieldMessages = Object.entries(flattened.fieldErrors)
-          .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
-          .join('; ');
-        const formMessages = flattened.formErrors.join('; ');
-        const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
-        res.status(400).send(allMessages);
-      } else {
-        res.status(500).send(error instanceof Error ? error.message : String(error));
-      }
+      handleMethodError(res, methodName, error);
     }
   });
 
@@ -228,6 +231,31 @@ export async function getCallContext(req: Request) {
     user: null,
     roles: getUnauthenticatedRoles(),
   };
+}
+
+function handleMethodError(res: Response, methodName: string, error: unknown) {
+  // TODO: introduce error codes and handle them differently
+  // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
+  console.error(`Error in method ${methodName}:`, error);
+
+  if (error instanceof ModelenceError) {
+    res.status(error.status).send(error.message);
+  } else if (
+    error instanceof Error &&
+    error?.constructor?.name === 'ZodError' &&
+    'errors' in error
+  ) {
+    const zodError = error as z.ZodError;
+    const flattened = zodError.flatten();
+    const fieldMessages = Object.entries(flattened.fieldErrors)
+      .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
+      .join('; ');
+    const formMessages = flattened.formErrors.join('; ');
+    const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
+    res.status(400).send(allMessages);
+  } else {
+    res.status(500).send(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function getClientIp(req: Request): string | undefined {

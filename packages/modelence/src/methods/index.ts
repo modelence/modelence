@@ -2,6 +2,7 @@ import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
+import { runInLiveQueryContext, TrackedLiveQuery } from '../data/liveQueryContext';
 
 const methods: Record<string, Method<unknown>> = {};
 
@@ -87,4 +88,44 @@ export async function runMethod(name: string, args: Args, context: Context) {
   transaction.end();
 
   return response;
+}
+
+export type LiveMethodResult<T = unknown> = {
+  result: T;
+  trackedQueries: TrackedLiveQuery[];
+};
+
+export async function runLiveMethod(
+  name: string,
+  args: Args,
+  context: Context
+): Promise<LiveMethodResult> {
+  requireServer();
+
+  const method = methods[name];
+  if (!method) {
+    throw new Error(`Method with name '${name}' is not defined.`);
+  }
+  const { type, handler } = method;
+
+  if (type !== 'query') {
+    throw new Error(`Live methods are only supported for queries`);
+  }
+
+  const transaction = startTransaction('method', `method:${name}:live`, { type, args });
+
+  try {
+    requireAccess(context.roles, method.permissions);
+
+    const { result, trackedQueries } = await runInLiveQueryContext(async () => {
+      return await handler(args, context);
+    });
+
+    transaction.end();
+
+    return { result, trackedQueries };
+  } catch (error) {
+    transaction.end('error');
+    throw error;
+  }
 }

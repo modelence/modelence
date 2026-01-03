@@ -11,7 +11,7 @@ export const AppProvider =
     : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
-export { callMethod, type MethodArgs } from './client/method';
+export { callMethod, callLiveMethod, type MethodArgs } from './client/method';
 export { useSession } from './client/session';
 export {
   signupWithPassword,
