@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/react-query",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "React Query utilities for Modelence",
   "exports": {
     ".": {
@@ -24,9 +24,9 @@
     "react": ">=18.0.0"
   },
   "devDependencies": {
-    "modelence": "^0.6.2",
     "@tanstack/react-query": "^5.76.2",
     "@types/react": "^19.0.0",
+    "modelence": "file:.yalc/modelence",
     "react": "^19.0.0",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2"

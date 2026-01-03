@@ -1,4 +1,4 @@
-import { callMethod } from 'modelence/client';
+import { callMethod, callLiveMethod } from 'modelence/client';
 
 type Args = Record<string, unknown>;
 
@@ -38,6 +38,48 @@ export function modelenceQuery<T = unknown>(
   return {
     queryKey: [methodName, args],
     queryFn: () => callMethod<T>(methodName, args),
+  };
+}
+
+/**
+ * Creates query options for live queries with TanStack Query's useQuery hook.
+ * Live queries use fetchLive() on the server and will receive real-time updates
+ * when the underlying data changes (via MongoDB change streams).
+ * 
+ * @example
+ * ```tsx
+ * import { useQuery } from '@tanstack/react-query';
+ * import { modelenceLiveQuery } from '@modelence/react-query';
+ * 
+ * function TodoList() {
+ *   // Subscribe to live updates - data refreshes automatically when todos change
+ *   const { data: todos } = useQuery(modelenceLiveQuery('todo.getAll', { userId }));
+ * 
+ *   return (
+ *     <ul>
+ *       {todos?.map(todo => <li key={todo._id}>{todo.title}</li>)}
+ *     </ul>
+ *   );
+ * }
+ * ```
+ * 
+ * @typeParam T - The expected return type of the query
+ * @param methodName - The name of the method to query
+ * @param args - Optional arguments to pass to the method
+ * @returns Query options object for TanStack Query's useQuery
+ */
+export function modelenceLiveQuery<T = unknown>(
+  methodName: string, 
+  args: Args = {}
+) {
+  return {
+    queryKey: ['live', methodName, args],
+    queryFn: () => callLiveMethod<T>(methodName, args),
+    // Disable automatic refetching since updates come via WebSocket
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   };
 }
 
