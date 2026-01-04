@@ -5,6 +5,11 @@ import { authenticate } from '@/auth';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
 import { ServerChannel } from '../serverChannel';
+import {
+  handleSubscribeLiveQuery,
+  handleUnsubscribeLiveQuery,
+  handleLiveQueryDisconnect,
+} from '@/live-query';
 import type { Collection, Document } from 'mongodb';
 
 let socketServer: SocketServer | null = null;
@@ -67,6 +72,7 @@ export async function init({
 
     socket.on('disconnect', () => {
       console.log(`Socket.IO client disconnected`);
+      handleLiveQueryDisconnect(socket);
     });
 
     socket.on('joinChannel', async (channelName) => {
@@ -90,6 +96,9 @@ export async function init({
       console.log(`User ${socket.id} left channel ${channelName}`);
       socket.emit('leftChannel', channelName);
     });
+
+    socket.on('subscribeLiveQuery', (payload) => handleSubscribeLiveQuery(socket, payload));
+    socket.on('unsubscribeLiveQuery', (payload) => handleUnsubscribeLiveQuery(socket, payload));
   });
 
   console.log('Socket.IO server initialized');

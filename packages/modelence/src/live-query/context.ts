@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Document, Filter } from 'mongodb';
-import { Store } from './store';
+import { Store } from '../data/store';
 
 export interface TrackedLiveQuery {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,3 +33,4 @@ export async function runInLiveQueryContext<T>(
 export function getCurrentLiveQueryContext(): LiveQueryExecutionContext | undefined {
   return liveQueryContext.getStore();
 }
+

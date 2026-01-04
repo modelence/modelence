@@ -1,6 +1,6 @@
 import googleAuthRouter from '@/auth/providers/google';
 import githubAuthRouter from '@/auth/providers/github';
-import { runMethod, runLiveMethod } from '@/methods';
+import { runMethod } from '@/methods';
 import { getResponseTypeMap } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
@@ -95,32 +95,6 @@ export async function startServer(
 
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
-
-  // Note: Live method route must come BEFORE the regular method route
-  // because Express matches in order and the wildcard would capture /live
-  app.post('/api/_internal/method/:methodName(*)/live', async (req: Request, res: Response) => {
-    const { methodName } = req.params;
-    const context = await getCallContext(req);
-
-    try {
-      const { result, trackedQueries } = await runLiveMethod(methodName, req.body.args, context);
-
-      // Log tracked queries for now (change stream subscription will be added later)
-      if (trackedQueries.length > 0) {
-        console.log(
-          `[LiveQuery] ${methodName} tracking ${trackedQueries.length} queries:`,
-          trackedQueries.map((q) => q.store.getName())
-        );
-      }
-
-      res.json({
-        data: result,
-        typeMap: getResponseTypeMap(result),
-      });
-    } catch (error) {
-      handleMethodError(res, methodName, error);
-    }
-  });
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;

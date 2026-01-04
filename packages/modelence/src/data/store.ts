@@ -25,7 +25,7 @@ import {
 
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
-import { getCurrentLiveQueryContext } from './liveQueryContext';
+import { getCurrentLiveQueryContext } from '../live-query';
 
 /**
  * Helper type to match strings containing dots (for MongoDB dot notation)

@@ -11,7 +11,7 @@ export const AppProvider =
     : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
-export { callMethod, callLiveMethod, type MethodArgs } from './client/method';
+export { callMethod, type MethodArgs } from './client/method';
 export { useSession } from './client/session';
 export {
   signupWithPassword,
@@ -26,6 +26,7 @@ export {
   getWebsocketClientProvider,
   setWebsocketClientProvider,
   startWebsockets,
+  subscribeLiveQuery,
 } from './websocket/client';
 export { ClientChannel } from './websocket/clientChannel';
 export { getLocalStorageSession } from './client/localStorage';

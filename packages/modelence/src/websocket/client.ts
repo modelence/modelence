@@ -1,6 +1,8 @@
 import { ClientChannel } from './clientChannel';
-import websocketProvider from './socketio/client';
+import websocketProvider, { subscribeLiveQuery } from './socketio/client';
 import { WebsocketClientProvider } from './types';
+
+export { subscribeLiveQuery };
 
 let websocketClientProvider: WebsocketClientProvider | null = null;
 

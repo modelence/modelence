@@ -2,7 +2,7 @@ import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
-import { runInLiveQueryContext, TrackedLiveQuery } from '../data/liveQueryContext';
+import { runInLiveQueryContext, TrackedLiveQuery } from '../live-query';
 
 const methods: Record<string, Method<unknown>> = {};
 
