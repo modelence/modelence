@@ -6,11 +6,28 @@ import { reviveResponseTypes } from '@/methods/serialize';
 
 let socketClient: Socket | null = null;
 
+interface ActiveLiveSubscription {
+  subscriptionId: string;
+  method: string;
+  args: Record<string, unknown>;
+}
+const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
+
 function getSocket(): Socket {
   if (!socketClient) {
     throw new Error('WebSocket not initialized. Call startWebsockets() first.');
   }
   return socketClient;
+}
+
+function resubscribeAll() {
+  for (const sub of activeLiveSubscriptions.values()) {
+    socketClient?.emit('subscribeLiveQuery', {
+      subscriptionId: sub.subscriptionId,
+      method: sub.method,
+      args: sub.args,
+    });
+  }
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
@@ -23,6 +40,14 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     auth: {
       token: getLocalStorageSession()?.authToken,
     },
+  });
+
+  // Re-subscribe to all live queries on reconnect
+  socketClient.on('connect', () => {
+    if (activeLiveSubscriptions.size > 0) {
+      console.log(`[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`);
+      resubscribeAll();
+    }
   });
 
   props.channels?.forEach((channel) => channel.init());
@@ -106,8 +131,11 @@ export function subscribeLiveQuery<T = unknown>(
   socket.on('liveQueryError', handleError);
   socket.emit('subscribeLiveQuery', { subscriptionId, method, args });
 
+  activeLiveSubscriptions.set(subscriptionId, { subscriptionId, method, args });
+
   // Return unsubscribe function
   return () => {
+    activeLiveSubscriptions.delete(subscriptionId);
     socket.emit('unsubscribeLiveQuery', { subscriptionId });
     socket.off('liveQueryData', handleData);
     socket.off('liveQueryError', handleError);
