@@ -42,15 +42,15 @@ export class ModelenceQueryClient {
    * This enables live query subscriptions and cache updates.
    */
   connect(queryClient: QueryClient) {
+    // Only support one query client at a time
+    if (queryClientRef) {
+      throw new Error('ModelenceQueryClient can only be connected to one QueryClient');
+    }
+
     if (cacheUnsubscribe) {
       cacheUnsubscribe();
       subscriptions.forEach((sub) => sub.unsubscribe());
       subscriptions.clear();
-    }
-
-    // Only support one query client at a time
-    if (queryClientRef) {
-      throw new Error('ModelenceQueryClient can only be connected to one QueryClient');
     }
 
     startWebsockets();
