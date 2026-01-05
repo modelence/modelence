@@ -42,7 +42,7 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     },
   });
 
-  // Re-subscribe to all live queries on reconnect
+  // Subscribe to all live queries on connect/reconnect
   socketClient.on('connect', () => {
     if (activeLiveSubscriptions.size > 0) {
       console.log(`[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`);
@@ -129,9 +129,13 @@ export function subscribeLiveQuery<T = unknown>(
   const socket = getSocket();
   socket.on('liveQueryData', handleData);
   socket.on('liveQueryError', handleError);
-  socket.emit('subscribeLiveQuery', { subscriptionId, method, args });
 
   activeLiveSubscriptions.set(subscriptionId, { subscriptionId, method, args });
+
+  // Only emit if already connected; otherwise the connect handler will handle it
+  if (socket.connected) {
+    socket.emit('subscribeLiveQuery', { subscriptionId, method, args });
+  }
 
   // Return unsubscribe function
   return () => {

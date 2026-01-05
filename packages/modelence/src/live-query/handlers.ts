@@ -41,17 +41,28 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   const { subscriptionId, method, args } = parsed.data;
 
   try {
-      const publish = (data: unknown) => {
-        socket.emit('liveQueryData', {
-          subscriptionId,
-          data,
-          typeMap: getResponseTypeMap(data),
-        });
-      };
+    const publish = (data: unknown) => {
+      socket.emit('liveQueryData', {
+        subscriptionId,
+        data,
+        typeMap: getResponseTypeMap(data),
+      });
+    };
 
     const cleanup = await runLiveMethod(method, args, socket.data, { publish });
 
     const subs = getSocketSubs(socket);
+
+    // Clean up to handle race conditions with reconnects
+    const existingSub = subs.get(subscriptionId);
+    if (existingSub?.cleanup) {
+      try {
+        existingSub.cleanup();
+      } catch (err) {
+        console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+      }
+    }
+
     subs.set(subscriptionId, { cleanup });
   } catch (error) {
     console.error(`[LiveQuery] Error in ${method}:`, error);
