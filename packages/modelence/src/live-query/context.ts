@@ -1,36 +1,19 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { Document, Filter } from 'mongodb';
-import { Store } from '../data/store';
+/**
+ * Publish function provided to live query handlers.
+ * Call this to send data to the subscribed client.
+ */
+export type LiveQueryPublish<T = unknown> = (data: T) => void;
 
-export interface TrackedLiveQuery {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  store: Store<any, any>;
-  filter: Filter<Document>;
-  options?: { sort?: Document; limit?: number; skip?: number };
-}
+/**
+ * Cleanup function returned by live query handlers.
+ * Called when the client unsubscribes.
+ */
+export type LiveQueryCleanup = () => void;
 
-export interface LiveQueryExecutionContext {
-  trackedQueries: TrackedLiveQuery[];
-}
-
-export const liveQueryContext = new AsyncLocalStorage<LiveQueryExecutionContext>();
-
-export async function runInLiveQueryContext<T>(
-  handler: () => Promise<T>
-): Promise<{ result: T; trackedQueries: TrackedLiveQuery[] }> {
-  const context: LiveQueryExecutionContext = {
-    trackedQueries: [],
-  };
-
-  const result = await liveQueryContext.run(context, handler);
-
-  return {
-    result,
-    trackedQueries: context.trackedQueries,
-  };
-}
-
-export function getCurrentLiveQueryContext(): LiveQueryExecutionContext | undefined {
-  return liveQueryContext.getStore();
+/**
+ * Context provided to live query handlers.
+ */
+export interface LiveQueryContext {
+  publish: LiveQueryPublish;
 }
 

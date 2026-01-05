@@ -2,7 +2,7 @@ import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
-import { runInLiveQueryContext, TrackedLiveQuery } from '../live-query';
+import { LiveQueryCleanup, LiveQueryContext } from '../live-query';
 
 const methods: Record<string, Method<unknown>> = {};
 
@@ -90,16 +90,16 @@ export async function runMethod(name: string, args: Args, context: Context) {
   return response;
 }
 
-export type LiveMethodResult<T = unknown> = {
-  result: T;
-  trackedQueries: TrackedLiveQuery[];
-};
-
+/**
+ * Run a method as a live query.
+ * The handler receives a `publish` function in context and should return a cleanup function.
+ */
 export async function runLiveMethod(
   name: string,
   args: Args,
-  context: Context
-): Promise<LiveMethodResult> {
+  context: Context,
+  liveContext: LiveQueryContext
+): Promise<LiveQueryCleanup | null> {
   requireServer();
 
   const method = methods[name];
@@ -117,13 +117,19 @@ export async function runLiveMethod(
   try {
     requireAccess(context.roles, method.permissions);
 
-    const { result, trackedQueries } = await runInLiveQueryContext(async () => {
-      return await handler(args, context);
-    });
+    const extendedContext = { ...context, ...liveContext };
+    const result = await handler(args, extendedContext);
 
     transaction.end();
 
-    return { result, trackedQueries };
+    if (result !== undefined && typeof result !== 'function') {
+      throw new Error(
+        `Live query handler for '${name}' must return a cleanup function or undefined, not data. ` +
+        `Use publish() to send data to the client.`
+      );
+    }
+
+    return (result as LiveQueryCleanup) || null;
   } catch (error) {
     transaction.end('error');
     throw error;

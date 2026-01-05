@@ -1,8 +1,7 @@
 export {
-  runInLiveQueryContext,
-  getCurrentLiveQueryContext,
-  type TrackedLiveQuery,
-  type LiveQueryExecutionContext,
+  type LiveQueryPublish,
+  type LiveQueryCleanup,
+  type LiveQueryContext,
 } from './context';
 
 export {

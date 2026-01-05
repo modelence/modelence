@@ -2,6 +2,7 @@ import io, { Socket } from 'socket.io-client';
 import { WebsocketClientProvider } from '../types';
 import { ClientChannel } from '../clientChannel';
 import { getLocalStorageSession } from '@/client/localStorage';
+import { reviveResponseTypes } from '@/methods/serialize';
 
 let socketClient: Socket | null = null;
 
@@ -87,14 +88,15 @@ export function subscribeLiveQuery<T = unknown>(
 ): () => void {
   const subscriptionId = `sub-${++liveQueryCounter}-${Date.now()}`;
 
-  const handleData = ({ subscriptionId: sid, data }: { subscriptionId: string; data: T }) => {
+  const handleData = ({ subscriptionId: sid, data, typeMap }: { subscriptionId: string; data: T; typeMap?: Record<string, unknown> }) => {
     if (sid === subscriptionId) {
-      onData(data);
+      onData(reviveResponseTypes(data, typeMap));
     }
   };
 
   const handleError = ({ subscriptionId: sid, error }: { subscriptionId: string; error: string }) => {
     if (sid === subscriptionId) {
+      console.error(`[Modelence] Live query error for ${method}:`, error);
       onError?.(error);
     }
   };

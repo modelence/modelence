@@ -75,23 +75,30 @@ export async function init({
       handleLiveQueryDisconnect(socket);
     });
 
-    socket.on('joinChannel', async (channelName) => {
-      const [category] = channelName.split(':');
+    socket.on('joinChannel', async (channelName: string) => {
+      const [category, ...idParts] = channelName.split(':');
+      const id = idParts.join(':'); // Handle IDs that might contain colons
+
       for (const channel of channels) {
-        if (
-          channel.category === category &&
-          (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data)))
-        ) {
-          socket.join(channelName);
+        if (channel.category === category) {
+          const canAccess =
+            !channel.canAccessChannel ||
+            (await channel.canAccessChannel({ id, ...socket.data }));
+
+          if (canAccess) {
+            socket.join(channelName);
+            socket.emit('joinedChannel', channelName);
+          } else {
+            socket.emit('channelAccessDenied', channelName);
+          }
+          return;
         }
       }
 
-      socket.join(channelName);
-      console.log(`User ${socket.id} joined channel ${channelName}`);
-      socket.emit('joinedChannel', channelName);
+      console.warn(`Unknown channel: ${category}`);
     });
 
-    socket.on('leaveChannel', (channelName) => {
+    socket.on('leaveChannel', (channelName: string) => {
       socket.leave(channelName);
       console.log(`User ${socket.id} left channel ${channelName}`);
       socket.emit('leftChannel', channelName);

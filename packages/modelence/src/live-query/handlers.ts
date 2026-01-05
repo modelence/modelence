@@ -1,6 +1,8 @@
 import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { runLiveMethod } from '../methods';
+import { getResponseTypeMap } from '../methods/serialize';
+import { LiveQueryCleanup } from './context';
 
 const subscribeLiveQuerySchema = z.object({
   subscriptionId: z.string().min(1),
@@ -11,6 +13,21 @@ const subscribeLiveQuerySchema = z.object({
 const unsubscribeLiveQuerySchema = z.object({
   subscriptionId: z.string().min(1),
 });
+
+interface ActiveSubscription {
+  cleanup: LiveQueryCleanup | null;
+}
+
+const socketSubscriptions = new Map<string, Map<string, ActiveSubscription>>();
+
+function getSocketSubs(socket: Socket): Map<string, ActiveSubscription> {
+  let subs = socketSubscriptions.get(socket.id);
+  if (!subs) {
+    subs = new Map();
+    socketSubscriptions.set(socket.id, subs);
+  }
+  return subs;
+}
 
 export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown) {
   const parsed = subscribeLiveQuerySchema.safeParse(payload);
@@ -24,20 +41,18 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   const { subscriptionId, method, args } = parsed.data;
 
   try {
-    const { result, trackedQueries } = await runLiveMethod(method, args, socket.data);
+      const publish = (data: unknown) => {
+        socket.emit('liveQueryData', {
+          subscriptionId,
+          data,
+          typeMap: getResponseTypeMap(data),
+        });
+      };
 
-    socket.emit('liveQueryData', { subscriptionId, data: result });
+    const cleanup = await runLiveMethod(method, args, socket.data, { publish });
 
-    // Log tracked queries (change stream setup will be added later)
-    if (trackedQueries.length > 0) {
-      console.log(
-        `[LiveQuery] ${method} (${subscriptionId}) tracking ${trackedQueries.length} queries:`,
-        trackedQueries.map((q) => q.store.getName())
-      );
-    }
-
-    // TODO: Set up MongoDB change streams for trackedQueries
-    // TODO: On change, re-run query and emit updated data
+    const subs = getSocketSubs(socket);
+    subs.set(subscriptionId, { cleanup });
   } catch (error) {
     console.error(`[LiveQuery] Error in ${method}:`, error);
     socket.emit('liveQueryError', {
@@ -54,11 +69,36 @@ export function handleUnsubscribeLiveQuery(socket: Socket, payload: unknown) {
     return;
   }
   const { subscriptionId } = parsed.data;
-  console.log(`[LiveQuery] Unsubscribed: ${subscriptionId}`);
-  // TODO: Close change streams for this subscription
+
+  const subs = socketSubscriptions.get(socket.id);
+  if (!subs) return;
+
+  const sub = subs.get(subscriptionId);
+  if (sub) {
+    if (sub.cleanup) {
+      try {
+        sub.cleanup();
+      } catch (err) {
+        console.error('[LiveQuery] Error in cleanup:', err);
+      }
+    }
+    subs.delete(subscriptionId);
+  }
 }
 
 export function handleLiveQueryDisconnect(socket: Socket) {
-  // TODO: Clean up any active live query subscriptions for this socket
-  console.log(`[LiveQuery] Cleaning up subscriptions for socket ${socket.id}`);
+  const subs = socketSubscriptions.get(socket.id);
+  if (subs) {
+    // Clean up all subscriptions for this socket
+    for (const sub of subs.values()) {
+      if (sub.cleanup) {
+        try {
+          sub.cleanup();
+        } catch (err) {
+          console.error('[LiveQuery] Error in cleanup on disconnect:', err);
+        }
+      }
+    }
+    socketSubscriptions.delete(socket.id);
+  }
 }
