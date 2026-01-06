@@ -5,6 +5,11 @@ import { authenticate } from '@/auth';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
 import { ServerChannel } from '../serverChannel';
+import {
+  handleSubscribeLiveQuery,
+  handleUnsubscribeLiveQuery,
+  handleLiveQueryDisconnect,
+} from '@/live-query';
 import type { Collection, Document } from 'mongodb';
 
 let socketServer: SocketServer | null = null;
@@ -67,9 +72,10 @@ export async function init({
 
     socket.on('disconnect', () => {
       console.log(`Socket.IO client disconnected`);
+      handleLiveQueryDisconnect(socket);
     });
 
-    socket.on('joinChannel', async (channelName) => {
+    socket.on('joinChannel', async (channelName: string) => {
       const [category] = channelName.split(':');
       let authorized = false;
 
@@ -78,10 +84,9 @@ export async function init({
           if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
             socket.join(channelName);
             authorized = true;
-            console.log(`User ${socket.id} joined channel ${channelName}`);
             socket.emit('joinedChannel', channelName);
           }
-          break; // Found matching channel, stop searching
+          break; // Found matching channel - stop searching
         }
       }
 
@@ -90,11 +95,14 @@ export async function init({
       }
     });
 
-    socket.on('leaveChannel', (channelName) => {
+    socket.on('leaveChannel', (channelName: string) => {
       socket.leave(channelName);
       console.log(`User ${socket.id} left channel ${channelName}`);
       socket.emit('leftChannel', channelName);
     });
+
+    socket.on('subscribeLiveQuery', (payload) => handleSubscribeLiveQuery(socket, payload));
+    socket.on('unsubscribeLiveQuery', (payload) => handleUnsubscribeLiveQuery(socket, payload));
   });
 
   console.log('Socket.IO server initialized');

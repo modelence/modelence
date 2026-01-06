@@ -28,6 +28,8 @@ export default defineConfig((options) => ({
   exclude: ['./src/node_modules/**/*', './dist/**/*'],
   external: [
     'react',
-    'react-dom'
+    'react-dom',
+    'node:async_hooks',
+    'async_hooks'
   ]
 }));

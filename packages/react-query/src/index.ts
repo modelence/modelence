@@ -1,6 +1,80 @@
-import { callMethod } from 'modelence/client';
+import { QueryClient, hashKey } from '@tanstack/react-query';
+import { callMethod, subscribeLiveQuery, startWebsockets } from 'modelence/client';
 
 type Args = Record<string, unknown>;
+
+interface Subscription {
+  unsubscribe: () => void;
+  resolvers: Set<{
+    resolve: (data: unknown) => void;
+    reject: (error: Error) => void;
+  }>;
+}
+
+let queryClientRef: QueryClient | null = null;
+let cacheUnsubscribe: (() => void) | null = null;
+const subscriptions = new Map<string, Subscription>();
+
+/**
+ * Client for managing Modelence live queries with TanStack Query.
+ * Create one instance and connect it to your QueryClient.
+ * 
+ * @example
+ * ```tsx
+ * import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ * import { ModelenceQueryClient } from '@modelence/react-query';
+ * 
+ * const queryClient = new QueryClient();
+ * new ModelenceQueryClient().connect(queryClient);
+ * 
+ * function App() {
+ *   return (
+ *     <QueryClientProvider client={queryClient}>
+ *       <YourApp />
+ *     </QueryClientProvider>
+ *   );
+ * }
+ * ```
+ */
+export class ModelenceQueryClient {
+  /**
+   * Connects to a TanStack Query QueryClient.
+   * This enables live query subscriptions and cache updates.
+   */
+  connect(queryClient: QueryClient) {
+    // Only support one query client at a time
+    if (queryClientRef) {
+      throw new Error('ModelenceQueryClient can only be connected to one QueryClient');
+    }
+
+    if (cacheUnsubscribe) {
+      cacheUnsubscribe();
+      subscriptions.forEach((sub) => sub.unsubscribe());
+      subscriptions.clear();
+    }
+
+    startWebsockets();
+
+    queryClientRef = queryClient;
+
+    cacheUnsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'removed') {
+        const subscriptionKey = hashKey(event.query.queryKey);
+        const sub = subscriptions.get(subscriptionKey);
+        if (sub) {
+          // Reject any pending resolvers since the query was removed
+          if (sub.resolvers.size > 0) {
+            const cancelError = new Error('Query was removed from cache');
+            sub.resolvers.forEach((r) => r.reject(cancelError));
+            sub.resolvers.clear();
+          }
+          sub.unsubscribe();
+          subscriptions.delete(subscriptionKey);
+        }
+      }
+    });
+  }
+}
 
 /**
  * Creates query options for use with TanStack Query's useQuery hook.
@@ -38,6 +112,99 @@ export function modelenceQuery<T = unknown>(
   return {
     queryKey: [methodName, args],
     queryFn: () => callMethod<T>(methodName, args),
+  };
+}
+
+/**
+ * Creates query options for live queries with TanStack Query's useQuery hook.
+ * Data will be updated in real-time when underlying data changes.
+ * 
+ * Requires ModelenceQueryClient to be connected to your QueryClient.
+ * 
+ * @example
+ * ```tsx
+ * import { useQuery } from '@tanstack/react-query';
+ * import { modelenceLiveQuery } from '@modelence/react-query';
+ * 
+ * function TodoList() {
+ *   // Subscribe to live updates - data refreshes automatically when todos change
+ *   const { data: todos } = useQuery(modelenceLiveQuery('todo.getAll', { userId }));
+ * 
+ *   return (
+ *     <ul>
+ *       {todos?.map(todo => <li key={todo._id}>{todo.title}</li>)}
+ *     </ul>
+ *   );
+ * }
+ * ```
+ * 
+ * @typeParam T - The expected return type of the query
+ * @param methodName - The name of the method to query
+ * @param args - Optional arguments to pass to the method
+ * @returns Query options object for TanStack Query's useQuery
+ */
+export function modelenceLiveQuery<T = unknown>(
+  methodName: string, 
+  args: Args = {}
+) {
+  const queryKey = ['live', methodName, args] as const;
+  const subscriptionKey = hashKey(queryKey);
+
+  return {
+    queryKey,
+    queryFn: () => new Promise<T>((resolve, reject) => {
+      if (!queryClientRef) {
+        const error = new Error('ModelenceQueryClient must be connected before using modelenceLiveQuery()');
+        console.error('[Modelence]', error.message);
+        reject(error);
+        return;
+      }
+
+      let sub = subscriptions.get(subscriptionKey);
+
+      if (!sub) {
+        const unsubscribe = subscribeLiveQuery<T>(
+          methodName,
+          args,
+          (data) => {
+            const currentSub = subscriptions.get(subscriptionKey);
+            
+            if (currentSub?.resolvers.size) {
+              currentSub.resolvers.forEach((r) => r.resolve(data));
+              currentSub.resolvers.clear();
+            }
+
+            if (queryClientRef) {
+              queryClientRef.setQueryData(queryKey, data);
+            }
+          },
+          (error) => {
+            const currentSub = subscriptions.get(subscriptionKey);
+            if (currentSub) {
+              if (currentSub.resolvers.size) {
+                currentSub.resolvers.forEach((r) => r.reject(new Error(error)));
+                currentSub.resolvers.clear();
+              }
+              currentSub.unsubscribe();
+              subscriptions.delete(subscriptionKey);
+            }
+          }
+        );
+
+        sub = { unsubscribe, resolvers: new Set() };
+        subscriptions.set(subscriptionKey, sub);
+      }
+
+      sub.resolvers.add({
+        resolve: resolve as (data: unknown) => void,
+        reject,
+      });
+    }),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    gcTime: 0,
   };
 }
 

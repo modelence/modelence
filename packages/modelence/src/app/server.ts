@@ -107,30 +107,7 @@ export async function startServer(
         typeMap: getResponseTypeMap(result),
       });
     } catch (error) {
-      // TODO: introduce error codes and handle them differently
-      // TODO: support multiple errors
-
-      // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
-      console.error(`Error in method ${methodName}:`, error);
-
-      if (error instanceof ModelenceError) {
-        res.status(error.status).send(error.message);
-      } else if (
-        error instanceof Error &&
-        error?.constructor?.name === 'ZodError' &&
-        'errors' in error
-      ) {
-        const zodError = error as z.ZodError;
-        const flattened = zodError.flatten();
-        const fieldMessages = Object.entries(flattened.fieldErrors)
-          .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
-          .join('; ');
-        const formMessages = flattened.formErrors.join('; ');
-        const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
-        res.status(400).send(allMessages);
-      } else {
-        res.status(500).send(error instanceof Error ? error.message : String(error));
-      }
+      handleMethodError(res, methodName, error);
     }
   });
 
@@ -228,6 +205,31 @@ export async function getCallContext(req: Request) {
     user: null,
     roles: getUnauthenticatedRoles(),
   };
+}
+
+function handleMethodError(res: Response, methodName: string, error: unknown) {
+  // TODO: introduce error codes and handle them differently
+  // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
+  console.error(`Error in method ${methodName}:`, error);
+
+  if (error instanceof ModelenceError) {
+    res.status(error.status).send(error.message);
+  } else if (
+    error instanceof Error &&
+    error?.constructor?.name === 'ZodError' &&
+    'errors' in error
+  ) {
+    const zodError = error as z.ZodError;
+    const flattened = zodError.flatten();
+    const fieldMessages = Object.entries(flattened.fieldErrors)
+      .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
+      .join('; ');
+    const formMessages = flattened.formErrors.join('; ');
+    const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
+    res.status(400).send(allMessages);
+  } else {
+    res.status(500).send(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function getClientIp(req: Request): string | undefined {

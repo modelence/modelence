@@ -26,6 +26,7 @@ export {
   getWebsocketClientProvider,
   setWebsocketClientProvider,
   startWebsockets,
+  subscribeLiveQuery,
 } from './websocket/client';
 export { ClientChannel } from './websocket/clientChannel';
 export { getLocalStorageSession } from './client/localStorage';

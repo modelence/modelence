@@ -129,7 +129,7 @@ describe('websocket/socketio/client', () => {
       websocketProvider.on({ category: 'updates', listener: listener1 });
       websocketProvider.on({ category: 'updates', listener: listener2 });
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(2);
+      expect(mockSocket.on).toHaveBeenCalledTimes(3);
       expect(mockSocket.on).toHaveBeenCalledWith('updates', listener1);
       expect(mockSocket.on).toHaveBeenCalledWith('updates', listener2);
     });
@@ -410,7 +410,7 @@ describe('websocket/socketio/client', () => {
       // Unsubscribe one
       websocketProvider.off({ category: 'updates', listener: listener1 });
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(2);
+      expect(mockSocket.on).toHaveBeenCalledTimes(3);
       expect(mockSocket.off).toHaveBeenCalledTimes(1);
       expect(mockSocket.off).toHaveBeenCalledWith('updates', listener1);
     });
