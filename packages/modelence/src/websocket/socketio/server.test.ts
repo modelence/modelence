@@ -123,7 +123,7 @@ describe('websocket/socketio/server', () => {
     const joinHandler = socketEvents.joinChannel;
     expect(joinHandler).toBeDefined();
     await joinHandler?.('chat:room1');
-    expect(accessSpy).toHaveBeenCalledWith({ id: 'room1', ...socket.data });
+    expect(accessSpy).toHaveBeenCalledWith(socket.data);
     expect(socket.join).toHaveBeenCalledWith('chat:room1');
     expect(socket.emit).toHaveBeenCalledWith('joinedChannel', 'chat:room1');
 
