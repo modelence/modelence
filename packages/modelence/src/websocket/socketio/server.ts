@@ -76,15 +76,14 @@ export async function init({
     });
 
     socket.on('joinChannel', async (channelName: string) => {
-      const [category, ...idParts] = channelName.split(':');
-      const id = idParts.join(':'); // Handle IDs that might contain colons
+      const [category] = channelName.split(':');
       let authorized = false;
 
       for (const channel of channels) {
         if (channel.category === category) {
           if (
             !channel.canAccessChannel ||
-            (await channel.canAccessChannel({ id, ...socket.data }))
+            (await channel.canAccessChannel(socket.data))
           ) {
             socket.join(channelName);
             authorized = true;
