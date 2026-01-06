@@ -180,9 +180,13 @@ export function modelenceLiveQuery<T = unknown>(
           },
           (error) => {
             const currentSub = subscriptions.get(subscriptionKey);
-            if (currentSub?.resolvers.size) {
-              currentSub.resolvers.forEach((r) => r.reject(new Error(error)));
-              currentSub.resolvers.clear();
+            if (currentSub) {
+              if (currentSub.resolvers.size) {
+                currentSub.resolvers.forEach((r) => r.reject(new Error(error)));
+                currentSub.resolvers.clear();
+              }
+              currentSub.unsubscribe();
+              subscriptions.delete(subscriptionKey);
             }
           }
         );
