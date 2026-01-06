@@ -31,11 +31,6 @@ function resubscribeAll() {
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
-  if (socketClient) {
-    console.warn('WebSocket already initialized. Skipping initialization.');
-    return;
-  }
-
   socketClient = io('/', {
     auth: {
       token: getLocalStorageSession()?.authToken,
