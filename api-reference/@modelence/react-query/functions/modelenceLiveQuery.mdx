@@ -1,0 +1,62 @@
+---
+sidebar_position: 1
+title: modelenceLiveQuery
+---
+
+[API Reference](/api-reference/@modelence/react-query/functions/../../../index) / [@modelence/react-query](/api-reference/@modelence/react-query/functions/../index) / modelenceLiveQuery
+
+> **modelenceLiveQuery**\<`T`\>(`methodName`, `args`): `object`
+
+Defined in: [index.ts:146](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L146)
+
+Creates query options for live queries with TanStack Query's useQuery hook.
+Data will be updated in real-time when underlying data changes.
+
+Requires ModelenceQueryClient to be connected to your QueryClient.
+
+## Example
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { modelenceLiveQuery } from '@modelence/react-query';
+
+function TodoList() {
+  // Subscribe to live updates - data refreshes automatically when todos change
+  const { data: todos } = useQuery(modelenceLiveQuery('todo.getAll', { userId }));
+
+  return (
+    <ul>
+      {todos?.map(todo => <li key={todo._id}>{todo.title}</li>)}
+    </ul>
+  );
+}
+```
+
+## Type Parameters
+
+| Type Parameter | Default type | Description |
+| ------ | ------ | ------ |
+| `T` | `unknown` | The expected return type of the query |
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `methodName` | `string` | The name of the method to query |
+| `args` | `Args` | Optional arguments to pass to the method |
+
+## Returns
+
+`object`
+
+Query options object for TanStack Query's useQuery
+
+| Name | Type | Default value | Defined in |
+| ------ | ------ | ------ | ------ |
+| `gcTime` | `number` | `0` | [index.ts:207](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L207) |
+| `queryFn()` | () => `Promise`\<`T`\> | - | [index.ts:155](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L155) |
+| `queryKey` | readonly \[`"live"`, `string`, `Args`\] | - | [index.ts:154](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L154) |
+| `refetchOnMount` | `boolean` | `false` | [index.ts:205](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L205) |
+| `refetchOnReconnect` | `boolean` | `false` | [index.ts:206](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L206) |
+| `refetchOnWindowFocus` | `boolean` | `false` | [index.ts:204](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L204) |
+| `staleTime` | `number` | `Infinity` | [index.ts:203](https://github.com/modelence/modelence/blob/dca9b607dbb1ba0ed6f2510846506b1a667d1b35/packages/react-query/src/index.ts#L203) |
