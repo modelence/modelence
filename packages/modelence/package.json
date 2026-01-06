@@ -34,7 +34,11 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
-    "postversion": "git push && git push --tags"
+    "postversion": "git push && git push --tags",
+    "prepare": "cd ../.. && git config core.hooksPath .husky"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx,js,jsx,json,css,md}": "prettier --write"
   },
   "repository": {
     "type": "git",
@@ -60,7 +64,9 @@
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "eslint": "^9.37.0",
+    "husky": "^9.1.7",
     "jest": "^30.2.0",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
