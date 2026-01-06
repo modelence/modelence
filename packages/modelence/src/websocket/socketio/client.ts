@@ -45,7 +45,9 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
   // Subscribe to all live queries on connect/reconnect
   socketClient.on('connect', () => {
     if (activeLiveSubscriptions.size > 0) {
-      console.log(`[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`);
+      console.log(
+        `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`
+      );
       resubscribeAll();
     }
   });
@@ -113,13 +115,27 @@ export function subscribeLiveQuery<T = unknown>(
 ): () => void {
   const subscriptionId = `sub-${++liveQueryCounter}-${Date.now()}`;
 
-  const handleData = ({ subscriptionId: sid, data, typeMap }: { subscriptionId: string; data: T; typeMap?: Record<string, unknown> }) => {
+  const handleData = ({
+    subscriptionId: sid,
+    data,
+    typeMap,
+  }: {
+    subscriptionId: string;
+    data: T;
+    typeMap?: Record<string, unknown>;
+  }) => {
     if (sid === subscriptionId) {
       onData(reviveResponseTypes(data, typeMap));
     }
   };
 
-  const handleError = ({ subscriptionId: sid, error }: { subscriptionId: string; error: string }) => {
+  const handleError = ({
+    subscriptionId: sid,
+    error,
+  }: {
+    subscriptionId: string;
+    error: string;
+  }) => {
     if (sid === subscriptionId) {
       console.error(`[Modelence] Live query error for ${method}:`, error);
       onError?.(error);

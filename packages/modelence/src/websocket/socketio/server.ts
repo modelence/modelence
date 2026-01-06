@@ -82,7 +82,10 @@ export async function init({
 
       for (const channel of channels) {
         if (channel.category === category) {
-          if (!channel.canAccessChannel || (await channel.canAccessChannel({ id, ...socket.data }))) {
+          if (
+            !channel.canAccessChannel ||
+            (await channel.canAccessChannel({ id, ...socket.data }))
+          ) {
             socket.join(channelName);
             authorized = true;
             socket.emit('joinedChannel', channelName);

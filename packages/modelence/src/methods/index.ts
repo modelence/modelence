@@ -125,7 +125,7 @@ export async function runLiveMethod(
     if (result !== undefined && typeof result !== 'function') {
       throw new Error(
         `Live query handler for '${name}' must return a cleanup function or undefined, not data. ` +
-        `Use publish() to send data to the client.`
+          `Use publish() to send data to the client.`
       );
     }
 

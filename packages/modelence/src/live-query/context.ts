@@ -16,4 +16,3 @@ export type LiveQueryCleanup = () => void;
 export interface LiveQueryContext {
   publish: LiveQueryPublish;
 }
-

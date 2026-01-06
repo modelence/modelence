@@ -1,8 +1,4 @@
-export {
-  type LiveQueryPublish,
-  type LiveQueryCleanup,
-  type LiveQueryContext,
-} from './context';
+export { type LiveQueryPublish, type LiveQueryCleanup, type LiveQueryContext } from './context';
 
 export {
   handleSubscribeLiveQuery,
