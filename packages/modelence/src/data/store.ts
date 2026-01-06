@@ -27,12 +27,6 @@ import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 
 /**
- * Helper type to match strings containing dots (for MongoDB dot notation)
- * @internal
- */
-type DottedString = `${string}.${string}`;
-
-/**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
  * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
  * @internal
@@ -58,12 +52,55 @@ type StrictRootFilterOperators<TSchema> = {
 };
 
 /**
+ * Helper type to extract array element type
+ * @internal
+ */
+type ArrayElement<T> = T extends (infer E)[] ? E : never;
+
+/**
+ * Helper type for $in/$nin that accepts any array/tuple where elements are assignable to T
+ * This solves the issue where TypeScript infers ['a', 'b'] as a tuple instead of ('a' | 'b')[]
+ * and where Array<Union> gets distributed into Union1[] | Union2[] | ...
+ * We wrap the Exclude in a tuple check to prevent distribution
+ * @internal
+ */
+type NonUndefined<T> = T extends undefined ? never : T;
+type ArrayLikeOfUnion<T> = [NonUndefined<T>] extends [never]
+  ? never
+  : ReadonlyArray<NonUndefined<T>> | Array<NonUndefined<T>>;
+
+/**
+ * Enhanced FilterOperators that fixes $in and $nin to properly accept arrays of union types
+ * MongoDB's native FilterOperators has issues with union types in $in/$nin arrays
+ * because TypeScript distributes Array<Union> into Array1 | Array2 | ...
+ * @internal
+ */
+type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
+  $in?: ArrayLikeOfUnion<T>;
+  $nin?: ArrayLikeOfUnion<T>;
+};
+
+/**
+ * Custom filter value type that handles array fields specially:
+ * - For array fields: allows element type, full array type, or FilterOperators
+ * - For non-array fields: allows exact type or FilterOperators
+ * We use [T] to prevent distribution when T is a union type
+ * @internal
+ */
+type FilterValue<T> = [T] extends [unknown[]]
+  ? ArrayElement<T> | T | EnhancedFilterOperators<T>
+  : [T] extends [never]
+    ? never
+    : T | EnhancedFilterOperators<[T] extends [never] ? never : T>;
+
+/**
  * Type-safe MongoDB filter that ensures only schema fields can be queried
  * while supporting all MongoDB query operators and dot notation for nested fields.
  *
  * This type combines:
  * - MongoDB's native `FilterOperators<T>` for field-level operators (comprehensive operator support)
  * - Custom `StrictRootFilterOperators<T>` for top-level operators without index signature
+ * - Custom array field handling: allows passing single element when field is an array
  * - Custom restriction: only strings containing dots are allowed for nested field queries
  *
  * @example
@@ -73,6 +110,7 @@ type StrictRootFilterOperators<TSchema> = {
  *     name: schema.string(),
  *     age: schema.number(),
  *     tags: schema.array(schema.string()),
+ *     collections: schema.array(schema.string()),
  *     address: schema.object({
  *       street: schema.string(),
  *       city: schema.string(),
@@ -89,6 +127,9 @@ type StrictRootFilterOperators<TSchema> = {
  * await dbUsers.findOne({ tags: { $in: ['typescript', 'mongodb'] } });
  * await dbUsers.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] });
  *
+ * // ✅ Valid - array field with single element (checks if array contains the element)
+ * await dbUsers.findOne({ collections: 'users' });
+ *
  * // ✅ Valid - dot notation for nested fields (must contain a dot)
  * await dbUsers.findOne({ 'address.city': 'New York' });
  * await dbUsers.findOne({ 'emails.0.address': 'test@example.com' });
@@ -98,13 +139,13 @@ type StrictRootFilterOperators<TSchema> = {
  * ```
  */
 export type TypedFilter<T> = {
-  [K in keyof WithId<T>]?: WithId<T>[K] | FilterOperators<WithId<T>[K]>;
+  [K in keyof WithId<T>]?: FilterValue<WithId<T>[K]>;
 } & StrictRootFilterOperators<T> & {
     // Support for MongoDB dot notation (e.g., 'emails.address', 'profile.settings.theme')
     // Only strings containing dots are allowed, which provides better type safety
     // while still enabling MongoDB's nested field query syntax
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [K: DottedString]: any;
+    [K: `${string}.${string}`]: any;
   };
 
 /**

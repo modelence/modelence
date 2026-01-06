@@ -45,6 +45,7 @@ export async function handleOAuthUserAuthentication(
       await authenticateUser(res, existingUser._id);
 
       getAuthConfig().onAfterLogin?.({
+        provider: userData.providerName,
         user: existingUser,
         session,
         connectionInfo,
@@ -58,6 +59,7 @@ export async function handleOAuthUserAuthentication(
       getAuthConfig().login?.onError?.(error);
 
       getAuthConfig().onLoginError?.({
+        provider: userData.providerName,
         error,
         session,
         connectionInfo,
@@ -115,6 +117,7 @@ export async function handleOAuthUserAuthentication(
 
     if (userDocument) {
       getAuthConfig().onAfterSignup?.({
+        provider: userData.providerName,
         user: userDocument,
         session,
         connectionInfo,
@@ -125,6 +128,7 @@ export async function handleOAuthUserAuthentication(
   } catch (error) {
     if (error instanceof Error) {
       getAuthConfig().onSignupError?.({
+        provider: userData.providerName,
         error,
         session,
         connectionInfo,

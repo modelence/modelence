@@ -78,24 +78,22 @@ export async function init({
     socket.on('joinChannel', async (channelName: string) => {
       const [category, ...idParts] = channelName.split(':');
       const id = idParts.join(':'); // Handle IDs that might contain colons
+      let authorized = false;
 
       for (const channel of channels) {
         if (channel.category === category) {
-          const canAccess =
-            !channel.canAccessChannel ||
-            (await channel.canAccessChannel({ id, ...socket.data }));
-
-          if (canAccess) {
+          if (!channel.canAccessChannel || (await channel.canAccessChannel({ id, ...socket.data }))) {
             socket.join(channelName);
+            authorized = true;
             socket.emit('joinedChannel', channelName);
-          } else {
-            socket.emit('channelAccessDenied', channelName);
           }
-          return;
+          break; // Found matching channel, stop searching
         }
       }
 
-      console.warn(`Unknown channel: ${category}`);
+      if (!authorized) {
+        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+      }
     });
 
     socket.on('leaveChannel', (channelName: string) => {

@@ -110,6 +110,7 @@ describe('auth/login', () => {
     expect(mockCompare).toHaveBeenCalledWith('Secret123', 'hashed');
     expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
     expect(authConfig.onAfterLogin).toHaveBeenCalledWith({
+      provider: 'email',
       user: expect.objectContaining({ _id: userId }),
       session: baseContext.session,
       connectionInfo: baseContext.connectionInfo,
@@ -160,6 +161,7 @@ describe('auth/login', () => {
       baseUrl: 'https://app.example.com',
     });
     expect(authConfig.onLoginError).toHaveBeenCalledWith({
+      provider: 'email',
       error: expect.any(Error),
       session: baseContext.session,
       connectionInfo: baseContext.connectionInfo,

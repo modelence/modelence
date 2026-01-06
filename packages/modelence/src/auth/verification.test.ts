@@ -11,6 +11,7 @@ const mockTimeHours = jest.fn();
 const mockHtmlToText = jest.fn<(html: string) => string>();
 const mockTemplate =
   jest.fn<(args: { name?: string; email: string; verificationUrl: string }) => string>();
+const mockGetAuthConfig = jest.fn();
 
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
@@ -46,6 +47,10 @@ jest.unstable_mockModule('./templates/emailVerficationTemplate', () => ({
   emailVerificationTemplate: mockTemplate,
 }));
 
+jest.unstable_mockModule('@/app/authConfig', () => ({
+  getAuthConfig: mockGetAuthConfig,
+}));
+
 const { handleVerifyEmail, sendVerificationEmail } = await import('./verification');
 
 describe('auth/verification', () => {
@@ -59,6 +64,10 @@ describe('auth/verification', () => {
         subject: 'Verify your email',
         template: null,
       },
+    });
+    mockGetAuthConfig.mockReturnValue({
+      onAfterEmailVerification: jest.fn(),
+      onEmailVerificationError: jest.fn(),
     });
     mockHtmlToText.mockImplementation((html: string) => html);
     mockTemplate.mockImplementation(
@@ -74,6 +83,15 @@ describe('auth/verification', () => {
   describe('handleVerifyEmail', () => {
     const baseParams = {
       query: { token: 'token' },
+      headers: {
+        'user-agent': 'test-agent',
+        'accept-language': 'en-US',
+        referer: 'https://example.com/signup',
+      },
+      req: {
+        ip: '192.168.1.1',
+        socket: { remoteAddress: '192.168.1.1' },
+      },
     };
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -93,10 +111,19 @@ describe('auth/verification', () => {
         email: 'user@example.com',
         expiresAt: new Date(Date.now() + 1000),
       };
+      const userDoc = {
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      };
+      const authConfig = {
+        onAfterEmailVerification: jest.fn(),
+        onEmailVerificationError: jest.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
       mockUsersFindOne
         .mockResolvedValueOnce({ _id: 'user123' } as never)
-        .mockResolvedValueOnce(null as never);
+        .mockResolvedValueOnce(userDoc as never);
       mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
 
       const result = await handleVerifyEmail(baseParams as never);
@@ -115,6 +142,18 @@ describe('auth/verification', () => {
         { $set: { 'emails.$.verified': true } }
       );
       expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
+      expect(authConfig.onAfterEmailVerification).toHaveBeenCalledWith({
+        provider: 'email',
+        user: userDoc,
+        session: null,
+        connectionInfo: {
+          baseUrl: undefined,
+          ip: '192.168.1.1',
+          userAgent: 'test-agent',
+          acceptLanguage: 'en-US',
+          referrer: 'https://example.com/signup',
+        },
+      });
       expect(result).toEqual({
         status: 301,
         redirect: '/verified?status=verified',
@@ -122,10 +161,27 @@ describe('auth/verification', () => {
     });
 
     test('redirects with error when token is invalid', async () => {
+      const authConfig = {
+        onAfterEmailVerification: jest.fn(),
+        onEmailVerificationError: jest.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(null as never);
 
       const result = await handleVerifyEmail(baseParams as never);
 
+      expect(authConfig.onEmailVerificationError).toHaveBeenCalledWith({
+        provider: 'email',
+        error: expect.any(Error),
+        session: null,
+        connectionInfo: {
+          baseUrl: undefined,
+          ip: '192.168.1.1',
+          userAgent: 'test-agent',
+          acceptLanguage: 'en-US',
+          referrer: 'https://example.com/signup',
+        },
+      });
       expect(result).toEqual({
         status: 301,
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
@@ -133,6 +189,11 @@ describe('auth/verification', () => {
     });
 
     test('redirects with error when user not found', async () => {
+      const authConfig = {
+        onAfterEmailVerification: jest.fn(),
+        onEmailVerificationError: jest.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
       const tokenDoc = {
         _id: 'token-id',
         token: 'token',
@@ -145,6 +206,18 @@ describe('auth/verification', () => {
 
       const result = await handleVerifyEmail(baseParams as never);
 
+      expect(authConfig.onEmailVerificationError).toHaveBeenCalledWith({
+        provider: 'email',
+        error: expect.any(Error),
+        session: null,
+        connectionInfo: {
+          baseUrl: undefined,
+          ip: '192.168.1.1',
+          userAgent: 'test-agent',
+          acceptLanguage: 'en-US',
+          referrer: 'https://example.com/signup',
+        },
+      });
       expect(result).toEqual({
         status: 301,
         redirect: '/verified?status=error&message=User%20not%20found',
