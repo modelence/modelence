@@ -74,17 +74,40 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       });
     };
 
-    await fetchAndEmit();
+    // Set to true to perform initial fetch at the beginning
+    let isPendingPublish = true;
+    let isFetching = false;
 
-    const cleanup = liveData.watch({
-      publish: () => {
-        fetchAndEmit().catch((err) => {
-          console.error(`[LiveQuery] Error re-fetching ${method}:`, err);
+    const processPendingPublish = () => {
+      if (!isPendingPublish || isFetching) {
+        return;
+      }
+      isPendingPublish = false;
+      isFetching = true;
+      fetchAndEmit()
+        .catch((err) => {
+          console.error(`[LiveQuery] Error fetching data for ${method}:`, err);
           socket.emit('liveQueryError', {
             subscriptionId,
             error: err instanceof Error ? err.message : String(err),
           });
+        })
+        .finally(() => {
+          isFetching = false;
+          // Process the next pending publish if another publish was triggered while fetching
+          processPendingPublish();
         });
+    };
+
+    const cleanup = liveData.watch({
+      publish: () => {
+        /*
+          Use a pending flag to ensure concurrent publishes are processed sequentially
+          (and run only once if there have been multiple publishes while the previous one was processing)
+          Without sequential processing, we could end up sending an older fetch after a newer one
+        */
+        isPendingPublish = true;
+        processPendingPublish();
       },
     });
 
@@ -101,6 +124,9 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     }
 
     subscription.cleanup = cleanup || null;
+
+    // Process initial fetch
+    processPendingPublish();
   } catch (error) {
     subs.delete(subscriptionId);
     console.error(`[LiveQuery] Error in ${method}:`, error);
