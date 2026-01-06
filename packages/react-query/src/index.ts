@@ -61,7 +61,13 @@ export class ModelenceQueryClient {
       if (event.type === 'removed') {
         const subscriptionKey = hashKey(event.query.queryKey);
         const sub = subscriptions.get(subscriptionKey);
-        if (sub?.resolvers.size === 0) {
+        if (sub) {
+          // Reject any pending resolvers since the query was removed
+          if (sub.resolvers.size > 0) {
+            const cancelError = new Error('Query was removed from cache');
+            sub.resolvers.forEach((r) => r.reject(cancelError));
+            sub.resolvers.clear();
+          }
           sub.unsubscribe();
           subscriptions.delete(subscriptionKey);
         }
