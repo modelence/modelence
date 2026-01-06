@@ -81,15 +81,12 @@ export async function init({
 
       for (const channel of channels) {
         if (channel.category === category) {
-          if (
-            !channel.canAccessChannel ||
-            (await channel.canAccessChannel(socket.data))
-          ) {
+          if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
             socket.join(channelName);
             authorized = true;
             socket.emit('joinedChannel', channelName);
           }
-          break; // Found matching channel, stop searching
+          break; // Found matching channel - stop searching
         }
       }
 
