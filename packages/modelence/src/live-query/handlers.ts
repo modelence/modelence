@@ -87,6 +87,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 
     subscription.cleanup = cleanup;
   } catch (error) {
+    subs.delete(subscriptionId);
     console.error(`[LiveQuery] Error in ${method}:`, error);
     socket.emit('liveQueryError', {
       subscriptionId,
