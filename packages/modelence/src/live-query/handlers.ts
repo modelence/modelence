@@ -16,6 +16,7 @@ const unsubscribeLiveQuerySchema = z.object({
 
 interface ActiveSubscription {
   cleanup: LiveQueryCleanup | null;
+  aborted?: boolean;
 }
 
 const socketSubscriptions = new Map<string, Map<string, ActiveSubscription>>();
@@ -40,6 +41,22 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   }
   const { subscriptionId, method, args } = parsed.data;
 
+  const subs = getSocketSubs(socket);
+
+  // Clean up any existing subscription with the same ID (handles reconnect race conditions)
+  const existingSub = subs.get(subscriptionId);
+  if (existingSub?.cleanup) {
+    try {
+      existingSub.cleanup();
+    } catch (err) {
+      console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+    }
+  }
+
+  // Create placeholder entry BEFORE the async call so disconnect handler can find it
+  const subscription: ActiveSubscription = { cleanup: null };
+  subs.set(subscriptionId, subscription);
+
   try {
     const publish = (data: unknown) => {
       socket.emit('liveQueryData', {
@@ -51,19 +68,19 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 
     const cleanup = await runLiveMethod(method, args, socket.data, { publish });
 
-    const subs = getSocketSubs(socket);
-
-    // Clean up to handle race conditions with reconnects
-    const existingSub = subs.get(subscriptionId);
-    if (existingSub?.cleanup) {
-      try {
-        existingSub.cleanup();
-      } catch (err) {
-        console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+    if (subscription.aborted) {
+      // Unsubscribe/disconnect happened during setup - clean up immediately
+      if (cleanup) {
+        try {
+          cleanup();
+        } catch (err) {
+          console.error('[LiveQuery] Error cleaning up after disconnect during setup:', err);
+        }
       }
+      return;
     }
 
-    subs.set(subscriptionId, { cleanup });
+    subscription.cleanup = cleanup;
   } catch (error) {
     console.error(`[LiveQuery] Error in ${method}:`, error);
     socket.emit('liveQueryError', {
@@ -92,6 +109,8 @@ export function handleUnsubscribeLiveQuery(socket: Socket, payload: unknown) {
       } catch (err) {
         console.error('[LiveQuery] Error in cleanup:', err);
       }
+    } else {
+      sub.aborted = true;
     }
     subs.delete(subscriptionId);
   }
@@ -108,6 +127,8 @@ export function handleLiveQueryDisconnect(socket: Socket) {
         } catch (err) {
           console.error('[LiveQuery] Error in cleanup on disconnect:', err);
         }
+      } else {
+        sub.aborted = true;
       }
     }
     socketSubscriptions.delete(socket.id);
