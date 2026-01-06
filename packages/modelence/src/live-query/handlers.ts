@@ -45,11 +45,16 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 
   // Clean up any existing subscription with the same ID (handles reconnect race conditions)
   const existingSub = subs.get(subscriptionId);
-  if (existingSub?.cleanup) {
-    try {
-      existingSub.cleanup();
-    } catch (err) {
-      console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+  if (existingSub) {
+    if (existingSub.cleanup) {
+      try {
+        existingSub.cleanup();
+      } catch (err) {
+        console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+      }
+    } else {
+      // Subscription is still initializing - mark it for abort so it cleans up when ready
+      existingSub.aborted = true;
     }
   }
 
