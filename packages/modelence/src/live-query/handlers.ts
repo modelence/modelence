@@ -63,7 +63,10 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const publish = (data: unknown) => {
+    const liveData = await runLiveMethod(method, args, socket.data);
+
+    const fetchAndEmit = async () => {
+      const data = await liveData.fetch();
       socket.emit('liveQueryData', {
         subscriptionId,
         data,
@@ -71,10 +74,22 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       });
     };
 
-    const cleanup = await runLiveMethod(method, args, socket.data, { publish });
+    await fetchAndEmit();
+
+    const cleanup = liveData.watch({
+      publish: () => {
+        fetchAndEmit().catch((err) => {
+          console.error(`[LiveQuery] Error re-fetching ${method}:`, err);
+          socket.emit('liveQueryError', {
+            subscriptionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      },
+    });
 
     if (subscription.aborted) {
-      // Unsubscribe/disconnect happened during setup - clean up immediately
+      // Unsubscribe/disconnect happened during watch setup - clean up immediately
       if (cleanup) {
         try {
           cleanup();
@@ -85,7 +100,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       return;
     }
 
-    subscription.cleanup = cleanup;
+    subscription.cleanup = cleanup || null;
   } catch (error) {
     subs.delete(subscriptionId);
     console.error(`[LiveQuery] Error in ${method}:`, error);
