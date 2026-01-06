@@ -114,13 +114,12 @@ export async function runLiveMethod(
 
   const transaction = startTransaction('method', `method:${name}:live`, { type, args });
 
+  let result;
   try {
     requireAccess(context.roles, method.permissions);
 
     const extendedContext = { ...context, ...liveContext };
-    const result = await handler(args, extendedContext);
-
-    transaction.end();
+    result = await handler(args, extendedContext);
 
     if (result !== undefined && typeof result !== 'function') {
       throw new Error(
@@ -128,10 +127,12 @@ export async function runLiveMethod(
           `Use publish() to send data to the client.`
       );
     }
-
-    return (result as LiveQueryCleanup) || null;
   } catch (error) {
     transaction.end('error');
     throw error;
   }
+
+  transaction.end();
+
+  return (result as LiveQueryCleanup) || null;
 }
