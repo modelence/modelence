@@ -67,6 +67,9 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 
     const fetchAndEmit = async () => {
       const data = await liveData.fetch();
+      if (subscription.aborted) {
+        return;
+      }
       socket.emit('liveQueryData', {
         subscriptionId,
         data,
@@ -79,13 +82,16 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     let isFetching = false;
 
     const processPendingPublish = () => {
-      if (!isPendingPublish || isFetching) {
+      if (subscription.aborted || !isPendingPublish || isFetching) {
         return;
       }
       isPendingPublish = false;
       isFetching = true;
       fetchAndEmit()
         .catch((err) => {
+          if (subscription.aborted) {
+            return;
+          }
           console.error(`[LiveQuery] Error fetching data for ${method}:`, err);
           socket.emit('liveQueryError', {
             subscriptionId,
