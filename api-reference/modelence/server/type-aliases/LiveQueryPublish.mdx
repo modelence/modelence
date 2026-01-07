@@ -5,24 +5,12 @@ title: LiveQueryPublish
 
 [API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / LiveQueryPublish
 
-> **LiveQueryPublish**\<`T`\> = (`data`) => `void`
+> **LiveQueryPublish** = () => `void`
 
-Defined in: [src/live-query/context.ts:5](https://github.com/modelence/modelence/blob/90c266574333430bd7e5eb1b19555ddac1006208/packages/modelence/src/live-query/context.ts#L5)
+Defined in: [src/live-query/context.ts:5](https://github.com/modelence/modelence/blob/e70c7e758bc5ad185d771fba4dfe02d30281b93a/packages/modelence/src/live-query/context.ts#L5)
 
-Publish function provided to live query handlers.
-Call this to send data to the subscribed client.
-
-## Type Parameters
-
-| Type Parameter | Default type |
-| ------ | ------ |
-| `T` | `unknown` |
-
-## Parameters
-
-| Parameter | Type |
-| ------ | ------ |
-| `data` | `T` |
+Publish function provided to watch handlers.
+Call this to trigger a re-fetch and send updated data to the client.
 
 ## Returns
 
