@@ -63,7 +63,13 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const publish = (data: unknown) => {
+    const liveData = await runLiveMethod(method, args, socket.data);
+
+    const fetchAndEmit = async () => {
+      const data = await liveData.fetch();
+      if (subscription.aborted) {
+        return;
+      }
       socket.emit('liveQueryData', {
         subscriptionId,
         data,
@@ -71,10 +77,48 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       });
     };
 
-    const cleanup = await runLiveMethod(method, args, socket.data, { publish });
+    // Set to true to perform initial fetch at the beginning
+    let isPendingPublish = true;
+    let isFetching = false;
+
+    const processPendingPublish = () => {
+      if (subscription.aborted || !isPendingPublish || isFetching) {
+        return;
+      }
+      isPendingPublish = false;
+      isFetching = true;
+      fetchAndEmit()
+        .catch((err) => {
+          if (subscription.aborted) {
+            return;
+          }
+          console.error(`[LiveQuery] Error fetching data for ${method}:`, err);
+          socket.emit('liveQueryError', {
+            subscriptionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        })
+        .finally(() => {
+          isFetching = false;
+          // Process the next pending publish if another publish was triggered while fetching
+          processPendingPublish();
+        });
+    };
+
+    const cleanup = liveData.watch({
+      publish: () => {
+        /*
+          Use a pending flag to ensure concurrent publishes are processed sequentially
+          (and run only once if there have been multiple publishes while the previous one was processing)
+          Without sequential processing, we could end up sending an older fetch after a newer one
+        */
+        isPendingPublish = true;
+        processPendingPublish();
+      },
+    });
 
     if (subscription.aborted) {
-      // Unsubscribe/disconnect happened during setup - clean up immediately
+      // Unsubscribe/disconnect happened during watch setup - clean up immediately
       if (cleanup) {
         try {
           cleanup();
@@ -85,7 +129,10 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       return;
     }
 
-    subscription.cleanup = cleanup;
+    subscription.cleanup = cleanup || null;
+
+    // Process initial fetch
+    processPendingPublish();
   } catch (error) {
     subs.delete(subscriptionId);
     console.error(`[LiveQuery] Error in ${method}:`, error);

@@ -2,7 +2,7 @@ import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
-import { LiveQueryCleanup, LiveQueryContext } from '../live-query';
+import { LiveData } from '../live-query';
 
 const methods: Record<string, Method<unknown>> = {};
 
@@ -92,14 +92,9 @@ export async function runMethod(name: string, args: Args, context: Context) {
 
 /**
  * Run a method as a live query.
- * The handler receives a `publish` function in context and should return a cleanup function.
+ * The handler should return a LiveData object with fetch and watch functions.
  */
-export async function runLiveMethod(
-  name: string,
-  args: Args,
-  context: Context,
-  liveContext: LiveQueryContext
-): Promise<LiveQueryCleanup | null> {
+export async function runLiveMethod(name: string, args: Args, context: Context): Promise<LiveData> {
   requireServer();
 
   const method = methods[name];
@@ -118,13 +113,11 @@ export async function runLiveMethod(
   try {
     requireAccess(context.roles, method.permissions);
 
-    const extendedContext = { ...context, ...liveContext };
-    result = await handler(args, extendedContext);
+    result = await handler(args, context);
 
-    if (result !== undefined && typeof result !== 'function') {
+    if (!(result instanceof LiveData)) {
       throw new Error(
-        `Live query handler for '${name}' must return a cleanup function or undefined, not data. ` +
-          `Use publish() to send data to the client.`
+        `Live query handler for '${name}' must return a LiveData object with fetch and watch functions.`
       );
     }
   } catch (error) {
@@ -134,5 +127,5 @@ export async function runLiveMethod(
 
   transaction.end();
 
-  return (result as LiveQueryCleanup) || null;
+  return result;
 }

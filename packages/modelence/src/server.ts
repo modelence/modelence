@@ -34,4 +34,10 @@ export { ServerChannel } from './websocket/serverChannel';
 export { authenticate } from './auth';
 export { sendEmail } from './app/email';
 
-export type { LiveQueryPublish, LiveQueryCleanup, LiveQueryContext } from './live-query';
+export { LiveData } from './live-query';
+export type {
+  LiveDataConfig,
+  LiveQueryPublish,
+  LiveQueryCleanup,
+  LiveQueryWatch,
+} from './live-query';
