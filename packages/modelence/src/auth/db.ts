@@ -1,5 +1,6 @@
 import { schema } from '../data/types';
 import { Store } from '../data/store';
+import { sessionsCollection } from './session';
 
 /**
  * Database collection for storing user accounts with authentication methods and profile information.
@@ -48,6 +49,15 @@ export const usersCollection = new Store('_modelenceUsers', {
         })
         .optional(),
     }),
+  },
+  methods: {
+    async getLastActiveDate() {
+      const session = await sessionsCollection.findOne(
+        { userId: this._id },
+        { sort: { lastActiveDate: -1 } }
+      );
+      return session?.lastActiveDate ?? null;
+    },
   },
   indexes: [
     {

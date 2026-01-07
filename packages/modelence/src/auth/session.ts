@@ -12,9 +12,15 @@ export const sessionsCollection = new Store('_modelenceSessions', {
     authToken: schema.string(),
     createdAt: schema.date(),
     expiresAt: schema.date(),
+    lastActiveDate: schema.date().optional(),
     userId: schema.userId().nullable(),
   },
-  indexes: [{ key: { authToken: 1 }, unique: true }, { key: { expiresAt: 1 } }],
+  indexes: [
+    { key: { authToken: 1 }, unique: true },
+    { key: { expiresAt: 1 } },
+    { key: { lastActiveDate: 1 } },
+    { key: { userId: 1, lastActiveDate: -1 } },
+  ],
   // TODO: add TTL index on expiresAt
 });
 
