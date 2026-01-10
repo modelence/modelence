@@ -13,6 +13,7 @@ export async function connect() {
 
   client = new MongoClient(mongodbUri, {
     maxPoolSize: 20,
+    ignoreUndefined: true,
   });
 
   try {
