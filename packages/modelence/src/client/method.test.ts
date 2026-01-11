@@ -20,7 +20,7 @@ const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
 const originalFetch = global.fetch;
 const originalWindow = globalThis.window;
 
-const { callMethod } = await import('./method');
+const { callMethod, MethodError } = await import('./method');
 
 describe('client/method', () => {
   beforeEach(() => {
@@ -69,15 +69,20 @@ describe('client/method', () => {
     spyJSON.mockRestore();
   });
 
-  test('callMethod throws and propagates errors with handleError notification', async () => {
-    const error = new Error('Server error');
+  test('callMethod throws MethodError with status code and propagates errors with handleError notification', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
-      text: async () => error.message,
+      status: 402,
+      text: async () => 'Payment required',
     } as unknown as Response);
 
-    await expect(callMethod('test.method')).rejects.toThrow('Server error');
-    expect(mockHandleError).toHaveBeenCalledWith(expect.any(Error), 'test.method');
+    await expect(callMethod('test.method')).rejects.toThrow('Payment required');
+    expect(mockHandleError).toHaveBeenCalledWith(expect.any(MethodError), 'test.method');
+
+    // Verify the error has the correct status
+    const thrownError = mockHandleError.mock.calls[0][0] as InstanceType<typeof MethodError>;
+    expect(thrownError.status).toBe(402);
+    expect(thrownError.name).toBe('MethodError');
   });
 
   test('callMethod throws when response lacks data', async () => {

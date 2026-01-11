@@ -1,19 +1,26 @@
+import { jest } from '@jest/globals';
 import { setErrorHandler, handleError } from './errorHandler';
 
 describe('client/errorHandler', () => {
+  let consoleErrorSpy: ReturnType<typeof jest.spyOn>;
+
   beforeEach(() => {
     // Reset to default error handler before each test
     setErrorHandler((error, methodName) => {
-      throw new Error(`Error calling method '${methodName}': ${error.toString()}`);
+      console.error(`Error calling method '${methodName}':`, error);
     });
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
   });
 
   describe('handleError', () => {
-    test('should throw error with default handler', () => {
+    test('should log error with default handler', () => {
       const error = new Error('Test error');
-      expect(() => handleError(error, 'testMethod')).toThrow(
-        "Error calling method 'testMethod': Error: Test error"
-      );
+      handleError(error, 'testMethod');
+      expect(consoleErrorSpy).toHaveBeenCalledWith("Error calling method 'testMethod':", error);
     });
 
     test('should use custom error handler when set', () => {
