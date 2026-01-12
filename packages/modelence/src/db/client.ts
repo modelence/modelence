@@ -13,6 +13,9 @@ export async function connect() {
 
   client = new MongoClient(mongodbUri, {
     maxPoolSize: 20,
+    driverInfo: {
+      name: "Modelence"
+    }
   });
 
   try {
