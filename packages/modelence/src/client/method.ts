@@ -11,6 +11,16 @@ import { getLocalStorageSession } from './localStorage';
 import { handleError } from './errorHandler';
 import { reviveResponseTypes } from '../methods/serialize';
 
+export class MethodError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'MethodError';
+    this.status = status;
+  }
+}
+
 export type MethodArgs = Record<string, unknown>;
 
 export type CallMethodOptions = {
@@ -53,7 +63,7 @@ async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T>
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(error);
+    throw new MethodError(error, response.status);
   }
 
   const text = await response.text();

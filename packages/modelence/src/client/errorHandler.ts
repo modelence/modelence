@@ -1,7 +1,7 @@
 export type ErrorHandler = (error: Error, methodName: string) => void;
 
 let errorHandler: ErrorHandler = (error, methodName) => {
-  throw new Error(`Error calling method '${methodName}': ${error.toString()}`);
+  console.error(`Error calling method '${methodName}':`, error);
 };
 
 export function setErrorHandler(handler: ErrorHandler) {
