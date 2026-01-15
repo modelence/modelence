@@ -11,10 +11,12 @@ export async function connect() {
     throw new Error('MongoDB URI is not set');
   }
 
+  const modelencePackageJson = await import('../../package.json'); 
   client = new MongoClient(mongodbUri, {
     maxPoolSize: 20,
     driverInfo: {
-      name: "Modelence"
+      name: "Modelence",
+      version: modelencePackageJson.default.version
     }
   });
 
