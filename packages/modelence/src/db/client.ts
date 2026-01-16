@@ -17,7 +17,8 @@ export async function connect() {
     driverInfo: {
       name: "Modelence",
       version: packageJson.version
-    }
+    },
+    ignoreUndefined: true,
   });
 
   try {
