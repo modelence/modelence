@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import { getConfig } from '../config/server';
+import packageJson from '../../package.json';
 
 let client: MongoClient | null = null;
 
@@ -11,12 +12,11 @@ export async function connect() {
     throw new Error('MongoDB URI is not set');
   }
 
-  const modelencePackageJson = await import('../../package.json'); 
   client = new MongoClient(mongodbUri, {
     maxPoolSize: 20,
     driverInfo: {
       name: "Modelence",
-      version: modelencePackageJson.default.version
+      version: packageJson.version
     }
   });
 
