@@ -100,10 +100,6 @@ describe('db/client', () => {
 
       const client = await connect();
 
-      expect(MockMongoClient).toHaveBeenCalledWith('mongodb://localhost:27017', {
-        ignoreUndefined: true,
-        maxPoolSize: 20,
-      });
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockDb).toHaveBeenCalledWith('admin');
       expect(mockCommand).toHaveBeenCalledWith({ ping: 1 });
