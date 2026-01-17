@@ -99,8 +99,12 @@ describe('db/client', () => {
       mockCommand.mockResolvedValue({ ok: 1 });
 
       const client = await connect();
-
+      // Expect options to include driverInfo along with other settings
       expect(MockMongoClient).toHaveBeenCalledWith('mongodb://localhost:27017', {
+        driverInfo: {
+          name: 'Modelence',
+          version: expect.any(String),
+        },
         ignoreUndefined: true,
         maxPoolSize: 20,
       });
