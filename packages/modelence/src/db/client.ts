@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import { getConfig } from '../config/server';
+import packageJson from '../../package.json';
 
 let client: MongoClient | null = null;
 
@@ -13,6 +14,10 @@ export async function connect() {
 
   client = new MongoClient(mongodbUri, {
     maxPoolSize: 20,
+    driverInfo: {
+      name: 'Modelence',
+      version: packageJson.version,
+    },
     ignoreUndefined: true,
   });
 
