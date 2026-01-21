@@ -99,7 +99,6 @@ describe('db/client', () => {
       mockCommand.mockResolvedValue({ ok: 1 });
 
       const client = await connect();
-
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockDb).toHaveBeenCalledWith('admin');
       expect(mockCommand).toHaveBeenCalledWith({ ping: 1 });
