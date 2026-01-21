@@ -208,51 +208,40 @@ export async function getCallContext(req: Request) {
 }
 
 function handleMethodError(res: Response, methodName: string, error: unknown) {
-  // TODO: introduce error codes and handle them differently
   // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
 
-  // Safely log the error to avoid serialization issues with complex error objects
-  try {
-    if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
-      const zodError = error as z.ZodError;
-      const flattened = zodError.flatten();
-      const fieldMessages = Object.entries(flattened.fieldErrors)
-        .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
-        .join('; ');
-      const formMessages = flattened.formErrors.join('; ');
-      const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
-      console.error(`Error in method ${methodName}: ZodError - ${allMessages}`);
-    } else if (error instanceof Error) {
-      console.error(`Error in method ${methodName}:`, error.message);
-      if (error.stack) {
-        console.error(error.stack);
-      }
-    } else {
-      console.error(`Error in method ${methodName}:`, String(error));
+  if (error instanceof ModelenceError) {
+    if (error.status >= 500 && error.status < 600) {
+      console.error(`Error calling ${methodName}:`, error);
     }
-  } catch (_logError) {
-    // Fallback if error logging itself fails (prevents infinite error loops)
-    console.error(`Error in method ${methodName}: [Failed to log error details]`);
+    res.status(error.status).send(error.message);
+    return;
   }
 
-  if (error instanceof ModelenceError) {
-    res.status(error.status).send(error.message);
-  } else if (
-    error instanceof Error &&
-    error?.constructor?.name === 'ZodError' &&
-    'errors' in error
-  ) {
-    const zodError = error as z.ZodError;
-    const flattened = zodError.flatten();
-    const fieldMessages = Object.entries(flattened.fieldErrors)
-      .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
-      .join('; ');
-    const formMessages = flattened.formErrors.join('; ');
-    const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
-    res.status(400).send(allMessages);
-  } else {
-    res.status(500).send(error instanceof Error ? error.message : String(error));
+  if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
+    let errorMessage = '';
+    try {
+      errorMessage = parseZodError(error as z.ZodError);
+    } catch (parsingError) {
+      console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+      errorMessage = 'Validation failed';
+    }
+    res.status(400).send(errorMessage);
+    return;
   }
+
+  console.error(`Error calling ${methodName}:`, error);
+  res.status(500).send(error instanceof Error ? error.message : String(error));
+}
+
+function parseZodError(zodError: z.ZodError): string {
+  const flattened = zodError.flatten();
+  const fieldMessages = Object.entries(flattened.fieldErrors).map(
+    ([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`
+  );
+  const formMessages = flattened.formErrors;
+  const allMessages = [...fieldMessages, ...formMessages].filter(Boolean);
+  return allMessages.join('; ');
 }
 
 function getClientIp(req: Request): string | undefined {
