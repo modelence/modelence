@@ -115,6 +115,18 @@ export function modelenceQuery<T = unknown>(
   };
 }
 
+export interface LiveQueryOptions {
+  /**
+   * If false, the socket subscription will not be made.
+   * Use this to prevent subscriptions until certain conditions are met (e.g., user is authenticated).
+   * 
+   * IMPORTANT: You must also pass `enabled` to useQuery for proper React Query integration.
+   * 
+   * @default true
+   */
+  enabled?: boolean;
+}
+
 /**
  * Creates query options for live queries with TanStack Query's useQuery hook.
  * Data will be updated in real-time when underlying data changes.
@@ -138,15 +150,32 @@ export function modelenceQuery<T = unknown>(
  * }
  * ```
  * 
+ * @example
+ * ```tsx
+ * // With conditional subscription (e.g., wait for authentication)
+ * function AuthenticatedData() {
+ *   const { user } = useSession();
+ *   const enabled = !!user;
+ *   
+ *   const { data } = useQuery({
+ *     ...modelenceLiveQuery('notifications.getPending', {}, { enabled }),
+ *     enabled, // Also pass to useQuery
+ *   });
+ * }
+ * ```
+ * 
  * @typeParam T - The expected return type of the query
  * @param methodName - The name of the method to query
  * @param args - Optional arguments to pass to the method
+ * @param options - Optional configuration including `enabled` to control subscription
  * @returns Query options object for TanStack Query's useQuery
  */
 export function modelenceLiveQuery<T = unknown>(
   methodName: string, 
-  args: Args = {}
+  args: Args = {},
+  options: LiveQueryOptions = {}
 ) {
+  const { enabled = true } = options;
   const queryKey = ['live', methodName, args] as const;
   const subscriptionKey = hashKey(queryKey);
 
@@ -157,6 +186,14 @@ export function modelenceLiveQuery<T = unknown>(
         const error = new Error('ModelenceQueryClient must be connected before using modelenceLiveQuery()');
         console.error('[Modelence]', error.message);
         reject(error);
+        return;
+      }
+
+      // Don't subscribe if explicitly disabled
+      // This prevents socket subscriptions when conditions aren't met (e.g., not authenticated)
+      if (!enabled) {
+        // Return without resolving - the query will stay in pending state
+        // React Query should not call queryFn when enabled:false, but this is a safety check
         return;
       }
 
