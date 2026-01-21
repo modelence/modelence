@@ -210,14 +210,10 @@ export async function getCallContext(req: Request) {
 function handleMethodError(res: Response, methodName: string, error: unknown) {
   // TODO: introduce error codes and handle them differently
   // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
-  
+
   // Safely log the error to avoid serialization issues with complex error objects
   try {
-    if (
-      error instanceof Error &&
-      error?.constructor?.name === 'ZodError' &&
-      'errors' in error
-    ) {
+    if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
       const zodError = error as z.ZodError;
       const flattened = zodError.flatten();
       const fieldMessages = Object.entries(flattened.fieldErrors)
@@ -234,7 +230,7 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     } else {
       console.error(`Error in method ${methodName}:`, String(error));
     }
-  } catch (logError) {
+  } catch (_logError) {
     // Fallback if error logging itself fails (prevents infinite error loops)
     console.error(`Error in method ${methodName}: [Failed to log error details]`);
   }
