@@ -122,6 +122,7 @@ describe('auth/login', () => {
       user: {
         id: userId,
         handle: 'demo',
+        roles: [],
       },
     });
   });
