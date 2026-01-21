@@ -13,6 +13,9 @@ interface ActiveLiveSubscription {
 }
 const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
 
+// Track active channels (format: "category:id")
+const activeChannels = new Set<string>();
+
 function getSocket(): Socket {
   if (!socketClient) {
     throw new Error('WebSocket not initialized. Call startWebsockets() first.');
@@ -30,6 +33,55 @@ function resubscribeAll() {
   }
 }
 
+function rejoinAllChannels() {
+  for (const channelName of activeChannels) {
+    socketClient?.emit('joinChannel', channelName);
+  }
+}
+
+function leaveAllChannels() {
+  for (const channelName of activeChannels) {
+    socketClient?.emit('leaveChannel', channelName);
+  }
+  activeChannels.clear();
+}
+
+export function handleAuthChange(newAuthToken: string | null) {
+  if (!socketClient) {
+    return;
+  }
+
+  // If socket is not connected yet, it will authenticate on connection
+  if (!socketClient.connected) {
+    return;
+  }
+
+  if (newAuthToken === null) {
+    // User logged out - leave all channels
+    console.log('[Modelence] User logged out, leaving all channels');
+    leaveAllChannels();
+  }
+
+  // Reauthenticate without reconnecting
+  socketClient.emit('reauthenticate', newAuthToken);
+
+  // Wait for reauthentication to complete, then rejoin channels and resubscribe live queries
+  socketClient.once('reauthenticated', ({ success }: { success: boolean }) => {
+    if (success) {
+      if (activeChannels.size > 0) {
+        console.log(`[Modelence] Reauthenticated, re-joining ${activeChannels.size} channels`);
+        rejoinAllChannels();
+      }
+      if (activeLiveSubscriptions.size > 0) {
+        console.log(
+          `[Modelence] Reauthenticated, re-subscribing to ${activeLiveSubscriptions.size} live queries`
+        );
+        resubscribeAll();
+      }
+    }
+  });
+}
+
 function init(props: { channels?: ClientChannel<unknown>[] }) {
   socketClient = io('/', {
     auth: {
@@ -37,13 +89,17 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     },
   });
 
-  // Subscribe to all live queries on connect/reconnect
+  // Subscribe to all live queries and rejoin channels on connect/reconnect
   socketClient.on('connect', () => {
     if (activeLiveSubscriptions.size > 0) {
       console.log(
         `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`
       );
       resubscribeAll();
+    }
+    if (activeChannels.size > 0) {
+      console.log(`[Modelence] WebSocket reconnected, re-joining ${activeChannels.size} channels`);
+      rejoinAllChannels();
     }
   });
 
@@ -85,6 +141,8 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 }
 
 function joinChannel({ category, id }: { category: string; id: string }) {
+  const channelName = `${category}:${id}`;
+  activeChannels.add(channelName);
   emit({
     eventName: 'joinChannel',
     category,
@@ -93,6 +151,8 @@ function joinChannel({ category, id }: { category: string; id: string }) {
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
+  const channelName = `${category}:${id}`;
+  activeChannels.delete(channelName);
   emit({
     eventName: 'leaveChannel',
     category,

@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import { z } from 'zod';
 import { callMethod } from './method';
 import { _setConfig } from '../config/client';
-import { setLocalStorageSession } from './localStorage';
+import { getLocalStorageSession, setLocalStorageSession } from './localStorage';
 import { time } from '../time';
 import { Configs } from '../config/types';
+import { handleAuthChange } from '../websocket/socketio/client';
 
 type User = {
   id: string;
@@ -81,6 +82,10 @@ async function loopSessionHeartbeat() {
 
 export function setCurrentUser(user: User | null) {
   useSessionStore.getState().setUser(user);
+
+  // Handle websocket channel management when auth state changes
+  const authToken = getLocalStorageSession()?.authToken ?? null;
+  handleAuthChange(authToken);
 }
 
 export function getHeartbeatTimer() {

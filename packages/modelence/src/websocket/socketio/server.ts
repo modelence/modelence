@@ -75,6 +75,15 @@ export async function init({
       handleLiveQueryDisconnect(socket);
     });
 
+    socket.on('reauthenticate', async (token: string | null) => {
+      try {
+        socket.data = await authenticate(token);
+        socket.emit('reauthenticated', { success: true });
+      } catch (error) {
+        socket.emit('reauthenticated', { success: false, error: String(error) });
+      }
+    });
+
     socket.on('joinChannel', async (channelName: string) => {
       const [category] = channelName.split(':');
       let authorized = false;
