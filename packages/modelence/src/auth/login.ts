@@ -94,6 +94,7 @@ export async function handleLoginWithPassword(
       user: {
         id: userDoc._id,
         handle: userDoc.handle,
+        roles: userDoc.roles || [],
       },
     };
   } catch (error) {
