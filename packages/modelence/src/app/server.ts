@@ -210,7 +210,34 @@ export async function getCallContext(req: Request) {
 function handleMethodError(res: Response, methodName: string, error: unknown) {
   // TODO: introduce error codes and handle them differently
   // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
-  console.error(`Error in method ${methodName}:`, error);
+  
+  // Safely log the error to avoid serialization issues with complex error objects
+  try {
+    if (
+      error instanceof Error &&
+      error?.constructor?.name === 'ZodError' &&
+      'errors' in error
+    ) {
+      const zodError = error as z.ZodError;
+      const flattened = zodError.flatten();
+      const fieldMessages = Object.entries(flattened.fieldErrors)
+        .map(([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`)
+        .join('; ');
+      const formMessages = flattened.formErrors.join('; ');
+      const allMessages = [fieldMessages, formMessages].filter(Boolean).join('; ');
+      console.error(`Error in method ${methodName}: ZodError - ${allMessages}`);
+    } else if (error instanceof Error) {
+      console.error(`Error in method ${methodName}:`, error.message);
+      if (error.stack) {
+        console.error(error.stack);
+      }
+    } else {
+      console.error(`Error in method ${methodName}:`, String(error));
+    }
+  } catch (logError) {
+    // Fallback if error logging itself fails (prevents infinite error loops)
+    console.error(`Error in method ${methodName}: [Failed to log error details]`);
+  }
 
   if (error instanceof ModelenceError) {
     res.status(error.status).send(error.message);
