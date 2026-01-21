@@ -28,8 +28,10 @@ describe('auth/client', () => {
   });
 
   test('loginWithPassword resolves user and stores in session', async () => {
-    const user = { id: '1', handle: 'demo', roles: [], hasRole: () => true, requireRole: () => {} };
-    mockCallMethod.mockResolvedValue({ user } as never);
+    const rawUser = { id: '1', handle: 'demo', roles: [] };
+    const enrichedUser = { ...rawUser, hasRole: () => true, requireRole: () => {} };
+    mockCallMethod.mockResolvedValue({ user: rawUser } as never);
+    mockSetCurrentUser.mockReturnValue(enrichedUser);
 
     const result = await authClient.loginWithPassword({
       email: 'user@example.com',
@@ -40,8 +42,8 @@ describe('auth/client', () => {
       email: 'user@example.com',
       password: 'secret',
     });
-    expect(mockSetCurrentUser).toHaveBeenCalledWith(user);
-    expect(result).toBe(user);
+    expect(mockSetCurrentUser).toHaveBeenCalledWith(rawUser);
+    expect(result).toBe(enrichedUser);
   });
 
   test('verifyEmail calls backend method with token', async () => {

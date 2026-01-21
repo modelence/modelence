@@ -28,6 +28,30 @@ let isInitialized = false;
 const SESSION_HEARTBEAT_INTERVAL = time.seconds(30);
 let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 
+const userSchema = z.object({
+  id: z.string(),
+  handle: z.string(),
+  roles: z.array(z.string()),
+});
+
+function parseUser(user: unknown): User | null {
+  if (!user) {
+    return null;
+  }
+
+  const parsedData = userSchema.parse(user);
+
+  return Object.freeze({
+    ...parsedData,
+    hasRole: (role: string) => parsedData.roles.includes(role),
+    requireRole: (role: string) => {
+      if (!parsedData.roles.includes(role)) {
+        throw new Error(`Access denied - role '${role}' required`);
+      }
+    },
+  });
+}
+
 export async function initSession() {
   if (isInitialized) {
     return;
@@ -43,29 +67,7 @@ export async function initSession() {
   _setConfig(configs);
   setLocalStorageSession(session);
 
-  const parsedUser = user
-    ? (() => {
-        const parsedData = z
-          .object({
-            id: z.string(),
-            handle: z.string(),
-            roles: z.array(z.string()),
-          })
-          .parse(user);
-
-        return Object.freeze({
-          ...parsedData,
-          hasRole: (role: string) => parsedData.roles.includes(role),
-          requireRole: (role: string) => {
-            if (!parsedData.roles.includes(role)) {
-              throw new Error(`Access denied - role '${role}' required`);
-            }
-          },
-        });
-      })()
-    : null;
-
-  useSessionStore.getState().setUser(parsedUser);
+  useSessionStore.getState().setUser(parseUser(user));
 
   await loopSessionHeartbeat();
 }
@@ -79,8 +81,10 @@ async function loopSessionHeartbeat() {
   heartbeatTimer = setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
-export function setCurrentUser(user: User | null) {
-  useSessionStore.getState().setUser(user);
+export function setCurrentUser(user: unknown) {
+  const enrichedUser = parseUser(user);
+  useSessionStore.getState().setUser(enrichedUser);
+  return enrichedUser;
 }
 
 export function getHeartbeatTimer() {

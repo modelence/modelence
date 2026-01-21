@@ -9,6 +9,12 @@ export type UserInfo = {
   requireRole: (role: string) => void;
 };
 
+type RawUserData = {
+  id: string;
+  handle: string;
+  roles: string[];
+};
+
 /**
  * Sign up a new user with an email and password.
  *
@@ -36,12 +42,12 @@ export async function signupWithPassword(options: { email: string; password: str
  */
 export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user } = await callMethod<{ user: UserInfo }>('_system.user.loginWithPassword', {
+  const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginWithPassword', {
     email,
     password,
   });
-  setCurrentUser(user);
-  return user;
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
 }
 
 /**
@@ -55,7 +61,7 @@ export async function loginWithPassword(options: { email: string; password: stri
  */
 export async function verifyEmail(options: { token: string }) {
   const { token } = options;
-  await callMethod<{ user: UserInfo }>('_system.user.verifyEmail', { token });
+  await callMethod<{ user: RawUserData }>('_system.user.verifyEmail', { token });
 }
 
 /**
