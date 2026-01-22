@@ -24,18 +24,21 @@ function getSocket(): Socket {
 }
 
 function resubscribeAll() {
+  const authToken = getLocalStorageSession()?.authToken;
   for (const sub of activeLiveSubscriptions.values()) {
     socketClient?.emit('subscribeLiveQuery', {
       subscriptionId: sub.subscriptionId,
       method: sub.method,
       args: sub.args,
+      authToken,
     });
   }
 }
 
 function rejoinAllChannels() {
+  const authToken = getLocalStorageSession()?.authToken;
   for (const channelName of activeChannels) {
-    socketClient?.emit('joinChannel', channelName);
+    socketClient?.emit('joinChannel', { channelName, authToken });
   }
 }
 
@@ -60,26 +63,20 @@ export function handleAuthChange(newAuthToken: string | null) {
     // User logged out - leave all channels
     console.log('[Modelence] User logged out, leaving all channels');
     leaveAllChannels();
-  }
-
-  // Reauthenticate without reconnecting
-  socketClient.emit('reauthenticate', newAuthToken);
-
-  // Wait for reauthentication to complete, then rejoin channels and resubscribe live queries
-  socketClient.once('reauthenticated', ({ success }: { success: boolean }) => {
-    if (success) {
-      if (activeChannels.size > 0) {
-        console.log(`[Modelence] Reauthenticated, re-joining ${activeChannels.size} channels`);
-        rejoinAllChannels();
-      }
-      if (activeLiveSubscriptions.size > 0) {
-        console.log(
-          `[Modelence] Reauthenticated, re-subscribing to ${activeLiveSubscriptions.size} live queries`
-        );
-        resubscribeAll();
-      }
+  } else {
+    // User logged in - rejoin channels and resubscribe live queries
+    // Each request will include the updated token for reauthentication
+    if (activeChannels.size > 0) {
+      console.log(`[Modelence] User authenticated, re-joining ${activeChannels.size} channels`);
+      rejoinAllChannels();
     }
-  });
+    if (activeLiveSubscriptions.size > 0) {
+      console.log(
+        `[Modelence] User authenticated, re-subscribing to ${activeLiveSubscriptions.size} live queries`
+      );
+      resubscribeAll();
+    }
+  }
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
@@ -143,11 +140,8 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 function joinChannel({ category, id }: { category: string; id: string }) {
   const channelName = `${category}:${id}`;
   activeChannels.add(channelName);
-  emit({
-    eventName: 'joinChannel',
-    category,
-    id,
-  });
+  const authToken = getLocalStorageSession()?.authToken;
+  getSocket().emit('joinChannel', { channelName, authToken });
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
@@ -205,7 +199,8 @@ export function subscribeLiveQuery<T = unknown>(
 
   // Only emit if already connected; otherwise the connect handler will handle it
   if (socket.connected) {
-    socket.emit('subscribeLiveQuery', { subscriptionId, method, args });
+    const authToken = getLocalStorageSession()?.authToken;
+    socket.emit('subscribeLiveQuery', { subscriptionId, method, args, authToken });
   }
 
   // Return unsubscribe function

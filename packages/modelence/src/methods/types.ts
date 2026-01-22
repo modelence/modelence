@@ -21,7 +21,7 @@ export type Context = {
   session: Session | null;
   user: UserInfo | null;
   roles: string[];
-  clientInfo: ClientInfo;
+  clientInfo?: ClientInfo;
   connectionInfo: ConnectionInfo;
 };
 

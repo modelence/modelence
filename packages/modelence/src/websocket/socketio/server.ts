@@ -58,13 +58,16 @@ export async function init({
   });
 
   socketServer.use(async (socket, next) => {
-    const token = socket.handshake.auth.token;
-
-    try {
-      socket.data = await authenticate(token);
-    } finally {
-      next();
-    }
+    // Store connection info in socket.data for use in per-request authentication
+    socket.data = {
+      connectionInfo: {
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent'],
+        acceptLanguage: socket.handshake.headers['accept-language'],
+        referrer: socket.handshake.headers.referer,
+      },
+    };
+    next();
   });
 
   socketServer.on('connection', (socket: Socket) => {
@@ -75,22 +78,25 @@ export async function init({
       handleLiveQueryDisconnect(socket);
     });
 
-    socket.on('reauthenticate', async (token: string | null) => {
-      try {
-        socket.data = await authenticate(token);
-        socket.emit('reauthenticated', { success: true });
-      } catch (error) {
-        socket.emit('reauthenticated', { success: false, error: String(error) });
-      }
-    });
+    socket.on('joinChannel', async (payload: { channelName: string; authToken: string | null }) => {
+      const { channelName, authToken } = payload;
 
-    socket.on('joinChannel', async (channelName: string) => {
+      // Authenticate with provided token
+      let authContext;
+      try {
+        authContext = await authenticate(authToken);
+      } catch (error) {
+        console.error('Failed to authenticate on joinChannel:', error);
+        socket.emit('joinError', { channel: channelName, error: 'Authentication failed' });
+        return;
+      }
+
       const [category] = channelName.split(':');
       let authorized = false;
 
       for (const channel of channels) {
         if (channel.category === category) {
-          if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
+          if (!channel.canAccessChannel || (await channel.canAccessChannel(authContext))) {
             socket.join(channelName);
             authorized = true;
             socket.emit('joinedChannel', channelName);

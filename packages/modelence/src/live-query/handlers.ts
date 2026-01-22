@@ -3,11 +3,14 @@ import { z } from 'zod';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
+import { authenticate } from '../auth';
+import { Context } from '../methods/types';
 
 const subscribeLiveQuerySchema = z.object({
   subscriptionId: z.string().min(1),
   method: z.string().min(1),
   args: z.record(z.unknown()).default({}),
+  authToken: z.string().nullable(),
 });
 
 const unsubscribeLiveQuerySchema = z.object({
@@ -39,7 +42,25 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     });
     return;
   }
-  const { subscriptionId, method, args } = parsed.data;
+  const { subscriptionId, method, args, authToken } = parsed.data;
+
+  // Authenticate with provided token and build full context
+  let authContext: Context;
+  try {
+    const authData = await authenticate(authToken);
+    // Build full context with auth data + connection info (no clientInfo for websockets)
+    authContext = {
+      ...authData,
+      connectionInfo: socket.data.connectionInfo,
+    };
+  } catch (error) {
+    console.error('Failed to authenticate on subscribeLiveQuery:', error);
+    socket.emit('liveQueryError', {
+      subscriptionId,
+      error: 'Authentication failed',
+    });
+    return;
+  }
 
   const subs = getSocketSubs(socket);
 
@@ -63,7 +84,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const liveData = await runLiveMethod(method, args, socket.data);
+    const liveData = await runLiveMethod(method, args, authContext);
 
     const fetchAndEmit = async () => {
       const data = await liveData.fetch();
