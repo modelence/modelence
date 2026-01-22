@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { z } from 'zod';
 import { callMethod } from './method';
 import { _setConfig } from '../config/client';
-import { getLocalStorageSession, setLocalStorageSession } from './localStorage';
+import { setLocalStorageSession } from './localStorage';
 import { time } from '../time';
 import { Configs } from '../config/types';
 import { handleAuthChange } from '../websocket/socketio/client';
@@ -89,8 +89,7 @@ export function setCurrentUser(user: RawUserData | null) {
   const enrichedUser = parseUser(user);
   useSessionStore.getState().setUser(enrichedUser);
   // Handle websocket channel management when auth state changes
-  const authToken = getLocalStorageSession()?.authToken ?? null;
-  handleAuthChange(authToken);
+  handleAuthChange(enrichedUser?.id ?? null);
   return enrichedUser;
 }
 

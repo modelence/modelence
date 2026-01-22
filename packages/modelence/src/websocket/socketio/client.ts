@@ -49,7 +49,7 @@ function leaveAllChannels() {
   activeChannels.clear();
 }
 
-export function handleAuthChange(newAuthToken: string | null) {
+export function handleAuthChange(userId: string | null) {
   if (!socketClient) {
     return;
   }
@@ -59,7 +59,7 @@ export function handleAuthChange(newAuthToken: string | null) {
     return;
   }
 
-  if (newAuthToken === null) {
+  if (userId === null) {
     // User logged out - leave all channels
     console.log('[Modelence] User logged out, leaving all channels');
     leaveAllChannels();
