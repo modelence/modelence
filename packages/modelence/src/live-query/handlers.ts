@@ -1,18 +1,10 @@
 import { Socket } from 'socket.io';
 import { z } from 'zod';
+import { authenticate } from '../auth';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
-
-const subscribeLiveQuerySchema = z.object({
-  subscriptionId: z.string().min(1),
-  method: z.string().min(1),
-  args: z.record(z.unknown()).default({}),
-});
-
-const unsubscribeLiveQuerySchema = z.object({
-  subscriptionId: z.string().min(1),
-});
+import { Context } from '@/methods/types';
 
 interface ActiveSubscription {
   cleanup: LiveQueryCleanup | null;
@@ -31,7 +23,22 @@ function getSocketSubs(socket: Socket): Map<string, ActiveSubscription> {
 }
 
 export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown) {
-  const parsed = subscribeLiveQuerySchema.safeParse(payload);
+  const parsed = z
+    .object({
+      subscriptionId: z.string().min(1),
+      method: z.string().min(1),
+      args: z.record(z.unknown()).default({}),
+      authToken: z.string().nullish(),
+      clientInfo: z.object({
+        screenWidth: z.number(),
+        screenHeight: z.number(),
+        windowWidth: z.number(),
+        windowHeight: z.number(),
+        pixelRatio: z.number(),
+        orientation: z.string().nullable(),
+      }),
+    })
+    .safeParse(payload);
   if (!parsed.success) {
     socket.emit('liveQueryError', {
       subscriptionId: null,
@@ -39,7 +46,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     });
     return;
   }
-  const { subscriptionId, method, args } = parsed.data;
+  const { subscriptionId, method, args, authToken, clientInfo } = parsed.data;
 
   const subs = getSocketSubs(socket);
 
@@ -63,7 +70,20 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const liveData = await runLiveMethod(method, args, socket.data);
+    const { session, user, roles } = await authenticate(authToken ?? null);
+
+    const context: Context = {
+      session,
+      user,
+      roles,
+      clientInfo,
+      connectionInfo: {
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent'],
+      },
+    };
+
+    const liveData = await runLiveMethod(method, args, context);
 
     const fetchAndEmit = async () => {
       const data = await liveData.fetch();
@@ -144,7 +164,11 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 }
 
 export function handleUnsubscribeLiveQuery(socket: Socket, payload: unknown) {
-  const parsed = unsubscribeLiveQuerySchema.safeParse(payload);
+  const parsed = z
+    .object({
+      subscriptionId: z.string().min(1),
+    })
+    .safeParse(payload);
   if (!parsed.success) {
     console.warn(`[LiveQuery] Invalid unsubscribe payload: ${parsed.error.message}`);
     return;
