@@ -91,15 +91,26 @@ describe('client/session', () => {
     expect(getHeartbeatTimer()).toBeNull();
   });
 
-  test('setCurrentUser updates session store', () => {
+  test('setCurrentUser parses and enriches user object', () => {
     const user = {
       id: '2',
       handle: 'other',
-      roles: [],
-      hasRole: () => false,
-      requireRole: () => {},
+      roles: ['editor'],
     };
     setCurrentUser(user);
-    expect(useSessionStore.getState().user).toBe(user);
+    const storedUser = useSessionStore.getState().user;
+    expect(storedUser?.id).toBe('2');
+    expect(storedUser?.handle).toBe('other');
+    expect(storedUser?.roles).toEqual(['editor']);
+    expect(storedUser?.hasRole('editor')).toBe(true);
+    expect(storedUser?.hasRole('admin')).toBe(false);
+    expect(() => storedUser?.requireRole('missing')).toThrow(
+      "Access denied - role 'missing' required"
+    );
+  });
+
+  test('setCurrentUser handles null', () => {
+    setCurrentUser(null);
+    expect(useSessionStore.getState().user).toBeNull();
   });
 });
