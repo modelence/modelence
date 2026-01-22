@@ -86,6 +86,16 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     },
   });
 
+  // Handle successful channel joins
+  socketClient.on('joinedChannel', (channelName: string) => {
+    activeChannels.add(channelName);
+  });
+
+  // Handle channel join errors - remove from tracking
+  socketClient.on('joinError', ({ channel }: { channel: string; error: string }) => {
+    activeChannels.delete(channel);
+  });
+
   // Subscribe to all live queries and rejoin channels on connect/reconnect
   socketClient.on('connect', () => {
     if (activeLiveSubscriptions.size > 0) {
@@ -139,9 +149,9 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 
 function joinChannel({ category, id }: { category: string; id: string }) {
   const channelName = `${category}:${id}`;
-  activeChannels.add(channelName);
   const authToken = getLocalStorageSession()?.authToken;
   getSocket().emit('joinChannel', { channelName, authToken });
+  // Channel will be added to activeChannels when 'joinedChannel' event is received
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
