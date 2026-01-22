@@ -29,14 +29,16 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       method: z.string().min(1),
       args: z.record(z.unknown()).default({}),
       authToken: z.string().nullish(),
-      clientInfo: z.object({
-        screenWidth: z.number(),
-        screenHeight: z.number(),
-        windowWidth: z.number(),
-        windowHeight: z.number(),
-        pixelRatio: z.number(),
-        orientation: z.string().nullable(),
-      }),
+      clientInfo: z
+        .object({
+          screenWidth: z.number(),
+          screenHeight: z.number(),
+          windowWidth: z.number(),
+          windowHeight: z.number(),
+          pixelRatio: z.number(),
+          orientation: z.string().nullable(),
+        })
+        .optional(),
     })
     .safeParse(payload);
   if (!parsed.success) {
@@ -76,7 +78,14 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       session,
       user,
       roles,
-      clientInfo,
+      clientInfo: clientInfo ?? {
+        screenWidth: 0,
+        screenHeight: 0,
+        windowWidth: 0,
+        windowHeight: 0,
+        pixelRatio: 1,
+        orientation: null,
+      },
       connectionInfo: {
         ip: socket.handshake.address,
         userAgent: socket.handshake.headers['user-agent'],
