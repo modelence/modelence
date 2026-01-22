@@ -14,7 +14,10 @@ jest.unstable_mockModule('../config/client', () => ({
   _setConfig: mockSetConfig,
 }));
 
+const mockGetLocalStorageSession = jest.fn();
+
 jest.unstable_mockModule('./localStorage', () => ({
+  getLocalStorageSession: mockGetLocalStorageSession,
   setLocalStorageSession: mockSetLocalStorageSession,
 }));
 
