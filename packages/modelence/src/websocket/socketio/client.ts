@@ -42,30 +42,23 @@ function rejoinAllChannels() {
   }
 }
 
-function leaveAllChannels() {
-  for (const channelName of activeChannels) {
-    socketClient?.emit('leaveChannel', channelName);
-  }
-  activeChannels.clear();
-}
-
 export function handleAuthChange(userId: string | null) {
   if (!socketClient) {
     return;
   }
 
-  // If socket is not connected yet, it will authenticate on connection
-  if (!socketClient.connected) {
-    return;
-  }
-
   if (userId === null) {
-    // User logged out - leave all channels
-    console.log('[Modelence] User logged out, leaving all channels');
-    leaveAllChannels();
-  } else {
-    // User logged in - rejoin channels and resubscribe live queries
-    // Each request will include the updated token for reauthentication
+    // User logged out - clear channels regardless of connection state
+    console.log('[Modelence] User logged out, clearing all channels');
+    // If connected, send leave requests to server before clearing
+    if (socketClient.connected) {
+      for (const channelName of activeChannels) {
+        socketClient.emit('leaveChannel', channelName);
+      }
+    }
+    activeChannels.clear();
+  } else if (socketClient.connected) {
+    // User logged in and socket is connected - rejoin channels and resubscribe live queries
     if (activeChannels.size > 0) {
       console.log(`[Modelence] User authenticated, re-joining ${activeChannels.size} channels`);
       rejoinAllChannels();
@@ -77,6 +70,7 @@ export function handleAuthChange(userId: string | null) {
       resubscribeAll();
     }
   }
+  // If user logged in but socket not connected, wait for connect event to handle it
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {

@@ -230,7 +230,7 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     } else {
       console.error(`Error in method ${methodName}:`, String(error));
     }
-  } catch (_logError) {
+  } catch {
     // Fallback if error logging itself fails (prevents infinite error loops)
     console.error(`Error in method ${methodName}: [Failed to log error details]`);
   }

@@ -10,7 +10,7 @@ const subscribeLiveQuerySchema = z.object({
   subscriptionId: z.string().min(1),
   method: z.string().min(1),
   args: z.record(z.unknown()).default({}),
-  authToken: z.string().nullable(),
+  authToken: z.string().nullish(),
 });
 
 const unsubscribeLiveQuerySchema = z.object({
@@ -47,7 +47,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   // Authenticate with provided token and build full context
   let authContext: Context;
   try {
-    const authData = await authenticate(authToken);
+    const authData = await authenticate(authToken ?? null);
     // Build full context with auth data + connection info (no clientInfo for websockets)
     authContext = {
       ...authData,

@@ -78,37 +78,40 @@ export async function init({
       handleLiveQueryDisconnect(socket);
     });
 
-    socket.on('joinChannel', async (payload: { channelName: string; authToken: string | null }) => {
-      const { channelName, authToken } = payload;
+    socket.on(
+      'joinChannel',
+      async (payload: { channelName: string; authToken?: string | null }) => {
+        const { channelName, authToken } = payload;
 
-      // Authenticate with provided token
-      let authContext;
-      try {
-        authContext = await authenticate(authToken);
-      } catch (error) {
-        console.error('Failed to authenticate on joinChannel:', error);
-        socket.emit('joinError', { channel: channelName, error: 'Authentication failed' });
-        return;
-      }
+        // Authenticate with provided token
+        let authContext;
+        try {
+          authContext = await authenticate(authToken ?? null);
+        } catch (error) {
+          console.error('Failed to authenticate on joinChannel:', error);
+          socket.emit('joinError', { channel: channelName, error: 'Authentication failed' });
+          return;
+        }
 
-      const [category] = channelName.split(':');
-      let authorized = false;
+        const [category] = channelName.split(':');
+        let authorized = false;
 
-      for (const channel of channels) {
-        if (channel.category === category) {
-          if (!channel.canAccessChannel || (await channel.canAccessChannel(authContext))) {
-            socket.join(channelName);
-            authorized = true;
-            socket.emit('joinedChannel', channelName);
+        for (const channel of channels) {
+          if (channel.category === category) {
+            if (!channel.canAccessChannel || (await channel.canAccessChannel(authContext))) {
+              socket.join(channelName);
+              authorized = true;
+              socket.emit('joinedChannel', channelName);
+            }
+            break; // Found matching channel - stop searching
           }
-          break; // Found matching channel - stop searching
+        }
+
+        if (!authorized) {
+          socket.emit('joinError', { channel: channelName, error: 'Access denied' });
         }
       }
-
-      if (!authorized) {
-        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
-      }
-    });
+    );
 
     socket.on('leaveChannel', (channelName: string) => {
       socket.leave(channelName);
