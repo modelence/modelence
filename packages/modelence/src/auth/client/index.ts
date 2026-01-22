@@ -114,6 +114,6 @@ export function getClientInfo(): ClientInfo {
     windowWidth: window.innerWidth,
     windowHeight: window.innerHeight,
     pixelRatio: window.devicePixelRatio,
-    orientation: window.screen.orientation?.type,
+    orientation: window.screen.orientation?.type ?? null,
   };
 }
