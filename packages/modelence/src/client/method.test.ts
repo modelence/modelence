@@ -4,8 +4,9 @@ const mockGetLocalStorageSession = jest.fn();
 const mockHandleError = jest.fn();
 const mockReviveResponseTypes = jest.fn();
 
-jest.unstable_mockModule('./localStorage', () => ({
+jest.unstable_mockModule('@/client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
+  setLocalStorageSession: jest.fn(),
 }));
 
 jest.unstable_mockModule('./errorHandler', () => ({

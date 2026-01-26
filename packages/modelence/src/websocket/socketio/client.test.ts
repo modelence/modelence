@@ -34,6 +34,7 @@ jest.unstable_mockModule('socket.io-client', () => ({
 
 jest.unstable_mockModule('@/client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
+  setLocalStorageSession: jest.fn(),
 }));
 
 const websocketProvider = (await import('./client')).default;

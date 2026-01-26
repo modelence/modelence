@@ -1,21 +1,10 @@
 import { Socket } from 'socket.io';
 import { z } from 'zod';
+import { authenticate } from '../auth';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
-import { authenticate } from '../auth';
-import { Context } from '../methods/types';
-
-const subscribeLiveQuerySchema = z.object({
-  subscriptionId: z.string().min(1),
-  method: z.string().min(1),
-  args: z.record(z.unknown()).default({}),
-  authToken: z.string().nullish(),
-});
-
-const unsubscribeLiveQuerySchema = z.object({
-  subscriptionId: z.string().min(1),
-});
+import { Context } from '@/methods/types';
 
 interface ActiveSubscription {
   cleanup: LiveQueryCleanup | null;
@@ -34,7 +23,24 @@ function getSocketSubs(socket: Socket): Map<string, ActiveSubscription> {
 }
 
 export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown) {
-  const parsed = subscribeLiveQuerySchema.safeParse(payload);
+  const parsed = z
+    .object({
+      subscriptionId: z.string().min(1),
+      method: z.string().min(1),
+      args: z.record(z.unknown()).default({}),
+      authToken: z.string().nullish(),
+      clientInfo: z
+        .object({
+          screenWidth: z.number(),
+          screenHeight: z.number(),
+          windowWidth: z.number(),
+          windowHeight: z.number(),
+          pixelRatio: z.number(),
+          orientation: z.string().nullable(),
+        })
+        .optional(),
+    })
+    .safeParse(payload);
   if (!parsed.success) {
     socket.emit('liveQueryError', {
       subscriptionId: null,
@@ -42,25 +48,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     });
     return;
   }
-  const { subscriptionId, method, args, authToken } = parsed.data;
-
-  // Authenticate with provided token and build full context
-  let authContext: Context;
-  try {
-    const authData = await authenticate(authToken ?? null);
-    // Build full context with auth data + connection info (no clientInfo for websockets)
-    authContext = {
-      ...authData,
-      connectionInfo: socket.data.connectionInfo,
-    };
-  } catch (error) {
-    console.error('Failed to authenticate on subscribeLiveQuery:', error);
-    socket.emit('liveQueryError', {
-      subscriptionId,
-      error: 'Authentication failed',
-    });
-    return;
-  }
+  const { subscriptionId, method, args, authToken, clientInfo } = parsed.data;
 
   const subs = getSocketSubs(socket);
 
@@ -84,7 +72,27 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const liveData = await runLiveMethod(method, args, authContext);
+    const { session, user, roles } = await authenticate(authToken ?? null);
+
+    const context: Context = {
+      session,
+      user,
+      roles,
+      clientInfo: clientInfo ?? {
+        screenWidth: 0,
+        screenHeight: 0,
+        windowWidth: 0,
+        windowHeight: 0,
+        pixelRatio: 1,
+        orientation: null,
+      },
+      connectionInfo: {
+        ip: socket.handshake.address,
+        userAgent: socket.handshake.headers['user-agent'],
+      },
+    };
+
+    const liveData = await runLiveMethod(method, args, context);
 
     const fetchAndEmit = async () => {
       const data = await liveData.fetch();
@@ -165,7 +173,11 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
 }
 
 export function handleUnsubscribeLiveQuery(socket: Socket, payload: unknown) {
-  const parsed = unsubscribeLiveQuerySchema.safeParse(payload);
+  const parsed = z
+    .object({
+      subscriptionId: z.string().min(1),
+    })
+    .safeParse(payload);
   if (!parsed.success) {
     console.warn(`[LiveQuery] Invalid unsubscribe payload: ${parsed.error.message}`);
     return;

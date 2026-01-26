@@ -7,9 +7,9 @@
 */
 'use client';
 
-import { getLocalStorageSession } from './localStorage';
-import { handleError } from './errorHandler';
-import { reviveResponseTypes } from '../methods/serialize';
+import { getAuthToken, getClientInfo } from '@/auth/client';
+import { handleError } from '@/client/errorHandler';
+import { reviveResponseTypes } from '@/methods/serialize';
 
 export class MethodError extends Error {
   status: number;
@@ -49,15 +49,8 @@ async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T>
     },
     body: JSON.stringify({
       args,
-      authToken: getLocalStorageSession()?.authToken,
-      clientInfo: {
-        screenWidth: window.screen.width,
-        screenHeight: window.screen.height,
-        windowWidth: window.innerWidth,
-        windowHeight: window.innerHeight,
-        pixelRatio: window.devicePixelRatio,
-        orientation: window.screen.orientation?.type,
-      },
+      authToken: getAuthToken(),
+      clientInfo: getClientInfo(),
     }),
   });
 

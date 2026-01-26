@@ -1,5 +1,7 @@
-import { setCurrentUser } from '../../client/session';
-import { callMethod } from '../../client/method';
+import { setCurrentUser } from '@/client/session';
+import { callMethod } from '@/client/method';
+import { getLocalStorageSession } from '@/client/localStorage';
+import { ClientInfo } from '@/methods/types';
 
 export type UserInfo = {
   id: string;
@@ -95,4 +97,23 @@ export async function resetPassword(options: { token: string; password: string }
     token,
     password,
   });
+}
+
+/**
+ * Get the current auth token associated with the current session.
+ * @returns The auth token or undefined if not authenticated.
+ */
+export function getAuthToken(): string | undefined {
+  return getLocalStorageSession()?.authToken;
+}
+
+export function getClientInfo(): ClientInfo {
+  return {
+    screenWidth: window.screen.width,
+    screenHeight: window.screen.height,
+    windowWidth: window.innerWidth,
+    windowHeight: window.innerHeight,
+    pixelRatio: window.devicePixelRatio,
+    orientation: window.screen.orientation?.type ?? null,
+  };
 }

@@ -1,8 +1,9 @@
 import io, { Socket } from 'socket.io-client';
 import { WebsocketClientProvider } from '../types';
 import { ClientChannel } from '../clientChannel';
-import { getLocalStorageSession } from '@/client/localStorage';
+import { getAuthToken, getClientInfo } from '@/auth/client';
 import { reviveResponseTypes } from '@/methods/serialize';
+import { getLocalStorageSession } from '@/client';
 
 let socketClient: Socket | null = null;
 
@@ -24,13 +25,15 @@ function getSocket(): Socket {
 }
 
 function resubscribeAll() {
-  const authToken = getLocalStorageSession()?.authToken;
+  const authToken = getAuthToken();
+  const clientInfo = getClientInfo();
   for (const sub of activeLiveSubscriptions.values()) {
     socketClient?.emit('subscribeLiveQuery', {
       subscriptionId: sub.subscriptionId,
       method: sub.method,
       args: sub.args,
       authToken,
+      clientInfo,
     });
   }
 }
@@ -76,7 +79,7 @@ export function handleAuthChange(userId: string | null) {
 function init(props: { channels?: ClientChannel<unknown>[] }) {
   socketClient = io('/', {
     auth: {
-      token: getLocalStorageSession()?.authToken,
+      token: getAuthToken(),
     },
   });
 
@@ -203,8 +206,13 @@ export function subscribeLiveQuery<T = unknown>(
 
   // Only emit if already connected; otherwise the connect handler will handle it
   if (socket.connected) {
-    const authToken = getLocalStorageSession()?.authToken;
-    socket.emit('subscribeLiveQuery', { subscriptionId, method, args, authToken });
+    socket.emit('subscribeLiveQuery', {
+      subscriptionId,
+      method,
+      args,
+      authToken: getAuthToken(),
+      clientInfo: getClientInfo(),
+    });
   }
 
   // Return unsubscribe function
