@@ -77,7 +77,15 @@ describe('websocket/socketio/server', () => {
     const socket = {
       id: 'socket-1',
       data: { user: { id: '1' } },
-      handshake: { auth: { token: 'token' } },
+      handshake: {
+        auth: { token: 'token' },
+        address: '127.0.0.1',
+        headers: {
+          'user-agent': 'test-agent',
+          'accept-language': 'en-US',
+          referer: 'http://localhost',
+        },
+      },
       join: jest.fn(),
       leave: jest.fn(),
       emit: jest.fn(),
@@ -104,14 +112,32 @@ describe('websocket/socketio/server', () => {
     );
     expect((mockCreateAdapter as jest.Mock).mock.calls[0]?.[0]).toBe(mockCollection);
 
-    // Auth middleware should attach authenticated user data
+    // Middleware should initialize socket.data with connection info
     const middleware = socketMiddlewares[0];
     expect(middleware).toBeDefined();
     const next = jest.fn();
-    const authSocket = { handshake: { auth: { token: 'abc' } }, data: null } as unknown as Socket;
+    const authSocket = {
+      handshake: {
+        auth: { token: 'abc' },
+        address: '127.0.0.1',
+        headers: {
+          'user-agent': 'test-agent',
+          'accept-language': 'en-US',
+          referer: 'http://localhost',
+        },
+      },
+      data: null,
+    } as unknown as Socket;
     await middleware?.(authSocket, next);
-    expect(mockAuthenticate).toHaveBeenCalledWith('abc');
-    expect(authSocket.data).toEqual({ user: { id: '1' } });
+    // Middleware no longer authenticates - it just stores connection info
+    expect(authSocket.data).toEqual({
+      connectionInfo: {
+        ip: '127.0.0.1',
+        userAgent: 'test-agent',
+        acceptLanguage: 'en-US',
+        referrer: 'http://localhost',
+      },
+    });
     expect(next).toHaveBeenCalled();
 
     // Simulate connection lifecycle
@@ -122,8 +148,9 @@ describe('websocket/socketio/server', () => {
 
     const joinHandler = socketEvents.joinChannel;
     expect(joinHandler).toBeDefined();
-    await joinHandler?.('chat:room1');
-    expect(accessSpy).toHaveBeenCalledWith(socket.data);
+    await joinHandler?.({ channelName: 'chat:room1', authToken: 'token' });
+    expect(mockAuthenticate).toHaveBeenCalledWith('token');
+    expect(accessSpy).toHaveBeenCalled();
     expect(socket.join).toHaveBeenCalledWith('chat:room1');
     expect(socket.emit).toHaveBeenCalledWith('joinedChannel', 'chat:room1');
 

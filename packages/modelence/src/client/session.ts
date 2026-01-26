@@ -5,11 +5,15 @@ import { _setConfig } from '../config/client';
 import { setLocalStorageSession } from './localStorage';
 import { time } from '../time';
 import { Configs } from '../config/types';
+import { handleAuthChange } from '../websocket/socketio/client';
 
-type User = {
+type RawUserData = {
   id: string;
   handle: string;
   roles: string[];
+};
+
+type User = RawUserData & {
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
 };
@@ -81,9 +85,11 @@ async function loopSessionHeartbeat() {
   heartbeatTimer = setTimeout(loopSessionHeartbeat, SESSION_HEARTBEAT_INTERVAL);
 }
 
-export function setCurrentUser(user: unknown) {
+export function setCurrentUser(user: RawUserData | null) {
   const enrichedUser = parseUser(user);
   useSessionStore.getState().setUser(enrichedUser);
+  // Handle websocket channel management when auth state changes
+  handleAuthChange(enrichedUser?.id ?? null);
   return enrichedUser;
 }
 

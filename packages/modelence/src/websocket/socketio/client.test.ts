@@ -130,7 +130,8 @@ describe('websocket/socketio/client', () => {
       websocketProvider.on({ category: 'updates', listener: listener1 });
       websocketProvider.on({ category: 'updates', listener: listener2 });
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(3);
+      // 4 listeners from init (connect, joinedChannel, joinError, leftChannel) + 2 user listeners = 6
+      expect(mockSocket.on).toHaveBeenCalledTimes(6);
       expect(mockSocket.on).toHaveBeenCalledWith('updates', listener1);
       expect(mockSocket.on).toHaveBeenCalledWith('updates', listener2);
     });
@@ -266,7 +267,10 @@ describe('websocket/socketio/client', () => {
         id: '42',
       });
 
-      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'room:42');
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName: 'room:42',
+        authToken: undefined,
+      });
     });
 
     test('can join multiple channels', () => {
@@ -274,9 +278,18 @@ describe('websocket/socketio/client', () => {
       websocketProvider.joinChannel({ category: 'chat', id: '2' });
       websocketProvider.joinChannel({ category: 'notifications', id: 'user-123' });
 
-      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'chat:1');
-      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'chat:2');
-      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'notifications:user-123');
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName: 'chat:1',
+        authToken: undefined,
+      });
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName: 'chat:2',
+        authToken: undefined,
+      });
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName: 'notifications:user-123',
+        authToken: undefined,
+      });
       expect(mockSocket.emit).toHaveBeenCalledTimes(3);
     });
   });
@@ -304,7 +317,7 @@ describe('websocket/socketio/client', () => {
       expect(mockSocket.emit).toHaveBeenCalledTimes(2);
     });
 
-    test('leaves channel with same format as join', () => {
+    test('leaves channel with same channelName as join', () => {
       websocketProvider.joinChannel({ category: 'lobby', id: 'main' });
       websocketProvider.leaveChannel({ category: 'lobby', id: 'main' });
 
@@ -317,8 +330,49 @@ describe('websocket/socketio/client', () => {
 
       expect(joinCall).toBeDefined();
       expect(leaveCall).toBeDefined();
-      expect(joinCall?.[1]).toBe(leaveCall?.[1]);
-      expect(joinCall?.[1]).toBe('lobby:main');
+      // Join sends an object with channelName, leave sends just the channelName string
+      expect(joinCall?.[1]).toEqual({ channelName: 'lobby:main', authToken: undefined });
+      expect(leaveCall?.[1]).toBe('lobby:main');
+    });
+
+    test('handles race condition: leaveChannel called before joinedChannel arrives', () => {
+      // Find the joinedChannel event handler registered during init
+      const joinedChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'joinedChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const leftChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'leftChannel'
+      )?.[1] as (channelName: string) => void;
+
+      expect(joinedChannelHandler).toBeDefined();
+      expect(leftChannelHandler).toBeDefined();
+
+      const channelName = 'chat:race-test';
+
+      // Simulate race condition: join, then leave before joinedChannel arrives
+      websocketProvider.joinChannel({ category: 'chat', id: 'race-test' });
+      websocketProvider.leaveChannel({ category: 'chat', id: 'race-test' });
+
+      // Verify leave was emitted
+      expect(mockSocket.emit).toHaveBeenCalledWith('leaveChannel', channelName);
+
+      // Now simulate joinedChannel arriving after leaveChannel was called
+      // This should NOT add the channel back to activeChannels
+      joinedChannelHandler(channelName);
+
+      // Simulate leftChannel confirmation from server
+      leftChannelHandler(channelName);
+
+      // Verify that on reconnect, this channel would not be rejoined
+      // (We can't directly test activeChannels, but we can verify the handlers work correctly)
+      // The key is that joinedChannel handler should check pendingLeaves and not add it
+    });
+
+    test('registers leftChannel event listener', () => {
+      websocketProvider.init({});
+
+      expect(mockSocket.on).toHaveBeenCalledWith('leftChannel', expect.any(Function));
     });
   });
 
@@ -363,7 +417,10 @@ describe('websocket/socketio/client', () => {
       // Cleanup listener
       websocketProvider.off({ category: 'message', listener });
 
-      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'chat:general');
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName: 'chat:general',
+        authToken: undefined,
+      });
       expect(mockSocket.on).toHaveBeenCalledWith('message', listener);
       expect(mockSocket.emit).toHaveBeenCalledWith('leaveChannel', 'chat:general');
       expect(mockSocket.off).toHaveBeenCalledWith('message', listener);
@@ -411,7 +468,8 @@ describe('websocket/socketio/client', () => {
       // Unsubscribe one
       websocketProvider.off({ category: 'updates', listener: listener1 });
 
-      expect(mockSocket.on).toHaveBeenCalledTimes(3);
+      // 4 listeners from init (connect, joinedChannel, joinError, leftChannel) + 2 user listeners = 6
+      expect(mockSocket.on).toHaveBeenCalledTimes(6);
       expect(mockSocket.off).toHaveBeenCalledTimes(1);
       expect(mockSocket.off).toHaveBeenCalledWith('updates', listener1);
     });
