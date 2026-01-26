@@ -17,6 +17,9 @@ const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
 // Track active channels (format: "category:id")
 const activeChannels = new Set<string>();
 
+// Track channels that are being left (to handle race conditions with join/leave)
+const pendingLeaves = new Set<string>();
+
 function getSocket(): Socket {
   if (!socketClient) {
     throw new Error('WebSocket not initialized. Call startWebsockets() first.');
@@ -51,15 +54,21 @@ export function handleAuthChange(userId: string | null) {
   }
 
   if (userId === null) {
-    // User logged out - clear channels regardless of connection state
-    console.log('[Modelence] User logged out, clearing all channels');
+    // User logged out - clear channels and live subscriptions regardless of connection state
+    console.log('[Modelence] User logged out, clearing all channels and live subscriptions');
     // If connected, send leave requests to server before clearing
     if (socketClient.connected) {
       for (const channelName of activeChannels) {
         socketClient.emit('leaveChannel', channelName);
       }
+      // Unsubscribe all live queries to clean up server-side subscriptions
+      for (const sub of activeLiveSubscriptions.values()) {
+        socketClient.emit('unsubscribeLiveQuery', { subscriptionId: sub.subscriptionId });
+      }
     }
     activeChannels.clear();
+    pendingLeaves.clear();
+    activeLiveSubscriptions.clear();
   } else if (socketClient.connected) {
     // User logged in and socket is connected - rejoin channels and resubscribe live queries
     if (activeChannels.size > 0) {
@@ -85,12 +94,26 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
 
   // Handle successful channel joins
   socketClient.on('joinedChannel', (channelName: string) => {
-    activeChannels.add(channelName);
+    // Only add to activeChannels if we're not in the process of leaving it
+    // This handles the race condition where leaveChannel is called before joinedChannel arrives
+    if (!pendingLeaves.has(channelName)) {
+      activeChannels.add(channelName);
+    } else {
+      // Channel was left before join completed, remove from pending leaves
+      pendingLeaves.delete(channelName);
+    }
   });
 
   // Handle channel join errors - remove from tracking
   socketClient.on('joinError', ({ channel }: { channel: string; error: string }) => {
     activeChannels.delete(channel);
+    pendingLeaves.delete(channel);
+  });
+
+  // Handle confirmed channel leaves from server
+  socketClient.on('leftChannel', (channelName: string) => {
+    activeChannels.delete(channelName);
+    pendingLeaves.delete(channelName);
   });
 
   // Subscribe to all live queries and rejoin channels on connect/reconnect
@@ -153,6 +176,9 @@ function joinChannel({ category, id }: { category: string; id: string }) {
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
   const channelName = `${category}:${id}`;
+  // Mark as pending leave to handle race condition where joinedChannel arrives after leave
+  pendingLeaves.add(channelName);
+  // Optimistically remove from activeChannels (will be confirmed by leftChannel event)
   activeChannels.delete(channelName);
   emit({
     eventName: 'leaveChannel',
