@@ -10,8 +10,11 @@ jest.unstable_mockModule('./method', () => ({
   callMethod: mockCallMethod,
 }));
 
+const mockGetConfig = jest.fn();
+
 jest.unstable_mockModule('../config/client', () => ({
   _setConfig: mockSetConfig,
+  getConfig: mockGetConfig,
 }));
 
 const mockGetLocalStorageSession = jest.fn();
@@ -25,6 +28,12 @@ jest.unstable_mockModule('../time', () => ({
   time: {
     seconds: mockSeconds,
   },
+}));
+
+const mockHandleAuthChange = jest.fn();
+
+jest.unstable_mockModule('../websocket/socketio/client', () => ({
+  handleAuthChange: mockHandleAuthChange,
 }));
 
 const { initSession, setCurrentUser, useSessionStore, getHeartbeatTimer, stopHeartbeatTimer } =
