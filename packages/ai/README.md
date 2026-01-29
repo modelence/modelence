@@ -41,4 +41,4 @@ The function automatically uses API keys from Modelence configuration:
 - Anthropic: `_system.anthropic.apiKey`
 - Google: `_system.google.apiKey`
 
-You don't need to manually set any of these configs as long as your application is using a [Modelence Cloud](https://modelence.com/cloud) backend - simply use the AI > Integrations tab in your Modelence Cloud dashboard to configure keys, and it will be automatically used and recognized by this package.
+You don't need to manually set any of these configs as long as your application is using a [Modelence Cloud](https://cloud.modelence.com) backend - simply use the AI > Integrations tab in your Modelence Cloud dashboard to configure keys, and it will be automatically used and recognized by this package.
