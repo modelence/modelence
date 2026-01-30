@@ -60,7 +60,9 @@ describe('data/store', () => {
       searchIndexes: [{ name: 'searchIdx', definition: {} } as SearchIndexDescription],
     });
 
-    const indexError = new MongoError('duplicate') as MongoError & { code: number };
+    const indexError = new MongoError(
+      'An existing index has the same name as the requested index. Requested index: { v: 2, key: { name: 1 }, name: "nameIdx" }, existing index: { v: 2, key: { name: 1 }, name: "nameIdx" }'
+    ) as MongoError & { code: number };
     indexError.code = 86;
     const searchError = new MongoError('duplicate search') as MongoError & { code: number };
     searchError.code = 68;
@@ -86,6 +88,32 @@ describe('data/store', () => {
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('nameIdx');
     expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
     expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
+  });
+
+  test('createIndexes drops auto-named indexes when options change', async () => {
+    const store = createStore({
+      indexes: [{ key: { title: 1, completed: 1 }, unique: true }],
+    });
+
+    const indexError = new MongoError(
+      'An existing index has the same name as the requested index. Requested index: { v: 2, unique: true, key: { title: 1, completed: 1 }, name: "title_1_completed_1" }, existing index: { v: 2, key: { title: 1, completed: 1 }, name: "title_1_completed_1" }'
+    ) as MongoError & { code: number };
+    indexError.code = 86;
+
+    const collectionMock = {
+      createIndexes: jest
+        .fn()
+        .mockRejectedValueOnce(indexError as never)
+        .mockResolvedValueOnce(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('title_1_completed_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
   });
 
   test('updateOne converts string selectors into ObjectIds', async () => {
