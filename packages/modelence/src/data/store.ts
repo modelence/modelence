@@ -106,6 +106,31 @@ const extractIndexNameFromError = (error: MongoError): string | undefined => {
 };
 
 /**
+ * Generates an auto-generated index name from the index keys
+ * Mimics MongoDB's default naming: field1_direction1_field2_direction2
+ */
+const generateAutoIndexName = (key: Document): string => {
+  return Object.entries(key)
+    .map(([field, direction]) => `${field}_${direction}`)
+    .join('_');
+};
+
+/**
+ * Normalizes an index by ensuring it has a name with _modelence_ prefix
+ */
+const normalizeIndexName = (index: IndexDescription): IndexDescription => {
+  if (index.name) {
+    // If name is provided, add _modelence_ prefix if not already present
+    const name = index.name.startsWith('_modelence_') ? index.name : `_modelence_${index.name}`;
+    return { ...index, name };
+  }
+
+  // Auto-generate name with _modelence_ prefix
+  const autoName = generateAutoIndexName(index.key);
+  return { ...index, name: `_modelence_${autoName}` };
+};
+
+/**
  * Custom filter value type that handles array fields specially:
  * - For array fields: allows element type, full array type, or FilterOperators
  * - For non-array fields: allows exact type or FilterOperators
@@ -263,7 +288,8 @@ export class Store<
     this.name = name;
     this.schema = options.schema;
     this.methods = options.methods;
-    this.indexes = options.indexes;
+    // Normalize all indexes to have _modelence_ prefix
+    this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
   }
 
@@ -375,6 +401,23 @@ export class Store<
   /** @internal */
   async createIndexes() {
     const collection = this.requireCollection();
+
+    // Get all existing indexes in the collection
+    const existingIndexes = await collection.listIndexes().toArray();
+
+    // Find all _modelence_ prefixed indexes that are not in the current schema
+    const currentIndexNames = new Set(this.indexes.map((idx) => idx.name));
+    const orphanedIndexes = existingIndexes.filter(
+      (existingIdx) =>
+        existingIdx.name.startsWith('_modelence_') && !currentIndexNames.has(existingIdx.name)
+    );
+
+    // Drop orphaned indexes
+    for (const orphanedIndex of orphanedIndexes) {
+      await collection.dropIndex(orphanedIndex.name);
+    }
+
+    // Create or update indexes
     if (this.indexes.length > 0) {
       for (const index of this.indexes) {
         try {

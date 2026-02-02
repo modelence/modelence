@@ -40,7 +40,11 @@ describe('data/store', () => {
       name: expect.anything(),
       age: expect.anything(),
     });
-    expect((extended as unknown as { indexes: IndexDescription[] }).indexes.length).toBe(2);
+    const extendedIndexes = (extended as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(extendedIndexes.length).toBe(2);
+    // Verify _modelence_ prefix is added
+    expect(extendedIndexes[0].name).toBe('_modelence_nameIdx');
+    expect(extendedIndexes[1].name).toBe('_modelence_ageIdx');
 
     const mockClient = {
       db: () => ({
@@ -61,13 +65,16 @@ describe('data/store', () => {
     });
 
     const indexError = new MongoError(
-      'An existing index has the same name as the requested index. Requested index: { v: 2, key: { name: 1 }, name: "nameIdx" }, existing index: { v: 2, key: { name: 1 }, name: "nameIdx" }'
+      'An existing index has the same name as the requested index. Requested index: { v: 2, key: { name: 1 }, name: "_modelence_nameIdx" }, existing index: { v: 2, key: { name: 1 }, name: "_modelence_nameIdx" }'
     ) as MongoError & { code: number };
     indexError.code = 86;
     const searchError = new MongoError('duplicate search') as MongoError & { code: number };
     searchError.code = 68;
 
     const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+      }),
       createIndexes: jest
         .fn()
         .mockRejectedValueOnce(indexError as never)
@@ -84,8 +91,9 @@ describe('data/store', () => {
 
     await store.createIndexes();
 
+    expect(collectionMock.listIndexes).toHaveBeenCalled();
     expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
-    expect(collectionMock.dropIndex).toHaveBeenCalledWith('nameIdx');
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_nameIdx');
     expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
     expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
   });
@@ -96,11 +104,14 @@ describe('data/store', () => {
     });
 
     const indexError = new MongoError(
-      'An existing index has the same name as the requested index. Requested index: { v: 2, unique: true, key: { title: 1, completed: 1 }, name: "title_1_completed_1" }, existing index: { v: 2, key: { title: 1, completed: 1 }, name: "title_1_completed_1" }'
+      'An existing index has the same name as the requested index. Requested index: { v: 2, unique: true, key: { title: 1, completed: 1 }, name: "_modelence_title_1_completed_1" }, existing index: { v: 2, key: { title: 1, completed: 1 }, name: "_modelence_title_1_completed_1" }'
     ) as MongoError & { code: number };
     indexError.code = 86;
 
     const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+      }),
       createIndexes: jest
         .fn()
         .mockRejectedValueOnce(indexError as never)
@@ -112,8 +123,66 @@ describe('data/store', () => {
 
     await store.createIndexes();
 
-    expect(collectionMock.dropIndex).toHaveBeenCalledWith('title_1_completed_1');
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_title_1_completed_1');
     expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
+  });
+
+  test('createIndexes drops orphaned _modelence_ indexes', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_' }, // Default index, should not be dropped
+          { name: '_modelence_name_1' }, // Current index, should be kept
+          { name: '_modelence_oldField_1' }, // Orphaned index, should be dropped
+          { name: 'customIndex_1' }, // Non-modelence index, should not be dropped
+        ] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    // Should only drop the orphaned _modelence_ index
+    expect(collectionMock.dropIndex).toHaveBeenCalledTimes(1);
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_oldField_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalled();
+  });
+
+  test('normalizes index names with _modelence_ prefix', () => {
+    // Test auto-generated name
+    const store1 = createStore({
+      indexes: [{ key: { userId: 1 } }],
+    });
+    const indexes1 = (store1 as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(indexes1[0].name).toBe('_modelence_userId_1');
+
+    // Test explicit name gets prefixed
+    const store2 = createStore({
+      indexes: [{ key: { userId: 1 }, name: 'customName' }],
+    });
+    const indexes2 = (store2 as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(indexes2[0].name).toBe('_modelence_customName');
+
+    // Test already prefixed name stays the same
+    const store3 = createStore({
+      indexes: [{ key: { userId: 1 }, name: '_modelence_alreadyPrefixed' }],
+    });
+    const indexes3 = (store3 as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(indexes3[0].name).toBe('_modelence_alreadyPrefixed');
+
+    // Test compound index auto-generated name
+    const store4 = createStore({
+      indexes: [{ key: { userId: 1, createdAt: -1 } }],
+    });
+    const indexes4 = (store4 as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(indexes4[0].name).toBe('_modelence_userId_1_createdAt_-1');
   });
 
   test('updateOne converts string selectors into ObjectIds', async () => {
