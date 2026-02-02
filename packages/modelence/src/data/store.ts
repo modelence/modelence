@@ -80,6 +80,83 @@ type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
   $nin?: ArrayLikeOfUnion<T>;
 };
 
+const extractIndexNameFromError = (error: MongoError): string | undefined => {
+  const mongoError = error as MongoError & {
+    errorResponse?: { errmsg?: string; message?: string };
+  };
+  const candidateMessages = [
+    mongoError.message,
+    mongoError.errorResponse?.errmsg,
+    mongoError.errorResponse?.message,
+  ].filter((message): message is string => typeof message === 'string');
+
+  for (const message of candidateMessages) {
+    // Pattern for code 86: "existing index: ... name: "indexName""
+    const existingMatch = message.match(/existing index:.*?name:\s*"([^"]+)"/i);
+    if (existingMatch?.[1]) {
+      return existingMatch[1];
+    }
+
+    // Pattern for code 86: "requested index: ... name: "indexName""
+    const requestedMatch = message.match(/requested index:.*?name:\s*"([^"]+)"/i);
+    if (requestedMatch?.[1]) {
+      return requestedMatch[1];
+    }
+
+    // Pattern for code 85: "Index already exists with a different name: indexName"
+    const differentNameMatch = message.match(
+      /Index already exists with a different name:\s*([^\s]+)/i
+    );
+    if (differentNameMatch?.[1]) {
+      return differentNameMatch[1];
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * Lists all indexes in a collection, returning an empty array if collection doesn't exist
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const listIndexes = async (collection: Collection<any>): Promise<Document[]> => {
+  try {
+    return await collection.listIndexes().toArray();
+  } catch (error) {
+    // If collection doesn't exist yet, return empty array
+    // It will be created when we insert data or create indexes
+    if (error instanceof MongoError && error.code === 26) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+/**
+ * Generates an auto-generated index name from the index keys
+ * Mimics MongoDB's default naming: field1_direction1_field2_direction2
+ */
+const generateAutoIndexName = (key: Document): string => {
+  return Object.entries(key)
+    .map(([field, direction]) => `${field}_${direction}`)
+    .join('_');
+};
+
+/**
+ * Normalizes an index by ensuring it has a name with _modelence_ prefix
+ */
+const normalizeIndexName = (index: IndexDescription): IndexDescription => {
+  if (index.name) {
+    // If name is provided, add _modelence_ prefix if not already present
+    const name = index.name.startsWith('_modelence_') ? index.name : `_modelence_${index.name}`;
+    return { ...index, name };
+  }
+
+  // Auto-generate name with _modelence_ prefix
+  const autoName = generateAutoIndexName(index.key);
+  return { ...index, name: `_modelence_${autoName}` };
+};
+
 /**
  * Custom filter value type that handles array fields specially:
  * - For array fields: allows element type, full array type, or FilterOperators
@@ -238,7 +315,8 @@ export class Store<
     this.name = name;
     this.schema = options.schema;
     this.methods = options.methods;
-    this.indexes = options.indexes;
+    // Normalize all indexes to have _modelence_ prefix
+    this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
   }
 
@@ -349,14 +427,38 @@ export class Store<
 
   /** @internal */
   async createIndexes() {
+    const collection = this.requireCollection();
+
+    // Get all existing indexes in the collection (returns [] if collection doesn't exist)
+    const existingIndexes = await listIndexes(collection);
+
+    // Find all _modelence_ prefixed indexes that are not in the current schema
+    const currentIndexNames = new Set(this.indexes.map((idx) => idx.name));
+    const orphanedIndexes = existingIndexes.filter(
+      (existingIdx) =>
+        existingIdx.name.startsWith('_modelence_') && !currentIndexNames.has(existingIdx.name)
+    );
+
+    // Drop orphaned indexes
+    for (const orphanedIndex of orphanedIndexes) {
+      await collection.dropIndex(orphanedIndex.name);
+    }
+
+    // Create or update indexes
     if (this.indexes.length > 0) {
       for (const index of this.indexes) {
         try {
-          await this.requireCollection().createIndexes([index]);
+          await collection.createIndexes([index]);
         } catch (error) {
-          if (error instanceof MongoError && error.code === 86 && index.name) {
-            await this.requireCollection().dropIndex(index.name);
-            await this.requireCollection().createIndexes([index]);
+          if (error instanceof MongoError && (error.code === 86 || error.code === 85)) {
+            const indexName = extractIndexNameFromError(error);
+
+            if (!indexName) {
+              throw error;
+            }
+
+            await collection.dropIndex(indexName);
+            await collection.createIndexes([index]);
           } else {
             throw error;
           }
@@ -366,11 +468,11 @@ export class Store<
     if (this.searchIndexes.length > 0) {
       for (const searchIndex of this.searchIndexes) {
         try {
-          await this.requireCollection().createSearchIndexes([searchIndex]);
+          await collection.createSearchIndexes([searchIndex]);
         } catch (error) {
           if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
-            await this.requireCollection().dropSearchIndex(searchIndex.name);
-            await this.requireCollection().createSearchIndexes([searchIndex]);
+            await collection.dropSearchIndex(searchIndex.name);
+            await collection.createSearchIndexes([searchIndex]);
           } else {
             throw error;
           }
