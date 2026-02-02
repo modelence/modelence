@@ -91,14 +91,24 @@ const extractIndexNameFromError = (error: MongoError): string | undefined => {
   ].filter((message): message is string => typeof message === 'string');
 
   for (const message of candidateMessages) {
+    // Pattern for code 86: "existing index: ... name: "indexName""
     const existingMatch = message.match(/existing index:.*?name:\s*"([^"]+)"/i);
     if (existingMatch?.[1]) {
       return existingMatch[1];
     }
 
+    // Pattern for code 86: "requested index: ... name: "indexName""
     const requestedMatch = message.match(/requested index:.*?name:\s*"([^"]+)"/i);
     if (requestedMatch?.[1]) {
       return requestedMatch[1];
+    }
+
+    // Pattern for code 85: "Index already exists with a different name: indexName"
+    const differentNameMatch = message.match(
+      /Index already exists with a different name:\s*([^\s]+)/i
+    );
+    if (differentNameMatch?.[1]) {
+      return differentNameMatch[1];
     }
   }
 

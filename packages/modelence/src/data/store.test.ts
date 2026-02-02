@@ -98,7 +98,7 @@ describe('data/store', () => {
     expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
   });
 
-  test('createIndexes drops auto-named indexes when options change', async () => {
+  test('createIndexes drops auto-named indexes when options change (code 86)', async () => {
     const store = createStore({
       indexes: [{ key: { title: 1, completed: 1 }, unique: true }],
     });
@@ -124,6 +124,35 @@ describe('data/store', () => {
     await store.createIndexes();
 
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_title_1_completed_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
+  });
+
+  test('createIndexes handles code 85 error (different name same fields)', async () => {
+    const store = createStore({
+      indexes: [{ key: { environmentId: 1, chatId: 1, position: 1 } }],
+    });
+
+    const indexError = new MongoError(
+      'Index already exists with a different name: environmentId_1_chatId_1_position_1'
+    ) as MongoError & { code: number };
+    indexError.code = 85;
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+      }),
+      createIndexes: jest
+        .fn()
+        .mockRejectedValueOnce(indexError as never)
+        .mockResolvedValueOnce(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('environmentId_1_chatId_1_position_1');
     expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
   });
 
