@@ -184,6 +184,31 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).toHaveBeenCalled();
   });
 
+  test('createIndexes handles non-existent collection (code 26)', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const namespaceError = new MongoError('ns not found') as MongoError & { code: number };
+    namespaceError.code = 26;
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockRejectedValue(namespaceError as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    // Should not throw and should still create indexes
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).toHaveBeenCalled();
+  });
+
   test('normalizes index names with _modelence_ prefix', () => {
     // Test auto-generated name
     const store1 = createStore({

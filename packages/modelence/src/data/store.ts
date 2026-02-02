@@ -116,6 +116,23 @@ const extractIndexNameFromError = (error: MongoError): string | undefined => {
 };
 
 /**
+ * Lists all indexes in a collection, returning an empty array if collection doesn't exist
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const listIndexes = async (collection: Collection<any>): Promise<Document[]> => {
+  try {
+    return await collection.listIndexes().toArray();
+  } catch (error) {
+    // If collection doesn't exist yet, return empty array
+    // It will be created when we insert data or create indexes
+    if (error instanceof MongoError && error.code === 26) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+/**
  * Generates an auto-generated index name from the index keys
  * Mimics MongoDB's default naming: field1_direction1_field2_direction2
  */
@@ -412,8 +429,8 @@ export class Store<
   async createIndexes() {
     const collection = this.requireCollection();
 
-    // Get all existing indexes in the collection
-    const existingIndexes = await collection.listIndexes().toArray();
+    // Get all existing indexes in the collection (returns [] if collection doesn't exist)
+    const existingIndexes = await listIndexes(collection);
 
     // Find all _modelence_ prefixed indexes that are not in the current schema
     const currentIndexNames = new Set(this.indexes.map((idx) => idx.name));
