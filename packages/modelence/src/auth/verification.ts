@@ -8,7 +8,6 @@ import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
-import { RateLimitError } from '@/error';
 import { User } from './types';
 import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
