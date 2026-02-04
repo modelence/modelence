@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersUpdateOne = jest.fn();
@@ -12,6 +13,8 @@ const mockHtmlToText = jest.fn<(html: string) => string>();
 const mockTemplate =
   jest.fn<(args: { name?: string; email: string; verificationUrl: string }) => string>();
 const mockGetAuthConfig = jest.fn();
+const mockValidateEmail = jest.fn<(value: string) => string>();
+const mockConsumeRateLimit = jest.fn();
 
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
@@ -51,11 +54,22 @@ jest.unstable_mockModule('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-const { handleVerifyEmail, sendVerificationEmail } = await import('./verification');
+jest.unstable_mockModule('./validators', () => ({
+  validateEmail: mockValidateEmail,
+}));
+
+jest.unstable_mockModule('@/rate-limit/rules', () => ({
+  consumeRateLimit: mockConsumeRateLimit,
+}));
+
+const verificationModule = await import('./verification');
+const { handleVerifyEmail, sendVerificationEmail, handleResendEmailVerification } =
+  verificationModule;
 
 describe('auth/verification', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockValidateEmail.mockImplementation((value) => value);
     mockGetEmailConfig.mockReturnValue({
       provider: { sendEmail: jest.fn() },
       from: 'no-reply@example.com',
@@ -270,6 +284,118 @@ describe('auth/verification', () => {
       });
 
       expect(mockTokensInsertOne).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleResendEmailVerification', () => {
+    const baseContext = {
+      connectionInfo: {
+        ip: '203.0.113.10',
+        baseUrl: 'https://app.example.com',
+      },
+    };
+
+    test('returns generic response when email is not found', async () => {
+      mockUsersFindOne.mockResolvedValue(null as never);
+
+      const result = await handleResendEmailVerification(
+        { email: 'user@example.com' } as never,
+        baseContext as never
+      );
+
+      expect(mockValidateEmail).toHaveBeenCalledWith('user@example.com');
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '203.0.113.10',
+      });
+      expect(result).toEqual({
+        success: true,
+        message:
+          'If that email is registered and not yet verified, a verification email has been sent',
+      });
+      expect(mockGetEmailConfig).not.toHaveBeenCalled();
+    });
+
+    test('returns generic response when email already verified', async () => {
+      mockUsersFindOne.mockResolvedValue({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      } as never);
+
+      const result = await handleResendEmailVerification(
+        { email: 'user@example.com' } as never,
+        baseContext as never
+      );
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        success: true,
+        message:
+          'If that email is registered and not yet verified, a verification email has been sent',
+      });
+    });
+
+    test('throws when email provider is missing', async () => {
+      mockGetEmailConfig.mockReturnValue({
+        provider: null,
+      });
+      const userId = new ObjectId('64b64b64b64b64b64b64b64b');
+      mockUsersFindOne.mockResolvedValue({
+        _id: userId,
+        emails: [{ address: 'user@example.com', verified: false }],
+      } as never);
+
+      await expect(
+        handleResendEmailVerification({ email: 'user@example.com' } as never, baseContext as never)
+      ).rejects.toThrow('Email provider is not configured');
+    });
+
+    test('sends verification email when unverified', async () => {
+      const userId = new ObjectId('64b64b64b64b64b64b64b64b');
+      mockUsersFindOne.mockResolvedValue({
+        _id: userId,
+        emails: [{ address: 'user@example.com', verified: false }],
+      } as never);
+
+      const provider = { sendEmail: jest.fn() };
+      mockGetEmailConfig.mockReturnValue({
+        provider,
+        from: 'no-reply@example.com',
+        verification: {},
+      });
+
+      const result = await handleResendEmailVerification(
+        { email: 'user@example.com' } as never,
+        baseContext as never
+      );
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'user',
+        value: userId.toString(),
+        message: 'Please wait at least 60 seconds before requesting another verification email',
+      });
+      expect(mockTokensInsertOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId,
+          email: 'user@example.com',
+          token: 'token123',
+          expiresAt: expect.any(Date),
+        })
+      );
+      expect(provider.sendEmail).toHaveBeenCalledWith({
+        to: 'user@example.com',
+        from: 'no-reply@example.com',
+        subject: 'Verify your email address',
+        text: expect.any(String),
+        html: expect.any(String),
+      });
+      expect(result).toEqual({
+        success: true,
+        message:
+          'If that email is registered and not yet verified, a verification email has been sent',
+      });
     });
   });
 });
