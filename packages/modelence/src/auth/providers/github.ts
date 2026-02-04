@@ -23,6 +23,13 @@ interface GitHubUserInfo {
   avatar_url: string;
 }
 
+interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: 'public' | 'private' | null;
+}
+
 async function exchangeCodeForToken(
   code: string,
   clientId: string,
@@ -65,6 +72,21 @@ async function fetchGitHubUserInfo(accessToken: string): Promise<GitHubUserInfo>
   return userInfoResponse.json();
 }
 
+async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]> {
+  const response = await fetch('https://api.github.com/user/emails', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user emails: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
   const state = req.query.state as string;
@@ -99,14 +121,22 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     const githubUser = await fetchGitHubUserInfo(tokenData.access_token);
 
     // Use the public email from user profile
-    const githubEmail = githubUser.email || '';
+    let githubEmail = githubUser.email;
 
     if (!githubEmail) {
-      res.status(400).json({
-        error:
-          'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.',
-      });
-      return;
+      const emails = await fetchGitHubUserEmails(tokenData.access_token);
+
+      const primaryVerifiedEmail = emails.find((e) => e.primary && e.verified);
+
+      githubEmail = primaryVerifiedEmail?.email ?? null;
+
+      if (!githubEmail) {
+        res.status(400).json({
+          error:
+            'Unable to retrieve a verified email from GitHub. Please ensure your GitHub account has at least one verified email.',
+        });
+        return;
+      }
     }
 
     const userData: OAuthUserData = {
