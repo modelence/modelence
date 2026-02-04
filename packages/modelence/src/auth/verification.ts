@@ -8,6 +8,7 @@ import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
+import { RateLimitError } from '@/error';
 import { User } from './types';
 import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
@@ -192,12 +193,18 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
     throw new Error('Email provider is not configured');
   }
 
-  await consumeRateLimit({
-    bucket: 'verification',
-    type: 'user',
-    value: userDoc._id.toString(),
-    message: 'Please wait at least 60 seconds before requesting another verification email',
-  });
+  try {
+    await consumeRateLimit({
+      bucket: 'verification',
+      type: 'user',
+      value: userDoc._id.toString(),
+    });
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      return resendVerificationResponse;
+    }
+    throw err;
+  }
 
   await sendVerificationEmail({
     userId: userDoc._id,
