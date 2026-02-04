@@ -87,6 +87,10 @@ async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]
   return response.json();
 }
 
+function getPrimaryVerifiedEmail(emails: GitHubEmail[]): string | null {
+  return emails.find((e) => e.primary && e.verified)?.email ?? null;
+}
+
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
   const state = req.query.state as string;
@@ -126,9 +130,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     if (!githubEmail) {
       const emails = await fetchGitHubUserEmails(tokenData.access_token);
 
-      const primaryVerifiedEmail = emails.find((e) => e.primary && e.verified);
-
-      githubEmail = primaryVerifiedEmail?.email ?? null;
+      githubEmail = getPrimaryVerifiedEmail(emails);
 
       if (!githubEmail) {
         res.status(400).json({
