@@ -192,6 +192,13 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
     throw new Error('Email provider is not configured');
   }
 
+  await consumeRateLimit({
+    bucket: 'verification',
+    type: 'user',
+    value: userDoc._id.toString(),
+    message: 'Please wait at least 60 seconds before requesting another verification email',
+  });
+
   await sendVerificationEmail({
     userId: userDoc._id,
     email,

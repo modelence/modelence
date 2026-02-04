@@ -96,8 +96,8 @@ export default new Module('_system.user', {
     {
       bucket: 'verification',
       type: 'user',
-      window: time.minutes(15),
-      limit: 3,
+      window: time.seconds(60),
+      limit: 1,
     },
     {
       bucket: 'verification',

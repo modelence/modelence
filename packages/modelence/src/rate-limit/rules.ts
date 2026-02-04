@@ -25,17 +25,20 @@ export function initRateLimits(rateLimits: RateLimitRule[]) {
  * @param options.bucket - The bucket for the rate limit.
  * @param options.type - The type of the rate limit.
  * @param options.value - The value for the rate limit.
+ * @param options.message - Optional custom error message when the rate limit is exceeded.
  */
 export async function consumeRateLimit(options: {
   bucket: string;
   type: RateLimitType;
   value: string;
+  message?: string;
 }) {
-  const { bucket, type, value } = options;
+  const { bucket, type, value, message } = options;
   const rules = allRules.filter((rule) => rule.bucket === bucket && rule.type === type);
+  const createError = message ? () => new RateLimitError(message) : undefined;
 
   for (const rule of rules) {
-    await checkRateLimitRule(rule, value);
+    await checkRateLimitRule(rule, value, createError);
   }
 }
 
