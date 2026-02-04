@@ -47,10 +47,10 @@
               },
               "roles",
               "email",
-              "rate-limiting",
               "stores",
               "websockets",
-              "telemetry"
+              "telemetry",
+              "rate-limiting"
             ]
           },
           {
