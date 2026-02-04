@@ -1,0 +1,67 @@
+---
+title: 'Rate Limiting'
+---
+
+Modelence provides a built-in rate limiting system you can use to protect any mutation or query from abuse. Authentication endpoints come with [their own default limits](/authentication/rate-limiting).
+
+## Defining Rate Limits
+
+You can define your own rate limits by adding a `rateLimits` array to a [Module](/api-reference/modelence/server/functions/../classes/Module). Each rule specifies a bucket name, the type of actor being limited (`ip` or `user`), a time window, and a maximum number of allowed calls within that window.
+
+```typescript
+import { Module } from 'modelence/server';
+import { time } from 'modelence/server';
+
+const myModule = new Module('myFeature', {
+  rateLimits: [
+    {
+      bucket: 'myAction',
+      type: 'ip',
+      window: time.minutes(15),  // 15-minute window
+      limit: 10,                 // max 10 calls per window
+    },
+  ],
+  // ...
+});
+```
+
+Multiple rules can share the same bucket to enforce more than one window. All rules on a bucket are checked — if any one is exceeded, the call is rejected:
+
+```typescript
+rateLimits: [
+  { bucket: 'myAction', type: 'ip', window: time.minutes(1),  limit: 3  },  // 3 per minute
+  { bucket: 'myAction', type: 'ip', window: time.hours(1),    limit: 20 },  // 20 per hour
+  { bucket: 'myAction', type: 'ip', window: time.days(1),     limit: 100 }, // 100 per day
+],
+```
+
+### Consuming a Rate Limit
+
+Call [`consumeRateLimit`](/api-reference/modelence/server/functions/consumeRateLimit) inside a mutation or query handler to check and increment the rate limit counter. It throws a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) automatically when any matching rule is exceeded:
+
+```typescript
+import { consumeRateLimit } from 'modelence/server';
+
+// Inside a mutation handler:
+async function handleMyAction(args, { connectionInfo }) {
+  await consumeRateLimit({
+    bucket: 'myAction',
+    type: 'ip',
+    value: connectionInfo.ip,
+  });
+
+  // ... proceed with the action
+}
+```
+
+An optional `message` parameter lets you provide a user-facing error message instead of the default:
+
+```typescript
+await consumeRateLimit({
+  bucket: 'myAction',
+  type: 'ip',
+  value: connectionInfo.ip,
+  message: 'Too many requests. Please wait a moment and try again.',
+});
+```
+
