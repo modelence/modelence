@@ -80,3 +80,20 @@ async function handleVerification(token: string) {
 }
 ```
 
+## Resending Verification Email
+
+If the user did not receive the original verification email, you can resend it. The email is only sent when the address is registered and not yet verified — a generic response is always returned regardless, to avoid leaking account information.
+
+```typescript
+import { resendEmailVerification } from 'modelence/client';
+
+async function handleResend(email: string) {
+  try {
+    await resendEmailVerification({ email });
+    console.log('Verification email sent');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
