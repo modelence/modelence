@@ -135,7 +135,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       if (!githubEmail) {
         res.status(400).json({
           error:
-            'Unable to retrieve a verified email from GitHub. Please ensure your GitHub account has at least one verified email.',
+            'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
         });
         return;
       }
