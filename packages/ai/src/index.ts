@@ -40,7 +40,7 @@ function getProviderModel(provider: Provider, model: string) {
     
     case 'google':
       return createGoogleGenerativeAI({
-        apiKey: String(getConfig('_system.google.apiKey')),
+        apiKey: String(getConfig('_system.gemini.apiKey')),
       })(model);
     
     default:
