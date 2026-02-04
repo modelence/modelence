@@ -11,6 +11,7 @@ const mockHandleLoginWithPassword = jest.fn();
 const mockHandleLogout = jest.fn();
 const mockHandleSignupWithPassword = jest.fn();
 const mockHandleVerifyEmail = jest.fn();
+const mockHandleResendEmailVerification = jest.fn();
 const mockHandleSendResetPasswordToken = jest.fn();
 const mockHandleResetPassword = jest.fn();
 const mockGetOwnProfile = jest.fn();
@@ -49,6 +50,7 @@ jest.unstable_mockModule('./signup', () => ({
 
 jest.unstable_mockModule('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
+  handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
 jest.unstable_mockModule('./resetPassword', () => ({
@@ -57,6 +59,7 @@ jest.unstable_mockModule('./resetPassword', () => ({
 }));
 
 const mockTime = {
+  seconds: jest.fn((value: number) => value * 1000),
   minutes: jest.fn((value: number) => value * 60 * 1000),
   days: jest.fn((value: number) => value * 24 * 60 * 60 * 1000),
 };
@@ -125,6 +128,7 @@ describe('auth/user', () => {
           signupWithPassword: mockHandleSignupWithPassword,
           loginWithPassword: mockHandleLoginWithPassword,
           logout: mockHandleLogout,
+          resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,
         }),
