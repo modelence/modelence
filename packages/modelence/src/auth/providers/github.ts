@@ -87,7 +87,10 @@ async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]
   return response.json();
 }
 
-async function getGitHubUserEmail(githubUser: GitHubUserInfo, accessToken: string): Promise<string | null> {
+async function getGitHubUserEmail(
+  githubUser: GitHubUserInfo,
+  accessToken: string
+): Promise<string | null> {
   if (githubUser.email) {
     return githubUser.email;
   }
