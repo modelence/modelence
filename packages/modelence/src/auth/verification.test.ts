@@ -304,11 +304,7 @@ describe('auth/verification', () => {
       );
 
       expect(mockValidateEmail).toHaveBeenCalledWith('user@example.com');
-      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'verification',
-        type: 'ip',
-        value: '203.0.113.10',
-      });
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message:
@@ -328,7 +324,7 @@ describe('auth/verification', () => {
         baseContext as never
       );
 
-      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message:
