@@ -12,7 +12,7 @@ import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
-import { handleVerifyEmail } from './verification';
+import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
 
 export async function createGuestUser() {
@@ -49,6 +49,7 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
+    resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,
   },
@@ -95,8 +96,8 @@ export default new Module('_system.user', {
     {
       bucket: 'verification',
       type: 'user',
-      window: time.minutes(15),
-      limit: 3,
+      window: time.seconds(60),
+      limit: 1,
     },
     {
       bucket: 'verification',

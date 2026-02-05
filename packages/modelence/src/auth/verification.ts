@@ -9,6 +9,9 @@ import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
 import { User } from './types';
+import { Args, Context } from '@/methods/types';
+import { validateEmail } from './validators';
+import { consumeRateLimit } from '@/rate-limit/rules';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = process.env.MODELENCE_SITE_URL;
@@ -152,4 +155,50 @@ export async function sendVerificationEmail({
       html: htmlTemplate,
     });
   }
+}
+
+const resendVerificationResponse = {
+  success: true,
+  message: 'If that email is registered and not yet verified, a verification email has been sent',
+};
+
+export async function handleResendEmailVerification(args: Args, { connectionInfo }: Context) {
+  const email = validateEmail(args.email as string);
+
+  // Find user by email, excluding deleted/disabled accounts
+  const userDoc = await usersCollection.findOne(
+    { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
+    { collation: { locale: 'en', strength: 2 } }
+  );
+
+  // Return the same generic response whether the email is unknown,
+  // already verified, or successfully sent — to prevent user enumeration.
+  if (!userDoc) {
+    return resendVerificationResponse;
+  }
+
+  const emailDoc = userDoc.emails?.find((e) => e.address === email);
+
+  if (!emailDoc || emailDoc.verified) {
+    return resendVerificationResponse;
+  }
+
+  if (!getEmailConfig().provider) {
+    throw new Error('Email provider is not configured');
+  }
+
+  await consumeRateLimit({
+    bucket: 'verification',
+    type: 'user',
+    value: userDoc._id.toString(),
+    message: 'Please wait at least 60 seconds before requesting another verification email',
+  });
+
+  await sendVerificationEmail({
+    userId: userDoc._id,
+    email,
+    baseUrl: connectionInfo?.baseUrl,
+  });
+
+  return resendVerificationResponse;
 }
