@@ -7,7 +7,7 @@ Modelence provides a built-in rate limiting system you can use to protect any mu
 
 ## Defining Rate Limits
 
-You can define your own rate limits by adding a `rateLimits` array to a [Module](/api-reference/modelence/server/functions/../classes/Module). Each rule specifies a bucket name, the type of actor being limited (`ip` or `user`), a time window, and a maximum number of allowed calls within that window.
+You can define your own rate limits by adding a `rateLimits` array to a [Module](/api-reference/modelence/server/classes/Module). Each rule specifies a bucket name, the type of actor being limited (`ip` or `user`), a time window, and a maximum number of allowed calls within that window.
 
 ```typescript
 import { Module } from 'modelence/server';

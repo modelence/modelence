@@ -161,15 +161,6 @@ const resendVerificationResponse = {
 export async function handleResendEmailVerification(args: Args, { connectionInfo }: Context) {
   const email = validateEmail(args.email as string);
 
-  const ip = connectionInfo?.ip;
-  if (ip) {
-    await consumeRateLimit({
-      bucket: 'verification',
-      type: 'ip',
-      value: ip,
-    });
-  }
-
   // Find user by email, excluding deleted/disabled accounts
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
