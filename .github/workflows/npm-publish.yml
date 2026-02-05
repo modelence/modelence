@@ -83,8 +83,8 @@ jobs:
         run: |
           if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
             echo "Publishing dev version without latest tag"
-            npm publish --tag dev --access public
+            npm publish --tag dev --access public --provenance
           else
             echo "Publishing with latest tag"
-            npm publish --access public
+            npm publish --access public --provenance
           fi
