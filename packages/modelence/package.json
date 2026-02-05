@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.11.0-dev.8",
+  "version": "0.11.0-dev.9",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -102,9 +102,5 @@
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   }
 }
