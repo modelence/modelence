@@ -1,8 +1,10 @@
 name: Publish to NPM
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'modelence@*'
+      - '@modelence/*@*'
 
 jobs:
   publish:
@@ -22,7 +24,7 @@ jobs:
       - name: Extract package info from tag
         id: package-info
         run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
+          TAG_NAME="${{ github.ref_name }}"
           echo "Full tag: $TAG_NAME"
           
           if [[ "$TAG_NAME" == *"@"* ]]; then
