@@ -1,0 +1,31 @@
+---
+sidebar_position: 1
+title: resendEmailVerification
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / resendEmailVerification
+
+> **resendEmailVerification**(`options`): `Promise`\<`void`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:80](https://github.com/modelence/modelence/blob/ddd1b06ebdaf4c401e60d0cd9067ed37e062c96b/packages/modelence/src/auth/client/index.ts#L80)
+
+Resend the verification email for a given email address.
+The email is only sent if the address is registered and not yet verified.
+A generic response is always returned to avoid leaking account information.
+
+## Example
+
+```ts
+await resendEmailVerification({ email: 'user@example.com' });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `email`: `string`; \} | - |
+| `options.email` | `string` | The email address to resend verification to. |
+
+## Returns
+
+`Promise`\<`void`\>

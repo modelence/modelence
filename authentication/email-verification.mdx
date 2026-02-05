@@ -80,3 +80,26 @@ async function handleVerification(token: string) {
 }
 ```
 
+## Resending Verification Email
+
+If the user did not receive the original verification email, you can resend it. The email is only sent when the address is registered and not yet verified — a generic response is always returned regardless, to avoid leaking account information.
+
+This endpoint enforces the following limits via the `verification` rate limit bucket:
+
+- **1 per 60 seconds** — per user, a new verification email cannot be sent until 60 seconds have passed since the previous one.
+- **10 per day** — per user, a maximum of 10 verification emails can be sent within a 24-hour window.
+- **IP-based rate limiting** — repeated calls from the same IP are also rate-limited.
+
+```typescript
+import { resendEmailVerification } from 'modelence/client';
+
+async function handleResend(email: string) {
+  try {
+    await resendEmailVerification({ email });
+    console.log('Verification email sent');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
