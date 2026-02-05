@@ -9,8 +9,11 @@ jest.unstable_mockModule('@/client/localStorage', () => ({
   setLocalStorageSession: jest.fn(),
 }));
 
+const mockSetErrorHandler = jest.fn();
+
 jest.unstable_mockModule('./errorHandler', () => ({
   handleError: mockHandleError,
+  setErrorHandler: mockSetErrorHandler,
 }));
 
 jest.unstable_mockModule('../methods/serialize', () => ({
