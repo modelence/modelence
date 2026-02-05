@@ -6,6 +6,9 @@ on:
 
 jobs:
   publish:
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,5 +88,3 @@ jobs:
             echo "Publishing with latest tag"
             npm publish --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
