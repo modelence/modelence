@@ -103,6 +103,8 @@ jobs:
 
       - name: Publish to NPM
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
+        env:
+          NODE_AUTH_TOKEN: ""
         run: |
           if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
             echo "Publishing dev version without latest tag"
