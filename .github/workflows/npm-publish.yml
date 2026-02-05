@@ -80,33 +80,9 @@ jobs:
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         run: npm ci
 
-      - name: Debug npm auth config (safe)
-        working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
-        run: |
-          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NODE_AUTH_TOKEN is set"
-          else
-            echo "NODE_AUTH_TOKEN is not set"
-          fi
-          echo "npm userconfig: $(npm config get userconfig)"
-          echo "npm registry: $(npm config get registry)"
-          for f in .npmrc "$HOME/.npmrc"; do
-            if [ -f "$f" ]; then
-              echo "Found $f"
-              if grep -n "_authToken" "$f" >/dev/null; then
-                grep -n "_authToken" "$f" | sed 's/_authToken.*/_authToken=<redacted>/'
-              else
-                echo "No _authToken lines in $f"
-              fi
-            else
-              echo "No $f"
-            fi
-          done
-
       - name: Publish to NPM
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         env:
-          NODE_AUTH_TOKEN: ""
           NPM_CONFIG_PROVENANCE: true
         run: |
           if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
