@@ -87,7 +87,12 @@ async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]
   return response.json();
 }
 
-function getPrimaryVerifiedEmail(emails: GitHubEmail[]): string | null {
+async function getGitHubUserEmail(githubUser: GitHubUserInfo,accessToken: string): Promise<string | null> {
+  if (githubUser.email) {
+    return githubUser.email;
+  }
+
+  const emails = await fetchGitHubUserEmails(accessToken);
   return emails.find((e) => e.primary && e.verified)?.email ?? null;
 }
 
@@ -124,21 +129,15 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     // Fetch user info
     const githubUser = await fetchGitHubUserInfo(tokenData.access_token);
 
-    // Use the public email from user profile
-    let githubEmail = githubUser.email;
+    // Resolve a usable GitHub email (public email or fallback to primary verified email)
+    const githubEmail = await getGitHubUserEmail(githubUser, tokenData.access_token);
 
     if (!githubEmail) {
-      const emails = await fetchGitHubUserEmails(tokenData.access_token);
-
-      githubEmail = getPrimaryVerifiedEmail(emails);
-
-      if (!githubEmail) {
-        res.status(400).json({
-          error:
-            'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
-        });
-        return;
-      }
+      res.status(400).json({
+        error:
+          'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
+      });
+      return;
     }
 
     const userData: OAuthUserData = {
