@@ -105,6 +105,7 @@ jobs:
         working-directory: ./packages/${{ steps.package-info.outputs.package-dir }}
         env:
           NODE_AUTH_TOKEN: ""
+          NPM_CONFIG_PROVENANCE: true
         run: |
           if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
             echo "Publishing dev version without latest tag"
