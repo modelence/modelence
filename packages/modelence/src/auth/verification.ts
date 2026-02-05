@@ -12,7 +12,11 @@ import { User } from './types';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = process.env.MODELENCE_SITE_URL;
-  const emailVerifiedRedirectUrl = getEmailConfig().emailVerifiedRedirectUrl || baseUrl || '/';
+  const emailVerifiedRedirectUrl =
+    getEmailConfig().verification?.redirectUrl ||
+    getEmailConfig().emailVerifiedRedirectUrl ||
+    baseUrl ||
+    '/';
   try {
     const token = z.string().parse(params.query.token);
     // Find token in database
