@@ -23,6 +23,13 @@ interface GitHubUserInfo {
   avatar_url: string;
 }
 
+interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: 'public' | 'private' | null;
+}
+
 async function exchangeCodeForToken(
   code: string,
   clientId: string,
@@ -65,6 +72,33 @@ async function fetchGitHubUserInfo(accessToken: string): Promise<GitHubUserInfo>
   return userInfoResponse.json();
 }
 
+async function fetchGitHubUserEmails(accessToken: string): Promise<GitHubEmail[]> {
+  const response = await fetch('https://api.github.com/user/emails', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user emails: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+async function getGitHubUserEmail(
+  githubUser: GitHubUserInfo,
+  accessToken: string
+): Promise<string | null> {
+  if (githubUser.email) {
+    return githubUser.email;
+  }
+
+  const emails = await fetchGitHubUserEmails(accessToken);
+  return emails.find((e) => e.primary && e.verified)?.email ?? null;
+}
+
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
   const state = req.query.state as string;
@@ -98,13 +132,13 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     // Fetch user info
     const githubUser = await fetchGitHubUserInfo(tokenData.access_token);
 
-    // Use the public email from user profile
-    const githubEmail = githubUser.email || '';
+    // Resolve a usable GitHub email (public email or fallback to primary verified email)
+    const githubEmail = await getGitHubUserEmail(githubUser, tokenData.access_token);
 
     if (!githubEmail) {
       res.status(400).json({
         error:
-          'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.',
+          'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
       });
       return;
     }
