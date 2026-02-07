@@ -13,6 +13,7 @@ export interface LoginFormProps {
   renderForgotPasswordLink?: LinkRenderer;
   onForgotPassword?: () => void;
   onSignup?: () => void;
+  onSuccess?: () => void;
   // Styling overrides
   className?: string;
   cardClassName?: string;
@@ -28,6 +29,7 @@ export function LoginForm({
   renderForgotPasswordLink,
   onForgotPassword,
   onSignup,
+  onSuccess,
   className = "",
   cardClassName = "",
   buttonClassName = "",
@@ -42,12 +44,17 @@ export function LoginForm({
   const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    
+
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    
-    await loginWithPassword({ email, password });
-  }, []);
+
+    try {
+      await loginWithPassword({ email, password });
+      onSuccess?.();
+    } catch (error) {
+      // intentionally no-op
+    }
+  }, [onSuccess]);
 
   const openGoogleAuth = useCallback(() => {
     window.location.href = '/api/_internal/auth/google';
@@ -97,7 +104,7 @@ export function LoginForm({
           Sign in to your account
         </CardTitle>
       </CardHeader>
-      
+
       <CardContent className="space-y-6">
         {socialButtons.length > 0 && (
           <>
@@ -121,15 +128,15 @@ export function LoginForm({
             <Label htmlFor="email" className={`block mb-2 ${labelClassName}`}>
               Email
             </Label>
-            <Input 
-              type="email" 
-              name="email" 
-              id="email" 
+            <Input
+              type="email"
+              name="email"
+              id="email"
               className={inputClassName}
               required
             />
           </div>
-          
+
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label htmlFor="password" className={labelClassName}>
@@ -143,10 +150,10 @@ export function LoginForm({
                 Forgot your password?
               </Link>
             </div>
-            <Input 
-              type="password" 
-              name="password" 
-              id="password" 
+            <Input
+              type="password"
+              name="password"
+              id="password"
               className={inputClassName}
               required
             />
