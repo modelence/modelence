@@ -50,10 +50,11 @@ export function LoginForm({
 
     try {
       await loginWithPassword({ email, password });
-      onSuccess?.();
     } catch (error) {
-      // intentionally no-op
+      // intentionally no-op: auth errors are handled internally
+      return;
     }
+    onSuccess?.();
   }, [onSuccess]);
 
   const openGoogleAuth = useCallback(() => {
