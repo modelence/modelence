@@ -250,6 +250,7 @@ describe('app/index', () => {
     delete process.env.MODELENCE_CRON_ENABLED;
     delete process.env.MONGODB_URI;
     delete process.env.MODELENCE_SITE_URL;
+    delete process.env.MODELENCE_MIGRATIONS_ENABLED;
   });
 
   test('marks app as started', async () => {
@@ -522,6 +523,33 @@ describe('app/index', () => {
   });
 
   test('does not start migrations when cron is disabled', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+
+    const migrations: MigrationScript[] = [
+      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+    ];
+
+    await startApp({ migrations });
+
+    expect(mockStartMigrations).not.toHaveBeenCalled();
+  });
+
+  test('starts migrations when MODELENCE_MIGRATIONS_ENABLED is true', async () => {
+    process.env.MODELENCE_MIGRATIONS_ENABLED = 'true';
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+
+    const migrations: MigrationScript[] = [
+      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+    ];
+
+    await startApp({ migrations });
+
+    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+  });
+
+  test('does not start migrations when MODELENCE_MIGRATIONS_ENABLED is false, even if cron is enabled', async () => {
+    process.env.MODELENCE_CRON_ENABLED = 'true';
+    process.env.MODELENCE_MIGRATIONS_ENABLED = 'false';
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
 
     const migrations: MigrationScript[] = [

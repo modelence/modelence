@@ -58,6 +58,10 @@ export async function startApp({
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
   const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
+  const isMigrationsEnabled =
+    process.env.MODELENCE_MIGRATIONS_ENABLED !== undefined
+      ? process.env.MODELENCE_MIGRATIONS_ENABLED === 'true'
+      : isCronEnabled;
 
   trackAppStart()
     .then(() => {
@@ -124,8 +128,13 @@ export async function startApp({
     initStores(stores);
   }
 
-  if (isCronEnabled) {
+  if (isMigrationsEnabled) {
     startMigrations(migrations);
+  } else if (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.MODELENCE_MIGRATIONS_ENABLED !== undefined
+  ) {
+    console.log('[Modelence] Migrations skipped (MODELENCE_MIGRATIONS_ENABLED is not true)');
   }
 
   if (mongodbUri) {

@@ -91,6 +91,7 @@ export async function setup(options: { token: string; host: string }) {
     const newEnv = {
       ...existingEnv,
       MODELENCE_CRON_ENABLED: 'true',
+      MODELENCE_MIGRATIONS_ENABLED: 'true',
       MODELENCE_TELEMETRY_ENABLED: 'false', // TODO: Remove after all usages are gone
       MODELENCE_ENVIRONMENT_ID: config.environmentId,
       MODELENCE_SERVICE_ENDPOINT: options.host, // TODO: Replace with config.serviceEndpoint in the future
