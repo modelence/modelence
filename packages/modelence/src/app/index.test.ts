@@ -250,6 +250,7 @@ describe('app/index', () => {
     delete process.env.MODELENCE_CRON_ENABLED;
     delete process.env.MONGODB_URI;
     delete process.env.MODELENCE_SITE_URL;
+    delete process.env.MODELENCE_MIGRATIONS_ENABLED;
   });
 
   test('marks app as started', async () => {
@@ -544,7 +545,6 @@ describe('app/index', () => {
     await startApp({ migrations });
 
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
-    delete process.env.MODELENCE_MIGRATIONS_ENABLED;
   });
 
   test('does not start migrations when MODELENCE_MIGRATIONS_ENABLED is false, even if cron is enabled', async () => {
@@ -559,7 +559,6 @@ describe('app/index', () => {
     await startApp({ migrations });
 
     expect(mockStartMigrations).not.toHaveBeenCalled();
-    delete process.env.MODELENCE_MIGRATIONS_ENABLED;
   });
 
   test('starts server with combined modules and channels', async () => {
