@@ -17,6 +17,7 @@ export {
   signupWithPassword,
   loginWithPassword,
   verifyEmail,
+  resendEmailVerification,
   logout,
   sendResetPasswordToken,
   resetPassword,

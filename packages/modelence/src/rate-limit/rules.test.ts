@@ -100,4 +100,33 @@ describe('rate-limit/rules', () => {
 
     expect(mocks.upsertOne).not.toHaveBeenCalled();
   });
+
+  test('consumeRateLimit uses custom error message when provided', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);
+
+    mocks.findOne.mockResolvedValue({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      windowCount: 1,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:03:00.000Z'),
+    } as never);
+
+    await expect(
+      consumeRateLimit({
+        bucket: 'api',
+        type: 'ip',
+        value: '127.0.0.1',
+        message: 'Please slow down',
+      })
+    ).rejects.toThrow('Please slow down');
+
+    expect(mocks.upsertOne).not.toHaveBeenCalled();
+  });
 });

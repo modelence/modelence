@@ -80,6 +80,41 @@ type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
   $nin?: ArrayLikeOfUnion<T>;
 };
 
+const extractIndexNameFromError = (error: MongoError): string | undefined => {
+  const mongoError = error as MongoError & {
+    errorResponse?: { errmsg?: string; message?: string };
+  };
+  const candidateMessages = [
+    mongoError.message,
+    mongoError.errorResponse?.errmsg,
+    mongoError.errorResponse?.message,
+  ].filter((message): message is string => typeof message === 'string');
+
+  for (const message of candidateMessages) {
+    // Pattern for code 86: "existing index: ... name: "indexName""
+    const existingMatch = message.match(/existing index:.*?name:\s*"([^"]+)"/i);
+    if (existingMatch?.[1]) {
+      return existingMatch[1];
+    }
+
+    // Pattern for code 86: "requested index: ... name: "indexName""
+    const requestedMatch = message.match(/requested index:.*?name:\s*"([^"]+)"/i);
+    if (requestedMatch?.[1]) {
+      return requestedMatch[1];
+    }
+
+    // Pattern for code 85: "Index already exists with a different name: indexName"
+    const differentNameMatch = message.match(
+      /Index already exists with a different name:\s*([^\s]+)/i
+    );
+    if (differentNameMatch?.[1]) {
+      return differentNameMatch[1];
+    }
+  }
+
+  return undefined;
+};
+
 /**
  * Custom filter value type that handles array fields specially:
  * - For array fields: allows element type, full array type, or FilterOperators
@@ -349,14 +384,21 @@ export class Store<
 
   /** @internal */
   async createIndexes() {
+    const collection = this.requireCollection();
     if (this.indexes.length > 0) {
       for (const index of this.indexes) {
         try {
-          await this.requireCollection().createIndexes([index]);
+          await collection.createIndexes([index]);
         } catch (error) {
-          if (error instanceof MongoError && error.code === 86 && index.name) {
-            await this.requireCollection().dropIndex(index.name);
-            await this.requireCollection().createIndexes([index]);
+          if (error instanceof MongoError && (error.code === 86 || error.code === 85)) {
+            const indexName = extractIndexNameFromError(error);
+
+            if (!indexName) {
+              throw error;
+            }
+
+            await collection.dropIndex(indexName);
+            await collection.createIndexes([index]);
           } else {
             throw error;
           }
@@ -366,11 +408,11 @@ export class Store<
     if (this.searchIndexes.length > 0) {
       for (const searchIndex of this.searchIndexes) {
         try {
-          await this.requireCollection().createSearchIndexes([searchIndex]);
+          await collection.createSearchIndexes([searchIndex]);
         } catch (error) {
           if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
-            await this.requireCollection().dropSearchIndex(searchIndex.name);
-            await this.requireCollection().createSearchIndexes([searchIndex]);
+            await collection.dropSearchIndex(searchIndex.name);
+            await collection.createSearchIndexes([searchIndex]);
           } else {
             throw error;
           }

@@ -67,6 +67,22 @@ export async function verifyEmail(options: { token: string }) {
 }
 
 /**
+ * Resend the verification email for a given email address.
+ * The email is only sent if the address is registered and not yet verified.
+ * A generic response is always returned to avoid leaking account information.
+ *
+ * @example
+ * ```ts
+ * await resendEmailVerification({ email: 'user@example.com' });
+ * ```
+ * @param options.email - The email address to resend verification to.
+ */
+export async function resendEmailVerification(options: { email: string }) {
+  const { email } = options;
+  await callMethod('_system.user.resendEmailVerification', { email });
+}
+
+/**
  * Logout the current user.
  *
  */

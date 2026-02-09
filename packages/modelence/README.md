@@ -58,6 +58,9 @@ See what you can build in just a few hours with Modelence's batteries-included a
 ## Getting Started
 Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
+> **Prerequisites:** Modelence requires [Node.js 20.20](https://nodejs.org/en/download) or higher.
+
+
 ### Quick Start
 
 #### 1. Create a new project
@@ -80,6 +83,78 @@ Your app will be available at [http://localhost:3000](http://localhost:3000)
 
 
 For a more detailed guide, check out the [Todo App tutorial](https://docs.modelence.com/tutorial).
+
+---
+
+### Local Development (Modelence Framework)
+
+If you want to contribute to Modelence itself (not just use it in an application), follow the steps below.
+
+#### 1. Clone the repository
+```bash
+git clone https://github.com/modelence/modelence.git
+cd modelence
+```
+
+#### 2. Install dependencies for the core package
+```bash
+cd packages/modelence
+npm install
+```
+
+#### 3. Build the package
+```bash
+npm run build
+```
+
+This generates the `dist/` directory required for local usage.
+
+#### 4. (Optional) Watch for changes during development
+```bash
+npm run dev
+```
+
+This runs the build in watch mode and rebuilds on file changes.
+
+> **Note**
+>
+> If you encounter dependency or build errors while developing Modelence locally, a clean install may help:
+>
+> ```bash
+> rm -rf node_modules package-lock.json
+> npm install
+> npm run build
+> ```
+>
+> This resets the local dependency state and mirrors the workflow often recommended when resolving local development issues.
+> The regenerated `package-lock.json` is only for local development and should not be committed as part of a PR unless explicitly requested.
+
+### Using the local build in a test app
+
+To test your local Modelence changes inside a real application:
+```bash
+npx create-modelence-app@latest my-app
+cd my-app
+```
+
+Update `package.json` to point to your local Modelence package:
+```json
+{
+  "dependencies": {
+    "modelence": "../modelence/packages/modelence"
+  }
+}
+```
+
+Then reinstall dependencies and start the app:
+```bash
+npm install
+npm run dev
+```
+
+Your application will now use your local Modelence build.
+
+---
 
 ### Examples
 

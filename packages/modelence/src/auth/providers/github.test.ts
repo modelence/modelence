@@ -154,10 +154,12 @@ describe('auth/providers/github', () => {
     const route = findRoute('/api/_internal/auth/github/callback');
     const handler = route.handlers[1];
     fetchMock
+      // token exchange
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ access_token: 'token', token_type: 'Bearer', scope: 'read:user' }),
       } as never)
+      // /user
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -166,6 +168,11 @@ describe('auth/providers/github', () => {
           email: null,
           avatar_url: 'pic',
         }),
+      } as never)
+      // /user/emails
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       } as never);
 
     const res = {
@@ -185,7 +192,7 @@ describe('auth/providers/github', () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       error:
-        'Unable to retrieve email from GitHub. Please ensure your email is public or grant email permissions.',
+        'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
     });
     expect(mockHandleOAuthUserAuthentication).not.toHaveBeenCalled();
   });

@@ -71,10 +71,7 @@ export async function init({
   });
 
   socketServer.on('connection', (socket: Socket) => {
-    console.log(`Socket.IO client connected`);
-
     socket.on('disconnect', () => {
-      console.log(`Socket.IO client disconnected`);
       handleLiveQueryDisconnect(socket);
     });
 
