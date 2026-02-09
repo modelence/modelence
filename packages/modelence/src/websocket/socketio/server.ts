@@ -1,6 +1,7 @@
 import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
+import { z } from 'zod';
 import { authenticate } from '@/auth';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
@@ -11,6 +12,14 @@ import {
   handleLiveQueryDisconnect,
 } from '@/live-query';
 import type { Collection, Document } from 'mongodb';
+
+const joinChannelPayloadSchema = z.union([
+  z.string().min(1),
+  z.object({
+    channelName: z.string().min(1),
+    authToken: z.string().nullish(),
+  }),
+]);
 
 let socketServer: SocketServer | null = null;
 
@@ -75,40 +84,47 @@ export async function init({
       handleLiveQueryDisconnect(socket);
     });
 
-    socket.on(
-      'joinChannel',
-      async (payload: { channelName: string; authToken?: string | null }) => {
-        const { channelName, authToken } = payload;
+    socket.on('joinChannel', async (payload: unknown) => {
+      const parsed = joinChannelPayloadSchema.safeParse(payload);
+      if (!parsed.success) {
+        socket.emit('joinError', {
+          channel: '(invalid)',
+          error: `Invalid payload: ${parsed.error.message}`,
+        });
+        return;
+      }
+      const channelName = typeof parsed.data === 'string' ? parsed.data : parsed.data.channelName;
+      const authToken =
+        typeof parsed.data === 'string' ? undefined : (parsed.data.authToken ?? null);
 
-        // Authenticate with provided token
-        let authContext;
-        try {
-          authContext = await authenticate(authToken ?? null);
-        } catch (error) {
-          console.error('Failed to authenticate on joinChannel:', error);
-          socket.emit('joinError', { channel: channelName, error: 'Authentication failed' });
-          return;
-        }
+      // Authenticate with provided token
+      let authContext;
+      try {
+        authContext = await authenticate(authToken ?? null);
+      } catch (error) {
+        console.error('Failed to authenticate on joinChannel:', error);
+        socket.emit('joinError', { channel: channelName, error: 'Authentication failed' });
+        return;
+      }
 
-        const [category] = channelName.split(':');
-        let authorized = false;
+      const [category] = channelName.split(':');
+      let authorized = false;
 
-        for (const channel of channels) {
-          if (channel.category === category) {
-            if (!channel.canAccessChannel || (await channel.canAccessChannel(authContext))) {
-              socket.join(channelName);
-              authorized = true;
-              socket.emit('joinedChannel', channelName);
-            }
-            break; // Found matching channel - stop searching
+      for (const channel of channels) {
+        if (channel.category === category) {
+          if (!channel.canAccessChannel || (await channel.canAccessChannel(authContext))) {
+            socket.join(channelName);
+            authorized = true;
+            socket.emit('joinedChannel', channelName);
           }
-        }
-
-        if (!authorized) {
-          socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+          break; // Found matching channel - stop searching
         }
       }
-    );
+
+      if (!authorized) {
+        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+      }
+    });
 
     socket.on('leaveChannel', (channelName: string) => {
       socket.leave(channelName);

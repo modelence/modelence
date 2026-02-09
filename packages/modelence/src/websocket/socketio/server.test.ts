@@ -161,6 +161,47 @@ describe('websocket/socketio/server', () => {
     expect(socket.emit).toHaveBeenCalledWith('leftChannel', 'chat:room1');
   });
 
+  test('joinChannel validates payload and accepts legacy string format', async () => {
+    const accessSpy = jest.fn(
+      async (_props: { user: User | null; session: Session | null; roles: string[] }) => true
+    );
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('chat', accessSpy)],
+    });
+    const connectionHandler = eventHandlers.connection;
+    const { socket, socketEvents } = buildSocket();
+    connectionHandler?.(socket);
+    const joinHandler = socketEvents.joinChannel;
+    expect(joinHandler).toBeDefined();
+
+    // Invalid: null payload
+    mockAuthenticate.mockClear();
+    (socket.emit as jest.Mock).mockClear();
+    await joinHandler?.(null);
+    expect(socket.emit).toHaveBeenCalledWith('joinError', {
+      channel: '(invalid)',
+      error: expect.stringContaining('Invalid payload'),
+    });
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+
+    // Invalid: object missing channelName
+    (socket.emit as jest.Mock).mockClear();
+    await joinHandler?.({ authToken: 'token' });
+    expect(socket.emit).toHaveBeenCalledWith('joinError', {
+      channel: '(invalid)',
+      error: expect.stringContaining('Invalid payload'),
+    });
+
+    // Legacy format: plain string (rolling deployment compatibility)
+    (socket.emit as jest.Mock).mockClear();
+    mockAuthenticate.mockResolvedValue({ user: { id: '1' } } as never);
+    await joinHandler?.('chat:legacy');
+    expect(mockAuthenticate).toHaveBeenCalledWith(null);
+    expect(socket.join).toHaveBeenCalledWith('chat:legacy');
+    expect(socket.emit).toHaveBeenCalledWith('joinedChannel', 'chat:legacy');
+  });
+
   test('broadcast emits messages to connected sockets when initialized', async () => {
     mockGetClient.mockReturnValue(null);
     await websocketProvider.init({
