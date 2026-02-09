@@ -18,6 +18,9 @@ const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
 // 'leaving' = we sent leave; 'left' = server confirmed leave (ignore late joinedChannel).
 const channelState = new Map<string, 'active' | 'leaving' | 'left'>();
 
+// Last userId we notified so we skip redundant rejoin/resubscribe when setCurrentUser is called with the same user.
+let lastNotifiedUserId: string | null = null;
+
 function getSocket(): Socket {
   if (!socketClient) {
     throw new Error('WebSocket not initialized. Call startWebsockets() first.');
@@ -52,6 +55,12 @@ export function handleAuthChange(userId: string | null) {
   if (!socketClient) {
     return;
   }
+
+  // Skip when auth state has not actually changed (e.g. setCurrentUser called multiple times with same user).
+  if (userId === lastNotifiedUserId) {
+    return;
+  }
+  lastNotifiedUserId = userId;
 
   if (userId === null) {
     // User logged out - clear channels and live subscriptions regardless of connection state
