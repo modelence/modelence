@@ -48,6 +48,7 @@ describe('client/session', () => {
     mockCallMethod.mockReset();
     mockSetConfig.mockReset();
     mockSetLocalStorageSession.mockReset();
+    mockHandleAuthChange.mockReset();
     global.setTimeout = ((fn: Parameters<typeof originalSetTimeout>[0], delay?: number) => {
       return originalSetTimeout(fn, delay);
     }) as typeof setTimeout;
@@ -81,6 +82,8 @@ describe('client/session', () => {
     );
     const sameRef = useSessionStore.getState().user;
     expect(storedUser).toBe(sameRef);
+
+    expect(mockHandleAuthChange).toHaveBeenCalledWith('1');
   });
 
   test('initSession handles null user and schedules heartbeat', async () => {
@@ -98,6 +101,7 @@ describe('client/session', () => {
 
     expect(freshStore.getState().user).toBeNull();
     expect(getHeartbeatTimer()).toBeNull();
+    expect(mockHandleAuthChange).toHaveBeenCalledWith(null);
   });
 
   test('setCurrentUser parses and enriches user object', () => {
@@ -121,5 +125,6 @@ describe('client/session', () => {
   test('setCurrentUser handles null', () => {
     setCurrentUser(null);
     expect(useSessionStore.getState().user).toBeNull();
+    expect(mockHandleAuthChange).toHaveBeenCalledWith(null);
   });
 });

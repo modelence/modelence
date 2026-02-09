@@ -71,7 +71,10 @@ export async function initSession() {
   _setConfig(configs);
   setLocalStorageSession(session);
 
-  useSessionStore.getState().setUser(parseUser(user));
+  const parsedUser = parseUser(user);
+  useSessionStore.getState().setUser(parsedUser);
+  // Notify websocket client so lastNotifiedUserId is set; otherwise logout would skip cleanup (null === lastNotifiedUserId).
+  handleAuthChange(parsedUser?.id ?? null);
 
   await loopSessionHeartbeat();
 }
