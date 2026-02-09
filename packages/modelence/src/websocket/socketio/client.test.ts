@@ -394,6 +394,54 @@ describe('websocket/socketio/client', () => {
       expect(rejoinedChannelNames).not.toContain(channelName);
     });
 
+    test('rejoin after leave: channel becomes active and is rejoined on reconnect', () => {
+      const joinedChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'joinedChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const leftChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'leftChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const connectHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'connect'
+      )?.[1] as () => void;
+
+      expect(joinedChannelHandler).toBeDefined();
+      expect(leftChannelHandler).toBeDefined();
+      expect(connectHandler).toBeDefined();
+
+      const channelName = 'chat:rejoin';
+
+      // Join, server confirms
+      websocketProvider.joinChannel({ category: 'chat', id: 'rejoin' });
+      joinedChannelHandler(channelName);
+
+      // Leave, server confirms
+      websocketProvider.leaveChannel({ category: 'chat', id: 'rejoin' });
+      leftChannelHandler(channelName);
+
+      // Rejoin same channel (joinChannel must clear stale 'left' state)
+      mockSocket.emit.mockClear();
+      websocketProvider.joinChannel({ category: 'chat', id: 'rejoin' });
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', {
+        channelName,
+        authToken: undefined,
+      });
+
+      // Server confirms join: must be accepted so channel becomes active again
+      joinedChannelHandler(channelName);
+
+      // On reconnect, channel must be rejoined (was active)
+      mockSocket.emit.mockClear();
+      connectHandler();
+      const rejoinCalls = mockSocket.emit.mock.calls.filter(([event]) => event === 'joinChannel');
+      const rejoinedChannelNames = rejoinCalls.map(
+        ([, payload]) => (payload as { channelName: string }).channelName
+      );
+      expect(rejoinedChannelNames).toContain(channelName);
+    });
+
     test('registers leftChannel event listener', () => {
       websocketProvider.init({});
 

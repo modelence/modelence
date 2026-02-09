@@ -173,9 +173,11 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 
 function joinChannel({ category, id }: { category: string; id: string }) {
   const channelName = `${category}:${id}`;
+  // Clear stale state (e.g. 'left') so joinedChannel handler will set 'active' when server confirms
+  channelState.delete(channelName);
   const authToken = getLocalStorageSession()?.authToken;
   getSocket().emit('joinChannel', { channelName, authToken });
-  // Channel will be added to activeChannels when 'joinedChannel' event is received
+  // Channel will be set to 'active' when 'joinedChannel' event is received
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
