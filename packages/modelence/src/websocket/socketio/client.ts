@@ -14,11 +14,9 @@ interface ActiveLiveSubscription {
 }
 const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
 
-// Track active channels (format: "category:id")
-const activeChannels = new Set<string>();
-
-// Track channels that are being left (to handle race conditions with join/leave)
-const pendingLeaves = new Set<string>();
+// Single source of truth per channel. 'active' = in room (rejoin on reconnect);
+// 'leaving' = we sent leave; 'left' = server confirmed leave (ignore late joinedChannel).
+const channelState = new Map<string, 'active' | 'leaving' | 'left'>();
 
 function getSocket(): Socket {
   if (!socketClient) {
@@ -43,8 +41,10 @@ function resubscribeAll() {
 
 function rejoinAllChannels() {
   const authToken = getLocalStorageSession()?.authToken;
-  for (const channelName of activeChannels) {
-    socketClient?.emit('joinChannel', { channelName, authToken });
+  for (const [channelName, state] of channelState) {
+    if (state === 'active') {
+      socketClient?.emit('joinChannel', { channelName, authToken });
+    }
   }
 }
 
@@ -55,28 +55,27 @@ export function handleAuthChange(userId: string | null) {
 
   if (userId === null) {
     // User logged out - clear channels and live subscriptions regardless of connection state
-    console.log('[Modelence] User logged out, clearing all channels and live subscriptions');
-    // If connected, send leave requests to server before clearing
+    console.debug('[Modelence] User logged out, clearing all channels and live subscriptions');
     if (socketClient.connected) {
-      for (const channelName of activeChannels) {
-        socketClient.emit('leaveChannel', channelName);
+      for (const [channelName, state] of channelState) {
+        if (state === 'active' || state === 'leaving') {
+          socketClient.emit('leaveChannel', channelName);
+        }
       }
-      // Unsubscribe all live queries to clean up server-side subscriptions
       for (const sub of activeLiveSubscriptions.values()) {
         socketClient.emit('unsubscribeLiveQuery', { subscriptionId: sub.subscriptionId });
       }
     }
-    activeChannels.clear();
-    pendingLeaves.clear();
+    channelState.clear();
     activeLiveSubscriptions.clear();
   } else if (socketClient.connected) {
-    // User logged in and socket is connected - rejoin channels and resubscribe live queries
-    if (activeChannels.size > 0) {
-      console.log(`[Modelence] User authenticated, re-joining ${activeChannels.size} channels`);
+    const activeCount = [...channelState.values()].filter((s) => s === 'active').length;
+    if (activeCount > 0) {
+      console.debug(`[Modelence] User authenticated, re-joining ${activeCount} channels`);
       rejoinAllChannels();
     }
     if (activeLiveSubscriptions.size > 0) {
-      console.log(
+      console.debug(
         `[Modelence] User authenticated, re-subscribing to ${activeLiveSubscriptions.size} live queries`
       );
       resubscribeAll();
@@ -92,40 +91,36 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     },
   });
 
-  // Handle successful channel joins
   socketClient.on('joinedChannel', (channelName: string) => {
-    // Only add to activeChannels if we're not in the process of leaving it
-    // This handles the race condition where leaveChannel is called before joinedChannel arrives
-    if (!pendingLeaves.has(channelName)) {
-      activeChannels.add(channelName);
-    } else {
-      // Channel was left before join completed, remove from pending leaves
-      pendingLeaves.delete(channelName);
+    const state = channelState.get(channelName);
+    if (state === 'leaving' || state === 'left') {
+      channelState.delete(channelName);
+      return;
     }
+    channelState.set(channelName, 'active');
   });
 
-  // Handle channel join errors - remove from tracking
   socketClient.on('joinError', ({ channel }: { channel: string; error: string }) => {
-    activeChannels.delete(channel);
-    pendingLeaves.delete(channel);
+    channelState.delete(channel);
   });
 
-  // Handle confirmed channel leaves from server
   socketClient.on('leftChannel', (channelName: string) => {
-    activeChannels.delete(channelName);
-    pendingLeaves.delete(channelName);
+    channelState.set(channelName, 'left');
   });
 
-  // Subscribe to all live queries and rejoin channels on connect/reconnect
   socketClient.on('connect', () => {
+    for (const [name, state] of channelState) {
+      if (state === 'left' || state === 'leaving') channelState.delete(name);
+    }
     if (activeLiveSubscriptions.size > 0) {
-      console.log(
+      console.debug(
         `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`
       );
       resubscribeAll();
     }
-    if (activeChannels.size > 0) {
-      console.log(`[Modelence] WebSocket reconnected, re-joining ${activeChannels.size} channels`);
+    const activeCount = [...channelState.values()].filter((s) => s === 'active').length;
+    if (activeCount > 0) {
+      console.debug(`[Modelence] WebSocket reconnected, re-joining ${activeCount} channels`);
       rejoinAllChannels();
     }
   });
@@ -176,10 +171,7 @@ function joinChannel({ category, id }: { category: string; id: string }) {
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
   const channelName = `${category}:${id}`;
-  // Mark as pending leave to handle race condition where joinedChannel arrives after leave
-  pendingLeaves.add(channelName);
-  // Optimistically remove from activeChannels (will be confirmed by leftChannel event)
-  activeChannels.delete(channelName);
+  channelState.set(channelName, 'leaving');
   emit({
     eventName: 'leaveChannel',
     category,
