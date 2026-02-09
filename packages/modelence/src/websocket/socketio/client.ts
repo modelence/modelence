@@ -111,11 +111,18 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
   });
 
   socketClient.on('joinError', ({ channel }: { channel: string; error: string }) => {
-    channelState.delete(channel);
+    // Only clear state if we're not already active (e.g. a later join succeeded before this error arrived)
+    if (channelState.get(channel) !== 'active') {
+      channelState.delete(channel);
+    }
   });
 
   socketClient.on('leftChannel', (channelName: string) => {
-    channelState.set(channelName, 'left');
+    // Only set 'left' if we are still in 'leaving'. If state is 'active', the user already
+    // rejoined and this is a stale leave confirmation; do not overwrite.
+    if (channelState.get(channelName) === 'leaving') {
+      channelState.set(channelName, 'left');
+    }
   });
 
   socketClient.on('connect', () => {

@@ -442,6 +442,78 @@ describe('websocket/socketio/client', () => {
       expect(rejoinedChannelNames).toContain(channelName);
     });
 
+    test('leftChannel does not overwrite active when leave confirmation arrives after rejoin', () => {
+      const joinedChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'joinedChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const leftChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'leftChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const connectHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'connect'
+      )?.[1] as () => void;
+
+      expect(joinedChannelHandler).toBeDefined();
+      expect(leftChannelHandler).toBeDefined();
+      expect(connectHandler).toBeDefined();
+
+      const channelName = 'chat:race-rejoin';
+
+      // Join, leave, then rejoin quickly (rejoin confirmation arrives before leave confirmation)
+      websocketProvider.joinChannel({ category: 'chat', id: 'race-rejoin' });
+      joinedChannelHandler(channelName);
+      websocketProvider.leaveChannel({ category: 'chat', id: 'race-rejoin' });
+      websocketProvider.joinChannel({ category: 'chat', id: 'race-rejoin' });
+      joinedChannelHandler(channelName); // rejoin confirmed first → state is 'active'
+      leftChannelHandler(channelName); // stale leave confirmation must not overwrite to 'left'
+
+      // On reconnect, channel must still be rejoined (we only set 'left' when state was 'leaving')
+      mockSocket.emit.mockClear();
+      connectHandler();
+      const rejoinCalls = mockSocket.emit.mock.calls.filter(([event]) => event === 'joinChannel');
+      const rejoinedChannelNames = rejoinCalls.map(
+        ([, payload]) => (payload as { channelName: string }).channelName
+      );
+      expect(rejoinedChannelNames).toContain(channelName);
+    });
+
+    test('joinError does not overwrite active when error arrives after retry succeeded', () => {
+      const joinedChannelHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'joinedChannel'
+      )?.[1] as (channelName: string) => void;
+
+      const joinErrorHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'joinError'
+      )?.[1] as (payload: { channel: string; error: string }) => void;
+
+      const connectHandler = mockSocket.on.mock.calls.find(
+        ([eventName]) => eventName === 'connect'
+      )?.[1] as () => void;
+
+      expect(joinedChannelHandler).toBeDefined();
+      expect(joinErrorHandler).toBeDefined();
+      expect(connectHandler).toBeDefined();
+
+      const channelName = 'chat:retry';
+
+      // First join fails (e.g. auth not ready), user retries, second join succeeds
+      websocketProvider.joinChannel({ category: 'chat', id: 'retry' });
+      websocketProvider.joinChannel({ category: 'chat', id: 'retry' });
+      joinedChannelHandler(channelName); // retry confirmed → state is 'active'
+      joinErrorHandler({ channel: channelName, error: 'Authentication failed' }); // late error from first attempt must not delete
+
+      // On reconnect, channel must still be rejoined (we only delete on joinError when not already active)
+      mockSocket.emit.mockClear();
+      connectHandler();
+      const rejoinCalls = mockSocket.emit.mock.calls.filter(([event]) => event === 'joinChannel');
+      const rejoinedChannelNames = rejoinCalls.map(
+        ([, payload]) => (payload as { channelName: string }).channelName
+      );
+      expect(rejoinedChannelNames).toContain(channelName);
+    });
+
     test('registers leftChannel event listener', () => {
       websocketProvider.init({});
 
