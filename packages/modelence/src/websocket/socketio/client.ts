@@ -52,15 +52,16 @@ function rejoinAllChannels() {
 }
 
 export function handleAuthChange(userId: string | null) {
-  if (!socketClient) {
-    return;
-  }
-
-  // Skip when auth state has not actually changed (e.g. setCurrentUser called multiple times with same user).
+  // Always update lastNotifiedUserId first so logout cleanup is never skipped when initSession ran
+  // before startWebsockets() (socketClient was null and we returned early).
   if (userId === lastNotifiedUserId) {
     return;
   }
   lastNotifiedUserId = userId;
+
+  if (!socketClient) {
+    return;
+  }
 
   if (userId === null) {
     // User logged out - clear channels and live subscriptions regardless of connection state
