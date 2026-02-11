@@ -12,6 +12,8 @@ type User = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
+  name?: string;
+  picture?: string;
 };
 
 type SessionStore = {
@@ -32,6 +34,8 @@ const userSchema = z.object({
   id: z.string(),
   handle: z.string(),
   roles: z.array(z.string()),
+  name: z.string().optional(),
+  picture: z.string().url().optional(),
 });
 
 function parseUser(user: unknown): User | null {
@@ -39,10 +43,19 @@ function parseUser(user: unknown): User | null {
     return null;
   }
 
-  const parsedData = userSchema.parse(user);
+  const result = userSchema.safeParse(user);
+
+  if (!result.success) {
+    console.error('Session Error: Invalid user payload', result.error);
+    return null;
+  }
+
+  const parsedData = result.data;
 
   return Object.freeze({
     ...parsedData,
+    name: parsedData.name ?? undefined,
+    picture: parsedData.picture ?? undefined,
     hasRole: (role: string) => parsedData.roles.includes(role),
     requireRole: (role: string) => {
       if (!parsedData.roles.includes(role)) {
@@ -74,7 +87,7 @@ export async function initSession() {
 
 async function loopSessionHeartbeat() {
   try {
-    await callMethod('_system.session.heartbeat', {}, { errorHandler: () => {} });
+    await callMethod('_system.session.heartbeat', {}, { errorHandler: () => { } });
   } catch {
     // Silently ignore heartbeat errors - they're expected during HMR/reconnects
   }

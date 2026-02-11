@@ -13,8 +13,8 @@ function SectionRow({ label, children, className = '' }: { label: string; childr
   );
 }
 
-function ProfileContent({ profile }: { profile: { handle: string; emails: { address: string; verified: boolean }[]; authMethods: string[] } }) {
-  const name = profile.handle.split('@')[0] || 'No name';
+function ProfileContent({ profile }: { profile: { handle: string; emails: { address: string; verified: boolean }[]; authMethods: string[], name?: string, picture?: string } }) {
+  const name = profile.name || profile.handle.split('@')[0] || 'No name';
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -23,7 +23,7 @@ function ProfileContent({ profile }: { profile: { handle: string; emails: { addr
       <div className="flex items-center justify-between py-6 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center text-xl font-semibold text-gray-600">
-            {name[0].toUpperCase()}
+            {profile.picture ? <img src={profile.picture} alt="Profile" className="w-full h-full rounded-full" /> : name[0].toUpperCase()}
           </div>
           <div>
             <div className="font-medium text-lg text-gray-900 dark:text-white">{name}</div>
@@ -104,7 +104,7 @@ function SettingsContent({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-xl font-semibold mb-8">Settings</div>
-      
+
       {/* Data Privacy */}
       {/* <SectionRow label="Data Privacy">
         <div className="space-y-4">
@@ -147,9 +147,9 @@ function SettingsContent({
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
               Permanently delete your account and all associated data. This action cannot be undone.
             </div>
-            <Button 
-              variant="destructive" 
-              size="sm" 
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={onDeleteAccount}
               className="font-medium"
             >
@@ -168,13 +168,15 @@ type ProfileData = {
   handle: string;
   emails: { address: string; verified: boolean }[];
   authMethods: string[];
+  name?: string;
+  picture?: string;
 };
 
 function UserProfileContent({
   onDeleteAccount,
 }: { onDeleteAccount?: () => void }) {
   const [activeTab, setActiveTab] = useState<TabType>('profile');
-  
+
   const { data: profile, isLoading, error } = useQuery({
     ...modelenceQuery<ProfileData>('_system.user.getOwnProfile'),
   });
@@ -188,28 +190,32 @@ function UserProfileContent({
     label: string;
     icon: React.ReactNode;
   }[] = [
-    { id: 'profile' as const, label: 'Profile', icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-        <circle cx="10" cy="6" r="4" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M2.5 17c0-2.485 3.358-4.5 7.5-4.5s7.5 2.015 7.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    )},
-    // { id: 'security' as const, label: 'Security', icon: (
-    //   <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-    //     <rect x="5" y="8" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-    //     <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    //   </svg>
-    // )},
-  ];
+      {
+        id: 'profile' as const, label: 'Profile', icon: (
+          <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+            <circle cx="10" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M2.5 17c0-2.485 3.358-4.5 7.5-4.5s7.5 2.015 7.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        )
+      },
+      // { id: 'security' as const, label: 'Security', icon: (
+      //   <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+      //     <rect x="5" y="8" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+      //     <path d="M7 8V6a3 3 0 116 0v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      //   </svg>
+      // )},
+    ];
 
   if (onDeleteAccount) {
     tabs.push(
-    { id: 'settings' as const, label: 'Settings', icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-        <circle cx="10" cy="10" r="2.8" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M11.08 17.6h-2.16l-.6-1.84c-.4-.12-.8-.28-1.16-.48l-1.76.88-1.52-1.52.88-1.76c-.2-.36-.36-.76-.48-1.16L2.4 11.08v-2.16l1.84-.6c.12-.4.28-.8.48-1.16l-.88-1.76 1.52-1.52 1.76.88c.36-.2.76-.36 1.16-.48L8.92 2.4h2.16l.6 1.84c.4.12.8.28 1.16.48l1.76-.88 1.52 1.52-.88 1.76c.2.36.36.76.48 1.16l1.84.6v2.16l-1.84.6c-.12.4-.28.8-.48 1.16l.88 1.76-1.52 1.52-1.76-.88c-.36.2-.76.36-1.16.48l-.6 1.84z" stroke="currentColor" strokeWidth="1.5"/>
-      </svg>
-    )});
+      {
+        id: 'settings' as const, label: 'Settings', icon: (
+          <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="2.8" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M11.08 17.6h-2.16l-.6-1.84c-.4-.12-.8-.28-1.16-.48l-1.76.88-1.52-1.52.88-1.76c-.2-.36-.36-.76-.48-1.16L2.4 11.08v-2.16l1.84-.6c.12-.4.28-.8.48-1.16l-.88-1.76 1.52-1.52 1.76.88c.36-.2.76-.36 1.16-.48L8.92 2.4h2.16l.6 1.84c.4.12.8.28 1.16.48l1.76-.88 1.52 1.52-.88 1.76c.2.36.36.76.48 1.16l1.84.6v2.16l-1.84.6c-.12.4-.28.8-.48 1.16l.88 1.76-1.52 1.52-1.76-.88c-.36.2-.76.36-1.16.48l-.6 1.84z" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+        )
+      });
   }
 
   const renderContent = () => {
@@ -238,11 +244,10 @@ function UserProfileContent({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${activeTab === tab.id
+                ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
             >
               <span className="inline-block w-5 text-center">
                 {tab.icon}

@@ -9,6 +9,8 @@ export type UserInfo = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
+  name?: string;
+  picture?: string;
 };
 
 export type Role = string;

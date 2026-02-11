@@ -11,6 +11,8 @@ export interface OAuthUserData {
   email: string;
   emailVerified: boolean;
   providerName: 'google' | 'github';
+  name?: string;
+  picture?: string;
 }
 
 export async function authenticateUser(res: Response, userId: ObjectId) {
@@ -42,15 +44,40 @@ export async function handleOAuthUserAuthentication(
 
   try {
     if (existingUser) {
+
+      // Updates user name and picture after re-login
+      const update: Record<string, any> = {};
+
+      if (userData.name !== undefined) {
+        update.name = userData.name;
+      }
+
+      if (userData.picture !== undefined) {
+        update.picture = userData.picture;
+      }
+
+      if (Object.keys(update).length > 0) {
+        await usersCollection.updateOne(
+          { _id: existingUser._id },
+          { $set: update }
+        );
+      }
+
+
       await authenticateUser(res, existingUser._id);
+
+      const updatedUser = {
+        ...existingUser,
+        ...update,
+      };
 
       getAuthConfig().onAfterLogin?.({
         provider: userData.providerName,
-        user: existingUser,
+        user: updatedUser,
         session,
         connectionInfo,
       });
-      getAuthConfig().login?.onSuccess?.(existingUser);
+      getAuthConfig().login?.onSuccess?.(updatedUser);
 
       return;
     }
@@ -91,7 +118,7 @@ export async function handleOAuthUserAuthentication(
     }
 
     // If the user does not exist, create a new user
-    const newUser = await usersCollection.insertOne({
+    const userDoc: Record<string, any> = {
       handle: userData.email,
       status: 'active',
       emails: [
@@ -106,7 +133,18 @@ export async function handleOAuthUserAuthentication(
           id: userData.id,
         },
       },
-    });
+    };
+
+    // Add name and picture to the user document if provided
+    if (userData.name !== undefined) {
+      userDoc.name = userData.name;
+    }
+
+    if (userData.picture !== undefined) {
+      userDoc.picture = userData.picture;
+    }
+
+    const newUser = await usersCollection.insertOne(userDoc);
 
     await authenticateUser(res, newUser.insertedId);
 

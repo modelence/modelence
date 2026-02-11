@@ -1,7 +1,7 @@
 import { getConfig } from '@/server';
 import { time } from '@/time';
 import { randomBytes } from 'crypto';
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Request, type Response, type NextFunction, type Router as ExpressRouter } from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
@@ -104,6 +104,8 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       email: googleUser.email,
       emailVerified: googleUser.verified_email,
       providerName: 'google',
+      name: googleUser.name || undefined,
+      picture: googleUser.picture || undefined
     };
 
     await handleOAuthUserAuthentication(req, res, userData);
@@ -113,7 +115,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   }
 }
 
-function getRouter() {
+function getRouter(): ExpressRouter {
   const googleAuthRouter = Router();
 
   // Middleware to check if Google auth is enabled and configured

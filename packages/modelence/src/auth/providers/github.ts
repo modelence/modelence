@@ -1,7 +1,7 @@
 import { getConfig } from '@/server';
 import { time } from '@/time';
 import { randomBytes } from 'crypto';
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Request, type Response, type NextFunction, type Router as ExpressRouter } from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
@@ -148,6 +148,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       email: githubEmail,
       emailVerified: true, // Assume public email is verified
       providerName: 'github',
+      name: githubUser.name || undefined,
+      picture: githubUser.avatar_url || undefined,
     };
 
     await handleOAuthUserAuthentication(req, res, userData);
@@ -157,7 +159,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   }
 }
 
-function getRouter() {
+function getRouter(): ExpressRouter {
   const githubAuthRouter = Router();
 
   // Middleware to check if GitHub auth is enabled and configured
@@ -184,9 +186,9 @@ function getRouter() {
       const githubScopes = getConfig('_system.user.auth.github.scopes');
       const scopes = githubScopes
         ? String(githubScopes)
-            .split(',')
-            .map((s) => s.trim())
-            .join(' ')
+          .split(',')
+          .map((s) => s.trim())
+          .join(' ')
         : 'user:email';
 
       const state = randomBytes(32).toString('hex');
