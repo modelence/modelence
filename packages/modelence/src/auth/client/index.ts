@@ -17,6 +17,8 @@ type RawUserData = {
   id: string;
   handle: string;
   roles: string[];
+  name?: string;
+  picture?: string;
 };
 
 /**

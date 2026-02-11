@@ -35,7 +35,7 @@ const userSchema = z.object({
   handle: z.string(),
   roles: z.array(z.string()),
   name: z.string().optional(),
-  picture: z.string().url().optional(),
+  picture: z.string().optional(),
 });
 
 function parseUser(user: unknown): User | null {

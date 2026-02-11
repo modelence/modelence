@@ -95,6 +95,8 @@ export async function handleLoginWithPassword(
         id: userDoc._id,
         handle: userDoc.handle,
         roles: userDoc.roles || [],
+        name: userDoc.name ?? undefined,
+        picture: userDoc.picture ?? undefined,
       },
     };
   } catch (error) {
