@@ -46,15 +46,10 @@ export async function handleOAuthUserAuthentication(
     if (existingUser) {
 
       // Updates user name and picture after re-login
-      const update: Record<string, any> = {};
-
-      if (userData.name !== undefined) {
-        update.name = userData.name;
-      }
-
-      if (userData.picture !== undefined) {
-        update.picture = userData.picture;
-      }
+      const update = {
+        ...(userData.name !== undefined && { name: userData.name }),
+        ...(userData.picture !== undefined && { picture: userData.picture }),
+      };
 
       if (Object.keys(update).length > 0) {
         await usersCollection.updateOne(
@@ -118,9 +113,9 @@ export async function handleOAuthUserAuthentication(
     }
 
     // If the user does not exist, create a new user
-    const userDoc: Record<string, any> = {
+    const userDoc = {
       handle: userData.email,
-      status: 'active',
+      status: 'active' as const,
       emails: [
         {
           address: userData.email,
@@ -133,16 +128,9 @@ export async function handleOAuthUserAuthentication(
           id: userData.id,
         },
       },
+      ...(userData.name !== undefined && { name: userData.name }),
+      ...(userData.picture !== undefined && { picture: userData.picture }),
     };
-
-    // Add name and picture to the user document if provided
-    if (userData.name !== undefined) {
-      userDoc.name = userData.name;
-    }
-
-    if (userData.picture !== undefined) {
-      userDoc.picture = userData.picture;
-    }
 
     const newUser = await usersCollection.insertOne(userDoc);
 
