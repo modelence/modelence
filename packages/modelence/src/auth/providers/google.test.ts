@@ -144,18 +144,21 @@ describe('auth/providers/google', () => {
         }),
       } as never);
 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
+
     await handler(
       {
         query: { code: 'code', state: 'valid-state' },
         cookies: { authStateGoogle: 'valid-state' },
       } as unknown as Request,
-      {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-        clearCookie: jest.fn(),
-      } as unknown as Response
+      res
     );
 
+    expect(res.clearCookie).toHaveBeenCalledWith('authStateGoogle');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(
       expect.anything(),
@@ -165,6 +168,8 @@ describe('auth/providers/google', () => {
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google',
+        name: 'User',
+        picture: 'pic',
       }
     );
   });
@@ -199,7 +204,7 @@ describe('auth/providers/google', () => {
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad Request',

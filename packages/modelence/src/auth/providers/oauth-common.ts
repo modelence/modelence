@@ -52,10 +52,14 @@ export async function handleOAuthUserAuthentication(
       };
 
       if (Object.keys(update).length > 0) {
-        await usersCollection.updateOne(
-          { _id: existingUser._id },
-          { $set: update }
-        );
+        try {
+          await usersCollection.updateOne(
+            { _id: existingUser._id },
+            { $set: update }
+          );
+        } catch {
+          // ignore error to not fail the login process and continue loggin without update profile
+        }
       }
 
 

@@ -123,21 +123,25 @@ describe('auth/providers/github', () => {
           login: 'demo',
           email: 'user@example.com',
           avatar_url: 'pic',
+          name: 'Test User',
         }),
       } as never);
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
 
     await handler(
       {
         query: { code: 'code', state: 's' },
         cookies: { authStateGithub: 's' },
       } as unknown as Request,
-      {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-        clearCookie: jest.fn(),
-      } as unknown as Response
+      res
     );
 
+    expect(res.clearCookie).toHaveBeenCalledWith('authStateGithub');
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -145,6 +149,8 @@ describe('auth/providers/github', () => {
         id: '123',
         email: 'user@example.com',
         emailVerified: true,
+        name: 'Test User',
+        picture: "pic",
         providerName: 'github',
       }
     );
@@ -227,7 +233,7 @@ describe('auth/providers/github', () => {
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad request',

@@ -178,6 +178,8 @@ describe('auth/providers/oauth-common', () => {
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google',
+        name: 'New User',
+        picture: 'pic-url',
       });
 
       expect(mockUsersInsertOne).toHaveBeenCalledWith(
@@ -186,6 +188,8 @@ describe('auth/providers/oauth-common', () => {
           authMethods: {
             google: { id: 'provider-id' },
           },
+          name: 'New User',
+          picture: 'pic-url',
         })
       );
       expect(authConfig.onAfterSignup).toHaveBeenCalledWith(
