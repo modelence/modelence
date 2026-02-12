@@ -53,8 +53,9 @@ export async function handleOAuthUserAuthentication(
       if (Object.keys(update).length > 0) {
         try {
           await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
-        } catch {
-          // ignore error to not fail the login process and continue loggin without update profile
+        } catch (error) {
+          console.error('Failed to update user profile during OAuth login:', error);
+          // ignore error to not fail the login process and continue user login
         }
       }
 
