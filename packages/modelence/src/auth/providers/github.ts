@@ -1,7 +1,13 @@
 import { getConfig } from '@/server';
 import { time } from '@/time';
 import { randomBytes } from 'crypto';
-import { Router, type Request, type Response, type NextFunction, type Router as ExpressRouter } from 'express';
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+  type Router as ExpressRouter,
+} from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
@@ -186,9 +192,9 @@ function getRouter(): ExpressRouter {
       const githubScopes = getConfig('_system.user.auth.github.scopes');
       const scopes = githubScopes
         ? String(githubScopes)
-          .split(',')
-          .map((s) => s.trim())
-          .join(' ')
+            .split(',')
+            .map((s) => s.trim())
+            .join(' ')
         : 'user:email';
 
       const state = randomBytes(32).toString('hex');

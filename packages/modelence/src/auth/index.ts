@@ -12,24 +12,24 @@ export async function authenticate(
 
   const userDoc = session.userId
     ? await usersCollection.findOne({
-      _id: new ObjectId(session.userId),
-      status: { $nin: ['deleted', 'disabled'] },
-    })
+        _id: new ObjectId(session.userId),
+        status: { $nin: ['deleted', 'disabled'] },
+      })
     : null;
   const user = userDoc
     ? {
-      id: userDoc._id.toString(),
-      handle: userDoc.handle,
-      roles: userDoc.roles || [],
-      hasRole: (role: string) => (userDoc.roles || []).includes(role),
-      requireRole: (role: string) => {
-        if (!(userDoc.roles || []).includes(role)) {
-          throw new Error(`Access denied - role '${role}' required`);
-        }
-      },
-      name: userDoc.name ?? undefined,
-      picture: userDoc.picture ?? undefined,
-    }
+        id: userDoc._id.toString(),
+        handle: userDoc.handle,
+        roles: userDoc.roles || [],
+        hasRole: (role: string) => (userDoc.roles || []).includes(role),
+        requireRole: (role: string) => {
+          if (!(userDoc.roles || []).includes(role)) {
+            throw new Error(`Access denied - role '${role}' required`);
+          }
+        },
+        name: userDoc.name ?? undefined,
+        picture: userDoc.picture ?? undefined,
+      }
     : null;
 
   const roles = user ? getDefaultAuthenticatedRoles() : getUnauthenticatedRoles();

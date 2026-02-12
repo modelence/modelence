@@ -44,7 +44,6 @@ export async function handleOAuthUserAuthentication(
 
   try {
     if (existingUser) {
-
       // Updates user name and picture after re-login
       const update = {
         ...(userData.name !== undefined && { name: userData.name }),
@@ -53,15 +52,11 @@ export async function handleOAuthUserAuthentication(
 
       if (Object.keys(update).length > 0) {
         try {
-          await usersCollection.updateOne(
-            { _id: existingUser._id },
-            { $set: update }
-          );
+          await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
         } catch {
           // ignore error to not fail the login process and continue loggin without update profile
         }
       }
-
 
       await authenticateUser(res, existingUser._id);
 
