@@ -9,16 +9,18 @@ export type UserInfo = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
-  name?: string;
-  picture?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 type RawUserData = {
   id: string;
   handle: string;
   roles: string[];
-  name?: string;
-  picture?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 /**
