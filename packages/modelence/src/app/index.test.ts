@@ -247,7 +247,6 @@ describe('app/index', () => {
     });
     mockStartCronJobs.mockResolvedValue(undefined);
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
-    delete process.env.MODELENCE_CRON_ENABLED;
     delete process.env.MONGODB_URI;
     delete process.env.MODELENCE_SITE_URL;
   });
@@ -396,9 +395,7 @@ describe('app/index', () => {
     expect(mockInitRateLimits).toHaveBeenCalledWith([rateLimit1, rateLimit2]);
   });
 
-  test('defines cron jobs when cron is enabled', async () => {
-    process.env.MODELENCE_CRON_ENABLED = 'true';
-
+  test('defines cron jobs from modules', async () => {
     await startApp({
       modules: [
         createTestModule({
@@ -415,22 +412,6 @@ describe('app/index', () => {
       handler: expect.any(Function),
     });
     expect(mockStartCronJobs).toHaveBeenCalled();
-  });
-
-  test('does not define cron jobs when cron is disabled', async () => {
-    await startApp({
-      modules: [
-        createTestModule({
-          name: 'cronModule',
-          cronJobs: {
-            dailyTask: { interval: 86400000, handler: jest.fn(async () => {}) },
-          },
-        }),
-      ],
-    });
-
-    expect(mockDefineCronJob).not.toHaveBeenCalled();
-    expect(mockStartCronJobs).not.toHaveBeenCalled();
   });
 
   test('merges config schema from all modules without duplicates', async () => {
@@ -508,8 +489,7 @@ describe('app/index', () => {
     expect(mockStartConfigSync).not.toHaveBeenCalled();
   });
 
-  test('starts migrations when cron is enabled', async () => {
-    process.env.MODELENCE_CRON_ENABLED = 'true';
+  test('starts migrations when mongodb is connected', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
 
     const migrations: MigrationScript[] = [
@@ -519,18 +499,6 @@ describe('app/index', () => {
     await startApp({ migrations });
 
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
-  });
-
-  test('does not start migrations when cron is disabled', async () => {
-    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-
-    const migrations: MigrationScript[] = [
-      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
-    ];
-
-    await startApp({ migrations });
-
-    expect(mockStartMigrations).not.toHaveBeenCalled();
   });
 
   test('starts server with combined modules and channels', async () => {
