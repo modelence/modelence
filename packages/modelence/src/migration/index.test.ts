@@ -113,6 +113,16 @@ describe('migration/index', () => {
     });
   });
 
+  test('releases lock if unexpected error occurs before migration loop', async () => {
+    mockFetch.mockRejectedValue(new Error('db failure') as never);
+
+    await expect(
+      runMigrations([{ version: 1, description: 'one', handler: async () => undefined }])
+    ).rejects.toThrow('db failure');
+
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
+  });
+
   test('startMigrations schedules execution and logs errors', async () => {
     jest.useFakeTimers();
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});

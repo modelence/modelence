@@ -23,52 +23,34 @@ export async function runMigrations(migrations: MigrationScript[]) {
     return;
   }
 
-  const versions = migrations.map(({ version }) => version);
+  try {
+    const versions = migrations.map(({ version }) => version);
 
-  const existingVersions = await dbMigrations.fetch({
-    version: { $in: versions },
-  });
-  const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
-  const pendingMigrations = migrations.filter(({ version }) => !existingVersionSet.has(version));
+    const existingVersions = await dbMigrations.fetch({
+      version: { $in: versions },
+    });
+    const existingVersionSet = new Set(existingVersions.map(({ version }) => version));
+    const pendingMigrations = migrations.filter(({ version }) => !existingVersionSet.has(version));
 
-  if (pendingMigrations.length === 0) {
-    return;
-  }
+    if (pendingMigrations.length === 0) {
+      return;
+    }
 
-  logInfo(`Running migrations (${pendingMigrations.length})...`, {
-    source: 'migrations',
-  });
-  for (const { version, description, handler } of pendingMigrations) {
-    logInfo(`Running migration v${version}: ${description}`, {
+    logInfo(`Running migrations (${pendingMigrations.length})...`, {
       source: 'migrations',
     });
-    try {
-      const output = await handler();
-      const outputStr = (output || '').toString().trim();
-      const maxSize = 15 * 1024 * 1024; // 15MB (leaving 1MB buffer for other fields and MongoDB overhead)
-      const truncatedOutput =
-        outputStr.length > maxSize
-          ? outputStr.slice(0, maxSize) + '\n[Output truncated - exceeded size limit]'
-          : outputStr;
-      await dbMigrations.upsertOne(
-        {
-          version,
-        },
-        {
-          $set: {
-            version,
-            status: 'completed',
-            description,
-            output: truncatedOutput,
-            appliedAt: new Date(),
-          },
-        }
-      );
-      logInfo(`Migration v${version} complete`, {
+    for (const { version, description, handler } of pendingMigrations) {
+      logInfo(`Running migration v${version}: ${description}`, {
         source: 'migrations',
       });
-    } catch (e) {
-      if (e instanceof Error) {
+      try {
+        const output = await handler();
+        const outputStr = (output || '').toString().trim();
+        const maxSize = 15 * 1024 * 1024; // 15MB (leaving 1MB buffer for other fields and MongoDB overhead)
+        const truncatedOutput =
+          outputStr.length > maxSize
+            ? outputStr.slice(0, maxSize) + '\n[Output truncated - exceeded size limit]'
+            : outputStr;
         await dbMigrations.upsertOne(
           {
             version,
@@ -76,21 +58,41 @@ export async function runMigrations(migrations: MigrationScript[]) {
           {
             $set: {
               version,
-              status: 'failed',
+              status: 'completed',
               description,
-              output: e.message || '',
+              output: truncatedOutput,
               appliedAt: new Date(),
             },
           }
         );
-        logInfo(`Migration v${version} is failed: ${e.message}`, {
+        logInfo(`Migration v${version} complete`, {
           source: 'migrations',
         });
+      } catch (e) {
+        if (e instanceof Error) {
+          await dbMigrations.upsertOne(
+            {
+              version,
+            },
+            {
+              $set: {
+                version,
+                status: 'failed',
+                description,
+                output: e.message || '',
+                appliedAt: new Date(),
+              },
+            }
+          );
+          logInfo(`Migration v${version} is failed: ${e.message}`, {
+            source: 'migrations',
+          });
+        }
       }
     }
+  } finally {
+    await releaseLock('migrations');
   }
-
-  await releaseLock('migrations');
 }
 
 export function startMigrations(migrations: MigrationScript[]) {
