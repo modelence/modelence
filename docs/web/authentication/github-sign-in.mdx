@@ -122,7 +122,7 @@ When a user signs in with GitHub, Modelence automatically:
 
 - Creates a user account if one doesn't exist
 - Links the GitHub account to the user profile
-- Retrieves profile information (username, email, avatar, name)
+- Retrieves profile information (first name, last name, username, email, avatar)
 - Marks the email as verified if GitHub has verified it
 
 The user object will contain:
@@ -133,8 +133,9 @@ The user object will contain:
   handle: string;          // Generated from GitHub username or email
   emailVerified: boolean;  // true if GitHub email is verified
   githubId: string;        // GitHub user ID
-  name?: string;           // Full name from GitHub profile
-  picture?: string;        // Avatar URL from GitHub
+  firstName?: string;      // First name from GitHub
+  lastName?: string;       // Last name
+  avatarUrl?: string;      // Avatar URL from GitHub
 }
 ```
 

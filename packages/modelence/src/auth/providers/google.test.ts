@@ -139,7 +139,9 @@ describe('auth/providers/google', () => {
           id: 'google-id',
           email: 'user@example.com',
           verified_email: true,
-          name: 'User',
+          name: 'User Test',
+          given_name: 'User',
+          family_name: 'Test',
           picture: 'pic',
         }),
       } as never);
@@ -168,8 +170,9 @@ describe('auth/providers/google', () => {
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google',
-        name: 'User',
-        picture: 'pic',
+        firstName: 'User',
+        lastName: 'Test',
+        avatarUrl: 'pic',
       }
     );
   });
@@ -204,7 +207,7 @@ describe('auth/providers/google', () => {
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad Request',

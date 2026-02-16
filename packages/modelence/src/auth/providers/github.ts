@@ -149,13 +149,18 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       return;
     }
 
+    const nameParts = githubUser.name ? githubUser.name.trim().split(/\s+/) : [];
+    const firstName = nameParts[0] || undefined;
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
+
     const userData: OAuthUserData = {
       id: String(githubUser.id),
       email: githubEmail,
       emailVerified: true, // Assume public email is verified
       providerName: 'github',
-      name: githubUser.name || undefined,
-      picture: githubUser.avatar_url || undefined,
+      firstName,
+      lastName,
+      avatarUrl: githubUser.avatar_url || undefined,
     };
 
     await handleOAuthUserAuthentication(req, res, userData);

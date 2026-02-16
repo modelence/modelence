@@ -12,7 +12,8 @@ export async function getOwnProfile(_args: Args, { user }: Context) {
     handle: profile.handle,
     emails: profile.emails,
     authMethods: Object.keys(profile.authMethods || {}),
-    name: profile.name ?? undefined,
-    picture: profile.picture ?? undefined,
+    firstName: profile.firstName ?? undefined,
+    lastName: profile.lastName ?? undefined,
+    avatarUrl: profile.avatarUrl ?? undefined,
   };
 }

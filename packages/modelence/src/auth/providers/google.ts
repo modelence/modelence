@@ -26,6 +26,8 @@ interface GoogleTokenResponse {
 interface GoogleUserInfo {
   id: string;
   name: string;
+  given_name: string;
+  family_name: string;
   email: string;
   verified_email: boolean;
   picture: string;
@@ -110,8 +112,9 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       email: googleUser.email,
       emailVerified: googleUser.verified_email,
       providerName: 'google',
-      name: googleUser.name || undefined,
-      picture: googleUser.picture || undefined,
+      firstName: googleUser.given_name || undefined,
+      lastName: googleUser.family_name || undefined,
+      avatarUrl: googleUser.picture || undefined,
     };
 
     await handleOAuthUserAuthentication(req, res, userData);

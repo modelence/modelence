@@ -11,8 +11,9 @@ export interface OAuthUserData {
   email: string;
   emailVerified: boolean;
   providerName: 'google' | 'github';
-  name?: string;
-  picture?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 }
 
 export async function authenticateUser(res: Response, userId: ObjectId) {
@@ -44,35 +45,33 @@ export async function handleOAuthUserAuthentication(
 
   try {
     if (existingUser) {
-      // Updates user name and picture after re-login
+      // Updates user profile after re-login
       const update = {
-        ...(userData.name !== undefined && { name: userData.name }),
-        ...(userData.picture !== undefined && { picture: userData.picture }),
+        ...(userData.firstName !== undefined && { firstName: userData.firstName }),
+        ...(userData.lastName !== undefined && { lastName: userData.lastName }),
+        ...(userData.avatarUrl !== undefined && { avatarUrl: userData.avatarUrl }),
       };
+
+      let userToReturn = existingUser;
 
       if (Object.keys(update).length > 0) {
         try {
           await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
+          userToReturn = { ...existingUser, ...update } as typeof existingUser;
         } catch (error) {
           console.error('Failed to update user profile during OAuth login:', error);
-          // ignore error to not fail the login process and continue user login
         }
       }
 
       await authenticateUser(res, existingUser._id);
 
-      const updatedUser = {
-        ...existingUser,
-        ...update,
-      };
-
       getAuthConfig().onAfterLogin?.({
         provider: userData.providerName,
-        user: updatedUser,
+        user: userToReturn,
         session,
         connectionInfo,
       });
-      getAuthConfig().login?.onSuccess?.(updatedUser);
+      getAuthConfig().login?.onSuccess?.(userToReturn);
 
       return;
     }
@@ -128,8 +127,9 @@ export async function handleOAuthUserAuthentication(
           id: userData.id,
         },
       },
-      ...(userData.name !== undefined && { name: userData.name }),
-      ...(userData.picture !== undefined && { picture: userData.picture }),
+      ...(userData.firstName !== undefined && { firstName: userData.firstName }),
+      ...(userData.lastName !== undefined && { lastName: userData.lastName }),
+      ...(userData.avatarUrl !== undefined && { avatarUrl: userData.avatarUrl }),
     };
 
     const newUser = await usersCollection.insertOne(userDoc);

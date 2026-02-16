@@ -27,8 +27,9 @@ export async function authenticate(
             throw new Error(`Access denied - role '${role}' required`);
           }
         },
-        name: userDoc.name ?? undefined,
-        picture: userDoc.picture ?? undefined,
+        firstName: userDoc.firstName ?? undefined,
+        lastName: userDoc.lastName ?? undefined,
+        avatarUrl: userDoc.avatarUrl ?? undefined,
       }
     : null;
 

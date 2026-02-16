@@ -149,8 +149,9 @@ describe('auth/providers/github', () => {
         id: '123',
         email: 'user@example.com',
         emailVerified: true,
-        name: 'Test User',
-        picture: "pic",
+        firstName: 'Test',
+        lastName: 'User',
+        avatarUrl: 'pic',
         providerName: 'github',
       }
     );
@@ -233,7 +234,7 @@ describe('auth/providers/github', () => {
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => { });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad request',

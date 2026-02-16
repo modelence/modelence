@@ -12,8 +12,9 @@ type User = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
-  name?: string;
-  picture?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 type SessionStore = {
@@ -34,8 +35,9 @@ const userSchema = z.object({
   id: z.string(),
   handle: z.string(),
   roles: z.array(z.string()),
-  name: z.string().optional(),
-  picture: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  avatarUrl: z.string().optional(),
 });
 
 function parseUser(user: unknown): User | null {
@@ -54,8 +56,9 @@ function parseUser(user: unknown): User | null {
 
   return Object.freeze({
     ...parsedData,
-    name: parsedData.name ?? undefined,
-    picture: parsedData.picture ?? undefined,
+    firstName: parsedData.firstName ?? undefined,
+    lastName: parsedData.lastName ?? undefined,
+    avatarUrl: parsedData.avatarUrl ?? undefined,
     hasRole: (role: string) => parsedData.roles.includes(role),
     requireRole: (role: string) => {
       if (!parsedData.roles.includes(role)) {
