@@ -52,6 +52,14 @@ describe('auth/client', () => {
     expect(mockCallMethod).toHaveBeenCalledWith('_system.user.verifyEmail', { token: 'token123' });
   });
 
+  test('resendEmailVerification calls backend method with email', async () => {
+    await authClient.resendEmailVerification({ email: 'user@example.com' });
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.resendEmailVerification', {
+      email: 'user@example.com',
+    });
+  });
+
   test('logout calls backend method and clears current user', async () => {
     await authClient.logout();
 

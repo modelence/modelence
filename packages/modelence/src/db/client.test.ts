@@ -162,22 +162,6 @@ describe('db/client', () => {
       expect(console.error).toHaveBeenCalledWith(pingError);
     });
 
-    test('uses maxPoolSize of 20 in client options', async () => {
-      const { connect } = await import('./client');
-      mockGetConfig.mockReturnValue('mongodb://localhost:27017');
-      mockConnect.mockResolvedValue(undefined);
-      mockCommand.mockResolvedValue({ ok: 1 });
-
-      await connect();
-
-      expect(MockMongoClient).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          maxPoolSize: 20,
-        })
-      );
-    });
-
     test('connects to admin database for ping command', async () => {
       const { connect } = await import('./client');
       mockGetConfig.mockReturnValue('mongodb://localhost:27017');

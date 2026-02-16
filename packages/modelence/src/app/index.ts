@@ -57,7 +57,6 @@ export async function startApp({
   dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
-  const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
   trackAppStart()
     .then(() => {
@@ -91,9 +90,7 @@ export async function startApp({
   const stores = getStores(combinedModules);
   const channels = getChannels(combinedModules);
 
-  if (isCronEnabled) {
-    defineCronJobs(combinedModules);
-  }
+  defineCronJobs(combinedModules);
 
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
@@ -102,7 +99,7 @@ export async function startApp({
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
-        cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
+        cronJobsMetadata: getCronJobsMetadata(),
         stores,
       });
     loadConfigs(configs);
@@ -124,9 +121,7 @@ export async function startApp({
     initStores(stores);
   }
 
-  if (isCronEnabled) {
-    startMigrations(migrations);
-  }
+  startMigrations(migrations);
 
   if (mongodbUri) {
     for (const store of stores) {
@@ -139,9 +134,7 @@ export async function startApp({
     startConfigSync();
   }
 
-  if (isCronEnabled) {
-    startCronJobs().catch(console.error);
-  }
+  startCronJobs().catch(console.error);
 
   await startServer(server, { combinedModules, channels });
 }

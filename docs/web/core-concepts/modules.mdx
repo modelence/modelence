@@ -246,34 +246,40 @@ function CreateTodo() {
 
 ## Rate Limiting
 
-Protect your queries and mutations from abuse with rate limiting:
+Protect your queries and mutations from abuse by declaring rate limit rules on the module and consuming them inside handlers:
 
 ```typescript
+import { Module, consumeRateLimit } from 'modelence/server';
+import { time } from 'modelence/server';
+
 export default new Module('todo', {
+  rateLimits: [
+    { bucket: 'todoCreate', type: 'ip', window: time.minutes(1), limit: 10 },
+  ],
+
   mutations: {
-    create: {
-      rateLimit: {
-        points: 10,      // 10 requests
-        duration: 60,    // per 60 seconds
-        keyPrefix: 'todo-create'
-      },
-      async handler({ title }, { user }) {
-        // Rate limit is automatically enforced
-        const { insertedId } = await dbTodos.insertOne({
-          title,
-          userId: user.id,
-          isCompleted: false,
-          createdAt: new Date()
-        });
-        return insertedId;
-      }
+    async create({ title }, { user, connectionInfo }) {
+      await consumeRateLimit({
+        bucket: 'todoCreate',
+        type: 'ip',
+        value: connectionInfo.ip,
+        message: 'Too many todos created. Please slow down.',
+      });
+
+      const { insertedId } = await dbTodos.insertOne({
+        title,
+        userId: user.id,
+        isCompleted: false,
+        createdAt: new Date()
+      });
+      return insertedId;
     }
   }
 });
 ```
 
 <Tip>
-Learn more about rate limiting in the [Rate Limiting documentation](/authentication/rate-limiting).
+Learn more about rate limiting in the [Rate Limiting documentation](/rate-limiting).
 </Tip>
 
 ## Best Practices

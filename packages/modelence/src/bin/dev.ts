@@ -8,7 +8,7 @@ export function dev() {
   const serverPath = getServerPath();
   const tsxPath = path.resolve('./node_modules/.bin/tsx');
 
-  execSync(`"${tsxPath}" watch "${serverPath}"`, {
+  execSync(`"${tsxPath}" watch --ignore "vite.config.ts.timestamp-*" "${serverPath}"`, {
     stdio: 'inherit',
     cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: 'development' },
