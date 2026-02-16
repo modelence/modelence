@@ -2,8 +2,8 @@ import { Module } from '../app/module';
 
 export default new Module('_system', {
   configSchema: {
-    mongodbUrl: {
-      type: 'string',
+    mongodbUri: {
+      type: 'secret',
       isPublic: false,
       default: '',
     },
