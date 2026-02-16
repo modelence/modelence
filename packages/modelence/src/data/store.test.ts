@@ -58,27 +58,24 @@ describe('data/store', () => {
     );
   });
 
-  test('createIndexes retries after duplicate index errors', async () => {
+  test('createIndexes reconciles conflicting index definitions and retries duplicate search indexes', async () => {
     const store = createStore({
-      indexes: [{ key: { name: 1 }, name: 'nameIdx' }],
+      indexes: [{ key: { name: 1 }, name: 'nameIdx', unique: true }],
       searchIndexes: [{ name: 'searchIdx', definition: {} } as SearchIndexDescription],
     });
 
-    const indexError = new MongoError(
-      'An existing index has the same name as the requested index. Requested index: { v: 2, key: { name: 1 }, name: "_modelence_nameIdx" }, existing index: { v: 2, key: { name: 1 }, name: "_modelence_nameIdx" }'
-    ) as MongoError & { code: number };
-    indexError.code = 86;
     const searchError = new MongoError('duplicate search') as MongoError & { code: number };
     searchError.code = 68;
 
     const collectionMock = {
       listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          // Same name, but stale options (missing unique) - should be replaced by code definition
+          { name: '_modelence_nameIdx', key: { name: 1 } },
+        ] as never),
       }),
-      createIndexes: jest
-        .fn()
-        .mockRejectedValueOnce(indexError as never)
-        .mockResolvedValueOnce(undefined as never),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
       dropIndex: jest.fn().mockResolvedValue(undefined as never),
       createSearchIndexes: jest
         .fn()
@@ -92,30 +89,25 @@ describe('data/store', () => {
     await store.createIndexes();
 
     expect(collectionMock.listIndexes).toHaveBeenCalled();
-    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(1);
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_nameIdx');
     expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
     expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
   });
 
-  test('createIndexes drops auto-named indexes when options change (code 86)', async () => {
+  test('createIndexes drops auto-named indexes when options change', async () => {
     const store = createStore({
       indexes: [{ key: { title: 1, completed: 1 }, unique: true }],
     });
 
-    const indexError = new MongoError(
-      'An existing index has the same name as the requested index. Requested index: { v: 2, unique: true, key: { title: 1, completed: 1 }, name: "_modelence_title_1_completed_1" }, existing index: { v: 2, key: { title: 1, completed: 1 }, name: "_modelence_title_1_completed_1" }'
-    ) as MongoError & { code: number };
-    indexError.code = 86;
-
     const collectionMock = {
       listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          { name: '_modelence_title_1_completed_1', key: { title: 1, completed: 1 } },
+        ] as never),
       }),
-      createIndexes: jest
-        .fn()
-        .mockRejectedValueOnce(indexError as never)
-        .mockResolvedValueOnce(undefined as never),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
       dropIndex: jest.fn().mockResolvedValue(undefined as never),
     };
 
@@ -124,27 +116,25 @@ describe('data/store', () => {
     await store.createIndexes();
 
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_title_1_completed_1');
-    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(1);
   });
 
-  test('createIndexes handles code 85 error (different name same fields)', async () => {
+  test('createIndexes replaces conflicting manual indexes with code-defined index names', async () => {
     const store = createStore({
       indexes: [{ key: { environmentId: 1, chatId: 1, position: 1 } }],
     });
 
-    const indexError = new MongoError(
-      'Index already exists with a different name: environmentId_1_chatId_1_position_1'
-    ) as MongoError & { code: number };
-    indexError.code = 85;
-
     const collectionMock = {
       listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([{ name: '_id_' }] as never),
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          {
+            name: 'environmentId_1_chatId_1_position_1',
+            key: { environmentId: 1, chatId: 1, position: 1 },
+          },
+        ] as never),
       }),
-      createIndexes: jest
-        .fn()
-        .mockRejectedValueOnce(indexError as never)
-        .mockResolvedValueOnce(undefined as never),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
       dropIndex: jest.fn().mockResolvedValue(undefined as never),
     };
 
@@ -153,10 +143,10 @@ describe('data/store', () => {
     await store.createIndexes();
 
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('environmentId_1_chatId_1_position_1');
-    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(2);
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(1);
   });
 
-  test('createIndexes drops orphaned _modelence_ indexes', async () => {
+  test('createIndexes drops orphaned _modelence_ indexes and keeps non-conflicting manual indexes', async () => {
     const store = createStore({
       indexes: [{ key: { name: 1 } }],
     });
@@ -164,10 +154,10 @@ describe('data/store', () => {
     const collectionMock = {
       listIndexes: jest.fn().mockReturnValue({
         toArray: jest.fn().mockResolvedValue([
-          { name: '_id_' }, // Default index, should not be dropped
-          { name: '_modelence_name_1' }, // Current index, should be kept
-          { name: '_modelence_oldField_1' }, // Orphaned index, should be dropped
-          { name: 'customIndex_1' }, // Non-modelence index, should not be dropped
+          { name: '_id_', key: { _id: 1 } }, // Default index, should not be dropped
+          { name: '_modelence_name_1', key: { name: 1 } }, // Current index, should be kept
+          { name: '_modelence_oldField_1', key: { oldField: 1 } }, // Orphaned index, should be dropped
+          { name: 'customIndex_1', key: { customField: 1 } }, // Non-modelence index, should not be dropped
         ] as never),
       }),
       createIndexes: jest.fn().mockResolvedValue(undefined as never),
@@ -181,7 +171,7 @@ describe('data/store', () => {
     // Should only drop the orphaned _modelence_ index
     expect(collectionMock.dropIndex).toHaveBeenCalledTimes(1);
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_oldField_1');
-    expect(collectionMock.createIndexes).toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
   test('createIndexes handles non-existent collection (code 26)', async () => {
@@ -207,6 +197,35 @@ describe('data/store', () => {
     // Should not throw and should still create indexes
     expect(collectionMock.dropIndex).not.toHaveBeenCalled();
     expect(collectionMock.createIndexes).toHaveBeenCalled();
+  });
+
+  test('createIndexes ignores index-not-found (code 27) during drop and continues reconciliation', async () => {
+    const store = createStore({
+      indexes: [{ key: { handle: 1 }, name: 'handleIdx' }],
+    });
+
+    const indexNotFoundError = new MongoError('index not found') as MongoError & { code: number };
+    indexNotFoundError.code = 27;
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          // Conflicting manual index with same key should be dropped, but race may already remove it
+          { name: 'handle_1', key: { handle: 1 } },
+        ] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockRejectedValue(indexNotFoundError as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await expect(store.createIndexes()).resolves.toBeUndefined();
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('handle_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalledWith([
+      { key: { handle: 1 }, name: '_modelence_handleIdx' },
+    ]);
   });
 
   test('normalizes index names with _modelence_ prefix', () => {
