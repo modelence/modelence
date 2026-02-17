@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import {
   AggregateOptions,
   AggregationCursor,
@@ -80,39 +82,129 @@ type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
   $nin?: ArrayLikeOfUnion<T>;
 };
 
-const extractIndexNameFromError = (error: MongoError): string | undefined => {
-  const mongoError = error as MongoError & {
-    errorResponse?: { errmsg?: string; message?: string };
-  };
-  const candidateMessages = [
-    mongoError.message,
-    mongoError.errorResponse?.errmsg,
-    mongoError.errorResponse?.message,
-  ].filter((message): message is string => typeof message === 'string');
+type ExistingIndex = Document & {
+  key?: Document;
+  name?: string;
+};
 
-  for (const message of candidateMessages) {
-    // Pattern for code 86: "existing index: ... name: "indexName""
-    const existingMatch = message.match(/existing index:.*?name:\s*"([^"]+)"/i);
-    if (existingMatch?.[1]) {
-      return existingMatch[1];
-    }
+const COMPARABLE_INDEX_OPTION_FIELDS = [
+  'background',
+  'bits',
+  'bucketSize',
+  'collation',
+  'default_language',
+  'expireAfterSeconds',
+  'hidden',
+  'language_override',
+  'max',
+  'min',
+  'partialFilterExpression',
+  'sparse',
+  'storageEngine',
+  'textIndexVersion',
+  'unique',
+  'weights',
+  'wildcardProjection',
+  '2dsphereIndexVersion',
+] as const;
 
-    // Pattern for code 86: "requested index: ... name: "indexName""
-    const requestedMatch = message.match(/requested index:.*?name:\s*"([^"]+)"/i);
-    if (requestedMatch?.[1]) {
-      return requestedMatch[1];
-    }
+const isDocumentRecord = (value: unknown): value is Document =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-    // Pattern for code 85: "Index already exists with a different name: indexName"
-    const differentNameMatch = message.match(
-      /Index already exists with a different name:\s*([^\s]+)/i
-    );
-    if (differentNameMatch?.[1]) {
-      return differentNameMatch[1];
+const hasModelencePrefix = (name: string): boolean => name.startsWith('_modelence_');
+
+const getComparableIndexOptions = (index: ExistingIndex | IndexDescription): Document => {
+  const options: Document = {};
+
+  for (const field of COMPARABLE_INDEX_OPTION_FIELDS) {
+    const value = (index as Document)[field];
+    if (value !== undefined) {
+      options[field] = value;
     }
   }
 
-  return undefined;
+  return options;
+};
+
+/**
+ * MongoDB index key order is significant (e.g. { a: 1, b: 1 } !== { b: 1, a: 1 }).
+ */
+const isSameIndexKey = (left: unknown, right: unknown): boolean => {
+  if (!isDocumentRecord(left) || !isDocumentRecord(right)) {
+    return false;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  return leftEntries.every(([leftField, leftDirection], index) => {
+    const [rightField, rightDirection] = rightEntries[index] || [];
+    return leftField === rightField && isDeepStrictEqual(leftDirection, rightDirection);
+  });
+};
+
+const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
+  if (!isSameIndexKey(existing.key, desired.key)) {
+    return false;
+  }
+
+  return isDeepStrictEqual(getComparableIndexOptions(existing), getComparableIndexOptions(desired));
+};
+
+const getIndexKeySignature = (key: unknown): string | null => {
+  if (!isDocumentRecord(key)) {
+    return null;
+  }
+
+  return Object.entries(key)
+    .map(([field, direction]) => `${field}:${JSON.stringify(direction)}`)
+    .join('|');
+};
+
+/**
+ * Lists all indexes in a collection, returning an empty array if collection doesn't exist
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const listIndexes = async (collection: Collection<any>): Promise<Document[]> => {
+  try {
+    return await collection.listIndexes().toArray();
+  } catch (error) {
+    // If collection doesn't exist yet, return empty array
+    // It will be created when we insert data or create indexes
+    if (error instanceof MongoError && error.code === 26) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+/**
+ * Generates an auto-generated index name from the index keys
+ * Mimics MongoDB's default naming: field1_direction1_field2_direction2
+ */
+const generateAutoIndexName = (key: Document): string => {
+  return Object.entries(key)
+    .map(([field, direction]) => `${field}_${direction}`)
+    .join('_');
+};
+
+/**
+ * Normalizes an index by ensuring it has a name with _modelence_ prefix
+ */
+const normalizeIndexName = (index: IndexDescription): IndexDescription => {
+  if (index.name) {
+    // If name is provided, add _modelence_ prefix if not already present
+    const name = index.name.startsWith('_modelence_') ? index.name : `_modelence_${index.name}`;
+    return { ...index, name };
+  }
+
+  // Auto-generate name with _modelence_ prefix
+  const autoName = generateAutoIndexName(index.key);
+  return { ...index, name: `_modelence_${autoName}` };
 };
 
 /**
@@ -273,7 +365,8 @@ export class Store<
     this.name = name;
     this.schema = options.schema;
     this.methods = options.methods;
-    this.indexes = options.indexes;
+    // Normalize all indexes to have _modelence_ prefix
+    this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
   }
 
@@ -385,23 +478,125 @@ export class Store<
   /** @internal */
   async createIndexes() {
     const collection = this.requireCollection();
+
+    // Get all existing indexes in the collection (returns [] if collection doesn't exist)
+    const existingIndexes = await listIndexes(collection);
+    const indexByName = new Map<string, ExistingIndex & { name: string }>();
+    const indexNamesByKey = new Map<string, Set<string>>();
+    const droppedIndexNames = new Set<string>();
+
+    const addIndexToLookup = (existingIndex: ExistingIndex & { name: string }) => {
+      indexByName.set(existingIndex.name, existingIndex);
+
+      const keySignature = getIndexKeySignature(existingIndex.key);
+      if (!keySignature) {
+        return;
+      }
+
+      const names = indexNamesByKey.get(keySignature);
+      if (names) {
+        names.add(existingIndex.name);
+      } else {
+        indexNamesByKey.set(keySignature, new Set([existingIndex.name]));
+      }
+    };
+
+    const removeIndexFromLookup = (indexName: string) => {
+      const existingIndex = indexByName.get(indexName);
+      if (!existingIndex) {
+        return;
+      }
+
+      indexByName.delete(indexName);
+
+      const keySignature = getIndexKeySignature(existingIndex.key);
+      if (!keySignature) {
+        return;
+      }
+
+      const names = indexNamesByKey.get(keySignature);
+      if (!names) {
+        return;
+      }
+
+      names.delete(indexName);
+      if (names.size === 0) {
+        indexNamesByKey.delete(keySignature);
+      }
+    };
+
+    for (const existingIndex of existingIndexes) {
+      if (typeof existingIndex.name === 'string') {
+        addIndexToLookup({
+          ...existingIndex,
+          name: existingIndex.name,
+        });
+      }
+    }
+
+    const dropIndexIfNeeded = async (indexName: string) => {
+      if (indexName === '_id_' || droppedIndexNames.has(indexName)) {
+        return;
+      }
+      try {
+        await collection.dropIndex(indexName);
+      } catch (error) {
+        // Another concurrent reconciler may have already dropped it.
+        if (!(error instanceof MongoError && error.code === 27)) {
+          throw error;
+        }
+      }
+      droppedIndexNames.add(indexName);
+      removeIndexFromLookup(indexName);
+    };
+
+    // Find all _modelence_ prefixed indexes that are not in the current schema
+    const currentIndexNames = new Set(
+      this.indexes.map((idx) => idx.name).filter((name): name is string => typeof name === 'string')
+    );
+    const orphanedIndexes = [...indexByName.values()].filter(
+      (existingIdx) =>
+        hasModelencePrefix(existingIdx.name) && !currentIndexNames.has(existingIdx.name)
+    );
+
+    // Drop orphaned indexes
+    for (const orphanedIndex of orphanedIndexes) {
+      await dropIndexIfNeeded(orphanedIndex.name);
+    }
+
+    // Reconcile code-defined indexes against the current DB metadata.
+    // Code wins on conflicts; non-conflicting manual indexes are preserved.
     if (this.indexes.length > 0) {
       for (const index of this.indexes) {
-        try {
-          await collection.createIndexes([index]);
-        } catch (error) {
-          if (error instanceof MongoError && (error.code === 86 || error.code === 85)) {
-            const indexName = extractIndexNameFromError(error);
+        if (!index.name) {
+          continue;
+        }
 
-            if (!indexName) {
-              throw error;
+        const existingByName = indexByName.get(index.name);
+        if (existingByName && !isSameIndexDefinition(existingByName, index)) {
+          await dropIndexIfNeeded(existingByName.name);
+        }
+
+        const keySignature = getIndexKeySignature(index.key);
+        if (keySignature) {
+          const existingNamesForKey = [...(indexNamesByKey.get(keySignature) || [])];
+          for (const existingName of existingNamesForKey) {
+            if (existingName !== index.name) {
+              await dropIndexIfNeeded(existingName);
             }
-
-            await collection.dropIndex(indexName);
-            await collection.createIndexes([index]);
-          } else {
-            throw error;
           }
+        }
+
+        const alignedIndex = indexByName.get(index.name);
+        const hasAlignedIndex = !!alignedIndex && isSameIndexDefinition(alignedIndex, index);
+
+        if (!hasAlignedIndex) {
+          await collection.createIndexes([index]);
+          addIndexToLookup({
+            name: index.name,
+            key: index.key,
+            ...getComparableIndexOptions(index),
+          });
         }
       }
     }
