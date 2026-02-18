@@ -8,7 +8,7 @@ import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
-import { consumeRateLimit } from '@/rate-limit/rules';
+import { consumeRateLimit } from '@/server';
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {

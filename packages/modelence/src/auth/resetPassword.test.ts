@@ -24,7 +24,7 @@ const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => 
 const mockTime = { hours: jest.fn() };
 const mockConsumeRateLimit = jest.fn();
 
-jest.unstable_mockModule('@/rate-limit/rules', () => ({
+jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
@@ -142,6 +142,7 @@ describe('auth/resetPassword', () => {
         redirectUrl: '/reset-password',
       },
     });
+    mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.hours.mockReturnValue(3600000); // 1 hour in ms
     process.env.MODELENCE_SITE_URL = 'https://example.com';
