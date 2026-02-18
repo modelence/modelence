@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/react-query",
-  "version": "1.2.6-dev.0",
+  "version": "1.2.6-dev.1",
   "description": "React Query utilities for Modelence",
   "exports": {
     ".": {
