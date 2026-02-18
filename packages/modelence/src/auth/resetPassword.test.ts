@@ -178,6 +178,11 @@ describe('auth/resetPassword', () => {
         type: 'ip',
         value: ip,
       });
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'password-reset-email',
+        type: 'email',
+        value: email,
+      });
     });
     test('sends reset email for valid user with password auth', async () => {
       const email = 'user@example.com';

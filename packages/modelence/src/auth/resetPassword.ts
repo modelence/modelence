@@ -51,6 +51,12 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   }
   const email = validateEmail(args.email as string);
 
+  await consumeRateLimit({
+    bucket: 'password-reset-email',
+    type: 'email',
+    value: email,
+  });
+
   // Find user by email
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
