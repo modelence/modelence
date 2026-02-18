@@ -52,6 +52,7 @@ describe('websocket/socketio/client', () => {
       websocketProvider.init({ channels: [] });
 
       expect(mockIo).toHaveBeenCalledWith('/', {
+        transports: ['websocket'],
         auth: {
           token: 'test-token',
         },
@@ -64,6 +65,7 @@ describe('websocket/socketio/client', () => {
       websocketProvider.init({ channels: [] });
 
       expect(mockIo).toHaveBeenCalledWith('/', {
+        transports: ['websocket'],
         auth: {
           token: undefined,
         },
@@ -378,6 +380,7 @@ describe('websocket/socketio/client', () => {
       websocketProvider.init({});
 
       expect(mockIo).toHaveBeenCalledWith('/', {
+        transports: ['websocket'],
         auth: {
           token: 'authenticated-token',
         },
