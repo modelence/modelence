@@ -22,13 +22,13 @@
     "modelence": "*"
   },
   "devDependencies": {
-    "@types/nodemailer": "^6.4.17",
-    "@types/react-dom": "^18.3.7",
-    "modelence": "^0.6.2",
-    "tsup": "^8.3.6",
-    "typescript": "^5.7.2"
+    "@types/nodemailer": "^7.0.10",
+    "@types/react-dom": "^19.2.3",
+    "modelence": "^0.12.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "nodemailer": "^7.0.5"
+    "nodemailer": "^8.0.1"
   }
 }
