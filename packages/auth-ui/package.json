@@ -16,6 +16,11 @@
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/auth-ui"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
