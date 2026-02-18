@@ -48,8 +48,7 @@ export async function init({
       methods: ['GET', 'POST'],
     },
     adapter: mongoCollection ? createAdapter(mongoCollection) : undefined,
-    transports: ['polling', 'websocket'],
-    allowUpgrades: true,
+    transports: ['websocket'],
     perMessageDeflate: false,
   });
 
