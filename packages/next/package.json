@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/next",
-  "version": "1.0.4",
+  "version": "1.0.5-dev.0",
   "description": "Next.js server for Modelence",
   "exports": {
     ".": {
