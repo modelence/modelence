@@ -19,17 +19,17 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@modelence/react-query": "^1.0.0",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^2.0.0"
+    "@modelence/react-query": "^1.2.5",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.4.1"
   },
   "peerDependencies": {
     "modelence": "*"
   },
   "devDependencies": {
-    "@types/react": "^18.0.0",
-    "modelence": "^0.5.13",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "@types/react": "^19.2.14",
+    "modelence": "^0.12.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }
