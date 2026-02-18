@@ -12,6 +12,11 @@
     "dev": "tsup src/index.ts --format esm --watch",
     "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/create-modelence-app"
+  },
   "dependencies": {
     "adm-zip": "^0.5.16",
     "chalk": "^5.6.2",

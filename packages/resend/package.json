@@ -16,6 +16,11 @@
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/resend"
+  },
   "author": "Modelence",
   "license": "SEE LICENSE IN LICENSE",
   "peerDependencies": {
