@@ -58,7 +58,7 @@ export function LoginForm({
   }, []);
 
   const socialButtons = useMemo(() => {
-    const buttons: JSX.Element[] = [];
+    const buttons: React.ReactElement[] = [];
     if (isGoogleAuthEnabled) {
       buttons.push(
         <Button

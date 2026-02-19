@@ -1,6 +1,6 @@
 {
   "name": "create-modelence-app",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Create Modelence applications with one command",
   "type": "module",
   "main": "dist/index.js",
@@ -12,19 +12,24 @@
     "dev": "tsup src/index.ts --format esm --watch",
     "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/create-modelence-app"
+  },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "chalk": "^4.1.2",
-    "commander": "^12.0.0",
-    "fs-extra": "^11.2.0",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "fs-extra": "^11.3.3",
     "node-fetch": "^3.3.2",
-    "ora": "^5.4.1"
+    "ora": "^9.3.0"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^25.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }
