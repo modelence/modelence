@@ -46,9 +46,9 @@ async function buildServer() {
       clean: true,
       watch: false,
       bundle: true,
+      skipNodeModulesBundle: true,
       treeshake: true,
       platform: 'node',
-      external: [/^[^./]/],
       outExtension: () => ({
         js: '.mjs',
       }),
