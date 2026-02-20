@@ -11,11 +11,13 @@ const baseSchema = {
 function createStore(options?: {
   indexes?: IndexDescription[];
   searchIndexes?: SearchIndexDescription[];
+  indexCreationMode?: 'blocking' | 'background';
 }) {
   return new Store<ModelSchema, Record<string, never>>('testCollection', {
     schema: baseSchema,
     indexes: options?.indexes || [],
     searchIndexes: options?.searchIndexes,
+    indexCreationMode: options?.indexCreationMode,
     methods: undefined,
   });
 }
@@ -256,6 +258,18 @@ describe('data/store', () => {
     });
     const indexes4 = (store4 as unknown as { indexes: IndexDescription[] }).indexes;
     expect(indexes4[0].name).toBe('_modelence_userId_1_createdAt_-1');
+  });
+
+  test('supports per-store index creation mode', () => {
+    const backgroundStore = createStore();
+    const blockingStore = createStore({ indexCreationMode: 'blocking' });
+
+    expect(backgroundStore.getIndexCreationMode()).toBe('background');
+    expect(blockingStore.getIndexCreationMode()).toBe('blocking');
+    expect(blockingStore.extend({}).getIndexCreationMode()).toBe('blocking');
+    expect(blockingStore.extend({ indexCreationMode: 'background' }).getIndexCreationMode()).toBe(
+      'background'
+    );
   });
 
   test('updateOne converts string selectors into ObjectIds', async () => {

@@ -119,15 +119,21 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
+
+    for (const store of stores) {
+      if (store.getIndexCreationMode() === 'blocking') {
+        await createStoreIndexes(store);
+      }
+    }
+
+    for (const store of stores) {
+      if (store.getIndexCreationMode() === 'background') {
+        void Promise.resolve().then(() => createStoreIndexes(store));
+      }
+    }
   }
 
   startMigrations(migrations);
-
-  if (mongodbUri) {
-    for (const store of stores) {
-      store.createIndexes();
-    }
-  }
 
   if (hasRemoteBackend) {
     await initMetrics();
@@ -171,6 +177,19 @@ function getChannels(modules: Module[]) {
 
 function getRateLimits(modules: Module[]) {
   return modules.flatMap((module) => module.rateLimits);
+}
+
+function warnIndexCreationFailure(storeName: string, error: unknown) {
+  console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function createStoreIndexes(store: Store<any, any>) {
+  try {
+    await store.createIndexes();
+  } catch (error) {
+    warnIndexCreationFailure(store.getName(), error);
+  }
 }
 
 function getConfigSchema(modules: Module[]): ConfigSchema {
