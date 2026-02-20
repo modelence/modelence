@@ -124,13 +124,19 @@ export async function startApp({
 
     for (const store of stores) {
       if (CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
-        await store.createIndexes();
+        try {
+          await store.createIndexes();
+        } catch (error) {
+          warnIndexCreationFailure(store.getName(), error);
+        }
       }
     }
 
     for (const store of stores) {
       if (!CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
-        store.createIndexes();
+        store.createIndexes().catch((error) => {
+          warnIndexCreationFailure(store.getName(), error);
+        });
       }
     }
   }
@@ -179,6 +185,10 @@ function getChannels(modules: Module[]) {
 
 function getRateLimits(modules: Module[]) {
   return modules.flatMap((module) => module.rateLimits);
+}
+
+function warnIndexCreationFailure(storeName: string, error: unknown) {
+  console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
 }
 
 function getConfigSchema(modules: Module[]): ConfigSchema {

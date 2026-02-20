@@ -551,6 +551,50 @@ describe('app/index', () => {
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
+  test('warns and continues startup when critical index creation fails', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+
+    const criticalError = new Error('critical index failed');
+    const criticalStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn(async () =>
+        Promise.reject(criticalError)
+      ) as MinimalStore['createIndexes'],
+      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
+    };
+    const otherStore = createStoreMock('testCollection');
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const migrations: MigrationScript[] = [
+      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+    ];
+
+    await expect(
+      startApp({
+        migrations,
+        modules: [
+          createTestModule({
+            stores: [
+              criticalStore as unknown as Store<ModelSchema, Record<string, never>>,
+              otherStore as unknown as Store<ModelSchema, Record<string, never>>,
+            ],
+          }),
+        ],
+      })
+    ).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
+      criticalError
+    );
+    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
   test('starts server with combined modules and channels', async () => {
     const channel1 = new ServerChannel('channel1');
     const channel2 = new ServerChannel('channel2');
