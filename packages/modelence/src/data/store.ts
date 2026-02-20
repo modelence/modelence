@@ -358,7 +358,7 @@ export class Store<
    * Creates a new Store instance
    *
    * @param name - The collection name in MongoDB
-   * @param options - Store configuration
+   * @param options - Store configuration (schema, indexes, methods, search indexes, and optional index-conflict deduplication)
    */
   constructor(
     name: string,
@@ -403,7 +403,7 @@ export class Store<
    * Returns a new Store instance with the extended schema and updated types.
    * Methods from the original store are preserved with updated type signatures.
    *
-   * @param config - Additional schema fields, indexes, methods, and search indexes to add
+   * @param config - Additional schema fields, indexes, methods, search indexes, and optional index-conflict deduplication to add
    * @returns A new Store instance with the extended schema
    *
    * @example
