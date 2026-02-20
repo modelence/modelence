@@ -119,11 +119,7 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
-  }
 
-  startMigrations(migrations);
-
-  if (mongodbUri) {
     for (const store of stores) {
       if (store.getIndexCreationMode() === 'blocking') {
         await createStoreIndexes(store);
@@ -136,6 +132,8 @@ export async function startApp({
       }
     }
   }
+
+  startMigrations(migrations);
 
   if (hasRemoteBackend) {
     await initMetrics();

@@ -514,7 +514,7 @@ describe('app/index', () => {
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
   });
 
-  test('starts migrations before waiting for blocking index creation and cron jobs', async () => {
+  test('starts migrations after waiting for blocking index creation and before cron jobs', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
@@ -550,17 +550,17 @@ describe('app/index', () => {
 
     expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
-    expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeLessThan(
-      (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
-    );
+    expect(mockStartMigrations).not.toHaveBeenCalled();
     expect(mockStartCronJobs).not.toHaveBeenCalled();
 
     resolveLockIndexes();
     await startPromise;
 
-    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
+      (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
+    );
+    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
