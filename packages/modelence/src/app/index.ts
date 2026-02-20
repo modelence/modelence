@@ -119,15 +119,10 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
+    await Promise.all(stores.map((store) => store.createIndexes()));
   }
 
   startMigrations(migrations);
-
-  if (mongodbUri) {
-    for (const store of stores) {
-      store.createIndexes();
-    }
-  }
 
   if (hasRemoteBackend) {
     await initMetrics();

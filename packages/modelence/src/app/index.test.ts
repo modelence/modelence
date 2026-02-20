@@ -501,6 +501,45 @@ describe('app/index', () => {
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
   });
 
+  test('awaits index creation before starting migrations and cron jobs', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+
+    let resolveCreateIndexes: () => void = () => undefined;
+    const createIndexesPromise = new Promise<void>((resolve) => {
+      resolveCreateIndexes = resolve;
+    });
+    const mockStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn(async () => createIndexesPromise) as MinimalStore['createIndexes'],
+    };
+
+    const migrations: MigrationScript[] = [
+      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+    ];
+
+    const startPromise = startApp({
+      migrations,
+      modules: [
+        createTestModule({
+          stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
+      ],
+    });
+
+    await Promise.resolve();
+
+    expect(mockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(mockStartMigrations).not.toHaveBeenCalled();
+    expect(mockStartCronJobs).not.toHaveBeenCalled();
+
+    resolveCreateIndexes();
+    await startPromise;
+
+    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+  });
+
   test('starts server with combined modules and channels', async () => {
     const channel1 = new ServerChannel('channel1');
     const channel2 = new ServerChannel('channel2');
