@@ -37,6 +37,7 @@ export type AppOptions = {
   server?: AppServer;
   email?: EmailConfig;
   auth?: AuthConfig;
+  /** Security settings such as clickjacking protection. See {@link SecurityConfig}. */
   security?: SecurityConfig;
   roles?: Record<string, RoleDefinition>;
   defaultRoles?: Record<string, string>;
