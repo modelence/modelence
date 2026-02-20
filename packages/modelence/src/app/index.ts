@@ -29,6 +29,7 @@ import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
+import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
@@ -36,6 +37,7 @@ export type AppOptions = {
   server?: AppServer;
   email?: EmailConfig;
   auth?: AuthConfig;
+  security?: SecurityConfig;
   roles?: Record<string, RoleDefinition>;
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
@@ -50,6 +52,7 @@ export async function startApp({
   migrations = [],
   email = {},
   auth = {},
+  security = {},
   websocket = {},
 }: AppOptions) {
   dotenv.config();
@@ -110,6 +113,7 @@ export async function startApp({
 
   setEmailConfig(email);
   setAuthConfig(auth);
+  setSecurityConfig(security);
   setWebsocketConfig({
     ...websocket,
     provider: websocket.provider || socketioServer,

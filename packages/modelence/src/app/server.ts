@@ -17,6 +17,7 @@ import { ModelenceError } from '../error';
 import { Module } from './module';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
+import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
 
 function getBodyParserMiddleware(config?: {
@@ -85,6 +86,8 @@ export async function startServer(
   const app = express();
 
   app.use(cookieParser());
+
+  app.use(securityHeadersMiddleware());
 
   // Register module routes first (with per-route body parser config)
   registerModuleRoutes(app, combinedModules);
@@ -242,6 +245,23 @@ function parseZodError(zodError: z.ZodError): string {
   const formMessages = flattened.formErrors;
   const allMessages = [...fieldMessages, ...formMessages].filter(Boolean);
   return allMessages.join('; ');
+}
+
+function securityHeadersMiddleware(): express.RequestHandler {
+  const { frameAncestors } = getSecurityConfig();
+  const hasCustomAncestors = frameAncestors && frameAncestors.length > 0;
+  const ancestors = hasCustomAncestors ? ["'self'", ...frameAncestors].join(' ') : "'self'";
+
+  return (_req, res, next) => {
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${ancestors}`);
+    // X-Frame-Options only supports DENY and SAMEORIGIN (ALLOW-FROM is deprecated).
+    // When custom ancestors are configured, only CSP frame-ancestors can express that,
+    // so we omit X-Frame-Options to avoid conflicting with the CSP directive.
+    if (!hasCustomAncestors) {
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    }
+    next();
+  };
 }
 
 function getClientIp(req: Request): string | undefined {
