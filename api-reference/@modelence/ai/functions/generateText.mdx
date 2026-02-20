@@ -5,9 +5,9 @@ title: generateText
 
 [API Reference](/api-reference/@modelence/ai/functions/../../../index) / [@modelence/ai](/api-reference/@modelence/ai/functions/../index) / generateText
 
-> **generateText**(`options`): `Promise`\<`GenerateTextResult`\<`ToolSet`, `unknown`\>\>
+> **generateText**(`options`): `Promise`\<`GenerateTextResult`\<`ToolSet`, `Output`\<`any`, `any`, `any`\>\>\>
 
-Defined in: [index.ts:76](https://github.com/modelence/modelence/blob/222809af335ee4693498716e629b8f44db133d59/packages/ai/src/index.ts#L76)
+Defined in: [index.ts:77](https://github.com/modelence/modelence/blob/2273e04d869b07b21d9a540da82971dea7c9aa44/packages/ai/src/index.ts#L77)
 
 Generates text using AI models with built-in Modelence configuration and telemetry.
 
@@ -20,8 +20,8 @@ configures providers using Modelence's server-side configuration system.
 import { generateText } from '@modelence/ai';
 
 const response = await generateText({
-  provider: 'openai',
-  model: 'gpt-4o',
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
   messages: [
     { role: 'user', content: 'Write a haiku about programming' }
   ],
@@ -35,10 +35,10 @@ console.log(response.text);
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `options` | [`GenerateTextOptions`](/api-reference/@modelence/ai/functions/../interfaces/GenerateTextOptions) | Configuration options for text generation |
+| `options` | [`GenerateTextOptions`](/api-reference/@modelence/ai/functions/../type-aliases/GenerateTextOptions) | Configuration options for text generation |
 
 ## Returns
 
-`Promise`\<`GenerateTextResult`\<`ToolSet`, `unknown`\>\>
+`Promise`\<`GenerateTextResult`\<`ToolSet`, `Output`\<`any`, `any`, `any`\>\>\>
 
 A promise that resolves to the generated text result
