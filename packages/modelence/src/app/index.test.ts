@@ -229,7 +229,7 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
 
 type MinimalStore = Pick<
   Store<ModelSchema, Record<string, never>>,
-  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode' | 'deduplicateOnIndexConflict'
+  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode'
 >;
 
 const createStoreMock = (
@@ -240,9 +240,6 @@ const createStoreMock = (
   createIndexes: jest.fn() as MinimalStore['createIndexes'],
   getName: jest.fn(() => name) as MinimalStore['getName'],
   getIndexCreationMode: jest.fn(() => indexCreationMode) as MinimalStore['getIndexCreationMode'],
-  deduplicateOnIndexConflict: jest.fn(
-    async () => null
-  ) as MinimalStore['deduplicateOnIndexConflict'],
 });
 
 describe('app/index', () => {
@@ -530,9 +527,6 @@ describe('app/index', () => {
       createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-      deduplicateOnIndexConflict: jest.fn(
-        async () => 0
-      ) as MinimalStore['deduplicateOnIndexConflict'],
     };
     const otherStore = createStoreMock('testCollection');
 
@@ -570,22 +564,18 @@ describe('app/index', () => {
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
-  test('deduplicates and retries blocking index creation on failures when deduplicator is provided', async () => {
+  test('warns and continues startup when blocking index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const indexCreationError = new Error('index creation failed');
     const lockStore: MinimalStore = {
       init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest
-        .fn(async () => undefined)
-        .mockImplementationOnce(async () => Promise.reject(indexCreationError))
-        .mockImplementationOnce(async () => undefined) as MinimalStore['createIndexes'],
+      createIndexes: jest.fn(async () =>
+        Promise.reject(indexCreationError)
+      ) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-      deduplicateOnIndexConflict: jest.fn(
-        async () => 2
-      ) as MinimalStore['deduplicateOnIndexConflict'],
     };
     const otherStore = createStoreMock('testCollection');
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -608,10 +598,10 @@ describe('app/index', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(lockStore.deduplicateOnIndexConflict).toHaveBeenCalledTimes(1);
-    expect(lockStore.createIndexes).toHaveBeenCalledTimes(2);
+    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
-      "Removed 2 duplicate documents from '_modelenceLocks'. Retrying index creation."
+      "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
+      indexCreationError
     );
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
@@ -631,9 +621,6 @@ describe('app/index', () => {
       ) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-      deduplicateOnIndexConflict: jest.fn(
-        async () => 0
-      ) as MinimalStore['deduplicateOnIndexConflict'],
     };
     const otherStore = createStoreMock('testCollection');
 

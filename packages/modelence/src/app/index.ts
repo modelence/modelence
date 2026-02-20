@@ -126,13 +126,13 @@ export async function startApp({
   if (mongodbUri) {
     for (const store of stores) {
       if (store.getIndexCreationMode() === 'blocking') {
-        await createStoreIndexesWithRecovery(store);
+        await createStoreIndexes(store);
       }
     }
 
     for (const store of stores) {
       if (store.getIndexCreationMode() === 'background') {
-        void Promise.resolve().then(() => createStoreIndexesWithRecovery(store));
+        void Promise.resolve().then(() => createStoreIndexes(store));
       }
     }
   }
@@ -186,35 +186,11 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createStoreIndexesWithRecovery(store: Store<any, any>) {
+async function createStoreIndexes(store: Store<any, any>) {
   try {
     await store.createIndexes();
   } catch (error) {
-    const recovered = await recoverIndexCreationFailure(store);
-    if (!recovered) {
-      warnIndexCreationFailure(store.getName(), error);
-    }
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function recoverIndexCreationFailure(store: Store<any, any>) {
-  try {
-    const deletedCount = await store.deduplicateOnIndexConflict();
-    if (deletedCount === null) {
-      return false;
-    }
-
-    if (deletedCount > 0) {
-      console.warn(
-        `Removed ${deletedCount} duplicate documents from '${store.getName()}'. Retrying index creation.`
-      );
-    }
-
-    await store.createIndexes();
-    return true;
-  } catch {
-    return false;
+    warnIndexCreationFailure(store.getName(), error);
   }
 }
 

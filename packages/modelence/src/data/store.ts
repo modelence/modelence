@@ -89,16 +89,6 @@ type ExistingIndex = Document & {
 
 export type IndexCreationMode = 'blocking' | 'background';
 
-type IndexConflictDeduplicator = (store: {
-  deduplicateByFields(params: { fields: string[]; sortBy: Document }): Promise<number>;
-}) => Promise<number> | number;
-
-type DuplicateGroup<TId> = {
-  _id: unknown;
-  ids: TId[];
-  count: number;
-};
-
 const COMPARABLE_INDEX_OPTION_FIELDS = [
   'background',
   'bits',
@@ -353,7 +343,6 @@ export class Store<
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
   private readonly indexCreationMode: IndexCreationMode;
-  private readonly deduplicateIndexes?: IndexConflictDeduplicator;
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -361,7 +350,7 @@ export class Store<
    * Creates a new Store instance
    *
    * @param name - The collection name in MongoDB
-   * @param options - Store configuration (schema, indexes, methods, search indexes, optional index creation mode, and optional index-conflict deduplication)
+   * @param options - Store configuration (schema, indexes, methods, search indexes, and optional index creation mode)
    */
   constructor(
     name: string,
@@ -376,8 +365,6 @@ export class Store<
       searchIndexes?: SearchIndexDescription[];
       /** Whether index creation should block startup or run in background (default: 'background') */
       indexCreationMode?: IndexCreationMode;
-      /** Optional deduplication callback for index creation failures */
-      deduplicateIndexes?: IndexConflictDeduplicator;
     }
   ) {
     this.name = name;
@@ -387,7 +374,6 @@ export class Store<
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
     this.indexCreationMode = options.indexCreationMode ?? 'background';
-    this.deduplicateIndexes = options.deduplicateIndexes;
   }
 
   getName() {
@@ -413,7 +399,7 @@ export class Store<
    * Returns a new Store instance with the extended schema and updated types.
    * Methods from the original store are preserved with updated type signatures.
    *
-   * @param config - Additional schema fields, indexes, methods, search indexes, optional index creation mode, and optional index-conflict deduplication to add
+   * @param config - Additional schema fields, indexes, methods, search indexes, and optional index creation mode to add
    * @returns A new Store instance with the extended schema
    *
    * @example
@@ -455,8 +441,6 @@ export class Store<
     searchIndexes?: SearchIndexDescription[];
     /** Whether index creation should block startup or run in background */
     indexCreationMode?: IndexCreationMode;
-    /** Optional deduplication callback for index creation failures */
-    deduplicateIndexes?: IndexConflictDeduplicator;
   }): Store<
     TSchema & TExtendedSchema,
     PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
@@ -483,7 +467,6 @@ export class Store<
       indexes: extendedIndexes,
       searchIndexes: extendedSearchIndexes,
       indexCreationMode: config.indexCreationMode ?? this.indexCreationMode,
-      deduplicateIndexes: config.deduplicateIndexes ?? this.deduplicateIndexes,
     });
 
     if (this.client) {
@@ -913,62 +896,6 @@ export class Store<
    */
   async deleteMany(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
     return await this.requireCollection().deleteMany(selector as Filter<this['_type']>);
-  }
-
-  /**
-   * Deduplicates documents by one or more fields, keeping the first document after sorting.
-   *
-   * @param params.fields - Fields that define a duplicate group
-   * @param params.sortBy - Sort order used before grouping; first document is kept
-   * @returns Number of deleted duplicate documents
-   */
-  async deduplicateByFields({
-    fields,
-    sortBy,
-  }: {
-    fields: string[];
-    sortBy: Document;
-  }): Promise<number> {
-    if (fields.length === 0) {
-      throw new Error('deduplicateByFields requires at least one field');
-    }
-
-    const groupId =
-      fields.length === 1
-        ? `$${fields[0]}`
-        : Object.fromEntries(fields.map((field) => [field, `$${field}`]));
-
-    const duplicateGroups = await this.requireCollection()
-      .aggregate<DuplicateGroup<this['_rawDoc']['_id']>>([
-        { $sort: sortBy },
-        { $group: { _id: groupId, ids: { $push: '$_id' }, count: { $sum: 1 } } },
-        { $match: { count: { $gt: 1 } } },
-      ])
-      .toArray();
-
-    const duplicateIds = duplicateGroups.flatMap((group) => group.ids.slice(1));
-    if (duplicateIds.length === 0) {
-      return 0;
-    }
-
-    const deleteResult = await this.requireCollection().deleteMany({
-      _id: { $in: duplicateIds },
-    } as Filter<this['_type']>);
-
-    return deleteResult.deletedCount ?? 0;
-  }
-
-  /**
-   * Runs store-specific deduplication logic for index conflict recovery if configured.
-   *
-   * @returns Number of deleted duplicate documents, or null if no deduplicator is configured
-   */
-  async deduplicateOnIndexConflict(): Promise<number | null> {
-    if (!this.deduplicateIndexes) {
-      return null;
-    }
-
-    return await this.deduplicateIndexes(this);
   }
 
   /**
