@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import type { Module } from './module';
 import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
@@ -229,13 +229,16 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
 
 type MinimalStore = Pick<
   Store<ModelSchema, Record<string, never>>,
-  'init' | 'createIndexes' | 'getName'
+  'init' | 'createIndexes' | 'getName' | 'deduplicateOnIndexConflict'
 >;
 
 const createStoreMock = (name = 'testStore'): MinimalStore => ({
   init: jest.fn() as MinimalStore['init'],
   createIndexes: jest.fn() as MinimalStore['createIndexes'],
   getName: jest.fn(() => name) as MinimalStore['getName'],
+  deduplicateOnIndexConflict: jest.fn(
+    async () => null
+  ) as MinimalStore['deduplicateOnIndexConflict'],
 });
 
 describe('app/index', () => {
@@ -250,9 +253,14 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
+    process.env.MODELENCE_TRACKING_ENABLED = 'false';
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MONGODB_URI;
     delete process.env.MODELENCE_SITE_URL;
+  });
+
+  afterEach(() => {
+    delete process.env.MODELENCE_TRACKING_ENABLED;
   });
 
   test('marks app as started', async () => {
@@ -517,6 +525,9 @@ describe('app/index', () => {
       init: jest.fn() as MinimalStore['init'],
       createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
+      deduplicateOnIndexConflict: jest.fn(
+        async () => 0
+      ) as MinimalStore['deduplicateOnIndexConflict'],
     };
     const otherStore = createStoreMock('testCollection');
 
@@ -551,6 +562,56 @@ describe('app/index', () => {
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
+  test('deduplicates locks and retries critical index creation on duplicate key errors', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+
+    const duplicateKeyError = Object.assign(new Error('E11000 duplicate key error'), {
+      code: 11000,
+    });
+    const lockStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest
+        .fn(async () => undefined)
+        .mockImplementationOnce(async () => Promise.reject(duplicateKeyError))
+        .mockImplementationOnce(async () => undefined) as MinimalStore['createIndexes'],
+      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
+      deduplicateOnIndexConflict: jest.fn(
+        async () => 2
+      ) as MinimalStore['deduplicateOnIndexConflict'],
+    };
+    const otherStore = createStoreMock('testCollection');
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const migrations: MigrationScript[] = [
+      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+    ];
+
+    await expect(
+      startApp({
+        migrations,
+        modules: [
+          createTestModule({
+            stores: [
+              lockStore as unknown as Store<ModelSchema, Record<string, never>>,
+              otherStore as unknown as Store<ModelSchema, Record<string, never>>,
+            ],
+          }),
+        ],
+      })
+    ).resolves.toBeUndefined();
+
+    expect(lockStore.deduplicateOnIndexConflict).toHaveBeenCalledTimes(1);
+    expect(lockStore.createIndexes).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Removed 2 duplicate documents from '_modelenceLocks'. Retrying index creation."
+    );
+    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
   test('warns and continues startup when critical index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
@@ -562,6 +623,9 @@ describe('app/index', () => {
         Promise.reject(criticalError)
       ) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
+      deduplicateOnIndexConflict: jest.fn(
+        async () => 0
+      ) as MinimalStore['deduplicateOnIndexConflict'],
     };
     const otherStore = createStoreMock('testCollection');
 

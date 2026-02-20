@@ -123,20 +123,31 @@ export async function startApp({
     initStores(stores);
 
     for (const store of stores) {
-      if (CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
+      const storeName = store.getName();
+      if (CRITICAL_INDEX_COLLECTION_NAMES.includes(storeName)) {
         try {
           await store.createIndexes();
         } catch (error) {
-          warnIndexCreationFailure(store.getName(), error);
+          if (isDuplicateKeyError(error)) {
+            const recovered = await recoverDuplicateKeyIndexCreation(store);
+            if (recovered) {
+              continue;
+            }
+          }
+
+          warnIndexCreationFailure(storeName, error);
         }
       }
     }
 
     for (const store of stores) {
       if (!CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
-        store.createIndexes().catch((error) => {
-          warnIndexCreationFailure(store.getName(), error);
-        });
+        const storeName = store.getName();
+        void Promise.resolve()
+          .then(() => store.createIndexes())
+          .catch((error) => {
+            warnIndexCreationFailure(storeName, error);
+          });
       }
     }
   }
@@ -189,6 +200,35 @@ function getRateLimits(modules: Module[]) {
 
 function warnIndexCreationFailure(storeName: string, error: unknown) {
   console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
+}
+
+function isDuplicateKeyError(error: unknown) {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+
+  return (error as { code?: unknown }).code === 11000;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function recoverDuplicateKeyIndexCreation(store: Store<any, any>) {
+  try {
+    const deletedCount = await store.deduplicateOnIndexConflict();
+    if (deletedCount === null) {
+      return false;
+    }
+
+    if (deletedCount > 0) {
+      console.warn(
+        `Removed ${deletedCount} duplicate documents from '${store.getName()}'. Retrying index creation.`
+      );
+    }
+
+    await store.createIndexes();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getConfigSchema(modules: Module[]): ConfigSchema {

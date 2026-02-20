@@ -50,6 +50,21 @@ describe('lock/helpers', () => {
     const first = await acquireLock('job');
     expect(first).toBe(true);
     expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+    expect(mockUpsertOne).toHaveBeenCalledWith(
+      {
+        $or: [
+          { resource: 'job', instanceId: 'instance-1' },
+          { resource: 'job', acquiredAt: { $lt: new Date(970_000) } },
+        ],
+      },
+      {
+        $set: {
+          resource: 'job',
+          instanceId: 'instance-1',
+          acquiredAt: expect.any(Date),
+        },
+      }
+    );
 
     const second = await acquireLock('job');
     expect(second).toBe(true);

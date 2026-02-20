@@ -11,11 +11,18 @@ const baseSchema = {
 function createStore(options?: {
   indexes?: IndexDescription[];
   searchIndexes?: SearchIndexDescription[];
+  deduplicateIndexes?: (store: {
+    deduplicateByFields(params: {
+      fields: string[];
+      sortBy: Record<string, unknown>;
+    }): Promise<number>;
+  }) => Promise<number> | number;
 }) {
   return new Store<ModelSchema, Record<string, never>>('testCollection', {
     schema: baseSchema,
     indexes: options?.indexes || [],
     searchIndexes: options?.searchIndexes,
+    deduplicateIndexes: options?.deduplicateIndexes,
     methods: undefined,
   });
 }
@@ -256,6 +263,71 @@ describe('data/store', () => {
     });
     const indexes4 = (store4 as unknown as { indexes: IndexDescription[] }).indexes;
     expect(indexes4[0].name).toBe('_modelence_userId_1_createdAt_-1');
+  });
+
+  test('deduplicateByFields keeps first sorted doc per group and deletes the rest', async () => {
+    const store = createStore();
+    const collectionMock = {
+      aggregate: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([
+          {
+            _id: 'job',
+            ids: [
+              new ObjectId('507f1f77bcf86cd799439011'),
+              new ObjectId('507f1f77bcf86cd799439012'),
+            ],
+            count: 2,
+          },
+        ] as never),
+      }),
+      deleteMany: jest.fn().mockResolvedValue({ deletedCount: 1 } as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const deletedCount = await store.deduplicateByFields({
+      fields: ['name'],
+      sortBy: { name: 1, _id: -1 },
+    });
+
+    expect(collectionMock.aggregate).toHaveBeenCalledWith([
+      { $sort: { name: 1, _id: -1 } },
+      { $group: { _id: '$name', ids: { $push: '$_id' }, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+    expect(collectionMock.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [new ObjectId('507f1f77bcf86cd799439012')] },
+    });
+    expect(deletedCount).toBe(1);
+  });
+
+  test('deduplicateOnIndexConflict returns null when deduplicator is not configured', async () => {
+    const store = createStore();
+
+    const deletedCount = await store.deduplicateOnIndexConflict();
+
+    expect(deletedCount).toBeNull();
+  });
+
+  test('deduplicateOnIndexConflict runs configured deduplicator when present', async () => {
+    const deduplicateIndexes = jest.fn(
+      async (_store: {
+        deduplicateByFields: (params: {
+          fields: string[];
+          sortBy: Record<string, unknown>;
+        }) => Promise<number>;
+      }) => 3
+    );
+    const store = createStore({ deduplicateIndexes });
+
+    const deletedCount = await store.deduplicateOnIndexConflict();
+
+    expect(deduplicateIndexes).toHaveBeenCalledTimes(1);
+    const passedStore = deduplicateIndexes.mock.calls[0]?.[0];
+    expect(passedStore).toEqual(
+      expect.objectContaining({ deduplicateByFields: expect.any(Function) })
+    );
+    expect(deletedCount).toBe(3);
   });
 
   test('updateOne converts string selectors into ObjectIds', async () => {
