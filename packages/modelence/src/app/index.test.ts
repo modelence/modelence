@@ -227,11 +227,15 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
   } as Module;
 }
 
-type MinimalStore = Pick<Store<ModelSchema, Record<string, never>>, 'init' | 'createIndexes'>;
+type MinimalStore = Pick<
+  Store<ModelSchema, Record<string, never>>,
+  'init' | 'createIndexes' | 'getName'
+>;
 
-const createStoreMock = (): MinimalStore => ({
+const createStoreMock = (name = 'testStore'): MinimalStore => ({
   init: jest.fn() as MinimalStore['init'],
   createIndexes: jest.fn() as MinimalStore['createIndexes'],
+  getName: jest.fn(() => name) as MinimalStore['getName'],
 });
 
 describe('app/index', () => {
@@ -501,18 +505,20 @@ describe('app/index', () => {
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
   });
 
-  test('awaits index creation before starting migrations and cron jobs', async () => {
+  test('awaits locks index creation before starting migrations and cron jobs', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
-    let resolveCreateIndexes: () => void = () => undefined;
-    const createIndexesPromise = new Promise<void>((resolve) => {
-      resolveCreateIndexes = resolve;
+    let resolveLockIndexes: () => void = () => undefined;
+    const lockIndexesPromise = new Promise<void>((resolve) => {
+      resolveLockIndexes = resolve;
     });
-    const mockStore: MinimalStore = {
+    const lockStore: MinimalStore = {
       init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () => createIndexesPromise) as MinimalStore['createIndexes'],
+      createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
+      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
     };
+    const otherStore = createStoreMock('testCollection');
 
     const migrations: MigrationScript[] = [
       { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
@@ -522,20 +528,25 @@ describe('app/index', () => {
       migrations,
       modules: [
         createTestModule({
-          stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>],
+          stores: [
+            lockStore as unknown as Store<ModelSchema, Record<string, never>>,
+            otherStore as unknown as Store<ModelSchema, Record<string, never>>,
+          ],
         }),
       ],
     });
 
     await Promise.resolve();
 
-    expect(mockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(otherStore.createIndexes).not.toHaveBeenCalled();
     expect(mockStartMigrations).not.toHaveBeenCalled();
     expect(mockStartCronJobs).not.toHaveBeenCalled();
 
-    resolveCreateIndexes();
+    resolveLockIndexes();
     await startPromise;
 
+    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });

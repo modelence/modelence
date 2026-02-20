@@ -31,6 +31,8 @@ import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
+const CRITICAL_INDEX_COLLECTION_NAMES = ['_modelenceLocks'];
+
 export type AppOptions = {
   modules?: Module[];
   server?: AppServer;
@@ -119,7 +121,18 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
-    await Promise.all(stores.map((store) => store.createIndexes()));
+
+    for (const store of stores) {
+      if (CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
+        await store.createIndexes();
+      }
+    }
+
+    for (const store of stores) {
+      if (!CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
+        store.createIndexes();
+      }
+    }
   }
 
   startMigrations(migrations);
