@@ -3,15 +3,21 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 const mockGetConfig = jest.fn<(key: string) => unknown>();
 const mockStartTransaction = jest.fn();
 const mockCaptureError = jest.fn();
-const mockGenerateText = jest.fn();
+const mockGenerateText = jest.fn<(options: unknown) => Promise<unknown>>();
 
-const mockOpenAIModelFactory = jest.fn();
-const mockAnthropicModelFactory = jest.fn();
-const mockGoogleModelFactory = jest.fn();
+const mockOpenAIModelFactory = jest.fn<(model: string) => unknown>();
+const mockAnthropicModelFactory = jest.fn<(model: string) => unknown>();
+const mockGoogleModelFactory = jest.fn<(model: string) => unknown>();
 
-const mockCreateOpenAI = jest.fn(() => mockOpenAIModelFactory);
-const mockCreateAnthropic = jest.fn(() => mockAnthropicModelFactory);
-const mockCreateGoogleGenerativeAI = jest.fn(() => mockGoogleModelFactory);
+const mockCreateOpenAI = jest.fn<
+  (options: { apiKey: string }) => typeof mockOpenAIModelFactory
+>(() => mockOpenAIModelFactory);
+const mockCreateAnthropic = jest.fn<
+  (options: { apiKey: string }) => typeof mockAnthropicModelFactory
+>(() => mockAnthropicModelFactory);
+const mockCreateGoogleGenerativeAI = jest.fn<
+  (options: { apiKey: string }) => typeof mockGoogleModelFactory
+>(() => mockGoogleModelFactory);
 
 jest.unstable_mockModule('modelence/server', () => ({
   getConfig: mockGetConfig,

@@ -78,7 +78,6 @@ export async function generateText(
   options: GenerateTextOptions
 ): Promise<Awaited<ReturnType<typeof originalGenerateText>>> {
   const { provider, model, ...restOptions } = options;
-  const providerModel = getProviderModel(provider, model);
   
   const transaction = startTransaction('ai', 'ai:generateText', {
     provider, 
@@ -88,18 +87,26 @@ export async function generateText(
   });
 
   try {
+    const providerModel = getProviderModel(provider, model);
     const result = await originalGenerateText({
       ...restOptions,
       model: providerModel,
     });
+    const usage = result.usage as {
+      inputTokens?: number;
+      outputTokens?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+    };
     
     if ('setContext' in transaction) {
       transaction.end('success', {
         context: {
           usage: {
-            promptTokens: result.usage.inputTokens,
-            completionTokens: result.usage.outputTokens,
-            totalTokens: result.usage.totalTokens,
+            promptTokens: usage.inputTokens ?? usage.promptTokens,
+            completionTokens: usage.outputTokens ?? usage.completionTokens,
+            totalTokens: usage.totalTokens,
           }
         }
       });
