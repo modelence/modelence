@@ -25,6 +25,7 @@ export const locksCollection = new Store('_modelenceLocks', {
       key: { resource: 1, acquiredAt: 1 },
     },
   ],
+  indexCreationMode: 'blocking',
   deduplicateIndexes: async (store) =>
     await store.deduplicateByFields({
       fields: ['resource'],

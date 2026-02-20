@@ -31,8 +31,6 @@ import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
-const CRITICAL_INDEX_COLLECTION_NAMES = ['_modelenceLocks'];
-
 export type AppOptions = {
   modules?: Module[];
   server?: AppServer;
@@ -123,31 +121,14 @@ export async function startApp({
     initStores(stores);
 
     for (const store of stores) {
-      const storeName = store.getName();
-      if (CRITICAL_INDEX_COLLECTION_NAMES.includes(storeName)) {
-        try {
-          await store.createIndexes();
-        } catch (error) {
-          if (isDuplicateKeyError(error)) {
-            const recovered = await recoverDuplicateKeyIndexCreation(store);
-            if (recovered) {
-              continue;
-            }
-          }
-
-          warnIndexCreationFailure(storeName, error);
-        }
+      if (store.getIndexCreationMode() === 'blocking') {
+        await createStoreIndexesWithRecovery(store);
       }
     }
 
     for (const store of stores) {
-      if (!CRITICAL_INDEX_COLLECTION_NAMES.includes(store.getName())) {
-        const storeName = store.getName();
-        void Promise.resolve()
-          .then(() => store.createIndexes())
-          .catch((error) => {
-            warnIndexCreationFailure(storeName, error);
-          });
+      if (store.getIndexCreationMode() === 'background') {
+        void Promise.resolve().then(() => createStoreIndexesWithRecovery(store));
       }
     }
   }
@@ -202,16 +183,20 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
   console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
 }
 
-function isDuplicateKeyError(error: unknown) {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function createStoreIndexesWithRecovery(store: Store<any, any>) {
+  try {
+    await store.createIndexes();
+  } catch (error) {
+    const recovered = await recoverIndexCreationFailure(store);
+    if (!recovered) {
+      warnIndexCreationFailure(store.getName(), error);
+    }
   }
-
-  return (error as { code?: unknown }).code === 11000;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function recoverDuplicateKeyIndexCreation(store: Store<any, any>) {
+async function recoverIndexCreationFailure(store: Store<any, any>) {
   try {
     const deletedCount = await store.deduplicateOnIndexConflict();
     if (deletedCount === null) {

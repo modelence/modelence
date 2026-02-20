@@ -87,6 +87,8 @@ type ExistingIndex = Document & {
   name?: string;
 };
 
+export type IndexCreationMode = 'blocking' | 'background';
+
 type IndexConflictDeduplicator = (store: {
   deduplicateByFields(params: { fields: string[]; sortBy: Document }): Promise<number>;
 }) => Promise<number> | number;
@@ -350,6 +352,7 @@ export class Store<
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
+  private readonly indexCreationMode: IndexCreationMode;
   private readonly deduplicateIndexes?: IndexConflictDeduplicator;
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
@@ -358,7 +361,7 @@ export class Store<
    * Creates a new Store instance
    *
    * @param name - The collection name in MongoDB
-   * @param options - Store configuration (schema, indexes, methods, search indexes, and optional index-conflict deduplication)
+   * @param options - Store configuration (schema, indexes, methods, search indexes, optional index creation mode, and optional index-conflict deduplication)
    */
   constructor(
     name: string,
@@ -371,7 +374,9 @@ export class Store<
       indexes: IndexDescription[];
       /** MongoDB Atlas Search */
       searchIndexes?: SearchIndexDescription[];
-      /** Optional deduplication callback for duplicate-key index creation failures */
+      /** Whether index creation should block startup or run in background (default: 'background') */
+      indexCreationMode?: IndexCreationMode;
+      /** Optional deduplication callback for index creation failures */
       deduplicateIndexes?: IndexConflictDeduplicator;
     }
   ) {
@@ -381,11 +386,16 @@ export class Store<
     // Normalize all indexes to have _modelence_ prefix
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
+    this.indexCreationMode = options.indexCreationMode ?? 'background';
     this.deduplicateIndexes = options.deduplicateIndexes;
   }
 
   getName() {
     return this.name;
+  }
+
+  getIndexCreationMode() {
+    return this.indexCreationMode;
   }
 
   /** @internal */
@@ -403,7 +413,7 @@ export class Store<
    * Returns a new Store instance with the extended schema and updated types.
    * Methods from the original store are preserved with updated type signatures.
    *
-   * @param config - Additional schema fields, indexes, methods, search indexes, and optional index-conflict deduplication to add
+   * @param config - Additional schema fields, indexes, methods, search indexes, optional index creation mode, and optional index-conflict deduplication to add
    * @returns A new Store instance with the extended schema
    *
    * @example
@@ -443,6 +453,9 @@ export class Store<
     indexes?: IndexDescription[];
     methods?: TExtendedMethods;
     searchIndexes?: SearchIndexDescription[];
+    /** Whether index creation should block startup or run in background */
+    indexCreationMode?: IndexCreationMode;
+    /** Optional deduplication callback for index creation failures */
     deduplicateIndexes?: IndexConflictDeduplicator;
   }): Store<
     TSchema & TExtendedSchema,
@@ -469,7 +482,8 @@ export class Store<
       methods: combinedMethods as unknown as CombinedMethods | undefined,
       indexes: extendedIndexes,
       searchIndexes: extendedSearchIndexes,
-      deduplicateIndexes: config.deduplicateIndexes || this.deduplicateIndexes,
+      indexCreationMode: config.indexCreationMode ?? this.indexCreationMode,
+      deduplicateIndexes: config.deduplicateIndexes ?? this.deduplicateIndexes,
     });
 
     if (this.client) {

@@ -143,7 +143,7 @@ Modelence automatically creates these indexes when the application starts.
 
 ## Handling Duplicate Key Index Conflicts
 
-If a unique index cannot be created because duplicate records already exist, you can provide store-specific recovery logic with `deduplicateIndexes`.
+If index creation fails (for example, because duplicate records exist), you can provide store-specific recovery logic with `deduplicateIndexes`.
 
 ```typescript
 export const locksCollection = new Store('_modelenceLocks', {
@@ -158,6 +158,9 @@ export const locksCollection = new Store('_modelenceLocks', {
     { key: { resource: 1, acquiredAt: 1 } },
   ],
 
+  // Wait for this store's indexes before continuing app startup
+  indexCreationMode: 'blocking',
+
   deduplicateIndexes: async (store) =>
     await store.deduplicateByFields({
       fields: ['resource'],
@@ -166,7 +169,7 @@ export const locksCollection = new Store('_modelenceLocks', {
 });
 ```
 
-This callback is only used when index creation hits duplicate-key conflicts, and only for stores that define it.
+This callback is only used when index creation fails, and only for stores that define it.
 
 ## MongoDB Atlas Search Indexes
 
