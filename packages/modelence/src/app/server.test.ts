@@ -54,6 +54,7 @@ const mockCreateRouteHandler =
 const mockGoogleAuthRouter = jest.fn();
 const mockGithubAuthRouter = jest.fn();
 const mockLogInfo = jest.fn();
+const mockGetSecurityConfig = jest.fn();
 const mockGetWebsocketConfig = jest.fn();
 const mockExpressJson = jest.fn();
 const mockExpressUrlencoded = jest.fn();
@@ -104,6 +105,10 @@ jest.unstable_mockModule('@/telemetry', () => ({
   logInfo: mockLogInfo,
 }));
 
+jest.unstable_mockModule('./securityConfig', () => ({
+  getSecurityConfig: mockGetSecurityConfig,
+}));
+
 jest.unstable_mockModule('./websocketConfig', () => ({
   getWebsocketConfig: mockGetWebsocketConfig,
 }));
@@ -118,6 +123,22 @@ const createExpressAppMock = (): MockExpressApp => ({
   delete: jest.fn(),
   all: jest.fn(),
 });
+
+type MiddlewareFn = (req: unknown, res: unknown, next: () => void) => void;
+
+function findSecurityMiddleware(app: MockExpressApp): MiddlewareFn | undefined {
+  for (const call of app.use.mock.calls) {
+    const fn = call[0];
+    if (typeof fn !== 'function') continue;
+    const mockRes = { setHeader: jest.fn() };
+    (fn as MiddlewareFn)({}, mockRes, () => {});
+    const setsCSP = mockRes.setHeader.mock.calls.some(
+      (args: unknown[]) => args[0] === 'Content-Security-Policy'
+    );
+    if (setsCSP) return fn as MiddlewareFn;
+  }
+  return undefined;
+}
 
 const getRegisteredMethodHandler = (app: MockExpressApp) => {
   const call = app.post.mock.calls.find(([path]) =>
@@ -415,11 +436,58 @@ describe('app/server startServer', () => {
     mockGoogleAuthRouter.mockReturnValue('google-router');
     mockGithubAuthRouter.mockReturnValue('github-router');
     mockHttpCreateServer.mockReturnValue(mockHttpServer);
+    mockGetSecurityConfig.mockReturnValue({});
     mockGetWebsocketConfig.mockReturnValue(null);
   });
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  test('sets default security headers (self-only framing)', async () => {
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const middleware = findSecurityMiddleware(mockApp);
+    expect(middleware).toBeDefined();
+
+    const mockRes = { setHeader: jest.fn() };
+    middleware!({}, mockRes, () => {});
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Content-Security-Policy',
+      "frame-ancestors 'self'"
+    );
+    expect(mockRes.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'SAMEORIGIN');
+  });
+
+  test('sets custom frame-ancestors and omits X-Frame-Options', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      frameAncestors: ['https://modelence.com', 'https://example.com'],
+    });
+
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const middleware = findSecurityMiddleware(mockApp);
+    expect(middleware).toBeDefined();
+
+    const mockRes = { setHeader: jest.fn() };
+    middleware!({}, mockRes, () => {});
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Content-Security-Policy',
+      "frame-ancestors 'self' https://modelence.com https://example.com"
+    );
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith('X-Frame-Options', expect.anything());
   });
 
   test('initializes express app with middleware', async () => {
@@ -685,6 +753,19 @@ describe('app/server startServer', () => {
 describe('app/server method endpoint', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSecurityConfig.mockReturnValue({});
+    mockGetWebsocketConfig.mockReturnValue(null);
+
+    mockExpressJson.mockReturnValue('json-middleware');
+    mockExpressUrlencoded.mockReturnValue('urlencoded-middleware');
+    mockCookieParser.mockReturnValue('cookie-parser-middleware');
+    mockGoogleAuthRouter.mockReturnValue('google-router');
+    mockGithubAuthRouter.mockReturnValue('github-router');
+    mockHttpCreateServer.mockReturnValue({
+      listen: jest.fn((_port: unknown, callback?: () => void) => {
+        if (callback) callback();
+      }),
+    });
   });
 
   test('handles successful method call', async () => {
