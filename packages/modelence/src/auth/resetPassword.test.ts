@@ -174,12 +174,12 @@ describe('auth/resetPassword', () => {
       );
 
       expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'password-reset',
+        bucket: 'passwordReset',
         type: 'ip',
         value: ip,
       });
       expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'password-reset-email',
+        bucket: 'passwordReset',
         type: 'email',
         value: email,
       });
