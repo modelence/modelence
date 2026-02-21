@@ -105,6 +105,30 @@ export default new Module('_system.user', {
       window: time.days(1),
       limit: 10,
     },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: 10,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.days(1),
+      limit: 100,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
+      window: time.hours(1),
+      limit: 5,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
+      window: time.days(1),
+      limit: 10,
+    },
   ],
   configSchema: {
     'auth.email.enabled': {
