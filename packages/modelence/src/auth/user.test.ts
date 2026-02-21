@@ -15,6 +15,7 @@ const mockHandleResendEmailVerification = jest.fn();
 const mockHandleSendResetPasswordToken = jest.fn();
 const mockHandleResetPassword = jest.fn();
 const mockGetOwnProfile = jest.fn();
+const mockHandleUpdateProfile = jest.fn();
 
 const moduleCtorMock = jest.fn();
 
@@ -42,6 +43,7 @@ jest.unstable_mockModule('./login', () => ({
 
 jest.unstable_mockModule('./profile', () => ({
   getOwnProfile: mockGetOwnProfile,
+  handleUpdateProfile: mockHandleUpdateProfile,
 }));
 
 jest.unstable_mockModule('./signup', () => ({
@@ -131,6 +133,7 @@ describe('auth/user', () => {
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,
+          updateProfile: mockHandleUpdateProfile,
         }),
         cronJobs: {
           updateDisposableEmailList: mockUpdateDisposableEmailListCron,

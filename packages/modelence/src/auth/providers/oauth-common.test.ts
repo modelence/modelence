@@ -4,17 +4,16 @@ import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersInsertOne = jest.fn();
-const mockUsersUpdateOne = jest.fn();
 const mockCreateSession = jest.fn();
 const mockGetAuthConfig = jest.fn();
 const mockGetCallContext = jest.fn();
 const mockGetConfig = jest.fn();
+const mockResolveUniqueHandle = jest.fn();
 
 jest.unstable_mockModule('../db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     insertOne: mockUsersInsertOne,
-    updateOne: mockUsersUpdateOne,
   },
 }));
 
@@ -32,6 +31,10 @@ jest.unstable_mockModule('@/app/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+}));
+
+jest.unstable_mockModule('../utils', () => ({
+  resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
 const moduleExports = await import('./oauth-common');
@@ -69,6 +72,10 @@ describe('auth/providers/oauth-common', () => {
       connectionInfo: { ip: '1.1.1.1' },
     } as never);
     mockGetConfig.mockReturnValue('https://app.example.com');
+    mockCreateSession.mockResolvedValue({ authToken: 'tok' } as never);
+    mockResolveUniqueHandle.mockImplementation(
+      async (_raw: unknown, email: unknown) => (email as string).split('@')[0]
+    );
   });
 
   describe('authenticateUser', () => {
@@ -134,68 +141,6 @@ describe('auth/providers/oauth-common', () => {
       expect(authConfig.login.onSuccess).toHaveBeenCalledWith(existingUser);
     });
 
-    test('updates name and picture on existing user re-login', async () => {
-      const existingUser = { _id: new ObjectId(), handle: 'demo' };
-      mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
-      mockUsersUpdateOne.mockResolvedValueOnce({} as never);
-
-      const userData = {
-        id: 'provider-id',
-        email: 'user@example.com',
-        emailVerified: true,
-        providerName: 'google' as const,
-        firstName: 'Updated',
-        lastName: 'Name',
-        avatarUrl: 'updated-pic-url',
-      };
-
-      await moduleExports.handleOAuthUserAuthentication(req, res, userData);
-
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
-        { _id: existingUser._id },
-        { $set: { firstName: 'Updated', lastName: 'Name', avatarUrl: 'updated-pic-url' } }
-      );
-      expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({
-            _id: existingUser._id,
-            firstName: 'Updated',
-            lastName: 'Name',
-            avatarUrl: 'updated-pic-url',
-          }),
-        })
-      );
-    });
-
-    test('login succeeds even if profile update fails', async () => {
-      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
-      const existingUser = { _id: new ObjectId(), handle: 'demo' };
-      mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
-      mockUsersUpdateOne.mockRejectedValueOnce(new Error('DB write failed') as never);
-
-      const userData = {
-        id: 'provider-id',
-        email: 'user@example.com',
-        emailVerified: true,
-        providerName: 'github' as const,
-        firstName: 'Name',
-        avatarUrl: 'pic',
-      };
-
-      await moduleExports.handleOAuthUserAuthentication(req, res, userData);
-
-      expect(consoleError).toHaveBeenCalledWith(
-        'Failed to update user profile during OAuth login:',
-        expect.any(Error)
-      );
-      // Login should still succeed despite the update failure
-      expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
-        expect.objectContaining({ user: existingUser })
-      );
-      expect(authConfig.login.onSuccess).toHaveBeenCalledWith(existingUser);
-      consoleError.mockRestore();
-    });
-
     test('returns error when provider does not supply email', async () => {
       mockUsersFindOne.mockResolvedValueOnce(null as never);
 
@@ -234,7 +179,7 @@ describe('auth/providers/oauth-common', () => {
       mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
       const insertedId = new ObjectId();
       mockUsersInsertOne.mockResolvedValue({ insertedId } as never);
-      const userDocument = { _id: insertedId, handle: 'user@example.com' };
+      const userDocument = { _id: insertedId, handle: 'user' };
       mockUsersFindOne.mockResolvedValueOnce(userDocument as never);
 
       await moduleExports.handleOAuthUserAuthentication(req, res, {
@@ -247,9 +192,10 @@ describe('auth/providers/oauth-common', () => {
         avatarUrl: 'pic-url',
       });
 
+      expect(mockResolveUniqueHandle).toHaveBeenCalledWith(undefined, 'user@example.com');
       expect(mockUsersInsertOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          handle: 'user@example.com',
+          handle: 'user',
           authMethods: {
             google: { id: 'provider-id' },
           },

@@ -5,13 +5,15 @@ import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
-import { validateEmail, validatePassword } from './validators';
+import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { resolveUniqueHandle } from './utils';
 
 export async function handleSignupWithPassword(
   args: Args,
   { user, session, connectionInfo }: Context
 ) {
+  const authConfig = getAuthConfig();
   try {
     const email = validateEmail(args.email as string);
     const password = validatePassword(args.password as string);
@@ -58,11 +60,37 @@ export async function handleSignupWithPassword(
       });
     }
 
+    // Validate optional profile fields (firstName, lastName, avatarUrl)
+    const profileFields = validateProfileFields({
+      firstName: args.firstName as string | undefined,
+      lastName: args.lastName as string | undefined,
+      avatarUrl: args.avatarUrl as string | undefined,
+    });
+
+    await authConfig.validateSignUp?.({
+      email,
+      password,
+      handle: args.handle as string | undefined,
+      ...profileFields,
+    });
+
+    // Resolve a unique handle (from args, custom generator, or derived from email).
+    let handle: string;
+
+    if (args.handle) {
+      handle = await resolveUniqueHandle(args.handle as string, email);
+    } else if (authConfig.generateHandle) {
+      const generated = await authConfig.generateHandle({ email, ...profileFields });
+      handle = await resolveUniqueHandle(generated, email);
+    } else {
+      handle = await resolveUniqueHandle(undefined, email);
+    }
+
     // Hash password with bcrypt (salt is automatically generated)
     const hash = await bcrypt.hash(password, 10);
 
     const result = await usersCollection.insertOne({
-      handle: email,
+      handle,
       status: 'active',
       emails: [
         {
@@ -76,6 +104,9 @@ export async function handleSignupWithPassword(
           hash,
         },
       },
+      ...(profileFields.firstName !== undefined && { firstName: profileFields.firstName }),
+      ...(profileFields.lastName !== undefined && { lastName: profileFields.lastName }),
+      ...(profileFields.avatarUrl !== undefined && { avatarUrl: profileFields.avatarUrl }),
     });
 
     const userDocument = await usersCollection.findOne(
@@ -93,26 +124,26 @@ export async function handleSignupWithPassword(
       baseUrl: connectionInfo?.baseUrl,
     });
 
-    getAuthConfig().onAfterSignup?.({
+    authConfig.onAfterSignup?.({
       provider: 'email',
       user: userDocument,
       session,
       connectionInfo,
     });
 
-    getAuthConfig().signup?.onSuccess?.(userDocument);
+    authConfig.signup?.onSuccess?.(userDocument);
 
     return result.insertedId;
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onSignupError?.({
+      authConfig.onSignupError?.({
         provider: 'email',
         error,
         session,
         connectionInfo,
       });
 
-      getAuthConfig().signup?.onError?.(error);
+      authConfig.signup?.onError?.(error);
     }
     throw error;
   }

@@ -5,6 +5,7 @@ import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { resolveUniqueHandle } from '../utils';
 
 export interface OAuthUserData {
   id: string;
@@ -45,33 +46,15 @@ export async function handleOAuthUserAuthentication(
 
   try {
     if (existingUser) {
-      // Updates user profile after re-login
-      const update = {
-        ...(userData.firstName !== undefined && { firstName: userData.firstName }),
-        ...(userData.lastName !== undefined && { lastName: userData.lastName }),
-        ...(userData.avatarUrl !== undefined && { avatarUrl: userData.avatarUrl }),
-      };
-
-      let userToReturn = existingUser;
-
-      if (Object.keys(update).length > 0) {
-        try {
-          await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
-          userToReturn = { ...existingUser, ...update } as typeof existingUser;
-        } catch (error) {
-          console.error('Failed to update user profile during OAuth login:', error);
-        }
-      }
-
       await authenticateUser(res, existingUser._id);
 
       getAuthConfig().onAfterLogin?.({
         provider: userData.providerName,
-        user: userToReturn,
+        user: existingUser,
         session,
         connectionInfo,
       });
-      getAuthConfig().login?.onSuccess?.(userToReturn);
+      getAuthConfig().login?.onSuccess?.(existingUser);
 
       return;
     }
@@ -111,9 +94,16 @@ export async function handleOAuthUserAuthentication(
       return;
     }
 
+    const handle =
+      (await getAuthConfig().generateHandle?.({
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+      })) ?? (await resolveUniqueHandle(undefined, userData.email));
+
     // If the user does not exist, create a new user
     const userDoc = {
-      handle: userData.email,
+      handle: handle,
       status: 'active' as const,
       emails: [
         {

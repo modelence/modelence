@@ -27,6 +27,13 @@ export type Context = {
 
 export type Args = Record<string, unknown>;
 
+export type UpdateProfileArgs = {
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  handle?: string;
+};
+
 export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
 
 export type MethodType = 'query' | 'mutation';
