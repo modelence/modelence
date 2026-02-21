@@ -1,7 +1,13 @@
 import { getConfig } from '@/server';
 import { time } from '@/time';
 import { randomBytes } from 'crypto';
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+  type Router as ExpressRouter,
+} from 'express';
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
@@ -20,7 +26,7 @@ interface GitHubUserInfo {
   login: string;
   name: string;
   email: string | null;
-  avatar_url: string;
+  avatar_url?: string;
 }
 
 interface GitHubEmail {
@@ -143,11 +149,18 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       return;
     }
 
+    const nameParts = githubUser.name ? githubUser.name.trim().split(/\s+/) : [];
+    const firstName = nameParts[0] || undefined;
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : undefined;
+
     const userData: OAuthUserData = {
       id: String(githubUser.id),
       email: githubEmail,
       emailVerified: true, // Assume public email is verified
       providerName: 'github',
+      firstName,
+      lastName,
+      avatarUrl: githubUser.avatar_url || undefined,
     };
 
     await handleOAuthUserAuthentication(req, res, userData);
@@ -157,7 +170,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   }
 }
 
-function getRouter() {
+function getRouter(): ExpressRouter {
   const githubAuthRouter = Router();
 
   // Middleware to check if GitHub auth is enabled and configured

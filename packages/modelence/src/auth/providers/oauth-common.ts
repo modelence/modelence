@@ -5,12 +5,16 @@ import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { resolveUniqueHandle } from '../utils';
 
 export interface OAuthUserData {
   id: string;
   email: string;
   emailVerified: boolean;
   providerName: 'google' | 'github';
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 }
 
 export async function authenticateUser(res: Response, userId: ObjectId) {
@@ -90,10 +94,25 @@ export async function handleOAuthUserAuthentication(
       return;
     }
 
+    let handle: string;
+
+    if (getAuthConfig().generateHandle) {
+      const generated = await getAuthConfig().generateHandle!({
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+      });
+      handle = await resolveUniqueHandle(generated, userData.email, {
+        throwOnConflict: false,
+      });
+    } else {
+      handle = await resolveUniqueHandle(undefined, userData.email);
+    }
+
     // If the user does not exist, create a new user
-    const newUser = await usersCollection.insertOne({
-      handle: userData.email,
-      status: 'active',
+    const userDoc = {
+      handle: handle,
+      status: 'active' as const,
       emails: [
         {
           address: userData.email,
@@ -106,7 +125,12 @@ export async function handleOAuthUserAuthentication(
           id: userData.id,
         },
       },
-    });
+      ...(userData.firstName !== undefined && { firstName: userData.firstName }),
+      ...(userData.lastName !== undefined && { lastName: userData.lastName }),
+      ...(userData.avatarUrl !== undefined && { avatarUrl: userData.avatarUrl }),
+    };
+
+    const newUser = await usersCollection.insertOne(userDoc);
 
     await authenticateUser(res, newUser.insertedId);
 

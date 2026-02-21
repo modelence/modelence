@@ -8,6 +8,7 @@ const mockCreateSession = jest.fn();
 const mockGetAuthConfig = jest.fn();
 const mockGetCallContext = jest.fn();
 const mockGetConfig = jest.fn();
+const mockResolveUniqueHandle = jest.fn();
 
 jest.unstable_mockModule('../db', () => ({
   usersCollection: {
@@ -30,6 +31,10 @@ jest.unstable_mockModule('@/app/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+}));
+
+jest.unstable_mockModule('../utils', () => ({
+  resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
 const moduleExports = await import('./oauth-common');
@@ -67,6 +72,10 @@ describe('auth/providers/oauth-common', () => {
       connectionInfo: { ip: '1.1.1.1' },
     } as never);
     mockGetConfig.mockReturnValue('https://app.example.com');
+    mockCreateSession.mockResolvedValue({ authToken: 'tok' } as never);
+    mockResolveUniqueHandle.mockImplementation(
+      async (_raw: unknown, email: unknown) => (email as string).split('@')[0]
+    );
   });
 
   describe('authenticateUser', () => {
@@ -170,7 +179,7 @@ describe('auth/providers/oauth-common', () => {
       mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
       const insertedId = new ObjectId();
       mockUsersInsertOne.mockResolvedValue({ insertedId } as never);
-      const userDocument = { _id: insertedId, handle: 'user@example.com' };
+      const userDocument = { _id: insertedId, handle: 'user' };
       mockUsersFindOne.mockResolvedValueOnce(userDocument as never);
 
       await moduleExports.handleOAuthUserAuthentication(req, res, {
@@ -178,14 +187,21 @@ describe('auth/providers/oauth-common', () => {
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google',
+        firstName: 'New',
+        lastName: 'User',
+        avatarUrl: 'pic-url',
       });
 
+      expect(mockResolveUniqueHandle).toHaveBeenCalledWith(undefined, 'user@example.com');
       expect(mockUsersInsertOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          handle: 'user@example.com',
+          handle: 'user',
           authMethods: {
             google: { id: 'provider-id' },
           },
+          firstName: 'New',
+          lastName: 'User',
+          avatarUrl: 'pic-url',
         })
       );
       expect(authConfig.onAfterSignup).toHaveBeenCalledWith(

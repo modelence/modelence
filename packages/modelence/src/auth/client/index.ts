@@ -9,12 +9,18 @@ export type UserInfo = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 type RawUserData = {
   id: string;
   handle: string;
   roles: string[];
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 /**
@@ -23,13 +29,32 @@ type RawUserData = {
  * @example
  * ```ts
  * await signupWithPassword({ email: 'test@example.com', password: '12345678' });
+ * await signupWithPassword({ email: 'test@example.com', password: '12345678', handle: 'myhandle', firstName: 'John' });
  * ```
  * @param options.email - The email of the user.
  * @param options.password - The password of the user.
+ * @param options.handle - Optional custom handle. If omitted, one is derived from the email.
+ * @param options.firstName - Optional first name.
+ * @param options.lastName - Optional last name.
+ * @param options.avatarUrl - Optional avatar URL.
  */
-export async function signupWithPassword(options: { email: string; password: string }) {
-  const { email, password } = options;
-  await callMethod('_system.user.signupWithPassword', { email, password });
+export async function signupWithPassword(options: {
+  email: string;
+  password: string;
+  handle?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+}) {
+  const { email, password, handle, firstName, lastName, avatarUrl } = options;
+  await callMethod('_system.user.signupWithPassword', {
+    email,
+    password,
+    ...(handle ? { handle } : {}),
+    ...(firstName !== undefined ? { firstName } : {}),
+    ...(lastName !== undefined ? { lastName } : {}),
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+  });
 }
 
 /**
@@ -47,6 +72,35 @@ export async function loginWithPassword(options: { email: string; password: stri
   const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginWithPassword', {
     email,
     password,
+  });
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
+ * Update the current user's profile.
+ *
+ * @example
+ * ```ts
+ * await updateProfile({ firstName: 'Atul', lastName: 'Yadav', avatarUrl: 'https://example.com/avatar.jpg', handle: 'atulyadav' });
+ * ```
+ * @param options.firstName - The first name of the user.
+ * @param options.lastName - The last name of the user.
+ * @param options.avatarUrl - The avatar URL of the user.
+ * @param options.handle - The handle of the user.
+ */
+export async function updateProfile(options: {
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  handle?: string;
+}) {
+  const { firstName, lastName, avatarUrl, handle } = options;
+  const { user } = await callMethod<{ user: RawUserData }>('_system.user.updateProfile', {
+    firstName,
+    lastName,
+    avatarUrl,
+    handle,
   });
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
