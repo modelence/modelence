@@ -94,12 +94,20 @@ export async function handleOAuthUserAuthentication(
       return;
     }
 
-    const handle =
-      (await getAuthConfig().generateHandle?.({
+    let handle: string;
+
+    if (getAuthConfig().generateHandle) {
+      const generated = await getAuthConfig().generateHandle!({
         email: userData.email,
         firstName: userData.firstName,
         lastName: userData.lastName,
-      })) ?? (await resolveUniqueHandle(undefined, userData.email));
+      });
+      handle = await resolveUniqueHandle(generated, userData.email, {
+        throwOnConflict: false,
+      });
+    } else {
+      handle = await resolveUniqueHandle(undefined, userData.email);
+    }
 
     // If the user does not exist, create a new user
     const userDoc = {

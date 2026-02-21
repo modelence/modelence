@@ -96,7 +96,7 @@ export async function updateProfile(options: {
   handle?: string;
 }) {
   const { firstName, lastName, avatarUrl, handle } = options;
-  const user = await callMethod<{ user: RawUserData }>('_system.user.updateProfile', {
+  const { user } = await callMethod<{ user: RawUserData }>('_system.user.updateProfile', {
     firstName,
     lastName,
     avatarUrl,

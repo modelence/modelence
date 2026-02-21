@@ -26,7 +26,7 @@ interface GitHubUserInfo {
   login: string;
   name: string;
   email: string | null;
-  avatar_url: string;
+  avatar_url?: string;
 }
 
 interface GitHubEmail {

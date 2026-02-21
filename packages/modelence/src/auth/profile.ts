@@ -33,10 +33,13 @@ export async function handleUpdateProfile(_args: UpdateProfileArgs, { user }: Co
 
   //Check if handle is already taken
   if ('handle' in update && update.handle !== undefined) {
-    const existing = await usersCollection.findOne({
-      handle: update.handle,
-      _id: { $ne: profile._id }, // excludes the current user
-    });
+    const existing = await usersCollection.findOne(
+      {
+        handle: update.handle,
+        _id: { $ne: profile._id }, // excludes the current user
+      },
+      { collation: { locale: 'en', strength: 2 } }
+    );
 
     if (existing) {
       throw new Error('Handle already taken.');
@@ -54,11 +57,13 @@ export async function handleUpdateProfile(_args: UpdateProfileArgs, { user }: Co
   }
 
   return {
-    id: profile._id,
-    handle: profile.handle,
-    roles: profile.roles || [],
-    firstName: profile.firstName ?? undefined,
-    lastName: profile.lastName ?? undefined,
-    avatarUrl: profile.avatarUrl ?? undefined,
+    user: {
+      id: profile._id,
+      handle: profile.handle,
+      roles: profile.roles || [],
+      firstName: profile.firstName ?? undefined,
+      lastName: profile.lastName ?? undefined,
+      avatarUrl: profile.avatarUrl ?? undefined,
+    },
   };
 }

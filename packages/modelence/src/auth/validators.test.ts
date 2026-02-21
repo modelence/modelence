@@ -1,4 +1,9 @@
-import { validateEmail, validatePassword, validateHandle, validateProfileFields } from './validators';
+import {
+  validateEmail,
+  validatePassword,
+  validateHandle,
+  validateProfileFields,
+} from './validators';
 
 describe('auth/validators', () => {
   describe('validatePassword', () => {
@@ -142,7 +147,9 @@ describe('auth/validators', () => {
     test('should accept handle at exactly min and max boundaries', () => {
       expect(validateProfileFields({ handle: 'abc' })).toEqual({ handle: 'abc' });
       const fiftyCharHandle = 'a'.repeat(50);
-      expect(validateProfileFields({ handle: fiftyCharHandle })).toEqual({ handle: fiftyCharHandle });
+      expect(validateProfileFields({ handle: fiftyCharHandle })).toEqual({
+        handle: fiftyCharHandle,
+      });
     });
   });
 });

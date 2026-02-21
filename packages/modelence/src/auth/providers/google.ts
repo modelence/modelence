@@ -26,11 +26,11 @@ interface GoogleTokenResponse {
 interface GoogleUserInfo {
   id: string;
   name: string;
-  given_name: string;
-  family_name: string;
+  given_name?: string;
+  family_name?: string;
   email: string;
   verified_email: boolean;
-  picture: string;
+  picture?: string;
 }
 
 async function exchangeCodeForToken(

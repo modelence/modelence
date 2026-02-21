@@ -81,7 +81,7 @@ export async function handleSignupWithPassword(
       handle = await resolveUniqueHandle(args.handle as string, email);
     } else if (authConfig.generateHandle) {
       const generated = await authConfig.generateHandle({ email, ...profileFields });
-      handle = await resolveUniqueHandle(generated, email);
+      handle = await resolveUniqueHandle(generated, email, { throwOnConflict: false });
     } else {
       handle = await resolveUniqueHandle(undefined, email);
     }
