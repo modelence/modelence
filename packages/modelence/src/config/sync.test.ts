@@ -4,6 +4,8 @@ const mockSeconds = jest.fn(() => 5000);
 const mockSyncStatus = jest.fn();
 const mockFetchConfigs = jest.fn();
 const mockLoadConfigs = jest.fn();
+const mockGetSchema = jest.fn(() => ({}));
+const mockGetLocalConfigs = jest.fn((_schema: unknown) => []);
 const mockAcquireLock = jest.fn();
 
 jest.unstable_mockModule('../time', () => ({
@@ -17,8 +19,13 @@ jest.unstable_mockModule('../app/backendApi', () => ({
   fetchConfigs: mockFetchConfigs,
 }));
 
+jest.unstable_mockModule('./local', () => ({
+  getLocalConfigs: mockGetLocalConfigs,
+}));
+
 jest.unstable_mockModule('./server', () => ({
   loadConfigs: mockLoadConfigs,
+  getSchema: mockGetSchema,
 }));
 
 describe('config/sync', () => {
@@ -58,7 +65,11 @@ describe('config/sync', () => {
 
     expect(mockSyncStatus).toHaveBeenCalled();
     expect(mockFetchConfigs).toHaveBeenCalled();
-    expect(mockLoadConfigs).toHaveBeenCalledWith([{ key: 'demo', type: 'string', value: 'v' }]);
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(1, [
+      { key: 'demo', type: 'string', value: 'v' },
+    ]);
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, []);
+    expect(mockGetLocalConfigs).toHaveBeenCalledWith(expect.objectContaining({}));
   });
 
   test('avoids concurrent sync executions using isSyncing guard', async () => {

@@ -1,6 +1,7 @@
 import { time } from '../time';
 import { fetchConfigs, syncStatus } from '../app/backendApi';
-import { loadConfigs } from './server';
+import { getLocalConfigs } from './local';
+import { loadConfigs, getSchema } from './server';
 
 let isSyncing = false;
 
@@ -34,4 +35,5 @@ export function startConfigSync() {
 async function syncConfig() {
   const { configs } = await fetchConfigs();
   loadConfigs(configs);
+  loadConfigs(getLocalConfigs(getSchema()));
 }
