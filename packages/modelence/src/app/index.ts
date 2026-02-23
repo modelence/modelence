@@ -14,6 +14,7 @@ import { startConfigSync } from '../config/sync';
 import { AppConfig, ConfigSchema, ConfigType } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
+import type { ModelSchema } from '../data/types';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
@@ -41,6 +42,11 @@ export type AppOptions = {
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
 };
+
+type ManagedStore = Pick<
+  Store<ModelSchema, Record<string, never>>,
+  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode'
+>;
 
 export async function startApp({
   modules = [],
@@ -88,6 +94,7 @@ export async function startApp({
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
   const stores = getStores(combinedModules);
+  const managedStores = stores as ManagedStore[];
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
@@ -118,19 +125,8 @@ export async function startApp({
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    initStores(stores);
-
-    for (const store of stores) {
-      if (store.getIndexCreationMode() === 'blocking') {
-        await createStoreIndexes(store);
-      }
-    }
-
-    for (const store of stores) {
-      if (store.getIndexCreationMode() === 'background') {
-        void Promise.resolve().then(() => createStoreIndexes(store));
-      }
-    }
+    initStores(managedStores);
+    await createIndexesWithLock(managedStores);
   }
 
   startMigrations(migrations);
@@ -185,21 +181,42 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 
 const INDEXES_LOCK_RESOURCE = 'indexes';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createStoreIndexes(store: Store<any, any>) {
-  const storeName = store.getName();
+async function createIndexesWithLock(stores: ManagedStore[]) {
   const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE);
-
   if (!hasLock) {
     return;
   }
+
+  const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
+  const backgroundStores = stores.filter((store) => store.getIndexCreationMode() === 'background');
+
+  for (const store of blockingStores) {
+    await createStoreIndexes(store);
+  }
+
+  if (backgroundStores.length > 0) {
+    void Promise.resolve().then(async () => {
+      try {
+        for (const store of backgroundStores) {
+          await createStoreIndexes(store);
+        }
+      } finally {
+        await releaseLock(INDEXES_LOCK_RESOURCE);
+      }
+    });
+    return;
+  }
+
+  await releaseLock(INDEXES_LOCK_RESOURCE);
+}
+
+async function createStoreIndexes(store: ManagedStore) {
+  const storeName = store.getName();
 
   try {
     await store.createIndexes();
   } catch (error) {
     warnIndexCreationFailure(storeName, error);
-  } finally {
-    await releaseLock(INDEXES_LOCK_RESOURCE);
   }
 }
 
@@ -228,8 +245,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function initStores(stores: Store<any, any>[]) {
+function initStores(stores: ManagedStore[]) {
   const client = getClient();
   if (!client) {
     throw new Error('Failed to initialize stores: MongoDB client not initialized');

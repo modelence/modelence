@@ -577,6 +577,8 @@ describe('app/index', () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    expect(mockAcquireLock).toHaveBeenCalledTimes(1);
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
     expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
     expect(mockStartMigrations).not.toHaveBeenCalled();
@@ -590,6 +592,8 @@ describe('app/index', () => {
       (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
     );
     expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
