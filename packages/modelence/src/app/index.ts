@@ -20,7 +20,7 @@ import { MigrationScript, default as migrationModule, startMigrations } from '..
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
-import lockModule from '../lock';
+import lockModule, { acquireLock, releaseLock } from '../lock';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
@@ -183,12 +183,23 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
   console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
 }
 
+const INDEXES_LOCK_RESOURCE = 'indexes';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createStoreIndexes(store: Store<any, any>) {
+  const storeName = store.getName();
+  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE);
+
+  if (!hasLock) {
+    return;
+  }
+
   try {
     await store.createIndexes();
   } catch (error) {
-    warnIndexCreationFailure(store.getName(), error);
+    warnIndexCreationFailure(storeName, error);
+  } finally {
+    await releaseLock(INDEXES_LOCK_RESOURCE);
   }
 }
 

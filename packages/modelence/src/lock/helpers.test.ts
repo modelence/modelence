@@ -202,6 +202,12 @@ describe('lock/helpers', () => {
     });
   });
 
+  test('releaseLock returns false when DB operation throws', async () => {
+    mockDeleteOne.mockRejectedValue(new Error('delete failed') as never);
+
+    await expect(releaseLock('release-error')).resolves.toBe(false);
+  });
+
   test('acquireLock returns false when DB operation throws', async () => {
     mockUpsertOne.mockRejectedValue(new Error('db down') as never);
 

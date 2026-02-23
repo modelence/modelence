@@ -165,7 +165,7 @@ const acquireLockById = async ({
       {
         _id: resource,
         $or: [{ instanceId }, { acquiredAt: { $lt: staleThresholdDate } }],
-      } as never,
+      },
       {
         $set: {
           resource,
@@ -175,7 +175,7 @@ const acquireLockById = async ({
         $setOnInsert: {
           _id: resource,
         },
-      } as never
+      }
     );
 
     return result.upsertedCount > 0 || result.modifiedCount > 0;
@@ -218,7 +218,7 @@ const acquireLockById = async ({
  *
  * @param resource - The resource to release the lock for
  * @param options.instanceId - The unique identifier for this application instance
- * @returns true if lock was released, false if lock wasn't owned by this container
+ * @returns true if lock was released, false if lock wasn't owned by this container or release failed.
  */
 export async function releaseLock(
   resource: string,
@@ -228,24 +228,26 @@ export async function releaseLock(
     instanceId?: string;
   } = {}
 ): Promise<boolean> {
-  const result = await locksCollection.deleteOne({
-    _id: resource,
-    instanceId,
-  } as never);
-
-  // TODO(v1.0.0): Remove the legacy fallback
-  if (result.deletedCount === 0) {
-    const legacyResult = await locksCollection.deleteOne({
-      resource,
+  try {
+    const result = await locksCollection.deleteOne({
+      _id: resource,
       instanceId,
     });
 
+    // TODO(v1.0.0): Remove the legacy fallback
+    if (result.deletedCount === 0) {
+      const legacyResult = await locksCollection.deleteOne({
+        resource,
+        instanceId,
+      });
+
+      return legacyResult.deletedCount > 0;
+    }
+
+    return result.deletedCount > 0;
+  } catch {
+    return false;
+  } finally {
     delete lockCache[resource];
-
-    return legacyResult.deletedCount > 0;
   }
-
-  delete lockCache[resource];
-
-  return result.deletedCount > 0;
 }
