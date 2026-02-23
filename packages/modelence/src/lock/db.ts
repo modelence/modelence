@@ -15,5 +15,20 @@ export const locksCollection = new Store('_modelenceLocks', {
 
     resource: schema.string(), // deprecated, use _id instead
   },
-  indexes: [],
+  indexes: [
+    {
+      // TODO(v1.0.0): remove after dropping legacy `resource` compatibility.
+      key: { resource: 1 },
+      unique: true,
+    },
+    {
+      // TODO(v1.0.0): remove after dropping legacy `resource` compatibility.
+      key: { resource: 1, instanceId: 1 },
+    },
+    {
+      // TODO(v1.0.0): remove after dropping legacy `resource` compatibility.
+      key: { resource: 1, acquiredAt: 1 },
+    },
+  ],
+  indexCreationMode: 'blocking',
 });
