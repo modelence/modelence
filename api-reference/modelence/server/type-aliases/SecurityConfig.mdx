@@ -1,0 +1,35 @@
+---
+sidebar_position: 1
+title: SecurityConfig
+---
+
+[API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / SecurityConfig
+
+> **SecurityConfig** = `object`
+
+Defined in: [packages/modelence/src/app/securityConfig.ts:20](https://github.com/modelence/modelence/blob/7e820eafb2160b12dfdecec9c309ad18efc88493/packages/modelence/src/app/securityConfig.ts#L20)
+
+Security configuration for the application
+
+By default, the app is protected against clickjacking by setting
+`Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`
+on all responses, preventing the app from being embedded in iframes on other domains.
+
+## Example
+
+```typescript
+import { startApp } from 'modelence/server';
+
+// Allow embedding in iframes on specific domains
+startApp({
+  security: {
+    frameAncestors: ['https://modelence.com', 'https://app.example.com'],
+  },
+});
+```
+
+## Properties
+
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="frameancestors"></a> `frameAncestors?` | `string`[] | Additional origins allowed to embed this app in an iframe. The app's own origin (`'self'`) is always included automatically. When not set, only same-origin framing is allowed. When set, `X-Frame-Options` is omitted since it cannot express multiple origins. | [packages/modelence/src/app/securityConfig.ts:28](https://github.com/modelence/modelence/blob/7e820eafb2160b12dfdecec9c309ad18efc88493/packages/modelence/src/app/securityConfig.ts#L28) |
