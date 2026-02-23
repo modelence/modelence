@@ -72,6 +72,60 @@ const shouldFallbackToLegacyStrategy = async ({
   return !!existingLock && existingLock._id !== resource;
 };
 
+const tryAcquireLockById = async ({
+  resource,
+  staleThresholdDate,
+  instanceId,
+}: {
+  resource: string;
+  staleThresholdDate: Date;
+  instanceId: string;
+}): Promise<boolean> => {
+  const result = await locksCollection.upsertOne(
+    {
+      _id: resource,
+      $or: [{ instanceId }, { acquiredAt: { $lt: staleThresholdDate } }],
+    },
+    {
+      $set: {
+        resource,
+        instanceId,
+        acquiredAt: new Date(),
+      },
+      $setOnInsert: {
+        _id: resource,
+      },
+    }
+  );
+
+  return result.upsertedCount > 0 || result.modifiedCount > 0;
+};
+
+const deleteLegacyLock = async ({
+  resource,
+  instanceId,
+  staleThresholdDate,
+}: {
+  resource: string;
+  instanceId: string;
+  staleThresholdDate?: Date;
+}): Promise<boolean> => {
+  const selector = staleThresholdDate
+    ? {
+        resource,
+        _id: { $ne: resource },
+        $or: [{ instanceId }, { acquiredAt: { $lt: staleThresholdDate } }],
+      }
+    : {
+        resource,
+        instanceId,
+      };
+
+  const legacyDeleteResult = await locksCollection.deleteOne(selector);
+
+  return legacyDeleteResult.deletedCount > 0;
+};
+
 /**
  * Acquires a lock of the specified resource.
  * If the lock already exists and is owned by another container, this will fail.
@@ -161,47 +215,31 @@ const acquireLockById = async ({
   instanceId: string;
 }): Promise<boolean> => {
   try {
-    const result = await locksCollection.upsertOne(
-      {
-        _id: resource,
-        $or: [{ instanceId }, { acquiredAt: { $lt: staleThresholdDate } }],
-      },
-      {
-        $set: {
-          resource,
-          instanceId,
-          acquiredAt: new Date(),
-        },
-        $setOnInsert: {
-          _id: resource,
-        },
-      }
-    );
-
-    return result.upsertedCount > 0 || result.modifiedCount > 0;
+    return await tryAcquireLockById({ resource, staleThresholdDate, instanceId });
   } catch (error) {
     // TODO(v1.0.0): Remove the legacy fallback
     // Backward compatibility: if an old lock doc exists with a non-resource _id and
     // a unique `resource` index, upserting the new `_id = resource` shape can fail.
-    // Fallback to legacy matching so upgrades continue working without manual cleanup.
+    // Migrate that legacy lock document to `_id = resource` and retry current strategy.
     if (isDuplicateKeyError(error) && (await shouldFallbackToLegacyStrategy({ error, resource }))) {
-      const legacyResult = await locksCollection.upsertOne(
-        {
-          $or: [
-            { resource, instanceId },
-            { resource, acquiredAt: { $lt: staleThresholdDate } },
-          ],
-        },
-        {
-          $set: {
-            resource,
-            instanceId,
-            acquiredAt: new Date(),
-          },
-        }
-      );
+      const hasDeletedLegacyLock = await deleteLegacyLock({
+        resource,
+        staleThresholdDate,
+        instanceId,
+      });
 
-      return legacyResult.upsertedCount > 0 || legacyResult.modifiedCount > 0;
+      if (!hasDeletedLegacyLock) {
+        return false;
+      }
+
+      try {
+        return await tryAcquireLockById({ resource, staleThresholdDate, instanceId });
+      } catch (retryError) {
+        if (isDuplicateKeyError(retryError)) {
+          return false;
+        }
+        throw retryError;
+      }
     }
 
     // Duplicate _id means the lock exists but was not eligible for update (owned + fresh).
@@ -236,12 +274,12 @@ export async function releaseLock(
 
     // TODO(v1.0.0): Remove the legacy fallback
     if (result.deletedCount === 0) {
-      const legacyResult = await locksCollection.deleteOne({
+      const hasDeletedLegacyLock = await deleteLegacyLock({
         resource,
         instanceId,
       });
 
-      return legacyResult.deletedCount > 0;
+      return hasDeletedLegacyLock;
     }
 
     return result.deletedCount > 0;

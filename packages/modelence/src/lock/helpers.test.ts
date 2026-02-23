@@ -96,7 +96,7 @@ describe('lock/helpers', () => {
     });
   });
 
-  test('acquireLock falls back to legacy resource query during upgrade collisions', async () => {
+  test('acquireLock migrates legacy lock to _id during upgrade collisions', async () => {
     const duplicateResource = new MongoError('dup resource') as MongoError & {
       code: number;
       keyPattern: Record<string, unknown>;
@@ -107,6 +107,7 @@ describe('lock/helpers', () => {
     mockUpsertOne
       .mockRejectedValueOnce(duplicateResource as never)
       .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 1 } as never);
 
     const acquired = await acquireLock('legacy');
     expect(acquired).toBe(true);
@@ -128,19 +129,25 @@ describe('lock/helpers', () => {
         },
       }
     );
+    expect(mockDeleteOne).toHaveBeenCalledWith({
+      resource: 'legacy',
+      _id: { $ne: 'legacy' },
+      $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+    });
     expect(mockUpsertOne).toHaveBeenNthCalledWith(
       2,
       {
-        $or: [
-          { resource: 'legacy', instanceId: 'instance-1' },
-          { resource: 'legacy', acquiredAt: { $lt: new Date(970_000) } },
-        ],
+        _id: 'legacy',
+        $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
       },
       {
         $set: {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+        },
+        $setOnInsert: {
+          _id: 'legacy',
         },
       }
     );
@@ -156,11 +163,33 @@ describe('lock/helpers', () => {
     mockUpsertOne
       .mockRejectedValueOnce(duplicateWithoutPattern as never)
       .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 1 } as never);
 
     const acquired = await acquireLock('legacy-no-pattern');
     expect(acquired).toBe(true);
     expect(mockFindOne).toHaveBeenCalledWith({ resource: 'legacy-no-pattern' });
+    expect(mockDeleteOne).toHaveBeenCalledWith({
+      resource: 'legacy-no-pattern',
+      _id: { $ne: 'legacy-no-pattern' },
+      $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+    });
     expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+  });
+
+  test('acquireLock returns false when legacy lock cannot be deleted during migration', async () => {
+    const duplicateResource = new MongoError('dup resource') as MongoError & {
+      code: number;
+      keyPattern: Record<string, unknown>;
+    };
+    duplicateResource.code = 11000;
+    duplicateResource.keyPattern = { resource: 1 };
+
+    mockUpsertOne.mockRejectedValueOnce(duplicateResource as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 0 } as never);
+
+    const acquired = await acquireLock('legacy-blocked');
+    expect(acquired).toBe(false);
+    expect(mockUpsertOne).toHaveBeenCalledTimes(1);
   });
 
   test('acquireLock caches failed attempts and logs failure when _id lock is held', async () => {
