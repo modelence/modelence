@@ -13,7 +13,7 @@ export const locksCollection = new Store('_modelenceLocks', {
     instanceId: schema.string(),
     acquiredAt: schema.date(),
 
-    resource: schema.string(), // deprecated, use _id instead
+    resource: schema.string(), // deprecated, will be dropped in v1.0.0 (use _id instead)
   },
   indexes: [
     {
