@@ -9,21 +9,11 @@ import { Store } from '../data/store';
  */
 export const locksCollection = new Store('_modelenceLocks', {
   schema: {
-    resource: schema.string(),
+    _id: schema.string(), // unique identifier for the lock, used as the primary key
     instanceId: schema.string(),
     acquiredAt: schema.date(),
+
+    resource: schema.string(), // deprecated, use _id instead
   },
-  indexes: [
-    {
-      key: { resource: 1 },
-      unique: true,
-    },
-    {
-      key: { resource: 1, instanceId: 1 },
-    },
-    {
-      key: { resource: 1, acquiredAt: 1 },
-    },
-  ],
-  indexCreationMode: 'blocking',
+  indexes: [],
 });

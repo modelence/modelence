@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { MongoError } from 'mongodb';
 import { locksCollection } from './db';
 import { logDebug } from '../telemetry';
 import { time } from '@/time';
@@ -30,6 +31,46 @@ const INSTANCE_ID = randomBytes(32).toString('base64url');
  * Time after which a lock is expired
  */
 const DEFAULT_LOCK_DURATION = time.seconds(30);
+
+type DuplicateKeyMongoError = MongoError & {
+  code?: number;
+  keyPattern?: Record<string, unknown>;
+};
+
+const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError =>
+  error instanceof MongoError && error.code === 11000;
+
+const hasKeyPatternField = (error: DuplicateKeyMongoError, field: string): boolean =>
+  typeof error.keyPattern === 'object' &&
+  error.keyPattern !== null &&
+  Object.prototype.hasOwnProperty.call(error.keyPattern, field);
+
+/**
+ * TODO(v1.0.0): Remove legacy `resource` fallback support.
+ * This helper only exists for pre-1.0.0 lock documents where `_id !== resource`.
+ * Delete this function and its call sites when releasing 1.0.0.
+ */
+const shouldFallbackToLegacyStrategy = async ({
+  error,
+  resource,
+}: {
+  error: DuplicateKeyMongoError;
+  resource: string;
+}): Promise<boolean> => {
+  if (hasKeyPatternField(error, 'resource')) {
+    return true;
+  }
+
+  if (hasKeyPatternField(error, '_id')) {
+    return false;
+  }
+
+  const existingLock = (await locksCollection.findOne({ resource })) as {
+    _id?: unknown;
+  } | null;
+
+  return !!existingLock && existingLock._id !== resource;
+};
 
 /**
  * Acquires a lock of the specified resource.
@@ -70,23 +111,11 @@ export async function acquireLock(
   });
 
   try {
-    const result = await locksCollection.upsertOne(
-      {
-        $or: [
-          { resource, instanceId },
-          { resource, acquiredAt: { $lt: staleThresholdDate } },
-        ],
-      },
-      {
-        $set: {
-          resource,
-          instanceId,
-          acquiredAt: new Date(),
-        },
-      }
-    );
-
-    const isLockAcquired = result.upsertedCount > 0 || result.modifiedCount > 0;
+    const isLockAcquired = await acquireLockById({
+      resource,
+      staleThresholdDate,
+      instanceId,
+    });
 
     lockCache[resource] = {
       value: isLockAcquired,
@@ -122,6 +151,68 @@ export async function acquireLock(
   }
 }
 
+const acquireLockById = async ({
+  resource,
+  staleThresholdDate,
+  instanceId,
+}: {
+  resource: string;
+  staleThresholdDate: Date;
+  instanceId: string;
+}): Promise<boolean> => {
+  try {
+    const result = await locksCollection.upsertOne(
+      {
+        _id: resource,
+        $or: [{ instanceId }, { acquiredAt: { $lt: staleThresholdDate } }],
+      } as never,
+      {
+        $set: {
+          resource,
+          instanceId,
+          acquiredAt: new Date(),
+        },
+        $setOnInsert: {
+          _id: resource,
+        },
+      } as never
+    );
+
+    return result.upsertedCount > 0 || result.modifiedCount > 0;
+  } catch (error) {
+    // TODO(v1.0.0): Remove the legacy fallback
+    // Backward compatibility: if an old lock doc exists with a non-resource _id and
+    // a unique `resource` index, upserting the new `_id = resource` shape can fail.
+    // Fallback to legacy matching so upgrades continue working without manual cleanup.
+    if (isDuplicateKeyError(error) && (await shouldFallbackToLegacyStrategy({ error, resource }))) {
+      const legacyResult = await locksCollection.upsertOne(
+        {
+          $or: [
+            { resource, instanceId },
+            { resource, acquiredAt: { $lt: staleThresholdDate } },
+          ],
+        },
+        {
+          $set: {
+            resource,
+            instanceId,
+            acquiredAt: new Date(),
+          },
+        }
+      );
+
+      return legacyResult.upsertedCount > 0 || legacyResult.modifiedCount > 0;
+    }
+
+    // Duplicate _id means the lock exists but was not eligible for update (owned + fresh).
+    if (isDuplicateKeyError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+};
+
 /**
  * Releases a lock of the specified resource owned by this container.
  *
@@ -138,9 +229,21 @@ export async function releaseLock(
   } = {}
 ): Promise<boolean> {
   const result = await locksCollection.deleteOne({
-    resource,
+    _id: resource,
     instanceId,
-  });
+  } as never);
+
+  // TODO(v1.0.0): Remove the legacy fallback
+  if (result.deletedCount === 0) {
+    const legacyResult = await locksCollection.deleteOne({
+      resource,
+      instanceId,
+    });
+
+    delete lockCache[resource];
+
+    return legacyResult.deletedCount > 0;
+  }
 
   delete lockCache[resource];
 
