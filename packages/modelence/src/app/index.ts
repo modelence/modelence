@@ -187,27 +187,35 @@ async function createIndexesWithLock(stores: ManagedStore[]) {
     return;
   }
 
-  const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
-  const backgroundStores = stores.filter((store) => store.getIndexCreationMode() === 'background');
+  let releaseHandledByBackgroundTask = false;
 
-  for (const store of blockingStores) {
-    await createStoreIndexes(store);
-  }
+  try {
+    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
+    const backgroundStores = stores.filter(
+      (store) => store.getIndexCreationMode() === 'background'
+    );
 
-  if (backgroundStores.length > 0) {
-    void Promise.resolve().then(async () => {
-      try {
-        for (const store of backgroundStores) {
-          await createStoreIndexes(store);
+    for (const store of blockingStores) {
+      await createStoreIndexes(store);
+    }
+
+    if (backgroundStores.length > 0) {
+      releaseHandledByBackgroundTask = true;
+      void Promise.resolve().then(async () => {
+        try {
+          for (const store of backgroundStores) {
+            await createStoreIndexes(store);
+          }
+        } finally {
+          await releaseLock(INDEXES_LOCK_RESOURCE);
         }
-      } finally {
-        await releaseLock(INDEXES_LOCK_RESOURCE);
-      }
-    });
-    return;
+      });
+    }
+  } finally {
+    if (!releaseHandledByBackgroundTask) {
+      await releaseLock(INDEXES_LOCK_RESOURCE);
+    }
   }
-
-  await releaseLock(INDEXES_LOCK_RESOURCE);
 }
 
 async function createStoreIndexes(store: ManagedStore) {

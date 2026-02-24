@@ -687,6 +687,35 @@ describe('app/index', () => {
     warnSpy.mockRestore();
   });
 
+  test('releases index lock when blocking index path throws unexpectedly', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+
+    const unexpectedError = new Error('unexpected index path error');
+    const brokenStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn() as MinimalStore['createIndexes'],
+      getName: jest.fn(() => {
+        throw unexpectedError;
+      }) as MinimalStore['getName'],
+      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
+    };
+
+    await expect(
+      startApp({
+        modules: [
+          createTestModule({
+            stores: [brokenStore as unknown as Store<ModelSchema, Record<string, never>>],
+          }),
+        ],
+      })
+    ).rejects.toThrow('unexpected index path error');
+
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+  });
+
   test('starts server with combined modules and channels', async () => {
     const channel1 = new ServerChannel('channel1');
     const channel2 = new ServerChannel('channel2');
