@@ -94,7 +94,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   });
 
   // Build reset URL
-  const baseUrl = getConfig('_system.site.url') || connectionInfo?.baseUrl;
+  const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
   const resetPasswordUrl = resolveUrl(baseUrl!, getEmailConfig().passwordReset?.redirectUrl);
   const resetUrl = `${resetPasswordUrl}?token=${resetToken}`;
 

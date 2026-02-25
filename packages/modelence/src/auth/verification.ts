@@ -15,7 +15,7 @@ import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
-  const baseUrl = getConfig('_system.site.url');
+  const baseUrl = getConfig('_system.site.url') as string | undefined;
   const emailVerifiedRedirectUrl =
     getEmailConfig().verification?.redirectUrl ||
     getEmailConfig().emailVerifiedRedirectUrl ||
@@ -119,7 +119,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 export async function sendVerificationEmail({
   userId,
   email,
-  baseUrl = getConfig('_system.site.url'),
+  baseUrl = getConfig('_system.site.url') as string | undefined,
 }: {
   userId: ObjectId;
   email: string;
