@@ -9,6 +9,7 @@ import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
+import { getConfig } from '@/config/server';
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
@@ -93,7 +94,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   });
 
   // Build reset URL
-  const baseUrl = process.env.MODELENCE_SITE_URL || connectionInfo?.baseUrl;
+  const baseUrl = getConfig('_system.site.url') || connectionInfo?.baseUrl;
   const resetPasswordUrl = resolveUrl(baseUrl!, getEmailConfig().passwordReset?.redirectUrl);
   const resetUrl = `${resetPasswordUrl}?token=${resetToken}`;
 

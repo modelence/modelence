@@ -19,6 +19,7 @@ import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
+import { getConfig } from '@/config/server';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -150,7 +151,7 @@ export async function startServer(
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
-    const siteUrl = process.env.MODELENCE_SITE_URL || `http://localhost:${port}`;
+    const siteUrl = getConfig('_system.site.url') || `http://localhost:${port}`;
     console.log(`\nApplication started on ${siteUrl}\n`);
   });
 }
