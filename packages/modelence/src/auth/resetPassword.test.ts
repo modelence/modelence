@@ -23,9 +23,14 @@ const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => 
   jest.fn();
 const mockTime = { hours: jest.fn() };
 const mockConsumeRateLimit = jest.fn();
+const mockGetConfig = jest.fn();
 
 jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
+}));
+
+jest.unstable_mockModule('@/config/server', () => ({
+  getConfig: mockGetConfig,
 }));
 
 jest.unstable_mockModule('./db', () => ({
@@ -145,11 +150,7 @@ describe('auth/resetPassword', () => {
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.hours.mockReturnValue(3600000); // 1 hour in ms
-    process.env.MODELENCE_SITE_URL = 'https://example.com';
-  });
-
-  afterEach(() => {
-    delete process.env.MODELENCE_SITE_URL;
+    mockGetConfig.mockReturnValue('https://example.com');
   });
 
   describe('handleSendResetPasswordToken', () => {
@@ -377,7 +378,7 @@ describe('auth/resetPassword', () => {
       const email = 'user@example.com';
       const resetToken = 'token456';
 
-      process.env.MODELENCE_SITE_URL = 'https://custom.com';
+      mockGetConfig.mockReturnValue('https://custom.com');
 
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(
@@ -407,7 +408,7 @@ describe('auth/resetPassword', () => {
       const email = 'user@example.com';
       const resetToken = 'token789';
 
-      delete process.env.MODELENCE_SITE_URL;
+      mockGetConfig.mockReturnValue(undefined);
 
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(
