@@ -4,6 +4,7 @@ import type { Store } from '../data/store';
 import type { ModelSchema } from '../data/types';
 import type { CronJobMetadata } from '../cron/types';
 import type { ConfigSchema } from '../config/types';
+import type { RoleDefinition } from '../auth/types';
 import { connectCloudBackend, fetchConfigs, syncStatus } from './backendApi';
 
 type BaseStore = Store<ModelSchema, Record<string, never>>;
@@ -82,10 +83,16 @@ describe('app/backendApi', () => {
         createStore('sessions', { name: 'sessions' }),
       ];
 
+      const roles: Record<string, RoleDefinition> = {
+        admin: { description: 'Full access', permissions: ['manage_users', 'manage_content'] },
+        editor: { permissions: ['manage_content'] },
+      };
+
       const result = await connectCloudBackend({
         configSchema,
         cronJobsMetadata,
         stores: asStoreArray(storeMocks),
+        roles,
       });
 
       expect(result).toEqual(okResponse);
@@ -107,6 +114,7 @@ describe('app/backendApi', () => {
         containerId: 'container-123',
         configSchema,
         cronJobsMetadata,
+        roles,
         dataModels: [
           { name: 'users', schema: { name: 'users' }, collections: ['users'], version: 2 },
           { name: 'sessions', schema: { name: 'sessions' }, collections: ['sessions'], version: 2 },

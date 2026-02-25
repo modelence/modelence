@@ -39,7 +39,23 @@ export type AppOptions = {
   auth?: AuthConfig;
   /** Security settings such as clickjacking protection. See {@link SecurityConfig}. */
   security?: SecurityConfig;
+  /**
+   * Custom role definitions keyed by role name. Defined roles are synced to the
+   * Modelence Cloud dashboard for user management. See {@link RoleDefinition}.
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   roles: {
+   *     admin: { description: 'Full access to all features' },
+   *     editor: { description: 'Can edit content' },
+   *     viewer: {},
+   *   },
+   * });
+   * ```
+   */
   roles?: Record<string, RoleDefinition>;
+  /** @internal */
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
@@ -105,6 +121,7 @@ export async function startApp({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
         stores,
+        roles,
       });
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });

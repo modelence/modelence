@@ -468,6 +468,7 @@ describe('app/index', () => {
       configSchema: expect.any(Object),
       cronJobsMetadata: undefined,
       stores: expect.any(Array),
+      roles: {},
     });
     expect(mockLoadConfigs).toHaveBeenCalledWith([{ key: 'test', type: 'string', value: 'value' }]);
     expect(mockSetMetadata).toHaveBeenCalledWith({
@@ -478,6 +479,19 @@ describe('app/index', () => {
     });
     expect(mockInitMetrics).toHaveBeenCalled();
     expect(mockStartConfigSync).toHaveBeenCalled();
+  });
+
+  test('passes roles to cloud backend', async () => {
+    process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
+
+    const roles = {
+      admin: { description: 'Full access', permissions: ['manage_users'] },
+      editor: { permissions: ['edit_content'] },
+    };
+
+    await startApp({ roles });
+
+    expect(mockConnectCloudBackend).toHaveBeenCalledWith(expect.objectContaining({ roles }));
   });
 
   test('loads local configs when cloud backend is not configured', async () => {
