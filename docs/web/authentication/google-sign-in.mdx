@@ -125,8 +125,9 @@ When a user signs in with Google, Modelence automatically:
 
 - Creates a user account if one doesn't exist
 - Links the Google account to the user profile
-- Retrieves profile information (first name, last name, email, profile picture)
+- Retrieves profile information (first name, last name, email, avatar URL)
 - Marks the email as verified (since Google has verified it)
+- **Backfills missing profile fields** — If an existing user is missing `firstName`, `lastName`, or `avatarUrl`, these fields are automatically populated from their Google profile on login
 
 The user object will contain:
 

@@ -1,18 +1,19 @@
 import { AuthErrorProps, AuthSuccessProps, User } from '@/auth/types';
-import { UpdateProfileArgs } from '@/methods/types';
+import { UpdateProfileProps } from '@/methods/types';
 
-type GenerateHandleInput = {
+type GenerateHandleProps = {
   email: string;
   firstName?: string;
   lastName?: string;
 };
 
-type signUpArgs = {
+type SignupProps = {
   email: string;
   firstName?: string;
   lastName?: string;
   password: string;
   handle?: string;
+  avatarUrl?: string;
 };
 
 /**
@@ -34,7 +35,7 @@ export type AuthOption = {
  *
  * startApp({
  *   auth: {
- *     validateSignUp: ({ email, firstName, lastName, password, handle }) => {
+ *     validateSignup: ({ email, firstName, lastName, password, handle, avatarUrl }) => {
  *       // Validating the signup data
  *       if (!email || !password) {
  *         throw new Error('Email and password are required');
@@ -66,8 +67,8 @@ export type AuthOption = {
  */
 export type AuthConfig = {
   // Optional pre-signup validation hook.
-  validateSignUp?: (props: signUpArgs) => void | Promise<void>;
-  validateProfileUpdate?: (props: UpdateProfileArgs) => void | Promise<void>;
+  validateSignup?: (props: SignupProps) => void | Promise<void>;
+  validateProfileUpdate?: (props: UpdateProfileProps) => void | Promise<void>;
 
   // After Authentication callbacks
   onAfterLogin?: (props: AuthSuccessProps) => void;
@@ -79,7 +80,7 @@ export type AuthConfig = {
 
   // Custom handle generator.
   // If provided, this overrides the default handle generation logic.
-  generateHandle?: (props: GenerateHandleInput) => Promise<string> | string;
+  generateHandle?: (props: GenerateHandleProps) => Promise<string> | string;
 
   /** deprecated: use onAfterLogin and onLoginError */
   login?: AuthOption;

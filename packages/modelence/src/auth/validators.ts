@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UpdateProfileArgs } from '../methods/types';
+import { UpdateProfileProps } from '../methods/types';
 
 export function validatePassword(value: string) {
   return z.string().min(8, { message: 'Password must contain at least 8 characters' }).parse(value);
@@ -22,7 +22,7 @@ type FieldRule = {
   max?: number;
 };
 
-const profileFieldRules: Record<keyof UpdateProfileArgs, FieldRule> = {
+const profileFieldRules: Record<keyof UpdateProfileProps, FieldRule> = {
   firstName: { max: 50 },
   lastName: { max: 50 },
   avatarUrl: { max: 400 },
@@ -40,9 +40,9 @@ const profileFieldRules: Record<keyof UpdateProfileArgs, FieldRule> = {
  * @returns An object containing only the validated, trimmed fields that were provided.
  */
 export function validateProfileFields(
-  fields: Partial<UpdateProfileArgs>
-): Partial<UpdateProfileArgs> {
-  const validated: Partial<UpdateProfileArgs> = {};
+  fields: Partial<UpdateProfileProps>
+): Partial<UpdateProfileProps> {
+  const validated: Partial<UpdateProfileProps> = {};
 
   for (const key of Object.keys(profileFieldRules) as (keyof typeof profileFieldRules)[]) {
     const value = fields[key];

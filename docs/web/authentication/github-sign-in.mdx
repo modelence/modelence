@@ -122,8 +122,9 @@ When a user signs in with GitHub, Modelence automatically:
 
 - Creates a user account if one doesn't exist
 - Links the GitHub account to the user profile
-- Retrieves profile information (first name, last name, username, email, avatar)
+- Retrieves profile information (first name, last name, username, email, avatar URL)
 - Marks the email as verified if GitHub has verified it
+- **Backfills missing profile fields** — If an existing user is missing `firstName`, `lastName`, or `avatarUrl`, these fields are automatically populated from their GitHub profile on login
 
 The user object will contain:
 

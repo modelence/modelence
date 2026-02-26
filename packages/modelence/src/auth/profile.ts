@@ -1,9 +1,9 @@
 import { usersCollection } from './db';
-import { Args, Context, UpdateProfileArgs } from '../methods/types';
+import { Args, Context, UpdateProfileProps } from '../methods/types';
 import { validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 
-export async function getOwnProfile(_args: Args, { user }: Context) {
+export async function getOwnProfile(props: Args, { user }: Context) {
   if (!user) {
     throw new Error('Not authenticated');
   }
@@ -20,16 +20,16 @@ export async function getOwnProfile(_args: Args, { user }: Context) {
   };
 }
 
-export async function handleUpdateProfile(_args: UpdateProfileArgs, { user }: Context) {
+export async function handleUpdateProfile(props: UpdateProfileProps, { user }: Context) {
   if (!user) {
     throw new Error('Not authenticated');
   }
 
   let profile = await usersCollection.requireById(user.id);
 
-  await getAuthConfig().validateProfileUpdate?.(_args);
+  await getAuthConfig().validateProfileUpdate?.(props);
 
-  const update = validateProfileFields(_args);
+  const update = validateProfileFields(props);
 
   //Check if handle is already taken
   if ('handle' in update && update.handle !== undefined) {

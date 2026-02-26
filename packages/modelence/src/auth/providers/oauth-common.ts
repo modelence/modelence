@@ -46,6 +46,23 @@ export async function handleOAuthUserAuthentication(
 
   try {
     if (existingUser) {
+      //Add User FirstName,LastName, AvatarURL if not exists
+      const update: Partial<OAuthUserData> = {};
+
+      if (existingUser.firstName === undefined && userData.firstName) {
+        update.firstName = userData.firstName;
+      }
+      if (existingUser.lastName === undefined && userData.lastName) {
+        update.lastName = userData.lastName;
+      }
+      if (existingUser.avatarUrl === undefined && userData.avatarUrl) {
+        update.avatarUrl = userData.avatarUrl;
+      }
+
+      if (Object.keys(update).length > 0) {
+        await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
+      }
+
       await authenticateUser(res, existingUser._id);
 
       getAuthConfig().onAfterLogin?.({

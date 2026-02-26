@@ -27,11 +27,16 @@ export type Context = {
 
 export type Args = Record<string, unknown>;
 
-export type UpdateProfileArgs = {
+export type UpdateProfileProps = {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
   handle?: string;
+};
+
+export type SignupProps = UpdateProfileProps & {
+  email: string;
+  password: string;
 };
 
 export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
