@@ -69,6 +69,6 @@ export async function resolveUniqueHandle(
   }
 
   // Derive handle from the email local-part (everything before '@').
-  const baseHandle = email.split('@')[0];
+  const baseHandle = email.split('@')[0].padEnd(3, '_');
   return findAvailableHandle(baseHandle);
 }

@@ -27,9 +27,9 @@ export async function handleUpdateProfile(props: UpdateProfileProps, { user }: C
 
   let profile = await usersCollection.requireById(user.id);
 
-  await getAuthConfig().validateProfileUpdate?.(props);
-
   const update = validateProfileFields(props);
+
+  await getAuthConfig().validateProfileUpdate?.(update);
 
   //Check if handle is already taken
   if ('handle' in update && update.handle !== undefined) {
