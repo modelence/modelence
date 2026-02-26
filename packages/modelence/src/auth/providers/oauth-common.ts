@@ -59,19 +59,22 @@ export async function handleOAuthUserAuthentication(
         update.avatarUrl = userData.avatarUrl;
       }
 
+      let user = existingUser;
+
       if (Object.keys(update).length > 0) {
         await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
+        user = { ...existingUser, ...update } as typeof existingUser;
       }
 
       await authenticateUser(res, existingUser._id);
 
       getAuthConfig().onAfterLogin?.({
         provider: userData.providerName,
-        user: existingUser,
+        user,
         session,
         connectionInfo,
       });
-      getAuthConfig().login?.onSuccess?.(existingUser);
+      getAuthConfig().login?.onSuccess?.(user);
 
       return;
     }

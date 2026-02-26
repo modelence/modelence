@@ -1,19 +1,10 @@
 import { AuthErrorProps, AuthSuccessProps, User } from '@/auth/types';
-import { UpdateProfileProps } from '@/methods/types';
+import { UpdateProfileProps, SignupProps } from '@/methods/types';
 
 type GenerateHandleProps = {
   email: string;
   firstName?: string;
   lastName?: string;
-};
-
-type SignupProps = {
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  password: string;
-  handle?: string;
-  avatarUrl?: string;
 };
 
 /**

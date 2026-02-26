@@ -48,8 +48,8 @@ export async function resolveUniqueHandle(
   { throwOnConflict = true }: { throwOnConflict?: boolean } = {}
 ): Promise<string> {
   if (rawHandle !== undefined && rawHandle !== null && String(rawHandle).trim() !== '') {
-    // Caller explicitly provided a handle – validate it.
-    const handle = validateHandle(String(rawHandle));
+    // Caller explicitly provided a handle – trim and validate it.
+    const handle = validateHandle(String(rawHandle).trim());
 
     if (throwOnConflict) {
       const existing = await usersCollection.findOne(
