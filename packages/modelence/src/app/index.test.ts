@@ -41,9 +41,25 @@ const mockCreateQuery = jest.fn();
 const mockCreateMutation = jest.fn();
 const mockCreateSystemQuery = jest.fn();
 const mockCreateSystemMutation = jest.fn();
-const mockAcquireLock = jest.fn<(resource: string) => Promise<boolean>>();
+const mockAcquireLock = jest.fn<
+  (
+    resource: string,
+    options?: {
+      lockDuration?: number;
+      successfulLockCacheDuration?: number;
+      failedLockCacheDuration?: number;
+      heartbeat?: boolean;
+    }
+  ) => Promise<boolean>
+>();
 const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
 const mockSocketioServer = { listen: jest.fn() };
+const expectedIndexesLockOptions = {
+  lockDuration: 30_000,
+  successfulLockCacheDuration: 0,
+  failedLockCacheDuration: 0,
+  heartbeat: true,
+};
 
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
@@ -347,7 +363,7 @@ describe('app/index', () => {
     expect(mockStore.init).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.any(Function) })
     );
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(mockStore.createIndexes).toHaveBeenCalled();
     expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
   });
@@ -367,7 +383,7 @@ describe('app/index', () => {
       ],
     });
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(mockStore.createIndexes).not.toHaveBeenCalled();
     expect(mockReleaseLock).not.toHaveBeenCalled();
   });
@@ -578,7 +594,7 @@ describe('app/index', () => {
     await Promise.resolve();
 
     expect(mockAcquireLock).toHaveBeenCalledTimes(1);
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
     expect(mockStartMigrations).not.toHaveBeenCalled();
@@ -586,6 +602,7 @@ describe('app/index', () => {
 
     resolveLockIndexes();
     await startPromise;
+    await Promise.resolve();
 
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
     expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -711,7 +728,7 @@ describe('app/index', () => {
       })
     ).rejects.toThrow('unexpected index path error');
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(mockReleaseLock).toHaveBeenCalledTimes(1);
     expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
   });

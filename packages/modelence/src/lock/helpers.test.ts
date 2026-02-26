@@ -214,6 +214,39 @@ describe('lock/helpers', () => {
     expect(mockUpsertOne).toHaveBeenCalledTimes(1);
   });
 
+  test('acquireLock refreshes lock with heartbeat and releaseLock stops it', async () => {
+    jest.useFakeTimers();
+
+    try {
+      mockUpsertOne
+        .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never)
+        .mockResolvedValue({ upsertedCount: 0, modifiedCount: 1 } as never);
+      mockDeleteOne.mockResolvedValue({ deletedCount: 1 } as never);
+
+      const acquired = await acquireLock('heartbeat', {
+        lockDuration: 3_000,
+        heartbeat: true,
+      });
+
+      expect(acquired).toBe(true);
+      expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+
+      await releaseLock('heartbeat');
+      await jest.advanceTimersByTimeAsync(3000);
+
+      expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+      expect(mockDeleteOne).toHaveBeenCalledWith({
+        _id: 'heartbeat',
+        instanceId: 'instance-1',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('releaseLock falls back to legacy deletion for pre-upgrade lock documents', async () => {
     mockDeleteOne
       .mockResolvedValueOnce({ deletedCount: 0 } as never)

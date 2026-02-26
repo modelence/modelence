@@ -32,6 +32,24 @@ const INSTANCE_ID = randomBytes(32).toString('base64url');
  */
 const DEFAULT_LOCK_DURATION = time.seconds(30);
 
+type LockOptions = {
+  lockDuration?: number;
+  successfulLockCacheDuration?: number;
+  failedLockCacheDuration?: number;
+  heartbeat?: boolean;
+  bypassCache?: boolean;
+  instanceId?: string;
+};
+
+type LockHeartbeat = {
+  timer: ReturnType<typeof setTimeout> | null;
+  stopRequested: boolean;
+  lockDuration: number;
+  heartbeatInterval: number;
+};
+
+const lockHeartbeats = new Map<string, LockHeartbeat>();
+
 type DuplicateKeyMongoError = MongoError & {
   code?: number;
   keyPattern?: Record<string, unknown>;
@@ -126,6 +144,91 @@ const deleteLegacyLock = async ({
   return legacyDeleteResult.deletedCount > 0;
 };
 
+const stopLockHeartbeat = (resource: string) => {
+  const heartbeatKey = resource;
+  const heartbeat = lockHeartbeats.get(heartbeatKey);
+  if (!heartbeat) {
+    return;
+  }
+
+  heartbeat.stopRequested = true;
+  if (heartbeat.timer) {
+    clearTimeout(heartbeat.timer);
+    heartbeat.timer = null;
+  }
+
+  lockHeartbeats.delete(heartbeatKey);
+};
+
+const startLockHeartbeat = ({
+  resource,
+  lockDuration,
+  instanceId,
+}: {
+  resource: string;
+  lockDuration: number;
+  instanceId: string;
+}) => {
+  const heartbeatInterval = Math.floor(lockDuration / 3);
+  const heartbeatKey = resource;
+  const existingHeartbeat = lockHeartbeats.get(heartbeatKey);
+
+  if (
+    existingHeartbeat &&
+    !existingHeartbeat.stopRequested &&
+    existingHeartbeat.heartbeatInterval === heartbeatInterval &&
+    existingHeartbeat.lockDuration === lockDuration
+  ) {
+    return;
+  }
+
+  if (existingHeartbeat) {
+    existingHeartbeat.stopRequested = true;
+    if (existingHeartbeat.timer) {
+      clearTimeout(existingHeartbeat.timer);
+      existingHeartbeat.timer = null;
+    }
+    lockHeartbeats.delete(heartbeatKey);
+  }
+
+  const heartbeat: LockHeartbeat = {
+    timer: null,
+    stopRequested: false,
+    lockDuration,
+    heartbeatInterval,
+  };
+
+  const scheduleRefresh = () => {
+    heartbeat.timer = setTimeout(() => {
+      acquireLock(resource, {
+        lockDuration,
+        bypassCache: true,
+        instanceId,
+      })
+        .then((isLockAcquired) => {
+          if (!isLockAcquired) {
+            heartbeat.stopRequested = true;
+            logDebug(`Lost lock while refreshing heartbeat: ${resource}`, {
+              source: 'lock',
+              resource,
+              instanceId,
+            });
+          }
+        })
+        .finally(() => {
+          if (heartbeat.stopRequested) {
+            lockHeartbeats.delete(heartbeatKey);
+            return;
+          }
+          scheduleRefresh();
+        });
+    }, heartbeatInterval);
+  };
+
+  lockHeartbeats.set(heartbeatKey, heartbeat);
+  scheduleRefresh();
+};
+
 /**
  * Acquires a lock of the specified resource.
  * If the lock already exists and is owned by another container, this will fail.
@@ -133,7 +236,10 @@ const deleteLegacyLock = async ({
  *
  * @param resource - The type of lock to acquire
  * @param options.lockDuration - Time in ms after which a lock is considered expired (default: 30s)
- * @param options.lockCacheDuration - Time in ms to cache successful lock acquisition (default: 10s)
+ * @param options.successfulLockCacheDuration - Time in ms to cache successful lock acquisition
+ * @param options.failedLockCacheDuration - Time in ms to cache failed lock acquisition
+ * @param options.heartbeat - If true, auto-refreshes lock ownership at lockDuration/3 intervals
+ * @param options.bypassCache - If true, skips the in-memory cache and always hits the DB
  * @param options.instanceId - The unique identifier for this application instance
  * @returns true if lock was acquired, false otherwise
  */
@@ -143,16 +249,20 @@ export async function acquireLock(
     lockDuration = DEFAULT_LOCK_DURATION,
     successfulLockCacheDuration = DEFAULT_CACHE_DURATION,
     failedLockCacheDuration = DEFAULT_CACHE_DURATION,
+    heartbeat,
+    bypassCache,
     instanceId = INSTANCE_ID,
-  }: {
-    lockDuration?: number;
-    successfulLockCacheDuration?: number;
-    failedLockCacheDuration?: number;
-    instanceId?: string;
-  } = {}
+  }: LockOptions = {}
 ): Promise<boolean> {
   const now = Date.now();
-  if (lockCache[resource] && now < lockCache[resource].expiresAt) {
+  if (!bypassCache && lockCache[resource] && now < lockCache[resource].expiresAt) {
+    if (lockCache[resource].value && heartbeat) {
+      startLockHeartbeat({
+        resource,
+        lockDuration,
+        instanceId,
+      });
+    }
     return lockCache[resource].value;
   }
 
@@ -177,6 +287,14 @@ export async function acquireLock(
     };
 
     if (isLockAcquired) {
+      if (heartbeat) {
+        startLockHeartbeat({
+          resource,
+          lockDuration,
+          instanceId,
+        });
+      }
+
       logDebug(`Lock acquired: ${resource}`, {
         source: 'lock',
         resource,
@@ -266,6 +384,8 @@ export async function releaseLock(
     instanceId?: string;
   } = {}
 ): Promise<boolean> {
+  stopLockHeartbeat(resource);
+
   try {
     const result = await locksCollection.deleteOne({
       _id: resource,

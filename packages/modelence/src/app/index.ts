@@ -28,6 +28,7 @@ import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import { time } from '@/time';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
@@ -182,7 +183,10 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 const INDEXES_LOCK_RESOURCE = 'indexes';
 
 async function createIndexesWithLock(stores: ManagedStore[]) {
-  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE);
+  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
+    lockDuration: time.seconds(30),
+    heartbeat: true,
+  });
   if (!hasLock) {
     return;
   }
