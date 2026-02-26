@@ -7,7 +7,7 @@ export default new Module('_system', {
       isPublic: false,
       default: '',
     },
-    env: {
+    'env.type': {
       type: 'string',
       isPublic: true,
       default: '',
