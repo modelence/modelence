@@ -7,18 +7,17 @@ title: AppOptions
 
 > **AppOptions** = `object`
 
-Defined in: [packages/modelence/src/app/index.ts:35](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L35)
+Defined in: [packages/modelence/src/app/index.ts:35](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L35)
 
 ## Properties
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="auth"></a> `auth?` | [`AuthConfig`](/api-reference/modelence/server/type-aliases/AuthConfig) | - | [packages/modelence/src/app/index.ts:39](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L39) |
-| <a id="defaultroles"></a> `defaultRoles?` | `Record`\<`string`, `string`\> | - | [packages/modelence/src/app/index.ts:43](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L43) |
-| <a id="email"></a> `email?` | `EmailConfig` | - | [packages/modelence/src/app/index.ts:38](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L38) |
-| <a id="migrations"></a> `migrations?` | `MigrationScript`[] | - | [packages/modelence/src/app/index.ts:44](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L44) |
-| <a id="modules"></a> `modules?` | [`Module`](/api-reference/modelence/server/type-aliases/../classes/Module)[] | - | [packages/modelence/src/app/index.ts:36](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L36) |
-| <a id="roles"></a> `roles?` | `Record`\<`string`, `RoleDefinition`\> | - | [packages/modelence/src/app/index.ts:42](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L42) |
-| <a id="security"></a> `security?` | [`SecurityConfig`](/api-reference/modelence/server/type-aliases/SecurityConfig) | Security settings such as clickjacking protection. See [SecurityConfig](/api-reference/modelence/server/type-aliases/SecurityConfig). | [packages/modelence/src/app/index.ts:41](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L41) |
-| <a id="server"></a> `server?` | `AppServer` | - | [packages/modelence/src/app/index.ts:37](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L37) |
-| <a id="websocket"></a> `websocket?` | `WebsocketConfig` | - | [packages/modelence/src/app/index.ts:45](https://github.com/modelence/modelence/blob/b000abea13566dfa63b71ef528c471cda627e0f1/packages/modelence/src/app/index.ts#L45) |
+| <a id="auth"></a> `auth?` | [`AuthConfig`](/api-reference/modelence/server/type-aliases/AuthConfig) | - | [packages/modelence/src/app/index.ts:39](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L39) |
+| <a id="email"></a> `email?` | `EmailConfig` | - | [packages/modelence/src/app/index.ts:38](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L38) |
+| <a id="migrations"></a> `migrations?` | `MigrationScript`[] | - | [packages/modelence/src/app/index.ts:60](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L60) |
+| <a id="modules"></a> `modules?` | [`Module`](/api-reference/modelence/server/type-aliases/../classes/Module)[] | - | [packages/modelence/src/app/index.ts:36](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L36) |
+| <a id="roles"></a> `roles?` | `Record`\<`string`, [`RoleDefinition`](/api-reference/modelence/server/type-aliases/RoleDefinition)\> | Custom role definitions keyed by role name. Defined roles are synced to the Modelence Cloud dashboard for user management. See [RoleDefinition](/api-reference/modelence/server/type-aliases/RoleDefinition). **Example** `startApp({ roles: { admin: { description: 'Full access to all features' }, editor: { description: 'Can edit content' }, viewer: {}, }, });` | [packages/modelence/src/app/index.ts:57](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L57) |
+| <a id="security"></a> `security?` | [`SecurityConfig`](/api-reference/modelence/server/type-aliases/SecurityConfig) | Security settings such as clickjacking protection. See [SecurityConfig](/api-reference/modelence/server/type-aliases/SecurityConfig). | [packages/modelence/src/app/index.ts:41](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L41) |
+| <a id="server"></a> `server?` | `AppServer` | - | [packages/modelence/src/app/index.ts:37](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L37) |
+| <a id="websocket"></a> `websocket?` | `WebsocketConfig` | - | [packages/modelence/src/app/index.ts:61](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/app/index.ts#L61) |

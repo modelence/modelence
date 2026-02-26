@@ -1,0 +1,35 @@
+---
+sidebar_position: 1
+title: RoleDefinition
+---
+
+[API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / RoleDefinition
+
+> **RoleDefinition** = `object`
+
+Defined in: [packages/modelence/src/auth/types.ts:50](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/auth/types.ts#L50)
+
+Defines a role that can be assigned to users.
+
+Roles are registered via the `roles` option in [AppOptions](/api-reference/modelence/server/type-aliases/AppOptions) and
+are synced to the Modelence Cloud dashboard for user management.
+
+## Example
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  roles: {
+    admin: { description: 'Full access to all features' },
+    editor: { description: 'Can edit content' },
+    viewer: {},
+  },
+});
+```
+
+## Properties
+
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="description"></a> `description?` | `string` | Human-readable description of the role, shown in the Modelence Cloud dashboard. | [packages/modelence/src/auth/types.ts:52](https://github.com/modelence/modelence/blob/4b2c5a0e2600e851a48a4c32d7085d871f9eb493/packages/modelence/src/auth/types.ts#L52) |
