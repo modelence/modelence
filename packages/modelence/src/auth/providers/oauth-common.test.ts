@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersInsertOne = jest.fn();
+const mockUsersUpdateOne = jest.fn();
 const mockCreateSession = jest.fn();
 const mockGetAuthConfig = jest.fn();
 const mockGetCallContext = jest.fn();
@@ -14,6 +15,7 @@ jest.unstable_mockModule('../db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     insertOne: mockUsersInsertOne,
+    updateOne: mockUsersUpdateOne,
   },
 }));
 
@@ -120,14 +122,23 @@ describe('auth/providers/oauth-common', () => {
   });
 
   describe('handleOAuthUserAuthentication', () => {
-    test('logs in existing user via provider id', async () => {
-      const existingUser = { _id: new ObjectId(), handle: 'demo' };
+    test('logs in existing user via provider id without backfill when fields exist', async () => {
+      const existingUser = {
+        _id: new ObjectId(),
+        handle: 'demo',
+        firstName: 'Existing',
+        lastName: 'User',
+        avatarUrl: 'https://existing-pic.com',
+      };
       mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
       const userData = {
         id: 'provider-id',
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google' as const,
+        firstName: 'New',
+        lastName: 'Name',
+        avatarUrl: 'https://new-pic.com',
       };
 
       await moduleExports.handleOAuthUserAuthentication(req, res, userData);
@@ -135,10 +146,76 @@ describe('auth/providers/oauth-common', () => {
       expect(mockUsersFindOne).toHaveBeenCalledWith({
         'authMethods.google.id': 'provider-id',
       });
+      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
       expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
         expect.objectContaining({ user: existingUser })
       );
       expect(authConfig.login.onSuccess).toHaveBeenCalledWith(existingUser);
+    });
+
+    test('backfills all missing profile fields for existing user', async () => {
+      const existingUser = { _id: new ObjectId(), handle: 'demo' };
+      mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
+      mockUsersUpdateOne.mockResolvedValueOnce({} as never);
+      const userData = {
+        id: 'provider-id',
+        email: 'user@example.com',
+        emailVerified: true,
+        providerName: 'google' as const,
+        firstName: 'John',
+        lastName: 'Doe',
+        avatarUrl: 'https://pic.com',
+      };
+
+      await moduleExports.handleOAuthUserAuthentication(req, res, userData);
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: existingUser._id },
+        { $set: { firstName: 'John', lastName: 'Doe', avatarUrl: 'https://pic.com' } }
+      );
+
+      const mergedUser = {
+        ...existingUser,
+        firstName: 'John',
+        lastName: 'Doe',
+        avatarUrl: 'https://pic.com',
+      };
+      expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
+        expect.objectContaining({ user: mergedUser })
+      );
+      expect(authConfig.login.onSuccess).toHaveBeenCalledWith(mergedUser);
+    });
+
+    test('backfills only missing profile fields, skips already-present ones', async () => {
+      const existingUser = {
+        _id: new ObjectId(),
+        handle: 'demo',
+        firstName: 'Already',
+      };
+      mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
+      mockUsersUpdateOne.mockResolvedValueOnce({} as never);
+      const userData = {
+        id: 'provider-id',
+        email: 'user@example.com',
+        emailVerified: true,
+        providerName: 'github' as const,
+        firstName: 'Ignored',
+        lastName: 'Doe',
+        avatarUrl: 'https://pic.com',
+      };
+
+      await moduleExports.handleOAuthUserAuthentication(req, res, userData);
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: existingUser._id },
+        { $set: { lastName: 'Doe', avatarUrl: 'https://pic.com' } }
+      );
+
+      const mergedUser = { ...existingUser, lastName: 'Doe', avatarUrl: 'https://pic.com' };
+      expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
+        expect.objectContaining({ user: mergedUser })
+      );
+      expect(authConfig.login.onSuccess).toHaveBeenCalledWith(mergedUser);
     });
 
     test('returns error when provider does not supply email', async () => {

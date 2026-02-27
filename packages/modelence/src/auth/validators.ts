@@ -17,17 +17,44 @@ export function validateHandle(value: string) {
     .parse(value);
 }
 
-type FieldRule = {
-  min?: number;
-  max?: number;
-};
+function trimmedString(opts: { min?: number; max?: number }) {
+  return z
+    .string()
+    .transform((v) => v.trim())
+    .superRefine((val, ctx) => {
+      if (val === '') {
+        if (opts.min && opts.min > 0) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: `cannot be empty.` });
+        }
+        return;
+      }
+      if (opts.min !== undefined && val.length < opts.min) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.too_small,
+          minimum: opts.min,
+          type: 'string',
+          inclusive: true,
+          message: `must be at least ${opts.min} characters.`,
+        });
+      }
+      if (opts.max !== undefined && val.length > opts.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.too_big,
+          maximum: opts.max,
+          type: 'string',
+          inclusive: true,
+          message: `must be at most ${opts.max} characters.`,
+        });
+      }
+    });
+}
 
-const profileFieldRules: Record<keyof UpdateProfileProps, FieldRule> = {
-  firstName: { max: 50 },
-  lastName: { max: 50 },
-  avatarUrl: { max: 400 },
-  handle: { min: 3, max: 50 },
-};
+const profileFieldsSchema = z.object({
+  firstName: trimmedString({ max: 50 }),
+  lastName: trimmedString({ max: 50 }),
+  avatarUrl: trimmedString({ max: 400 }),
+  handle: trimmedString({ min: 3, max: 50 }),
+});
 
 /**
  * Validates and trims profile fields against the defined rules.
@@ -42,34 +69,24 @@ const profileFieldRules: Record<keyof UpdateProfileProps, FieldRule> = {
 export function validateProfileFields(
   fields: Partial<UpdateProfileProps>
 ): Partial<UpdateProfileProps> {
-  const validated: Partial<UpdateProfileProps> = {};
+  const providedKeys = Object.keys(fields).filter(
+    (key): key is keyof UpdateProfileProps =>
+      key in profileFieldsSchema.shape && fields[key as keyof UpdateProfileProps] !== undefined
+  );
 
-  for (const key of Object.keys(profileFieldRules) as (keyof typeof profileFieldRules)[]) {
-    const value = fields[key];
+  const partialSchema = profileFieldsSchema.pick(
+    Object.fromEntries(providedKeys.map((key) => [key, true])) as Record<
+      keyof UpdateProfileProps,
+      true
+    >
+  );
 
-    if (value === undefined) continue;
+  const result = partialSchema.safeParse(fields);
 
-    const trimmed = value.trim();
-    const rules = profileFieldRules[key];
-
-    if (trimmed === '') {
-      if (rules.min && rules.min > 0) {
-        throw new Error(`${key} cannot be empty.`);
-      }
-      validated[key] = trimmed;
-      continue;
-    }
-
-    if (rules.min !== undefined && trimmed.length < rules.min) {
-      throw new Error(`${key} must be at least ${rules.min} characters.`);
-    }
-
-    if (rules.max !== undefined && trimmed.length > rules.max) {
-      throw new Error(`${key} must be at most ${rules.max} characters.`);
-    }
-
-    validated[key] = trimmed;
+  if (!result.success) {
+    const firstError = result.error.errors[0];
+    throw new Error(`${firstError.path[0]} ${firstError.message}`);
   }
 
-  return validated;
+  return result.data;
 }
