@@ -61,6 +61,7 @@ jest.unstable_mockModule('./resetPassword', () => ({
 const mockTime = {
   seconds: jest.fn((value: number) => value * 1000),
   minutes: jest.fn((value: number) => value * 60 * 1000),
+  hours: jest.fn((value: number) => value * 60 * 60 * 1000),
   days: jest.fn((value: number) => value * 24 * 60 * 60 * 1000),
 };
 
@@ -147,6 +148,7 @@ describe('auth/user', () => {
     );
 
     expect(mockTime.minutes).toHaveBeenCalledWith(15);
+    expect(mockTime.hours).toHaveBeenCalledWith(1);
     expect(mockTime.days).toHaveBeenCalledWith(1);
   });
 });

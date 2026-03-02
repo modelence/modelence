@@ -1,6 +1,7 @@
 import os from 'os';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
+import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
 import { AppConfig } from '../config/types';
 
@@ -29,11 +30,13 @@ export async function connectCloudBackend({
   configSchema,
   cronJobsMetadata,
   stores,
+  roles,
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any, any>[];
+  roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
@@ -56,6 +59,7 @@ export async function connectCloudBackend({
       dataModels,
       configSchema,
       cronJobsMetadata,
+      roles,
     });
 
     if (data.status === 'error') {

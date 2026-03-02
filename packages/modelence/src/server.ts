@@ -1,5 +1,6 @@
 export { startApp, type AppOptions } from './app';
 export type { AuthConfig, AuthOption } from './app/authConfig';
+export type { SecurityConfig } from './app/securityConfig';
 export { Module } from './app/module';
 export {
   RouteHandler,
@@ -14,7 +15,7 @@ export { createQuery } from './methods';
 
 // Auth
 export { usersCollection as dbUsers } from './auth/db';
-export type { UserInfo } from './auth/types';
+export type { UserInfo, RoleDefinition } from './auth/types';
 export { deleteUser, disableUser } from './auth/deleteUser';
 
 // Database

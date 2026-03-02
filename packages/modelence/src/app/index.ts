@@ -30,6 +30,7 @@ import { markAppStarted, setMetadata } from './state';
 import { time } from '@/time';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
+import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
@@ -37,7 +38,25 @@ export type AppOptions = {
   server?: AppServer;
   email?: EmailConfig;
   auth?: AuthConfig;
+  /** Security settings such as clickjacking protection. See {@link SecurityConfig}. */
+  security?: SecurityConfig;
+  /**
+   * Custom role definitions keyed by role name. Defined roles are synced to the
+   * Modelence Cloud dashboard for user management. See {@link RoleDefinition}.
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   roles: {
+   *     admin: { description: 'Full access to all features' },
+   *     editor: { description: 'Can edit content' },
+   *     viewer: {},
+   *   },
+   * });
+   * ```
+   */
   roles?: Record<string, RoleDefinition>;
+  /** @internal */
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
@@ -51,6 +70,7 @@ export async function startApp({
   migrations = [],
   email = {},
   auth = {},
+  security = {},
   websocket = {},
 }: AppOptions) {
   dotenv.config();
@@ -102,6 +122,7 @@ export async function startApp({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
         stores,
+        roles,
       });
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
@@ -111,6 +132,7 @@ export async function startApp({
 
   setEmailConfig(email);
   setAuthConfig(auth);
+  setSecurityConfig(security);
   setWebsocketConfig({
     ...websocket,
     provider: websocket.provider || socketioServer,
@@ -279,8 +301,9 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
   MODELENCE_SITE_URL: '_system.site.url',
-  MODELENCE_ENV: '_system.env',
+  MODELENCE_ENV_TYPE: '_system.env.type',
   // deprecated
+  MODELENCE_ENV: '_system.env',
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',

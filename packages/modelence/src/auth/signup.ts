@@ -41,7 +41,7 @@ export async function handleSignupWithPassword(
     );
 
     if (existingUser) {
-      const existingEmail = existingUser.emails?.find((e) => e.address === email);
+      const existingEmail = existingUser.emails?.find((e) => e.address.toLowerCase() === email);
       if (existingUser.status === 'disabled') {
         throw new Error(
           `User is marked for deletion, please contact support if you want to restore the account.`

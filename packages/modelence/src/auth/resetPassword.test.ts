@@ -22,6 +22,16 @@ const mockRandomBytes = jest.fn();
 const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => Promise<string>> =
   jest.fn();
 const mockTime = { hours: jest.fn() };
+const mockConsumeRateLimit = jest.fn();
+const mockGetConfig = jest.fn();
+
+jest.unstable_mockModule('@/server', () => ({
+  consumeRateLimit: mockConsumeRateLimit,
+}));
+
+jest.unstable_mockModule('@/config/server', () => ({
+  getConfig: mockGetConfig,
+}));
 
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
@@ -137,16 +147,44 @@ describe('auth/resetPassword', () => {
         redirectUrl: '/reset-password',
       },
     });
+    mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.hours.mockReturnValue(3600000); // 1 hour in ms
-    process.env.MODELENCE_SITE_URL = 'https://example.com';
-  });
-
-  afterEach(() => {
-    delete process.env.MODELENCE_SITE_URL;
+    mockGetConfig.mockReturnValue('https://example.com');
   });
 
   describe('handleSendResetPasswordToken', () => {
+    test('checks rate limit before sending email', async () => {
+      const email = 'user@example.com';
+      const ip = '127.0.0.1';
+
+      mockValidateEmail.mockReturnValue(email);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          emails: [{ address: email, verified: true }],
+          authMethods: { password: { hash: 'hash' } },
+        })
+      );
+      mockRandomBytes.mockReturnValue({
+        toString: () => 'token',
+      });
+
+      await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com', ip } })
+      );
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'passwordReset',
+        type: 'ip',
+        value: ip,
+      });
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'passwordReset',
+        type: 'email',
+        value: email,
+      });
+    });
     test('sends reset email for valid user with password auth', async () => {
       const email = 'user@example.com';
       const userId = new ObjectId();
@@ -340,7 +378,7 @@ describe('auth/resetPassword', () => {
       const email = 'user@example.com';
       const resetToken = 'token456';
 
-      process.env.MODELENCE_SITE_URL = 'https://custom.com';
+      mockGetConfig.mockReturnValue('https://custom.com');
 
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(
@@ -370,7 +408,7 @@ describe('auth/resetPassword', () => {
       const email = 'user@example.com';
       const resetToken = 'token789';
 
-      delete process.env.MODELENCE_SITE_URL;
+      mockGetConfig.mockReturnValue(undefined);
 
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(
