@@ -41,7 +41,21 @@ const mockCreateQuery = jest.fn();
 const mockCreateMutation = jest.fn();
 const mockCreateSystemQuery = jest.fn();
 const mockCreateSystemMutation = jest.fn();
+const mockAcquireLock = jest.fn<
+  (
+    resource: string,
+    options?: {
+      lockDuration?: number;
+      heartbeat?: boolean;
+    }
+  ) => Promise<boolean>
+>();
+const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
 const mockSocketioServer = { listen: jest.fn() };
+const expectedIndexesLockOptions = {
+  lockDuration: 30_000,
+  heartbeat: true,
+};
 
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
@@ -203,6 +217,8 @@ jest.unstable_mockModule('../lock', () => ({
     cronJobs: {},
     configSchema: {},
   },
+  acquireLock: mockAcquireLock,
+  releaseLock: mockReleaseLock,
 }));
 
 jest.unstable_mockModule('../viteServer', () => ({
@@ -245,6 +261,8 @@ const createStoreMock = (
 describe('app/index', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAcquireLock.mockResolvedValue(true);
+    mockReleaseLock.mockResolvedValue(true);
     mockGetMongodbUri.mockReturnValue('');
     mockConnectCloudBackend.mockResolvedValue({
       configs: [],
@@ -327,7 +345,7 @@ describe('app/index', () => {
     const mockClient = { db: jest.fn() };
     mockGetClient.mockReturnValue(mockClient);
 
-    const mockStore = createStoreMock();
+    const mockStore = createStoreMock('testStore', 'blocking');
 
     await startApp({
       modules: [
@@ -341,7 +359,29 @@ describe('app/index', () => {
     expect(mockStore.init).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.any(Function) })
     );
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(mockStore.createIndexes).toHaveBeenCalled();
+    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+  });
+
+  test('skips index creation when index lock is not acquired', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockAcquireLock.mockResolvedValue(false);
+
+    const mockStore = createStoreMock('testStore', 'blocking');
+
+    await startApp({
+      modules: [
+        createTestModule({
+          stores: [mockStore as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
+      ],
+    });
+
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockStore.createIndexes).not.toHaveBeenCalled();
+    expect(mockReleaseLock).not.toHaveBeenCalled();
   });
 
   test('does not connect to database when mongodb uri is not provided', async () => {
@@ -561,7 +601,10 @@ describe('app/index', () => {
     });
 
     await Promise.resolve();
+    await Promise.resolve();
 
+    expect(mockAcquireLock).toHaveBeenCalledTimes(1);
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
     expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
     expect(mockStartMigrations).not.toHaveBeenCalled();
@@ -569,12 +612,15 @@ describe('app/index', () => {
 
     resolveLockIndexes();
     await startPromise;
+    await Promise.resolve();
 
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
     expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
       (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
     );
     expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
   });
 
@@ -666,6 +712,35 @@ describe('app/index', () => {
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 
     warnSpy.mockRestore();
+  });
+
+  test('releases index lock when blocking index path throws unexpectedly', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: jest.fn() });
+
+    const unexpectedError = new Error('unexpected index path error');
+    const brokenStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn() as MinimalStore['createIndexes'],
+      getName: jest.fn(() => {
+        throw unexpectedError;
+      }) as MinimalStore['getName'],
+      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
+    };
+
+    await expect(
+      startApp({
+        modules: [
+          createTestModule({
+            stores: [brokenStore as unknown as Store<ModelSchema, Record<string, never>>],
+          }),
+        ],
+      })
+    ).rejects.toThrow('unexpected index path error');
+
+    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
   });
 
   test('starts server with combined modules and channels', async () => {

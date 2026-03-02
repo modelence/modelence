@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import type { AppServer } from '../types';
+import type { AppServer, ModelSchema } from '../types';
 import socketioServer from '@/websocket/socketio/server';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
@@ -20,13 +20,14 @@ import { MigrationScript, default as migrationModule, startMigrations } from '..
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
-import lockModule from '../lock';
+import lockModule, { acquireLock, releaseLock } from '../lock';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import { time } from '@/time';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
@@ -107,7 +108,7 @@ export async function startApp({
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
-  const stores = getStores(combinedModules);
+  const stores = getStores(combinedModules) as Store<ModelSchema, never>[];
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
@@ -141,18 +142,7 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
-
-    for (const store of stores) {
-      if (store.getIndexCreationMode() === 'blocking') {
-        await createStoreIndexes(store);
-      }
-    }
-
-    for (const store of stores) {
-      if (store.getIndexCreationMode() === 'background') {
-        void Promise.resolve().then(() => createStoreIndexes(store));
-      }
-    }
+    await createIndexesWithLock(stores);
   }
 
   startMigrations(migrations);
@@ -205,12 +195,55 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
   console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createStoreIndexes(store: Store<any, any>) {
+const INDEXES_LOCK_RESOURCE = 'indexes';
+
+async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
+  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
+    lockDuration: time.seconds(30),
+    heartbeat: true,
+  });
+  if (!hasLock) {
+    return;
+  }
+
+  let releaseHandledByBackgroundTask = false;
+
+  try {
+    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
+    const backgroundStores = stores.filter(
+      (store) => store.getIndexCreationMode() === 'background'
+    );
+
+    for (const store of blockingStores) {
+      await createStoreIndexes(store);
+    }
+
+    if (backgroundStores.length > 0) {
+      releaseHandledByBackgroundTask = true;
+      void Promise.resolve().then(async () => {
+        try {
+          for (const store of backgroundStores) {
+            await createStoreIndexes(store);
+          }
+        } finally {
+          await releaseLock(INDEXES_LOCK_RESOURCE);
+        }
+      });
+    }
+  } finally {
+    if (!releaseHandledByBackgroundTask) {
+      await releaseLock(INDEXES_LOCK_RESOURCE);
+    }
+  }
+}
+
+async function createStoreIndexes(store: Store<ModelSchema, never>) {
+  const storeName = store.getName();
+
   try {
     await store.createIndexes();
   } catch (error) {
-    warnIndexCreationFailure(store.getName(), error);
+    warnIndexCreationFailure(storeName, error);
   }
 }
 
@@ -239,8 +272,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function initStores(stores: Store<any, any>[]) {
+function initStores(stores: Store<ModelSchema, never>[]) {
   const client = getClient();
   if (!client) {
     throw new Error('Failed to initialize stores: MongoDB client not initialized');
