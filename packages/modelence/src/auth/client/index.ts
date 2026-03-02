@@ -97,10 +97,10 @@ export async function updateProfile(options: {
 }) {
   const { firstName, lastName, avatarUrl, handle } = options;
   const { user } = await callMethod<{ user: RawUserData }>('_system.user.updateProfile', {
-    firstName,
-    lastName,
-    avatarUrl,
-    handle,
+    ...(firstName !== undefined ? { firstName } : {}),
+    ...(lastName !== undefined ? { lastName } : {}),
+    ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    ...(handle !== undefined ? { handle } : {}),
   });
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;

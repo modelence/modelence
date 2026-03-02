@@ -52,7 +52,10 @@ export async function handleUpdateProfile(props: UpdateProfileProps, { user }: C
       await usersCollection.updateOne({ _id: profile._id }, { $set: update });
       profile = { ...profile, ...update } as typeof profile;
     } catch (error) {
-      throw new Error('Failed to update profile.');
+      if (error instanceof Error && 'code' in error && (error as { code: number }).code === 11000) {
+        throw new Error('Handle already taken.');
+      }
+      throw error;
     }
   }
 

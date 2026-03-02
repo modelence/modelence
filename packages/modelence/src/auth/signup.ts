@@ -63,25 +63,25 @@ export async function handleSignupWithPassword(
       });
     }
 
-    // Validate optional profile fields (firstName, lastName, avatarUrl)
+    // Validate optional profile fields (firstName, lastName, avatarUrl, handle)
     const profileFields = validateProfileFields({
       firstName,
       lastName,
       avatarUrl,
+      handle,
     });
 
     await authConfig.validateSignup?.({
       email,
       password,
-      handle,
       ...profileFields,
     });
 
     // Resolve unique handle
     let resolvedHandle: string;
 
-    if (handle) {
-      resolvedHandle = await resolveUniqueHandle(handle, email);
+    if (profileFields.handle) {
+      resolvedHandle = await resolveUniqueHandle(profileFields.handle, email);
     } else if (authConfig.generateHandle) {
       const generated = await authConfig.generateHandle({
         email,
