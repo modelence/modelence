@@ -46,8 +46,6 @@ const mockAcquireLock = jest.fn<
     resource: string,
     options?: {
       lockDuration?: number;
-      successfulLockCacheDuration?: number;
-      failedLockCacheDuration?: number;
       heartbeat?: boolean;
     }
   ) => Promise<boolean>
@@ -56,8 +54,6 @@ const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
 const mockSocketioServer = { listen: jest.fn() };
 const expectedIndexesLockOptions = {
   lockDuration: 30_000,
-  successfulLockCacheDuration: 0,
-  failedLockCacheDuration: 0,
   heartbeat: true,
 };
 
