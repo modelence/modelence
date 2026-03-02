@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import type { AppServer } from '../types';
+import type { AppServer, ModelSchema } from '../types';
 import socketioServer from '@/websocket/socketio/server';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
@@ -14,7 +14,6 @@ import { startConfigSync } from '../config/sync';
 import { AppConfig, ConfigSchema, ConfigType } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
-import type { ModelSchema } from '../data/types';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
@@ -43,11 +42,6 @@ export type AppOptions = {
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
 };
-
-type ManagedStore = Pick<
-  Store<ModelSchema, Record<string, never>>,
-  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode'
->;
 
 export async function startApp({
   modules = [],
@@ -94,8 +88,7 @@ export async function startApp({
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
-  const stores = getStores(combinedModules);
-  const managedStores = stores as ManagedStore[];
+  const stores = getStores(combinedModules) as Store<ModelSchema, never>[];
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
@@ -126,8 +119,8 @@ export async function startApp({
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    initStores(managedStores);
-    await createIndexesWithLock(managedStores);
+    initStores(stores);
+    await createIndexesWithLock(stores);
   }
 
   startMigrations(migrations);
@@ -182,7 +175,7 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 
 const INDEXES_LOCK_RESOURCE = 'indexes';
 
-async function createIndexesWithLock(stores: ManagedStore[]) {
+async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
   const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
     lockDuration: time.seconds(30),
     heartbeat: true,
@@ -222,7 +215,7 @@ async function createIndexesWithLock(stores: ManagedStore[]) {
   }
 }
 
-async function createStoreIndexes(store: ManagedStore) {
+async function createStoreIndexes(store: Store<ModelSchema, never>) {
   const storeName = store.getName();
 
   try {
@@ -257,7 +250,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-function initStores(stores: ManagedStore[]) {
+function initStores(stores: Store<ModelSchema, never>[]) {
   const client = getClient();
   if (!client) {
     throw new Error('Failed to initialize stores: MongoDB client not initialized');
