@@ -1,23 +1,29 @@
 import { usersCollection } from './db';
-import { validateHandle } from './validators';
+import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
 
 /**
 Finds an available handle by appending incremental suffixes (_2, _3, …)
 to the base handle until a unique one is found.
+The base handle is truncated so that the suffixed candidate never exceeds MAX_HANDLE_LENGTH.
  */
 async function findAvailableHandle(baseHandle: string): Promise<string> {
+  // Truncate base handle to MAX_HANDLE_LENGTH so the unsuffixed form is valid.
+  const truncatedBase = baseHandle.slice(0, MAX_HANDLE_LENGTH);
+
   const firstCheck = await usersCollection.findOne(
-    { handle: baseHandle },
+    { handle: truncatedBase },
     { collation: { locale: 'en', strength: 2 } }
   );
 
   if (!firstCheck) {
-    return baseHandle;
+    return truncatedBase;
   }
 
   let suffix = 2;
   while (true) {
-    const candidate = `${baseHandle}_${suffix}`;
+    const suffixStr = `_${suffix}`;
+    // Truncate base so that base + suffix fits within the limit.
+    const candidate = `${truncatedBase.slice(0, MAX_HANDLE_LENGTH - suffixStr.length)}${suffixStr}`;
     const conflict = await usersCollection.findOne(
       { handle: candidate },
       { collation: { locale: 'en', strength: 2 } }
@@ -69,6 +75,7 @@ export async function resolveUniqueHandle(
   }
 
   // Derive handle from the email local-part (everything before '@').
-  const baseHandle = email.split('@')[0].padEnd(3, '_');
+  // Truncate to MAX_HANDLE_LENGTH since RFC 5321 allows local parts up to 64 chars.
+  const baseHandle = email.split('@')[0].padEnd(MIN_HANDLE_LENGTH, '_').slice(0, MAX_HANDLE_LENGTH);
   return findAvailableHandle(baseHandle);
 }

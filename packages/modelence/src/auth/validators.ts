@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { UpdateProfileProps } from '../methods/types';
 
+export const MIN_HANDLE_LENGTH = 3;
+export const MAX_HANDLE_LENGTH = 50;
+
 export function validatePassword(value: string) {
   return z.string().min(8, { message: 'Password must contain at least 8 characters' }).parse(value);
 }
@@ -12,8 +15,8 @@ export function validateEmail(value: string) {
 export function validateHandle(value: string) {
   return z
     .string()
-    .min(3, { message: 'Handle must be at least 3 characters' })
-    .max(50, { message: 'Handle must be at most 50 characters' })
+    .min(MIN_HANDLE_LENGTH, { message: `Handle must be at least ${MIN_HANDLE_LENGTH} characters` })
+    .max(MAX_HANDLE_LENGTH, { message: `Handle must be at most ${MAX_HANDLE_LENGTH} characters` })
     .parse(value);
 }
 
@@ -53,7 +56,7 @@ const profileFieldsSchema = z.object({
   firstName: trimmedString({ max: 50 }),
   lastName: trimmedString({ max: 50 }),
   avatarUrl: trimmedString({ max: 400 }),
-  handle: trimmedString({ min: 3, max: 50 }),
+  handle: trimmedString({ min: MIN_HANDLE_LENGTH, max: MAX_HANDLE_LENGTH }),
 });
 
 /**
