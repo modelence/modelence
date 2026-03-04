@@ -27,6 +27,19 @@ export default [
     },
   },
   {
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='MODELENCE_SITE_URL']",
+          message: 'Use getConfig("_system.site.url") from "@/config/server" instead of process.env.MODELENCE_SITE_URL.',
+        },
+      ],
+    },
+  },
+  {
     ignores: ['dist', 'node_modules', 'coverage', '.turbo'],
   },
 ];

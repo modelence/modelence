@@ -12,9 +12,10 @@ import { User } from './types';
 import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
+import { getConfig } from '@/config/server';
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
-  const baseUrl = process.env.MODELENCE_SITE_URL;
+  const baseUrl = getConfig('_system.site.url') as string | undefined;
   const emailVerifiedRedirectUrl =
     getEmailConfig().verification?.redirectUrl ||
     getEmailConfig().emailVerifiedRedirectUrl ||
@@ -118,7 +119,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 export async function sendVerificationEmail({
   userId,
   email,
-  baseUrl = process.env.MODELENCE_SITE_URL,
+  baseUrl = getConfig('_system.site.url') as string | undefined,
 }: {
   userId: ObjectId;
   email: string;
@@ -177,7 +178,7 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
     return resendVerificationResponse;
   }
 
-  const emailDoc = userDoc.emails?.find((e) => e.address === email);
+  const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
   if (!emailDoc || emailDoc.verified) {
     return resendVerificationResponse;

@@ -10,7 +10,7 @@ import { schema } from '../data/types';
 export const dbRateLimits = new Store('_modelenceRateLimits', {
   schema: {
     bucket: schema.string(),
-    type: schema.enum(['ip', 'user']),
+    type: schema.enum(['ip', 'user', 'email']),
     value: schema.string(),
     windowMs: schema.number(),
 

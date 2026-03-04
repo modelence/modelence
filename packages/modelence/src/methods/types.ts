@@ -45,6 +45,7 @@ export type MethodType = 'query' | 'mutation';
 
 export type MethodDefinition<T = unknown> =
   | {
+      /** @internal */
       permissions?: Permission[];
       handler: Handler<T>;
     }

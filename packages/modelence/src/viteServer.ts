@@ -41,6 +41,13 @@ class ViteServer implements AppServer {
   handler(req: express.Request, res: express.Response) {
     if (this.isDev()) {
       try {
+        // Prevent browser from caching the HTML entrypoint in dev mode.
+        // Vite's transformMiddleware uses no-cache + ETag for .ts/.tsx modules,
+        // which revalidates correctly. But the HTML served by Express's sendFile
+        // can be cached by the browser (e.g. bfcache on back/forward navigation).
+        // Without HMR WebSocket, stale HTML leads to dynamic import() URLs that
+        // reference modules the current Vite instance doesn't recognize.
+        res.setHeader('Cache-Control', 'no-store');
         res.sendFile('index.html', { root: './src/client' });
       } catch (e) {
         console.error('Error serving index.html:', e);

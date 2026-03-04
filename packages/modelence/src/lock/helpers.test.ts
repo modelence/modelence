@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { MongoError } from 'mongodb';
 
 const mockUpsertOne = jest.fn();
 const mockDeleteOne = jest.fn();
+const mockFindOne = jest.fn();
 const mockLogDebug = jest.fn();
 const mockSeconds = jest.fn((value: number) => value * 1000);
 const mockRandomBytes = jest.fn(() => ({
@@ -12,6 +14,7 @@ jest.unstable_mockModule('./db', () => ({
   locksCollection: {
     upsertOne: mockUpsertOne,
     deleteOne: mockDeleteOne,
+    findOne: mockFindOne,
   },
 }));
 
@@ -50,6 +53,22 @@ describe('lock/helpers', () => {
     const first = await acquireLock('job');
     expect(first).toBe(true);
     expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+    expect(mockUpsertOne).toHaveBeenCalledWith(
+      {
+        _id: 'job',
+        $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+      },
+      {
+        $set: {
+          resource: 'job',
+          instanceId: 'instance-1',
+          acquiredAt: expect.any(Date),
+        },
+        $setOnInsert: {
+          _id: 'job',
+        },
+      }
+    );
 
     const second = await acquireLock('job');
     expect(second).toBe(true);
@@ -72,13 +91,116 @@ describe('lock/helpers', () => {
     expect(await acquireLock('cleanup')).toBe(true);
     expect(mockUpsertOne).toHaveBeenCalledTimes(2);
     expect(mockDeleteOne).toHaveBeenCalledWith({
-      resource: 'cleanup',
+      _id: 'cleanup',
       instanceId: 'instance-1',
     });
   });
 
-  test('acquireLock caches failed attempts and logs failure', async () => {
-    mockUpsertOne.mockResolvedValue({ upsertedCount: 0, modifiedCount: 0 } as never);
+  test('acquireLock migrates legacy lock to _id during upgrade collisions', async () => {
+    const duplicateResource = new MongoError('dup resource') as MongoError & {
+      code: number;
+      keyPattern: Record<string, unknown>;
+    };
+    duplicateResource.code = 11000;
+    duplicateResource.keyPattern = { resource: 1 };
+
+    mockUpsertOne
+      .mockRejectedValueOnce(duplicateResource as never)
+      .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 1 } as never);
+
+    const acquired = await acquireLock('legacy');
+    expect(acquired).toBe(true);
+
+    expect(mockUpsertOne).toHaveBeenNthCalledWith(
+      1,
+      {
+        _id: 'legacy',
+        $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+      },
+      {
+        $set: {
+          resource: 'legacy',
+          instanceId: 'instance-1',
+          acquiredAt: expect.any(Date),
+        },
+        $setOnInsert: {
+          _id: 'legacy',
+        },
+      }
+    );
+    expect(mockDeleteOne).toHaveBeenCalledWith({
+      resource: 'legacy',
+      _id: { $ne: 'legacy' },
+      $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+    });
+    expect(mockUpsertOne).toHaveBeenNthCalledWith(
+      2,
+      {
+        _id: 'legacy',
+        $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+      },
+      {
+        $set: {
+          resource: 'legacy',
+          instanceId: 'instance-1',
+          acquiredAt: expect.any(Date),
+        },
+        $setOnInsert: {
+          _id: 'legacy',
+        },
+      }
+    );
+  });
+
+  test('acquireLock infers legacy fallback when duplicate key pattern is missing', async () => {
+    const duplicateWithoutPattern = new MongoError('dup key') as MongoError & {
+      code: number;
+    };
+    duplicateWithoutPattern.code = 11000;
+
+    mockFindOne.mockResolvedValueOnce({ _id: 'legacy-id', resource: 'legacy-no-pattern' } as never);
+    mockUpsertOne
+      .mockRejectedValueOnce(duplicateWithoutPattern as never)
+      .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 1 } as never);
+
+    const acquired = await acquireLock('legacy-no-pattern');
+    expect(acquired).toBe(true);
+    expect(mockFindOne).toHaveBeenCalledWith({ resource: 'legacy-no-pattern' });
+    expect(mockDeleteOne).toHaveBeenCalledWith({
+      resource: 'legacy-no-pattern',
+      _id: { $ne: 'legacy-no-pattern' },
+      $or: [{ instanceId: 'instance-1' }, { acquiredAt: { $lt: new Date(970_000) } }],
+    });
+    expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+  });
+
+  test('acquireLock returns false when legacy lock cannot be deleted during migration', async () => {
+    const duplicateResource = new MongoError('dup resource') as MongoError & {
+      code: number;
+      keyPattern: Record<string, unknown>;
+    };
+    duplicateResource.code = 11000;
+    duplicateResource.keyPattern = { resource: 1 };
+
+    mockUpsertOne.mockRejectedValueOnce(duplicateResource as never);
+    mockDeleteOne.mockResolvedValueOnce({ deletedCount: 0 } as never);
+
+    const acquired = await acquireLock('legacy-blocked');
+    expect(acquired).toBe(false);
+    expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+  });
+
+  test('acquireLock caches failed attempts and logs failure when _id lock is held', async () => {
+    const duplicateId = new MongoError('dup id') as MongoError & {
+      code: number;
+      keyPattern: Record<string, unknown>;
+    };
+    duplicateId.code = 11000;
+    duplicateId.keyPattern = { _id: 1 };
+
+    mockUpsertOne.mockRejectedValue(duplicateId as never);
 
     const first = await acquireLock('busy');
     expect(first).toBe(false);
@@ -90,6 +212,62 @@ describe('lock/helpers', () => {
     const second = await acquireLock('busy');
     expect(second).toBe(false);
     expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+  });
+
+  test('acquireLock refreshes lock with heartbeat and releaseLock stops it', async () => {
+    jest.useFakeTimers();
+
+    try {
+      mockUpsertOne
+        .mockResolvedValueOnce({ upsertedCount: 1, modifiedCount: 0 } as never)
+        .mockResolvedValue({ upsertedCount: 0, modifiedCount: 1 } as never);
+      mockDeleteOne.mockResolvedValue({ deletedCount: 1 } as never);
+
+      const acquired = await acquireLock('heartbeat', {
+        lockDuration: 3_000,
+        heartbeat: true,
+      });
+
+      expect(acquired).toBe(true);
+      expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+
+      await releaseLock('heartbeat');
+      await jest.advanceTimersByTimeAsync(3000);
+
+      expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+      expect(mockDeleteOne).toHaveBeenCalledWith({
+        _id: 'heartbeat',
+        instanceId: 'instance-1',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('releaseLock falls back to legacy deletion for pre-upgrade lock documents', async () => {
+    mockDeleteOne
+      .mockResolvedValueOnce({ deletedCount: 0 } as never)
+      .mockResolvedValueOnce({ deletedCount: 1 } as never);
+
+    const released = await releaseLock('legacy-release');
+    expect(released).toBe(true);
+    expect(mockDeleteOne).toHaveBeenNthCalledWith(1, {
+      _id: 'legacy-release',
+      instanceId: 'instance-1',
+    });
+    expect(mockDeleteOne).toHaveBeenNthCalledWith(2, {
+      resource: 'legacy-release',
+      instanceId: 'instance-1',
+    });
+  });
+
+  test('releaseLock returns false when DB operation throws', async () => {
+    mockDeleteOne.mockRejectedValue(new Error('delete failed') as never);
+
+    await expect(releaseLock('release-error')).resolves.toBe(false);
   });
 
   test('acquireLock returns false when DB operation throws', async () => {

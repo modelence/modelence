@@ -44,7 +44,7 @@ export function hasPermission(roles: Role[], permission: Permission) {
   for (const role of roles) {
     const definition = roleMap.get(role);
 
-    if (definition && definition.permissions.includes(permission)) {
+    if (definition?.permissions?.includes(permission)) {
       return true;
     }
   }

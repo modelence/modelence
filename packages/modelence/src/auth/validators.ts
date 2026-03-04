@@ -9,7 +9,7 @@ export function validatePassword(value: string) {
 }
 
 export function validateEmail(value: string) {
-  return z.string().email({ message: 'Invalid email address' }).parse(value);
+  return z.string().email({ message: 'Invalid email address' }).parse(value).toLowerCase();
 }
 
 export function validateHandle(value: string) {

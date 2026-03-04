@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
-import type { AppServer } from '../types';
+import type { AppServer, ModelSchema } from '../types';
 import socketioServer from '@/websocket/socketio/server';
 import { initRoles } from '../auth/role';
 import sessionModule from '../auth/session';
@@ -20,15 +20,17 @@ import { MigrationScript, default as migrationModule, startMigrations } from '..
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
-import lockModule from '../lock';
+import lockModule, { acquireLock, releaseLock } from '../lock';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
+import { time } from '@/time';
 import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
+import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 
 export type AppOptions = {
@@ -36,7 +38,25 @@ export type AppOptions = {
   server?: AppServer;
   email?: EmailConfig;
   auth?: AuthConfig;
+  /** Security settings such as clickjacking protection. See {@link SecurityConfig}. */
+  security?: SecurityConfig;
+  /**
+   * Custom role definitions keyed by role name. Defined roles are synced to the
+   * Modelence Cloud dashboard for user management. See {@link RoleDefinition}.
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   roles: {
+   *     admin: { description: 'Full access to all features' },
+   *     editor: { description: 'Can edit content' },
+   *     viewer: {},
+   *   },
+   * });
+   * ```
+   */
   roles?: Record<string, RoleDefinition>;
+  /** @internal */
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
@@ -50,6 +70,7 @@ export async function startApp({
   migrations = [],
   email = {},
   auth = {},
+  security = {},
   websocket = {},
 }: AppOptions) {
   dotenv.config();
@@ -57,7 +78,6 @@ export async function startApp({
   dotenv.config({ path: '.modelence.env' });
 
   const hasRemoteBackend = Boolean(process.env.MODELENCE_SERVICE_ENDPOINT);
-  const isCronEnabled = process.env.MODELENCE_CRON_ENABLED === 'true';
 
   trackAppStart()
     .then(() => {
@@ -88,12 +108,10 @@ export async function startApp({
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
-  const stores = getStores(combinedModules);
+  const stores = getStores(combinedModules) as Store<ModelSchema, never>[];
   const channels = getChannels(combinedModules);
 
-  if (isCronEnabled) {
-    defineCronJobs(combinedModules);
-  }
+  defineCronJobs(combinedModules);
 
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
@@ -102,8 +120,9 @@ export async function startApp({
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
-        cronJobsMetadata: isCronEnabled ? getCronJobsMetadata() : undefined,
+        cronJobsMetadata: getCronJobsMetadata(),
         stores,
+        roles,
       });
     loadConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
@@ -113,6 +132,7 @@ export async function startApp({
 
   setEmailConfig(email);
   setAuthConfig(auth);
+  setSecurityConfig(security);
   setWebsocketConfig({
     ...websocket,
     provider: websocket.provider || socketioServer,
@@ -122,26 +142,17 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
+    await createIndexesWithLock(stores);
   }
 
-  if (isCronEnabled) {
-    startMigrations(migrations);
-  }
-
-  if (mongodbUri) {
-    for (const store of stores) {
-      store.createIndexes();
-    }
-  }
+  startMigrations(migrations);
 
   if (hasRemoteBackend) {
     await initMetrics();
     startConfigSync();
   }
 
-  if (isCronEnabled) {
-    startCronJobs().catch(console.error);
-  }
+  startCronJobs().catch(console.error);
 
   await startServer(server, { combinedModules, channels });
 }
@@ -180,6 +191,62 @@ function getRateLimits(modules: Module[]) {
   return modules.flatMap((module) => module.rateLimits);
 }
 
+function warnIndexCreationFailure(storeName: string, error: unknown) {
+  console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
+}
+
+const INDEXES_LOCK_RESOURCE = 'indexes';
+
+async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
+  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
+    lockDuration: time.seconds(30),
+    heartbeat: true,
+  });
+  if (!hasLock) {
+    return;
+  }
+
+  let releaseHandledByBackgroundTask = false;
+
+  try {
+    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
+    const backgroundStores = stores.filter(
+      (store) => store.getIndexCreationMode() === 'background'
+    );
+
+    for (const store of blockingStores) {
+      await createStoreIndexes(store);
+    }
+
+    if (backgroundStores.length > 0) {
+      releaseHandledByBackgroundTask = true;
+      void Promise.resolve().then(async () => {
+        try {
+          for (const store of backgroundStores) {
+            await createStoreIndexes(store);
+          }
+        } finally {
+          await releaseLock(INDEXES_LOCK_RESOURCE);
+        }
+      });
+    }
+  } finally {
+    if (!releaseHandledByBackgroundTask) {
+      await releaseLock(INDEXES_LOCK_RESOURCE);
+    }
+  }
+}
+
+async function createStoreIndexes(store: Store<ModelSchema, never>) {
+  const storeName = store.getName();
+
+  try {
+    await store.createIndexes();
+  } catch (error) {
+    warnIndexCreationFailure(storeName, error);
+  }
+}
+
 function getConfigSchema(modules: Module[]): ConfigSchema {
   const merged: ConfigSchema = {};
 
@@ -205,8 +272,7 @@ function defineCronJobs(modules: Module[]) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function initStores(stores: Store<any, any>[]) {
+function initStores(stores: Store<ModelSchema, never>[]) {
   const client = getClient();
   if (!client) {
     throw new Error('Failed to initialize stores: MongoDB client not initialized');
@@ -235,8 +301,9 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
   MODELENCE_SITE_URL: '_system.site.url',
-  MODELENCE_ENV: '_system.env',
+  MODELENCE_ENV_TYPE: '_system.env.type',
   // deprecated
+  MODELENCE_ENV: '_system.env',
   GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
   GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
   GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',

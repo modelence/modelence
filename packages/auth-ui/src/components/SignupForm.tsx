@@ -119,7 +119,7 @@ export function SignupForm({
   }, []);
 
   const socialButtons = useMemo(() => {
-    const buttons: JSX.Element[] = [];
+    const buttons: React.ReactElement[] = [];
     if (isGoogleAuthEnabled) {
       buttons.push(
         <Button

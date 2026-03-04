@@ -48,7 +48,7 @@ export async function handleLoginWithPassword(
       throw incorrectCredentialsError();
     }
 
-    const emailDoc = userDoc.emails?.find((e) => e.address === email);
+    const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
     if (!emailDoc?.verified && getEmailConfig()?.provider) {
       if (ip) {

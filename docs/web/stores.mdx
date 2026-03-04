@@ -141,6 +141,28 @@ export const dbPosts = new Store('posts', {
 
 Modelence automatically creates these indexes when the application starts.
 
+## Index Creation Mode
+
+By default, store indexes are created in the background during startup.  
+Set `indexCreationMode: 'blocking'` for indexes that must be created before startup continues.
+
+```typescript
+export const locksCollection = new Store('_modelenceLocks', {
+  schema: {
+    resource: schema.string(),
+    instanceId: schema.string(),
+    acquiredAt: schema.date(),
+  },
+
+  indexes: [
+    { key: { resource: 1 }, unique: true },
+    { key: { resource: 1, acquiredAt: 1 } },
+  ],
+
+  indexCreationMode: 'blocking',
+});
+```
+
 ## MongoDB Atlas Search Indexes
 
 For advanced full-text search capabilities using MongoDB Atlas Search, configure search indexes:

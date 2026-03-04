@@ -1,4 +1,4 @@
-export type RateLimitType = 'ip' | 'user';
+export type RateLimitType = 'ip' | 'user' | 'email';
 
 export type RateLimitRule = {
   /** Logical action being limited, e.g. "signup" */
