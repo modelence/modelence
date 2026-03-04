@@ -59,12 +59,14 @@ export const usersCollection = new Store('_modelenceUsers', {
       key: { 'emails.address': 1, status: 1 },
     },
     {
-      key: { 'authMethods.google.id': 1, status: 1 },
+      key: { 'authMethods.google.id': 1 },
       sparse: true,
+      unique: true,
     },
     {
-      key: { 'authMethods.github.id': 1, status: 1 },
+      key: { 'authMethods.github.id': 1 },
       sparse: true,
+      unique: true,
     },
   ],
 });

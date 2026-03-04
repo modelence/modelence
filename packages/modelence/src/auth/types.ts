@@ -1,7 +1,38 @@
 import { Document, ObjectId } from 'mongodb';
 import { ConnectionInfo } from '@/methods/types';
 
-export type User = Document;
+export interface UserEmail {
+  address: string;
+  verified: boolean;
+}
+
+export interface User extends Document {
+  _id: ObjectId;
+
+  handle: string;
+
+  emails?: UserEmail[];
+
+  status?: 'active' | 'disabled' | 'deleted';
+
+  createdAt: Date;
+  disabledAt?: Date;
+  deletedAt?: Date;
+
+  roles?: string[];
+
+  authMethods: {
+    password?: {
+      hash: string;
+    };
+    google?: {
+      id: string;
+    };
+    github?: {
+      id: string;
+    };
+  };
+}
 
 export type UserInfo = {
   /** The user's unique identifier. */

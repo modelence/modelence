@@ -50,6 +50,14 @@ export type AuthConfig = {
   login?: AuthOption;
   /** deprecated: user onAfterSignup and onSignupError */
   signup?: AuthOption;
+
+  /**
+   * Controls how OAuth providers handle existing accounts with matching email.
+   * - 'manual' (default): Returns an error when an OAuth login matches an existing email.
+   * - 'auto': Automatically links the OAuth provider to the existing account
+   *   if the provider email is verified.
+   */
+  oauthAccountLinking?: 'auto' | 'manual';
 };
 
 let authConfig: AuthConfig = Object.freeze({});
