@@ -486,7 +486,35 @@ describe('app/index', () => {
     expect(mockStartConfigSync).toHaveBeenCalled();
   });
 
-  test('loads local configs when cloud backend is not configured', async () => {
+  test('overrides cloud config with local env when remote backend is enabled', async () => {
+    process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
+    process.env.MODELENCE_SITE_URL = 'https://local.example.com';
+    process.env.MONGODB_URI = 'mongodb://localhost:27017/local';
+
+    mockConnectCloudBackend.mockResolvedValue({
+      configs: [
+        { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
+        { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
+      ],
+      environmentId: 'env-123',
+      appAlias: 'test-app',
+      environmentAlias: 'test-env',
+      telemetry: { enabled: true },
+    });
+
+    await startApp({});
+
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(1, [
+      { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
+      { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
+    ]);
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, [
+      { key: '_system.mongodbUri', type: 'string', value: 'mongodb://localhost:27017/local' },
+      { key: '_system.site.url', type: 'string', value: 'https://local.example.com' },
+    ]);
+  });
+
+  test('loads only local site url when cloud backend is not configured', async () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
     process.env.MODELENCE_SITE_URL = 'https://example.com';
 
@@ -495,15 +523,9 @@ describe('app/index', () => {
     });
 
     expect(mockConnectCloudBackend).not.toHaveBeenCalled();
-    expect(mockLoadConfigs).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: '_system.mongodbUri',
-          value: 'mongodb://localhost:27017/test',
-        }),
-        expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
-      ])
-    );
+    expect(mockLoadConfigs).toHaveBeenCalledWith([
+      expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
+    ]);
     expect(mockInitMetrics).not.toHaveBeenCalled();
     expect(mockStartConfigSync).not.toHaveBeenCalled();
   });

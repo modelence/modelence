@@ -107,7 +107,7 @@ export async function startApp({
         stores,
       });
     loadConfigs(configs);
-    loadConfigs(getLocalConfigs(configSchema));
+    loadConfigs(getLocalConfigs(configSchema, 'withRemoteServer'));
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
   } else {
     loadConfigs(getLocalConfigs(configSchema));

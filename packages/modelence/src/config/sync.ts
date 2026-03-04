@@ -35,5 +35,5 @@ export function startConfigSync() {
 async function syncConfig() {
   const { configs } = await fetchConfigs();
   loadConfigs(configs);
-  loadConfigs(getLocalConfigs(getSchema()));
+  loadConfigs(getLocalConfigs(getSchema(), 'withRemoteServer'));
 }
