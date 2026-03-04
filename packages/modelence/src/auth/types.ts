@@ -15,6 +15,10 @@ export interface User extends Document {
 
   status?: 'active' | 'disabled' | 'deleted';
 
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+
   createdAt: Date;
   disabledAt?: Date;
   deletedAt?: Date;
