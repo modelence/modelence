@@ -20,14 +20,14 @@ export async function getOwnProfile(props: Args, { user }: Context) {
   };
 }
 
-export async function handleUpdateProfile(props: UpdateProfileProps, { user }: Context) {
+export async function handleUpdateProfile(props: Args, { user }: Context) {
   if (!user) {
     throw new Error('Not authenticated');
   }
 
   let profile = await usersCollection.requireById(user.id);
 
-  const update = validateProfileFields(props);
+  const update = validateProfileFields(props as UpdateProfileProps);
 
   await getAuthConfig().validateProfileUpdate?.(update);
 

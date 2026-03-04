@@ -50,7 +50,7 @@ export async function signupWithPassword(options: {
   await callMethod('_system.user.signupWithPassword', {
     email,
     password,
-    ...(handle ? { handle } : {}),
+    ...(handle !== undefined ? { handle } : {}),
     ...(firstName !== undefined ? { firstName } : {}),
     ...(lastName !== undefined ? { lastName } : {}),
     ...(avatarUrl !== undefined ? { avatarUrl } : {}),
