@@ -1,15 +1,17 @@
 import { Document, ObjectId } from 'mongodb';
 import { ConnectionInfo } from '@/methods/types';
 
+export interface UserEmail {
+  address: string;
+  verified: boolean;
+}
+
 export interface User extends Document {
   _id: ObjectId;
 
   handle: string;
 
-  emails?: {
-    address: string;
-    verified: boolean;
-  }[];
+  emails?: UserEmail[];
 
   status?: 'active' | 'disabled' | 'deleted';
 

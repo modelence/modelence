@@ -5,7 +5,7 @@ import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
-import { User, Session } from '@/auth/types';
+import { User, Session, UserEmail } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
 
 export interface OAuthUserData {
@@ -82,7 +82,7 @@ async function handleExistingEmailLogin(
 
   const linkingMode = getAuthConfig().oauthAccountLinking ?? 'manual';
   const matchedEmail = existingUserByEmail.emails?.find(
-    (emailDoc: any) => emailDoc.address.toLowerCase() === userData.email.toLowerCase()
+    (emailDoc: UserEmail) => emailDoc.address.toLowerCase() === userData.email.toLowerCase()
   );
 
   if (linkingMode === 'auto' && userData.emailVerified) {
