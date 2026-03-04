@@ -246,11 +246,38 @@ describe('auth/providers/oauth-common', () => {
         expect(mockUsersUpdateOne).not.toHaveBeenCalled();
       });
 
-      test('rejects OAuth for disabled user accounts', async () => {
+      test('rejects OAuth for disabled user accounts in default manual mode', async () => {
         mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
           _id: new ObjectId(),
           status: 'disabled',
         } as never);
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, {
+          id: 'google-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'google',
+        });
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'User with this email already exists. Please log in instead.',
+        });
+        expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+        expect(mockCreateSession).not.toHaveBeenCalled();
+      });
+
+      test('rejects auto-link for disabled user accounts', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'disabled',
+          emails: [{ address: 'user@example.com', verified: true }],
+        } as never);
+
+        mockGetAuthConfig.mockReturnValue({
+          ...authConfig,
+          oauthAccountLinking: 'auto',
+        });
 
         await moduleExports.handleOAuthUserAuthentication(req, res, {
           id: 'google-id',

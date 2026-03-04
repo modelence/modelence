@@ -73,19 +73,19 @@ async function handleExistingEmailLogin(
   session: Session | null,
   connectionInfo: ConnectionInfo
 ) {
-  if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
-    res.status(400).json({
-      error: 'User account is not active.',
-    });
-    return;
-  }
-
   const linkingMode = getAuthConfig().oauthAccountLinking ?? 'manual';
   const matchedEmail = existingUserByEmail.emails?.find(
     (emailDoc: UserEmail) => emailDoc.address.toLowerCase() === userData.email.toLowerCase()
   );
 
   if (linkingMode === 'auto' && userData.emailVerified) {
+    if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
+      res.status(400).json({
+        error: 'User account is not active.',
+      });
+      return;
+    }
+
     // Prevent pre-registration takeover by requiring local ownership verification too.
     if (!matchedEmail?.verified) {
       res.status(400).json({
