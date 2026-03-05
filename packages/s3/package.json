@@ -1,0 +1,39 @@
+{
+  "type": "module",
+  "name": "@modelence/s3",
+  "version": "1.0.0",
+  "description": "AWS S3 Storage Adapter for Modelence",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/s3"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "peerDependencies": {
+    "modelence": "*"
+  },
+  "devDependencies": {
+    "modelence": "^0.12.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3",
+    "@aws-sdk/lib-storage": "^3",
+    "@aws-sdk/s3-request-presigner": "^3"
+  }
+}

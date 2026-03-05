@@ -19,3 +19,4 @@ export interface AppServer {
 }
 
 export type * from './email';
+export type * from './storage';

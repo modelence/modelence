@@ -32,6 +32,7 @@ import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
+import { StorageConfig, setStorageConfig } from './storageConfig';
 
 export type AppOptions = {
   modules?: Module[];
@@ -60,6 +61,7 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
+  storage?: StorageConfig;
 };
 
 export async function startApp({
@@ -72,6 +74,7 @@ export async function startApp({
   auth = {},
   security = {},
   websocket = {},
+  storage = {},
 }: AppOptions) {
   dotenv.config();
 
@@ -137,6 +140,7 @@ export async function startApp({
     ...websocket,
     provider: websocket.provider || socketioServer,
   });
+  setStorageConfig(storage);
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
@@ -300,6 +304,11 @@ const localConfigMap = {
   MODELENCE_EMAIL_SMTP_PORT: '_system.email.smtp.port',
   MODELENCE_EMAIL_SMTP_USER: '_system.email.smtp.user',
   MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
+  MODELENCE_STORAGE_S3_ACCESS_KEY_ID: '_system.storage.s3.accessKeyId',
+  MODELENCE_STORAGE_S3_SECRET_ACCESS_KEY: '_system.storage.s3.secretAccessKey',
+  MODELENCE_STORAGE_S3_REGION: '_system.storage.s3.region',
+  MODELENCE_STORAGE_S3_BUCKET: '_system.storage.s3.bucket',
+  MODELENCE_STORAGE_S3_ENDPOINT: '_system.storage.s3.endpoint',
   MODELENCE_SITE_URL: '_system.site.url',
   MODELENCE_ENV_TYPE: '_system.env.type',
   // deprecated
