@@ -284,7 +284,17 @@ const todo = await dbTodos.requireById(todoId);
 // Fetch multiple documents
 const todos = await dbTodos.fetch(
   { userId: user.id },
-  { sort: { createdAt: -1 }, limit: 10 }
+  {
+    projection: { title: 1, isCompleted: 1, createdAt: 1 },
+    sort: { createdAt: -1 },
+    limit: 10
+  }
+);
+
+// Exclude heavy fields when they are not needed
+const chunks = await dbDocumentChunks.fetch(
+  { documentId },
+  { projection: { embedding: 0 } }
 );
 
 // Count documents

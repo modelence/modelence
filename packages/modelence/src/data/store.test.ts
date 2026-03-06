@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { IndexDescription, MongoError, ObjectId, SearchIndexDescription } from 'mongodb';
 
 import { Store } from './store';
-import type { ModelSchema } from './types';
+import { schema, type ModelSchema } from './types';
 
 const baseSchema = {
   name: {},
@@ -21,6 +21,34 @@ function createStore(options?: {
     methods: undefined,
   });
 }
+
+function assertFetchOptionTypeSafety() {
+  const typedStore = new Store('typedStore', {
+    schema: {
+      name: schema.string(),
+      score: schema.number(),
+      nested: schema.object({
+        level: schema.number(),
+      }),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  typedStore.fetch(
+    { name: 'john' },
+    {
+      sort: { name: 1, score: -1, 'nested.level': 1 },
+      projection: { name: 1, score: 1, 'nested.level': 1 },
+    }
+  );
+
+  // @ts-expect-error unknown top-level field should be rejected in sort
+  typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
+  // @ts-expect-error unknown top-level field should be rejected in projection
+  typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
+}
+void assertFetchOptionTypeSafety;
 
 describe('data/store', () => {
   beforeEach(() => {
