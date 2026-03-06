@@ -23,6 +23,7 @@ import {
   SearchIndexDescription,
   MongoError,
   FilterOperators,
+  SortDirection,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -85,6 +86,30 @@ type EnhancedFilterOperators<T> = Omit<FilterOperators<T>, '$in' | '$nin'> & {
 type ExistingIndex = Document & {
   key?: Document;
   name?: string;
+};
+
+type TypedFieldSelection<T, TValue> = {
+  [K in keyof WithId<T> & string]?: TValue;
+} & {
+  [key: `${string}.${string}`]: TValue;
+};
+
+type ProjectionValue =
+  | 0
+  | 1
+  | boolean
+  | { $meta: string }
+  | { $slice: number | [number, number] }
+  | { $elemMatch: Document };
+
+type TypedSort<T> = TypedFieldSelection<T, SortDirection>;
+type TypedProjection<T> = TypedFieldSelection<T, ProjectionValue>;
+
+type FetchOptions<T> = {
+  sort?: TypedSort<T>;
+  limit?: number;
+  skip?: number;
+  projection?: TypedProjection<T>;
 };
 
 export type IndexCreationMode = 'blocking' | 'background';
@@ -719,11 +744,11 @@ export class Store<
     return result;
   }
 
-  private find(
-    query: TypedFilter<this['_type']>,
-    options?: { sort?: Document; limit?: number; skip?: number }
-  ) {
-    const cursor = this.requireCollection().find(query as Filter<this['_type']>);
+  private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
+    const cursor = this.requireCollection().find(
+      query as Filter<this['_type']>,
+      options?.projection ? { projection: options.projection } : undefined
+    );
     if (options?.sort) {
       cursor.sort(options.sort);
     }
@@ -778,12 +803,31 @@ export class Store<
    * Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
    *
    * @param query - The query to filter documents
-   * @param options - Options
+   * @param options - Optional fetch options
+   * @param options.projection - Fields to include or exclude in the result documents
+   * @param options.sort - Sort order for matching documents
+   * @param options.limit - Maximum number of documents to return
+   * @param options.skip - Number of matching documents to skip
    * @returns The documents
+   *
+   * @example
+   * ```ts
+   * // Include only selected fields
+   * const docs = await store.fetch(
+   *   { userId: user.id },
+   *   { projection: { framework: 1, title: 1 }, sort: { createdAt: -1 }, limit: 50 }
+   * );
+   *
+   * // Exclude large fields when not needed
+   * const chunks = await store.fetch(
+   *   { documentId },
+   *   { projection: { embedding: 0 } }
+   * );
+   * ```
    */
   async fetch(
     query: TypedFilter<this['_type']>,
-    options?: { sort?: Document; limit?: number; skip?: number }
+    options?: FetchOptions<this['_type']>
   ): Promise<this['_doc'][]> {
     const cursor = this.find(query, options);
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));

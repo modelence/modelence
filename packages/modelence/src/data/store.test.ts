@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { IndexDescription, MongoError, ObjectId, SearchIndexDescription } from 'mongodb';
 
 import { Store } from './store';
-import type { ModelSchema } from './types';
+import { schema, type ModelSchema } from './types';
 
 const baseSchema = {
   name: {},
@@ -21,6 +21,34 @@ function createStore(options?: {
     methods: undefined,
   });
 }
+
+function assertFetchOptionTypeSafety() {
+  const typedStore = new Store('typedStore', {
+    schema: {
+      name: schema.string(),
+      score: schema.number(),
+      nested: schema.object({
+        level: schema.number(),
+      }),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  typedStore.fetch(
+    { name: 'john' },
+    {
+      sort: { name: 1, score: -1, 'nested.level': 1 },
+      projection: { name: 1, score: 1, 'nested.level': 1 },
+    }
+  );
+
+  // @ts-expect-error unknown top-level field should be rejected in sort
+  typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
+  // @ts-expect-error unknown top-level field should be rejected in projection
+  typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
+}
+void assertFetchOptionTypeSafety;
 
 describe('data/store', () => {
   beforeEach(() => {
@@ -286,6 +314,35 @@ describe('data/store', () => {
     const calledFilter = collectionMock.updateOne.mock.calls[0]?.[0] as { _id?: ObjectId };
     expect(calledFilter?._id).toBeInstanceOf(ObjectId);
     expect((calledFilter?._id as ObjectId).toHexString()).toBe(id);
+  });
+
+  test('fetch forwards projection and cursor options to MongoDB find', async () => {
+    const store = createStore();
+    const cursorMock = {
+      sort: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      toArray: jest.fn().mockResolvedValue([{ _id: new ObjectId(), name: 'test' }] as never),
+    };
+    const collectionMock = {
+      find: jest.fn().mockReturnValue(cursorMock as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const result = await store.fetch({ name: 'test' } as never, {
+      projection: { name: 1 },
+      sort: { name: 1 },
+      limit: 5,
+      skip: 2,
+    });
+
+    expect(collectionMock.find).toHaveBeenCalledWith({ name: 'test' }, { projection: { name: 1 } });
+    expect(cursorMock.sort).toHaveBeenCalledWith({ name: 1 });
+    expect(cursorMock.limit).toHaveBeenCalledWith(5);
+    expect(cursorMock.skip).toHaveBeenCalledWith(2);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ name: 'test' });
   });
 
   test('vectorSearch delegates to aggregate with expected pipeline', async () => {
