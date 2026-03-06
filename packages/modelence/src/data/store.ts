@@ -87,6 +87,13 @@ type ExistingIndex = Document & {
   name?: string;
 };
 
+type FetchOptions = {
+  sort?: Document;
+  limit?: number;
+  skip?: number;
+  projection?: Document;
+};
+
 export type IndexCreationMode = 'blocking' | 'background';
 
 const COMPARABLE_INDEX_OPTION_FIELDS = [
@@ -719,11 +726,11 @@ export class Store<
     return result;
   }
 
-  private find(
-    query: TypedFilter<this['_type']>,
-    options?: { sort?: Document; limit?: number; skip?: number }
-  ) {
-    const cursor = this.requireCollection().find(query as Filter<this['_type']>);
+  private find(query: TypedFilter<this['_type']>, options?: FetchOptions) {
+    const cursor = this.requireCollection().find(
+      query as Filter<this['_type']>,
+      options?.projection ? { projection: options.projection } : undefined
+    );
     if (options?.sort) {
       cursor.sort(options.sort);
     }
@@ -781,10 +788,7 @@ export class Store<
    * @param options - Options
    * @returns The documents
    */
-  async fetch(
-    query: TypedFilter<this['_type']>,
-    options?: { sort?: Document; limit?: number; skip?: number }
-  ): Promise<this['_doc'][]> {
+  async fetch(query: TypedFilter<this['_type']>, options?: FetchOptions): Promise<this['_doc'][]> {
     const cursor = this.find(query, options);
     return (await cursor.toArray()).map(this.wrapDocument.bind(this));
   }

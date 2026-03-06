@@ -288,6 +288,35 @@ describe('data/store', () => {
     expect((calledFilter?._id as ObjectId).toHexString()).toBe(id);
   });
 
+  test('fetch forwards projection and cursor options to MongoDB find', async () => {
+    const store = createStore();
+    const cursorMock = {
+      sort: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      toArray: jest.fn().mockResolvedValue([{ _id: new ObjectId(), name: 'test' }] as never),
+    };
+    const collectionMock = {
+      find: jest.fn().mockReturnValue(cursorMock as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const result = await store.fetch({ name: 'test' } as never, {
+      projection: { name: 1 },
+      sort: { name: 1 },
+      limit: 5,
+      skip: 2,
+    });
+
+    expect(collectionMock.find).toHaveBeenCalledWith({ name: 'test' }, { projection: { name: 1 } });
+    expect(cursorMock.sort).toHaveBeenCalledWith({ name: 1 });
+    expect(cursorMock.limit).toHaveBeenCalledWith(5);
+    expect(cursorMock.skip).toHaveBeenCalledWith(2);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ name: 'test' });
+  });
+
   test('vectorSearch delegates to aggregate with expected pipeline', async () => {
     const store = createStore();
     const aggregateSpy = jest
