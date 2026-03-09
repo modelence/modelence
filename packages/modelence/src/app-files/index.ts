@@ -34,11 +34,11 @@ export async function uploadFile({
   const blob = new Blob([data as ArrayBuffer], { type: contentType });
   formData.append('file', blob, fileName);
 
-  return await callCloudApi('/api/files/upload', 'POST', formData);
+  return await callCloudApi<FileRecord>('/api/files/upload', 'POST', formData);
 }
 
 export async function getFile(fileId: string): Promise<FileRecord> {
-  return await callCloudApi(`/api/files/${encodeURIComponent(fileId)}`, 'GET');
+  return await callCloudApi<FileRecord>(`/api/files/${encodeURIComponent(fileId)}`, 'GET');
 }
 
 export async function listFiles({
@@ -50,9 +50,9 @@ export async function listFiles({
     offset: String(offset),
   });
 
-  return await callCloudApi(`/api/files?${params}`, 'GET');
+  return await callCloudApi<ListFilesResult>(`/api/files?${params}`, 'GET');
 }
 
 export async function deleteFile(fileId: string): Promise<void> {
-  await callCloudApi(`/api/files/${encodeURIComponent(fileId)}`, 'DELETE');
+  await callCloudApi<void>(`/api/files/${encodeURIComponent(fileId)}`, 'DELETE');
 }

@@ -53,7 +53,7 @@ export async function connectCloudBackend({
       };
     });
 
-    const data = await callApi('/api/connect', 'POST', {
+    const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
       containerId,
       dataModels,
@@ -87,8 +87,8 @@ export async function syncStatus() {
   return data;
 }
 
-async function callApi(endpoint: string, method: string, payload?: object) {
-  return callCloudApi(
+async function callApi<T = unknown>(endpoint: string, method: string, payload?: object) {
+  return callCloudApi<T>(
     endpoint,
     method,
     payload ? JSON.stringify(payload) : undefined,
@@ -96,13 +96,12 @@ async function callApi(endpoint: string, method: string, payload?: object) {
   );
 }
 
-export async function callCloudApi(
+export async function callCloudApi<T>(
   endpoint: string,
   method: string,
   body?: BodyInit,
   extraHeaders?: Record<string, string>
-): Promise<any> {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
+): Promise<T> {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
 
   if (!MODELENCE_SERVICE_ENDPOINT) {
@@ -133,8 +132,8 @@ export async function callCloudApi(
   }
 
   if (response.status === 204 || response.headers.get('content-length') === '0') {
-    return;
+    return undefined as T;
   }
 
-  return await response.json();
+  return (await response.json()) as T;
 }
