@@ -76,8 +76,7 @@ export async function connectCloudBackend({
 }
 
 export async function fetchConfigs() {
-  const data = await callApi('/api/configs', 'GET');
-  return data;
+  return callApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
 }
 
 export async function syncStatus() {
@@ -131,7 +130,7 @@ export async function callCloudApi<T>(
     }
   }
 
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
+  if (response.status === 204 || response.headers?.get('content-length') === '0') {
     return undefined as T;
   }
 
