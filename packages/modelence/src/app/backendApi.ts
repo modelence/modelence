@@ -88,6 +88,21 @@ export async function syncStatus() {
 }
 
 async function callApi(endpoint: string, method: string, payload?: object) {
+  return callCloudApi(
+    endpoint,
+    method,
+    payload ? JSON.stringify(payload) : undefined,
+    payload ? { 'Content-Type': 'application/json' } : {}
+  );
+}
+
+export async function callCloudApi(
+  endpoint: string,
+  method: string,
+  body?: BodyInit,
+  extraHeaders?: Record<string, string>
+): Promise<any> {
+  // eslint-disable-line @typescript-eslint/no-explicit-any
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
 
   if (!MODELENCE_SERVICE_ENDPOINT) {
@@ -98,9 +113,9 @@ async function callApi(endpoint: string, method: string, payload?: object) {
     method,
     headers: {
       Authorization: `Bearer ${MODELENCE_SERVICE_TOKEN}`,
-      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+      ...extraHeaders,
     },
-    body: payload ? JSON.stringify(payload) : undefined,
+    body,
   });
 
   if (!response.ok) {
@@ -115,6 +130,10 @@ async function callApi(endpoint: string, method: string, payload?: object) {
         `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`
       );
     }
+  }
+
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return;
   }
 
   return await response.json();
