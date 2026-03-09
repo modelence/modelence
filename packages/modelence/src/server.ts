@@ -42,3 +42,6 @@ export type {
   LiveQueryCleanup,
   LiveQueryWatch,
 } from './live-query';
+
+// App files
+export { uploadFile, getFile, listFiles, deleteFile } from './app-files';
