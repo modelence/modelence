@@ -47,6 +47,7 @@
               },
               "roles",
               "email",
+              "files",
               "stores",
               "websockets",
               "telemetry",
@@ -121,6 +122,15 @@
               "api-reference/@modelence/smtp/index",
               "api-reference/@modelence/resend/index",
               "api-reference/@modelence/aws-ses/index"
+            ]
+          },
+          {
+            "group": "Files",
+            "pages": [
+              "api-reference/modelence/server/functions/uploadFile",
+              "api-reference/modelence/server/functions/getFile",
+              "api-reference/modelence/server/functions/listFiles",
+              "api-reference/modelence/server/functions/deleteFile"
             ]
           }
         ]
