@@ -56,14 +56,14 @@ describe('auth/validators', () => {
     });
 
     test('should throw error for handle shorter than 3 characters', () => {
-      expect(() => validateHandle('ab')).toThrow('Handle must be at least 3 characters');
-      expect(() => validateHandle('a')).toThrow('Handle must be at least 3 characters');
-      expect(() => validateHandle('')).toThrow();
+      expect(() => validateHandle('ab')).toThrow('must be at least 3 characters');
+      expect(() => validateHandle('a')).toThrow('must be at least 3 characters');
+      expect(() => validateHandle('')).toThrow('must be at least 3 characters');
     });
 
     test('should throw error for handle longer than 50 characters', () => {
       const longHandle = 'a'.repeat(51);
-      expect(() => validateHandle(longHandle)).toThrow('Handle must be at most 50 characters');
+      expect(() => validateHandle(longHandle)).toThrow('must be at most 50 characters');
     });
 
     test('should accept handle at exactly 3 and 50 characters', () => {
@@ -78,9 +78,9 @@ describe('auth/validators', () => {
       expect(validateProfileFields({})).toEqual({});
     });
 
-    test('should skip undefined fields', () => {
+    test('should keep undefined fields as undefined', () => {
       const result = validateProfileFields({ firstName: undefined });
-      expect(result).toEqual({});
+      expect(result).toEqual({ firstName: undefined });
     });
 
     test('should trim whitespace from field values', () => {
@@ -90,36 +90,40 @@ describe('auth/validators', () => {
 
     test('should allow clearing optional fields (no min) with empty string', () => {
       const result = validateProfileFields({ firstName: '' });
-      expect(result).toEqual({ firstName: '' });
+      expect(result).toEqual({ firstName: undefined });
     });
 
     test('should allow clearing optional fields with whitespace-only string', () => {
       const result = validateProfileFields({ firstName: '   ' });
-      expect(result).toEqual({ firstName: '' });
+      expect(result).toEqual({ firstName: undefined });
     });
 
     test('should throw when clearing a field that has min > 0', () => {
-      expect(() => validateProfileFields({ handle: '' })).toThrow('handle cannot be empty.');
-      expect(() => validateProfileFields({ handle: '   ' })).toThrow('handle cannot be empty.');
+      expect(() => validateProfileFields({ handle: '' })).toThrow(
+        'handle: must be at least 3 characters'
+      );
+      expect(() => validateProfileFields({ handle: '   ' })).toThrow(
+        'handle: must be at least 3 characters'
+      );
     });
 
     test('should throw for handle shorter than min length', () => {
       expect(() => validateProfileFields({ handle: 'ab' })).toThrow(
-        'handle must be at least 3 characters.'
+        'handle: must be at least 3 characters'
       );
     });
 
     test('should throw for firstName exceeding max length', () => {
       const longName = 'a'.repeat(51);
       expect(() => validateProfileFields({ firstName: longName })).toThrow(
-        'firstName must be at most 50 characters.'
+        'firstName: must be at most 50 characters'
       );
     });
 
     test('should throw for avatarUrl exceeding max length', () => {
       const longUrl = 'a'.repeat(401);
       expect(() => validateProfileFields({ avatarUrl: longUrl })).toThrow(
-        'avatarUrl must be at most 400 characters.'
+        'avatarUrl: must be at most 400 characters'
       );
     });
 
