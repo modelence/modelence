@@ -1,0 +1,32 @@
+---
+sidebar_position: 1
+title: updateProfile
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / updateProfile
+
+> **updateProfile**(`options`): `Promise`\<`null` \| `User`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:92](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/auth/client/index.ts#L92)
+
+Update the current user's profile.
+
+## Example
+
+```ts
+await updateProfile({ firstName: 'Atul', lastName: 'Yadav', avatarUrl: 'https://example.com/avatar.jpg', handle: 'atulyadav' });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `avatarUrl?`: `string`; `firstName?`: `string`; `handle?`: `string`; `lastName?`: `string`; \} | - |
+| `options.avatarUrl?` | `string` | The avatar URL of the user. |
+| `options.firstName?` | `string` | The first name of the user. |
+| `options.handle?` | `string` | The handle of the user. |
+| `options.lastName?` | `string` | The last name of the user. |
+
+## Returns
+
+`Promise`\<`null` \| `User`\>

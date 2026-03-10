@@ -47,10 +47,11 @@ When a user signs up with email and password:
 
 1. **Validation** - Email format and password strength are validated
 2. **Duplicate Check** - System checks if email already exists
-3. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
-4. **User Creation** - User record is created in the `_modelenceUsers` collection
-5. **Session Linking** - The session is linked to the new user
-6. **Email Verification** (Optional) - If enabled, a verification email is sent
+3. **Validate Signup** (Optional) - If provided, validates signup using `validateSignup` hook
+4. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+5. **User Creation** - User record is created in the `_modelenceUsers` collection
+6. **Session Linking** - The session is linked to the new user
+7. **Email Verification** (Optional) - If enabled, a verification email is sent
 
 #### Login Process
 
@@ -79,6 +80,16 @@ async function handleSignup(email: string, password: string) {
     console.error('Signup failed:', error.message);
   }
 }
+
+// You can also pass optional profile fields during signup
+await signupWithPassword({
+  email: 'test@example.com',
+  password: 'securepassword',
+  firstName: 'John',
+  lastName: 'Doe',
+  avatarUrl: 'https://example.com/avatar.jpg',
+  handle: 'johndoe',
+});
 ```
 
 #### Login
@@ -106,6 +117,28 @@ async function handleLogout() {
   // User is now logged out
 }
 ```
+
+#### Update Profile
+
+```typescript
+import { updateProfile } from 'modelence/client';
+
+async function handleUpdateProfile() {
+  try {
+    const user = await updateProfile({
+      firstName: 'John',
+      lastName: 'Doe',
+      avatarUrl: 'https://example.com/avatar.jpg',
+      handle: 'johndoe',
+    });
+    console.log('Profile updated:', user.handle);
+  } catch (error) {
+    console.error('Update failed:', error.message);
+  }
+}
+```
+
+All fields are optional — pass only the ones you want to update. Modelence automatically updates the user in `useSession()`.
 
 #### Accessing Current User
 

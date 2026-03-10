@@ -7,7 +7,7 @@ title: AuthConfig
 
 > **AuthConfig** = `object`
 
-Defined in: [packages/modelence/src/app/authConfig.ts:41](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L41)
+Defined in: [packages/modelence/src/app/authConfig.ts:59](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L59)
 
 Authentication configuration for the application
 
@@ -18,6 +18,12 @@ import { startApp } from 'modelence/server';
 
 startApp({
   auth: {
+    validateSignup: ({ email, firstName, lastName, password, handle, avatarUrl }) => {
+      // Validating the signup data
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+    },
     onAfterLogin: ({ user }) => {
       console.log('User logged in:', user.name);
       // Redirect to dashboard
@@ -32,7 +38,12 @@ startApp({
     },
     onSignupError: ({ error }) => {
       console.error('Signup failed:', error.message);
-    }
+    },
+    generateHandle: ({ email }) => {
+      console.log('Generating handle for:', email);
+      // Generate handle
+      return 'user123';
+    },
   }
 });
 ```
@@ -41,12 +52,15 @@ startApp({
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="login"></a> `login?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | deprecated: use onAfterLogin and onLoginError | [packages/modelence/src/app/authConfig.ts:50](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L50) |
-| <a id="oauthaccountlinking"></a> `oauthAccountLinking?` | `"auto"` \| `"manual"` | Controls how OAuth providers handle existing accounts with matching email. - 'manual' (default): Returns an error when an OAuth login matches an existing email. - 'auto': Automatically links the OAuth provider to the existing account if the provider email is verified. | [packages/modelence/src/app/authConfig.ts:60](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L60) |
-| <a id="onafteremailverification"></a> `onAfterEmailVerification?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:46](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L46) |
-| <a id="onafterlogin"></a> `onAfterLogin?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:42](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L42) |
-| <a id="onaftersignup"></a> `onAfterSignup?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:44](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L44) |
-| <a id="onemailverificationerror"></a> `onEmailVerificationError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:47](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L47) |
-| <a id="onloginerror"></a> `onLoginError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:43](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L43) |
-| <a id="onsignuperror"></a> `onSignupError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:45](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L45) |
-| <a id="signup"></a> `signup?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | deprecated: user onAfterSignup and onSignupError | [packages/modelence/src/app/authConfig.ts:52](https://github.com/modelence/modelence/blob/acaf180f41364e3059e4329fa7ce74158e010959/packages/modelence/src/app/authConfig.ts#L52) |
+| <a id="generatehandle"></a> `generateHandle?` | (`props`) => `Promise`\<`string`\> \| `string` | - | [packages/modelence/src/app/authConfig.ts:74](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L74) |
+| <a id="login"></a> `login?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | deprecated: use onAfterLogin and onLoginError | [packages/modelence/src/app/authConfig.ts:77](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L77) |
+| <a id="oauthaccountlinking"></a> `oauthAccountLinking?` | `"auto"` \| `"manual"` | Controls how OAuth providers handle existing accounts with matching email. - 'manual' (default): Returns an error when an OAuth login matches an existing email. - 'auto': Automatically links the OAuth provider to the existing account if the provider email is verified. | [packages/modelence/src/app/authConfig.ts:87](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L87) |
+| <a id="onafteremailverification"></a> `onAfterEmailVerification?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:69](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L69) |
+| <a id="onafterlogin"></a> `onAfterLogin?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:65](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L65) |
+| <a id="onaftersignup"></a> `onAfterSignup?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:67](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L67) |
+| <a id="onemailverificationerror"></a> `onEmailVerificationError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:70](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L70) |
+| <a id="onloginerror"></a> `onLoginError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:66](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L66) |
+| <a id="onsignuperror"></a> `onSignupError?` | (`props`) => `void` | - | [packages/modelence/src/app/authConfig.ts:68](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L68) |
+| <a id="signup"></a> `signup?` | [`AuthOption`](/api-reference/modelence/server/type-aliases/AuthOption) | deprecated: user onAfterSignup and onSignupError | [packages/modelence/src/app/authConfig.ts:79](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L79) |
+| <a id="validateprofileupdate"></a> `validateProfileUpdate?` | (`props`) => `void` \| `Promise`\<`void`\> | - | [packages/modelence/src/app/authConfig.ts:62](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L62) |
+| <a id="validatesignup"></a> `validateSignup?` | (`props`) => `void` \| `Promise`\<`void`\> | - | [packages/modelence/src/app/authConfig.ts:61](https://github.com/modelence/modelence/blob/f163899bc4df71725372252e70814ca8e67186e5/packages/modelence/src/app/authConfig.ts#L61) |
