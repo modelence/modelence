@@ -4,76 +4,60 @@ description: 'Upload and manage files with Modelence Cloud storage'
 icon: 'file'
 ---
 
-Modelence provides built-in file storage through Modelence Cloud. You can upload, retrieve, list, and delete files directly from your server-side code.
+Modelence provides built-in file storage through Modelence Cloud. Files are organized by visibility — either `public` (accessible via a permanent URL) or `private` (accessible only via a time-limited signed URL).
 
 ## Uploading a File
 
-Use [`uploadFile`](/api-reference/modelence/server/functions/uploadFile) to upload a file to Modelence Cloud:
+Use [`uploadFile`](/api-reference/modelence/server/functions/uploadFile) to request a presigned upload URL, then PUT the file directly to storage:
 
 ```ts
 import { uploadFile } from 'modelence/server';
 import fs from 'fs/promises';
 
-const data = await fs.readFile('./photo.png');
-
-const file = await uploadFile({
-  fileName: 'photo.png',
+const { uploadUrl, filePath } = await uploadFile({
+  filePath: 'photo.png',
   contentType: 'image/png',
-  data,
+  visibility: 'public',
 });
 
-console.log(file.url); // Public URL to access the file
+const data = await fs.readFile('./photo.png');
+await fetch(uploadUrl, {
+  method: 'PUT',
+  body: data,
+  headers: { 'Content-Type': 'image/png' },
+});
+
+console.log(filePath); // e.g. 'public/photo.png'
 ```
 
-The function accepts an `ArrayBuffer` or `Uint8Array` as `data`, so you can also pass a buffer received from an HTTP upload:
+The `visibility` field controls access:
+- `"public"` — the file is accessible via a permanent URL
+- `"private"` — the file requires a signed URL to access (default)
+
+## Getting a File URL
+
+Use [`getFileUrl`](/api-reference/modelence/server/functions/getFileUrl) to get a URL for displaying or linking to a file. For public files this returns a permanent URL; for private files it returns a time-limited presigned URL:
 
 ```ts
-import { uploadFile } from 'modelence/server';
+import { getFileUrl } from 'modelence/server';
 
-// Inside a route handler
-async function handleUpload({ req }, { user }) {
-  const file = await uploadFile({
-    fileName: req.file.originalname,
-    contentType: req.file.mimetype,
-    data: req.file.buffer,
-  });
+const { url } = await getFileUrl('public/photo.png');
+console.log(url); // Permanent public URL
 
-  return { data: { fileId: file.fileId, url: file.url } };
-}
+const { url: privateUrl } = await getFileUrl('private/report.pdf');
+console.log(privateUrl); // Time-limited presigned URL
 ```
 
-## Retrieving a File
+## Downloading a File
 
-Use [`getFile`](/api-reference/modelence/server/functions/getFile) to fetch metadata for a single file by its ID:
+Use [`downloadFile`](/api-reference/modelence/server/functions/downloadFile) to get a presigned download URL for a file:
 
 ```ts
-import { getFile } from 'modelence/server';
+import { downloadFile } from 'modelence/server';
 
-const file = await getFile('file_abc123');
-console.log(file.fileName);   // 'photo.png'
-console.log(file.contentType); // 'image/png'
-console.log(file.size);       // size in bytes
-console.log(file.url);        // public URL
-console.log(file.createdAt);  // ISO timestamp
+const { downloadUrl } = await downloadFile('private/report.pdf');
+// Redirect the user to downloadUrl or fetch it server-side
 ```
-
-## Listing Files
-
-Use [`listFiles`](/api-reference/modelence/server/functions/listFiles) to retrieve a paginated list of all files:
-
-```ts
-import { listFiles } from 'modelence/server';
-
-const { files, total } = await listFiles({ limit: 20, offset: 0 });
-
-console.log(`Showing ${files.length} of ${total} files`);
-
-for (const file of files) {
-  console.log(file.fileName, file.url);
-}
-```
-
-Both `limit` and `offset` are optional and default to `50` and `0` respectively.
 
 ## Deleting a File
 
@@ -82,18 +66,17 @@ Use [`deleteFile`](/api-reference/modelence/server/functions/deleteFile) to perm
 ```ts
 import { deleteFile } from 'modelence/server';
 
-await deleteFile('file_abc123');
+await deleteFile('public/photo.png');
+await deleteFile('private/report.pdf');
 ```
 
-## FileRecord type
+## File paths
 
-All file functions return a `FileRecord` object with the following fields:
+File paths always include the visibility prefix: `public/<path>` or `private/<path>`. The `uploadFile` function returns the full `filePath` (including prefix) in its result, which you can store and pass to the other functions.
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `fileId` | `string` | Unique identifier for the file |
-| `fileName` | `string` | Original file name |
-| `contentType` | `string` | MIME type (e.g. `"image/png"`) |
-| `size` | `number` | File size in bytes |
-| `url` | `string` | Public URL to access the file |
-| `createdAt` | `string` | ISO 8601 timestamp of when the file was uploaded |
+```ts
+const { filePath } = await uploadFile({ filePath: 'avatars/user-123.png', contentType: 'image/png', visibility: 'private' });
+// filePath === 'private/avatars/user-123.png'
+
+const { url } = await getFileUrl(filePath);
+```
