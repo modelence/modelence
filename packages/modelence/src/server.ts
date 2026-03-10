@@ -43,5 +43,5 @@ export type {
   LiveQueryWatch,
 } from './live-query';
 
-// App files
-export { uploadFile, getFile, listFiles, deleteFile } from './app-files';
+// Files
+export { uploadFile, deleteFile, downloadFile, getFileUrl, type FileVisibility } from './files';
