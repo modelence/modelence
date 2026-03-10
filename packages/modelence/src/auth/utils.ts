@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { usersCollection } from './db';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
 
@@ -10,31 +11,66 @@ async function findAvailableHandle(baseHandle: string): Promise<string> {
   // Truncate base handle to MAX_HANDLE_LENGTH so the unsuffixed form is valid.
   const truncatedBase = baseHandle.slice(0, MAX_HANDLE_LENGTH);
 
-  const firstCheck = await usersCollection.findOne(
-    { handle: truncatedBase },
-    { collation: { locale: 'en', strength: 2 } }
-  );
-
-  if (!firstCheck) {
-    return truncatedBase;
-  }
-
-  let suffix = 2;
-  while (true) {
-    const suffixStr = `_${suffix}`;
-    // Truncate base so that base + suffix fits within the limit.
-    const candidate = `${truncatedBase.slice(0, MAX_HANDLE_LENGTH - suffixStr.length)}${suffixStr}`;
-    const conflict = await usersCollection.findOne(
-      { handle: candidate },
+  // Check the unsuffixed base handle first.
+  try {
+    const firstCheck = await usersCollection.findOne(
+      { handle: truncatedBase },
       { collation: { locale: 'en', strength: 2 } }
     );
 
-    if (!conflict) {
-      return candidate;
+    if (!firstCheck) {
+      return truncatedBase;
     }
-
-    suffix++;
+  } catch (err) {
+    throw new Error(`Database error while checking handle availability: ${err}`);
   }
+
+  // Try sequential suffixes _2 through _51 (50 attempts).
+  const MAX_SUFFIX_VALUE = 51;
+
+  for (let suffix = 2; suffix <= MAX_SUFFIX_VALUE; suffix++) {
+    const suffixStr = `_${suffix}`;
+    const candidate = `${truncatedBase.slice(0, MAX_HANDLE_LENGTH - suffixStr.length)}${suffixStr}`;
+
+    try {
+      const conflict = await usersCollection.findOne(
+        { handle: candidate },
+        { collation: { locale: 'en', strength: 2 } }
+      );
+
+      if (!conflict) {
+        return candidate;
+      }
+    } catch (err) {
+      throw new Error(`Database error while checking handle "${candidate}": ${err}`);
+    }
+  }
+
+  // Fallback: sequential suffixes exhausted — use random hex suffixes.
+  // Limit the number of attempts to avoid an infinite loop in case of persistent DB issues
+  const MAX_RANDOM_ATTEMPTS = 10;
+
+  for (let attempt = 0; attempt < MAX_RANDOM_ATTEMPTS; attempt++) {
+    const randomSuffix = `_${randomBytes(3).toString('hex')}`;
+    const candidate = `${truncatedBase.slice(0, MAX_HANDLE_LENGTH - randomSuffix.length)}${randomSuffix}`;
+
+    try {
+      const conflict = await usersCollection.findOne(
+        { handle: candidate },
+        { collation: { locale: 'en', strength: 2 } }
+      );
+
+      if (!conflict) {
+        return candidate;
+      }
+    } catch (err) {
+      throw new Error(`Database error while checking handle "${candidate}": ${err}`);
+    }
+  }
+
+  throw new Error(
+    `Could not generate a unique handle for base "${baseHandle}" after exhausting all attempts.`
+  );
 }
 
 /**
