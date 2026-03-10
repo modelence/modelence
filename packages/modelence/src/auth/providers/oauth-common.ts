@@ -49,7 +49,7 @@ async function handleExistingProviderLogin(
     }
 
     //Add User FirstName,LastName, AvatarURL if not exists
-    const update: Partial<OAuthUserData> = {};
+    const update: Partial<Pick<OAuthUserData, 'firstName' | 'lastName' | 'avatarUrl'>> = {};
 
     if (existingUser.firstName === undefined && userData.firstName) {
       update.firstName = userData.firstName;
@@ -123,7 +123,7 @@ async function handleExistingEmailLogin(
 
     try {
       // Build profile fields to backfill from provider data if missing
-      const profileUpdate: Partial<OAuthUserData> = {
+      const profileUpdate: Partial<Pick<OAuthUserData, 'firstName' | 'lastName' | 'avatarUrl'>> = {
         ...(existingUserByEmail.firstName === undefined &&
           userData.firstName && { firstName: userData.firstName }),
         ...(existingUserByEmail.lastName === undefined &&
