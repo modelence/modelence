@@ -15,6 +15,10 @@ export interface User extends Document {
 
   status?: 'active' | 'disabled' | 'deleted';
 
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+
   createdAt: Date;
   disabledAt?: Date;
   deletedAt?: Date;
@@ -45,6 +49,9 @@ export type UserInfo = {
   hasRole: (role: string) => boolean;
   /** Throws an error if the user does not have the given role. */
   requireRole: (role: string) => void;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 export type Role = string;

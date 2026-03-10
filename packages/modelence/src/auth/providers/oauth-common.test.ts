@@ -9,6 +9,7 @@ const mockCreateSession = jest.fn();
 const mockGetAuthConfig = jest.fn();
 const mockGetCallContext = jest.fn();
 const mockGetConfig = jest.fn();
+const mockResolveUniqueHandle = jest.fn();
 
 jest.unstable_mockModule('../db', () => ({
   usersCollection: {
@@ -32,6 +33,10 @@ jest.unstable_mockModule('@/app/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+}));
+
+jest.unstable_mockModule('../utils', () => ({
+  resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
 const moduleExports = await import('./oauth-common');
@@ -78,6 +83,10 @@ describe('auth/providers/oauth-common', () => {
       connectionInfo: { ip: '1.1.1.1' },
     } as never);
     mockGetConfig.mockReturnValue('https://app.example.com');
+    mockCreateSession.mockResolvedValue({ authToken: 'tok' } as never);
+    mockResolveUniqueHandle.mockImplementation(
+      async (_raw: unknown, email: unknown) => (email as string).split('@')[0]
+    );
   });
 
   describe('authenticateUser', () => {
@@ -96,7 +105,7 @@ describe('auth/providers/oauth-common', () => {
           sameSite: 'strict',
         })
       );
-      expect(res.status).toHaveBeenCalledWith(301);
+      expect(res.status).toHaveBeenCalledWith(302);
       expect(res.redirect).toHaveBeenCalledWith('/');
     });
   });
@@ -123,14 +132,24 @@ describe('auth/providers/oauth-common', () => {
 
   describe('handleOAuthUserAuthentication', () => {
     describe('Flow: Existing Provider Account', () => {
-      test('logs in existing user via provider id', async () => {
-        const existingUser = { _id: new ObjectId(), handle: 'demo', status: 'active' };
+      test('logs in existing user via provider id without backfill when fields exist', async () => {
+        const existingUser = {
+          _id: new ObjectId(),
+          handle: 'demo',
+          status: 'active',
+          firstName: 'Existing',
+          lastName: 'User',
+          avatarUrl: 'https://existing-pic.com',
+        };
         mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
         const userData = {
           id: 'provider-id',
           email: 'user@example.com',
           emailVerified: true,
           providerName: 'google' as const,
+          firstName: 'New',
+          lastName: 'Name',
+          avatarUrl: 'https://new-pic.com',
         };
 
         await moduleExports.handleOAuthUserAuthentication(req, res, userData);
@@ -138,10 +157,77 @@ describe('auth/providers/oauth-common', () => {
         expect(mockUsersFindOne).toHaveBeenCalledWith({
           'authMethods.google.id': 'provider-id',
         });
+        expect(mockUsersUpdateOne).not.toHaveBeenCalled();
         expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
           expect.objectContaining({ user: existingUser })
         );
         expect(authConfig.login.onSuccess).toHaveBeenCalledWith(existingUser);
+      });
+
+      test('backfills all missing profile fields for existing user', async () => {
+        const existingUser = { _id: new ObjectId(), handle: 'demo', status: 'active' };
+        mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
+        mockUsersUpdateOne.mockResolvedValueOnce({} as never);
+        const userData = {
+          id: 'provider-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'google' as const,
+          firstName: 'John',
+          lastName: 'Doe',
+          avatarUrl: 'https://pic.com',
+        };
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, userData);
+
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+          { _id: existingUser._id },
+          { $set: { firstName: 'John', lastName: 'Doe', avatarUrl: 'https://pic.com' } }
+        );
+
+        const mergedUser = {
+          ...existingUser,
+          firstName: 'John',
+          lastName: 'Doe',
+          avatarUrl: 'https://pic.com',
+        };
+        expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
+          expect.objectContaining({ user: mergedUser })
+        );
+        expect(authConfig.login.onSuccess).toHaveBeenCalledWith(mergedUser);
+      });
+
+      test('backfills only missing profile fields, skips already-present ones', async () => {
+        const existingUser = {
+          _id: new ObjectId(),
+          handle: 'demo',
+          status: 'active',
+          firstName: 'Already',
+        };
+        mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
+        mockUsersUpdateOne.mockResolvedValueOnce({} as never);
+        const userData = {
+          id: 'provider-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'github' as const,
+          firstName: 'Ignored',
+          lastName: 'Doe',
+          avatarUrl: 'https://pic.com',
+        };
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, userData);
+
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+          { _id: existingUser._id },
+          { $set: { lastName: 'Doe', avatarUrl: 'https://pic.com' } }
+        );
+
+        const mergedUser = { ...existingUser, lastName: 'Doe', avatarUrl: 'https://pic.com' };
+        expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
+          expect.objectContaining({ user: mergedUser })
+        );
+        expect(authConfig.login.onSuccess).toHaveBeenCalledWith(mergedUser);
       });
 
       test('rejects login for existing linked user if account is disabled', async () => {
@@ -338,6 +424,54 @@ describe('auth/providers/oauth-common', () => {
         expect(authConfig.login.onSuccess).toHaveBeenCalledWith(updatedUser);
       });
 
+      test('backfills missing profile fields for existing user auto-linking', async () => {
+        const existingUser = {
+          _id: new ObjectId(),
+          handle: 'user@example.com',
+          status: 'active',
+          emails: [{ address: 'user@example.com', verified: true }],
+        };
+        const updatedUser = {
+          ...existingUser,
+          firstName: 'New',
+          lastName: 'User',
+          avatarUrl: 'pic-url',
+          authMethods: { google: { id: 'google-id' } },
+        };
+        mockUsersFindOne
+          .mockResolvedValueOnce(null as never)
+          .mockResolvedValueOnce(existingUser as never);
+        mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
+        mockCreateSession.mockResolvedValue({ authToken: 'tok' } as never);
+
+        mockGetAuthConfig.mockReturnValue({
+          ...authConfig,
+          oauthAccountLinking: 'auto',
+        });
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, {
+          id: 'google-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'google',
+          firstName: 'New',
+          lastName: 'User',
+          avatarUrl: 'pic-url',
+        });
+
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(expect.anything(), {
+          $set: {
+            'authMethods.google.id': 'google-id',
+            firstName: 'New',
+            lastName: 'User',
+            avatarUrl: 'pic-url',
+          },
+        });
+        expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
+          expect.objectContaining({ user: updatedUser, provider: 'google' })
+        );
+      });
+
       test('proceeds to login if concurrent request already linked the same provider ID', async () => {
         const existingUser = {
           _id: new ObjectId(),
@@ -511,7 +645,7 @@ describe('auth/providers/oauth-common', () => {
         mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
         const insertedId = new ObjectId();
         mockUsersInsertOne.mockResolvedValue({ insertedId } as never);
-        const userDocument = { _id: insertedId, handle: 'user@example.com' };
+        const userDocument = { _id: insertedId, handle: 'user' };
         mockUsersFindOne.mockResolvedValueOnce(userDocument as never);
 
         await moduleExports.handleOAuthUserAuthentication(req, res, {
@@ -519,14 +653,21 @@ describe('auth/providers/oauth-common', () => {
           email: 'user@example.com',
           emailVerified: true,
           providerName: 'google',
+          firstName: 'New',
+          lastName: 'User',
+          avatarUrl: 'pic-url',
         });
 
+        expect(mockResolveUniqueHandle).toHaveBeenCalledWith(undefined, 'user@example.com');
         expect(mockUsersInsertOne).toHaveBeenCalledWith(
           expect.objectContaining({
-            handle: 'user@example.com',
+            handle: 'user',
             authMethods: {
               google: { id: 'provider-id' },
             },
+            firstName: 'New',
+            lastName: 'User',
+            avatarUrl: 'pic-url',
           })
         );
         expect(authConfig.onAfterSignup).toHaveBeenCalledWith(

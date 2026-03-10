@@ -5,6 +5,7 @@ import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
 
@@ -13,6 +14,9 @@ export interface OAuthUserData {
   email: string;
   emailVerified: boolean;
   providerName: 'google' | 'github';
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 }
 
 export async function authenticateUser(res: Response, userId: ObjectId) {
@@ -23,7 +27,7 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
   });
-  res.status(301);
+  res.status(302);
   res.redirect('/');
 }
 
@@ -34,6 +38,8 @@ async function handleExistingProviderLogin(
   session: Session | null,
   connectionInfo: ConnectionInfo
 ) {
+  const authConfig = getAuthConfig();
+
   try {
     if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
       res.status(400).json({
@@ -42,20 +48,39 @@ async function handleExistingProviderLogin(
       return;
     }
 
-    await authenticateUser(res, existingUser._id);
+    //Add User FirstName,LastName, AvatarURL if not exists
+    const update: Partial<Pick<OAuthUserData, 'firstName' | 'lastName' | 'avatarUrl'>> = {};
 
-    getAuthConfig().onAfterLogin?.({
+    if (existingUser.firstName === undefined && userData.firstName) {
+      update.firstName = userData.firstName;
+    }
+    if (existingUser.lastName === undefined && userData.lastName) {
+      update.lastName = userData.lastName;
+    }
+    if (existingUser.avatarUrl === undefined && userData.avatarUrl) {
+      update.avatarUrl = userData.avatarUrl;
+    }
+
+    let user = existingUser;
+
+    if (Object.keys(update).length > 0) {
+      await usersCollection.updateOne({ _id: existingUser._id }, { $set: update });
+      user = { ...existingUser, ...update } as typeof existingUser;
+    }
+
+    await authenticateUser(res, existingUser._id);
+    authConfig.onAfterLogin?.({
       provider: userData.providerName,
-      user: existingUser,
+      user,
       session,
       connectionInfo,
     });
-    getAuthConfig().login?.onSuccess?.(existingUser);
+    authConfig.login?.onSuccess?.(user);
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().login?.onError?.(error);
+      authConfig.login?.onError?.(error);
 
-      getAuthConfig().onLoginError?.({
+      authConfig.onLoginError?.({
         provider: userData.providerName,
         error,
         session,
@@ -73,10 +98,8 @@ async function handleExistingEmailLogin(
   session: Session | null,
   connectionInfo: ConnectionInfo
 ) {
-  const linkingMode = getAuthConfig().oauthAccountLinking ?? 'manual';
-  const matchedEmail = existingUserByEmail.emails?.find(
-    (emailDoc: UserEmail) => emailDoc.address.toLowerCase() === userData.email.toLowerCase()
-  );
+  const authConfig = getAuthConfig();
+  const linkingMode = authConfig.oauthAccountLinking ?? 'manual';
 
   if (linkingMode === 'auto' && userData.emailVerified) {
     if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
@@ -85,6 +108,10 @@ async function handleExistingEmailLogin(
       });
       return;
     }
+
+    const matchedEmail = existingUserByEmail.emails?.find(
+      (emailDoc: UserEmail) => emailDoc.address.toLowerCase() === userData.email.toLowerCase()
+    );
 
     // Prevent pre-registration takeover by requiring local ownership verification too.
     if (!matchedEmail?.verified) {
@@ -95,6 +122,17 @@ async function handleExistingEmailLogin(
     }
 
     try {
+      // Build profile fields to backfill from provider data if missing
+      const profileUpdate: Partial<Pick<OAuthUserData, 'firstName' | 'lastName' | 'avatarUrl'>> = {
+        ...(existingUserByEmail.firstName === undefined &&
+          userData.firstName && { firstName: userData.firstName }),
+        ...(existingUserByEmail.lastName === undefined &&
+          userData.lastName && { lastName: userData.lastName }),
+        ...(existingUserByEmail.avatarUrl === undefined &&
+          userData.avatarUrl && { avatarUrl: userData.avatarUrl }),
+      };
+
+      // Single atomic update — link provider + backfill profile in one round trip
       const updateResult = await usersCollection.updateOne(
         {
           _id: existingUserByEmail._id,
@@ -104,7 +142,12 @@ async function handleExistingEmailLogin(
             { [`authMethods.${userData.providerName}.id`]: userData.id },
           ],
         },
-        { $set: { [`authMethods.${userData.providerName}.id`]: userData.id } }
+        {
+          $set: {
+            [`authMethods.${userData.providerName}.id`]: userData.id,
+            ...profileUpdate,
+          },
+        }
       );
 
       const autoLinkSuccessful = updateResult.matchedCount > 0;
@@ -122,6 +165,7 @@ async function handleExistingEmailLogin(
       // Construct updated user in-memory to provide fresh data to callbacks
       const updatedUser: User = {
         ...existingUserByEmail,
+        ...profileUpdate,
         authMethods: {
           ...existingUserByEmail.authMethods,
           [userData.providerName]: {
@@ -130,20 +174,20 @@ async function handleExistingEmailLogin(
         },
       };
 
-      getAuthConfig().onAfterLogin?.({
+      authConfig.onAfterLogin?.({
         provider: userData.providerName,
         user: updatedUser,
         session,
         connectionInfo,
       });
-      getAuthConfig().login?.onSuccess?.(updatedUser);
+      authConfig.login?.onSuccess?.(updatedUser);
 
       return;
     } catch (error) {
       if (error instanceof Error) {
-        getAuthConfig().login?.onError?.(error);
+        authConfig.login?.onError?.(error);
 
-        getAuthConfig().onLoginError?.({
+        authConfig.onLoginError?.({
           provider: userData.providerName,
           error,
           session,
@@ -168,10 +212,28 @@ async function handleNewUserSignup(
   session: Session | null,
   connectionInfo: ConnectionInfo
 ) {
+  const authConfig = getAuthConfig();
+
   try {
-    const newUser = await usersCollection.insertOne({
-      handle: userData.email,
-      status: 'active',
+    let handle: string;
+
+    if (authConfig.generateHandle) {
+      const generated = await authConfig.generateHandle!({
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+      });
+      //Don't throw error if handle is already taken, instead add a suffix '_2', '_3', etc. to the handle
+      handle = await resolveUniqueHandle(generated, userData.email, {
+        throwOnConflict: false,
+      });
+    } else {
+      handle = await resolveUniqueHandle(undefined, userData.email);
+    }
+
+    const userDoc = {
+      handle: handle,
+      status: 'active' as const,
       emails: [
         {
           address: userData.email,
@@ -184,7 +246,12 @@ async function handleNewUserSignup(
           id: userData.id,
         },
       },
-    });
+      ...(userData.firstName !== undefined && { firstName: userData.firstName }),
+      ...(userData.lastName !== undefined && { lastName: userData.lastName }),
+      ...(userData.avatarUrl !== undefined && { avatarUrl: userData.avatarUrl }),
+    };
+
+    const newUser = await usersCollection.insertOne(userDoc);
 
     await authenticateUser(res, newUser.insertedId);
 
@@ -194,25 +261,25 @@ async function handleNewUserSignup(
     );
 
     if (userDocument) {
-      getAuthConfig().onAfterSignup?.({
+      authConfig.onAfterSignup?.({
         provider: userData.providerName,
         user: userDocument,
         session,
         connectionInfo,
       });
 
-      getAuthConfig().signup?.onSuccess?.(userDocument);
+      authConfig.signup?.onSuccess?.(userDocument);
     }
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onSignupError?.({
+      authConfig.onSignupError?.({
         provider: userData.providerName,
         error,
         session,
         connectionInfo,
       });
 
-      getAuthConfig().signup?.onError?.(error);
+      authConfig.signup?.onError?.(error);
     }
     throw error;
   }
@@ -256,22 +323,25 @@ export async function handleOAuthUserAuthentication(
     );
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onSignupError?.({
+      const authConfig = getAuthConfig();
+      authConfig.onSignupError?.({
         provider: userData.providerName,
         error,
         session,
         connectionInfo,
       });
 
-      getAuthConfig().signup?.onError?.(error);
+      authConfig.signup?.onError?.(error);
     }
     throw error;
   }
 
+  //User Already existed via email verification but now trying to login via OAuth Providers from the same email
   if (existingUserByEmail) {
     return handleExistingEmailLogin(res, userData, existingUserByEmail, session, connectionInfo);
   }
 
+  //New User
   return handleNewUserSignup(res, userData, session, connectionInfo);
 }
 

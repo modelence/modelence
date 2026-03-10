@@ -1,20 +1,25 @@
 import bcrypt from 'bcrypt';
-
-import { Args, Context } from '../methods/types';
+import { SignupProps, Context, Args } from '../methods/types';
 import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
-import { validateEmail, validatePassword } from './validators';
+import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { resolveUniqueHandle } from './utils';
 
 export async function handleSignupWithPassword(
-  args: Args,
+  props: Args,
   { user, session, connectionInfo }: Context
 ) {
+  const authConfig = getAuthConfig();
   try {
-    const email = validateEmail(args.email as string);
-    const password = validatePassword(args.password as string);
+    // Narrow once at the boundary
+    const signupProps = props as SignupProps;
+    const { firstName, lastName, avatarUrl, handle } = signupProps;
+
+    const email = validateEmail(signupProps.email);
+    const password = validatePassword(signupProps.password);
 
     const ip = connectionInfo?.ip;
     if (ip) {
@@ -58,11 +63,44 @@ export async function handleSignupWithPassword(
       });
     }
 
+    // Validate optional profile fields (firstName, lastName, avatarUrl, handle)
+    const profileFields = validateProfileFields({
+      firstName,
+      lastName,
+      avatarUrl,
+      handle,
+    });
+
+    await authConfig.validateSignup?.({
+      email,
+      password,
+      ...profileFields,
+    });
+
+    // Resolve unique handle
+    let resolvedHandle: string;
+
+    if (profileFields.handle) {
+      resolvedHandle = await resolveUniqueHandle(profileFields.handle, email);
+    } else if (authConfig.generateHandle) {
+      const generated = await authConfig.generateHandle({
+        email,
+        firstName: profileFields.firstName,
+        lastName: profileFields.lastName,
+      });
+
+      resolvedHandle = await resolveUniqueHandle(generated, email, {
+        throwOnConflict: false,
+      });
+    } else {
+      resolvedHandle = await resolveUniqueHandle(undefined, email);
+    }
+
     // Hash password with bcrypt (salt is automatically generated)
     const hash = await bcrypt.hash(password, 10);
 
     const result = await usersCollection.insertOne({
-      handle: email,
+      handle: resolvedHandle,
       status: 'active',
       emails: [
         {
@@ -76,6 +114,9 @@ export async function handleSignupWithPassword(
           hash,
         },
       },
+      ...(profileFields.firstName !== undefined && { firstName: profileFields.firstName }),
+      ...(profileFields.lastName !== undefined && { lastName: profileFields.lastName }),
+      ...(profileFields.avatarUrl !== undefined && { avatarUrl: profileFields.avatarUrl }),
     });
 
     const userDocument = await usersCollection.findOne(
@@ -93,26 +134,26 @@ export async function handleSignupWithPassword(
       baseUrl: connectionInfo?.baseUrl,
     });
 
-    getAuthConfig().onAfterSignup?.({
+    authConfig.onAfterSignup?.({
       provider: 'email',
       user: userDocument,
       session,
       connectionInfo,
     });
 
-    getAuthConfig().signup?.onSuccess?.(userDocument);
+    authConfig.signup?.onSuccess?.(userDocument);
 
     return result.insertedId;
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onSignupError?.({
+      authConfig.onSignupError?.({
         provider: 'email',
         error,
         session,
         connectionInfo,
       });
 
-      getAuthConfig().signup?.onError?.(error);
+      authConfig.signup?.onError?.(error);
     }
     throw error;
   }

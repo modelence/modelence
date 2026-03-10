@@ -10,7 +10,7 @@ import {
 } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
-import { getOwnProfile } from './profile';
+import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
@@ -52,6 +52,7 @@ export default new Module('_system.user', {
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,
+    updateProfile: handleUpdateProfile,
   },
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron,
