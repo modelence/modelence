@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { deleteFile, downloadFile, getFileUrl, uploadFile } from './index';
+import { deleteFile, downloadFile, getFileUrl, getUploadUrl } from './index';
 
 describe('files', () => {
   const originalEnv = process.env;
@@ -20,20 +20,26 @@ describe('files', () => {
     jest.restoreAllMocks();
   });
 
-  describe('uploadFile', () => {
+  describe('getUploadUrl', () => {
     test('throws when MODELENCE_SERVICE_ENDPOINT is not set', async () => {
       delete process.env.MODELENCE_SERVICE_ENDPOINT;
 
       await expect(
-        uploadFile({ filePath: 'photo.png', contentType: 'image/png', visibility: 'public' })
+        getUploadUrl({ filePath: 'photo.png', contentType: 'image/png', visibility: 'public' })
       ).rejects.toThrow(
         'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
       );
     });
 
-    test('sends POST request and returns upload URL', async () => {
+    test('sends POST request and returns presigned url, fields, and filePath', async () => {
       const uploadResult = {
-        uploadUrl: 'https://s3.amazonaws.com/presigned-upload-url',
+        url: 'https://s3.amazonaws.com/',
+        fields: {
+          'Content-Type': 'image/png',
+          Policy: 'base64policy',
+          'X-Amz-Signature': 'abc123',
+          key: 'public/photo.png',
+        },
         filePath: 'public/photo.png',
       };
 
@@ -42,7 +48,7 @@ describe('files', () => {
         json: async () => uploadResult,
       } as unknown as Response);
 
-      const result = await uploadFile({
+      const result = await getUploadUrl({
         filePath: 'photo.png',
         contentType: 'image/png',
         visibility: 'public',
@@ -74,7 +80,7 @@ describe('files', () => {
       } as unknown as Response);
 
       await expect(
-        uploadFile({ filePath: '../escape.png', contentType: 'image/png', visibility: 'private' })
+        getUploadUrl({ filePath: '../escape.png', contentType: 'image/png', visibility: 'private' })
       ).rejects.toThrow('HTTP status: 400');
     });
   });

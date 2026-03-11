@@ -7,6 +7,7 @@ const mockIsTelemetryEnabled = jest.fn();
 jest.unstable_mockModule('@/app/metrics', () => ({
   getLogger: mockGetLogger,
   getApm: mockGetApm,
+  isLoggerReady: jest.fn(),
 }));
 
 jest.unstable_mockModule('@/app/state', () => ({
