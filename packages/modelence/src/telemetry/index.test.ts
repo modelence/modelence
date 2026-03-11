@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 const mockGetLogger = jest.fn();
 const mockGetApm = jest.fn();
 const mockIsTelemetryEnabled = jest.fn();
+const mockIsLoggerReady = jest.fn();
 
 jest.unstable_mockModule('@/app/metrics', () => ({
   getLogger: mockGetLogger,
   getApm: mockGetApm,
-  isLoggerReady: jest.fn(),
+  isLoggerReady: mockIsLoggerReady,
 }));
 
 jest.unstable_mockModule('@/app/state', () => ({
@@ -43,6 +44,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logDebug('debug-msg', { foo: 'bar' });
 
@@ -64,6 +66,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logDebug('debug-msg', { foo: 'bar' });
 
@@ -76,6 +79,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logInfo('info-msg', { foo: 'bar' });
 
@@ -88,6 +92,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logInfo('info-msg', { foo: 'bar' });
 
@@ -100,6 +105,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logInfo('info-msg', { foo: 'bar' });
 
@@ -112,6 +118,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logError('error-msg', { foo: 'bar' });
 
@@ -133,6 +140,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logError('error-msg', { foo: 'bar' });
 
@@ -144,6 +152,7 @@ describe('telemetry/index', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
     mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logError('error-msg', { foo: 'bar' });
 
