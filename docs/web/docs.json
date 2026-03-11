@@ -128,8 +128,8 @@
             "group": "Files",
             "pages": [
               "api-reference/modelence/server/functions/uploadFile",
-              "api-reference/modelence/server/functions/getFile",
-              "api-reference/modelence/server/functions/listFiles",
+              "api-reference/modelence/server/functions/getFileUrl",
+              "api-reference/modelence/server/functions/downloadFile",
               "api-reference/modelence/server/functions/deleteFile"
             ]
           }
