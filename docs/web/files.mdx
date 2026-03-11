@@ -6,76 +6,143 @@ icon: 'file'
 
 Modelence provides built-in file storage through Modelence Cloud. Files are organized by visibility — either `public` (accessible via a permanent URL) or `private` (accessible only via a time-limited signed URL).
 
+Each file operation is available in two forms:
+- **Client (`modelence/client`)** — call directly from the browser via built-in methods
+- **Server (`modelence/server`)** — call from your server-side code (e.g. inside a mutation or cron job)
+
 ## Uploading a File
 
-Use [`uploadFile`](/api-reference/modelence/server/functions/uploadFile) to request a presigned upload URL, then PUT the file directly to storage:
+<Tabs>
+  <Tab title="Client">
+    `uploadFile` takes a `File` or `Blob`, requests a presigned URL from the backend, then PUTs the file directly to storage:
 
-```ts
-import { uploadFile } from 'modelence/server';
-import fs from 'fs/promises';
+    ```ts
+    import { uploadFile } from 'modelence/client';
 
-const { uploadUrl, filePath } = await uploadFile({
-  filePath: 'photo.png',
-  contentType: 'image/png',
-  visibility: 'public',
-});
+    const file = event.target.files[0]; // File from an <input type="file">
+    const { filePath } = await uploadFile(file, {
+      filePath: 'photo.png',
+      contentType: 'image/png',
+      visibility: 'public',
+    });
 
-const data = await fs.readFile('./photo.png');
-await fetch(uploadUrl, {
-  method: 'PUT',
-  body: data,
-  headers: { 'Content-Type': 'image/png' },
-});
+    console.log(filePath); // e.g. 'public/photo.png'
+    ```
+  </Tab>
+  <Tab title="Server">
+    `getUploadUrl` returns a presigned URL you can use to PUT the file contents directly to storage:
 
-console.log(filePath); // e.g. 'public/photo.png'
-```
+    ```ts
+    import { getUploadUrl } from 'modelence/server';
+    import fs from 'fs/promises';
+
+    const { uploadUrl, filePath } = await getUploadUrl({
+      filePath: 'photo.png',
+      contentType: 'image/png',
+      visibility: 'public',
+    });
+
+    const data = await fs.readFile('./photo.png');
+    await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: data,
+    });
+
+    console.log(filePath); // e.g. 'public/photo.png'
+    ```
+  </Tab>
+</Tabs>
 
 The `visibility` field controls access:
 - `"public"` — the file is accessible via a permanent URL
-- `"private"` — the file requires a signed URL to access (default)
+- `"private"` — the file requires a signed URL to access
 
 ## Getting a File URL
 
-Use [`getFileUrl`](/api-reference/modelence/server/functions/getFileUrl) to get a URL for displaying or linking to a file. For public files this returns a permanent URL; for private files it returns a time-limited presigned URL:
+Returns a URL for displaying or linking to a file. For public files this is a permanent URL; for private files it is a time-limited presigned URL.
 
-```ts
-import { getFileUrl } from 'modelence/server';
+<Tabs>
+  <Tab title="Client">
+    ```ts
+    import { getFileUrl } from 'modelence/client';
 
-const { url } = await getFileUrl('public/photo.png');
-console.log(url); // Permanent public URL
+    const { url } = await getFileUrl('public/photo.png');
+    console.log(url); // Permanent public URL
 
-const { url: privateUrl } = await getFileUrl('private/report.pdf');
-console.log(privateUrl); // Time-limited presigned URL
-```
+    const { url: privateUrl } = await getFileUrl('private/report.pdf');
+    console.log(privateUrl); // Time-limited presigned URL
+    ```
+  </Tab>
+  <Tab title="Server">
+    ```ts
+    import { getFileUrl } from 'modelence/server';
+
+    const { url } = await getFileUrl('public/photo.png');
+    console.log(url); // Permanent public URL
+
+    const { url: privateUrl } = await getFileUrl('private/report.pdf');
+    console.log(privateUrl); // Time-limited presigned URL
+    ```
+  </Tab>
+</Tabs>
 
 ## Downloading a File
 
-Use [`downloadFile`](/api-reference/modelence/server/functions/downloadFile) to get a presigned download URL for a file:
+Returns a presigned download URL for a private file.
 
-```ts
-import { downloadFile } from 'modelence/server';
+<Tabs>
+  <Tab title="Client">
+    ```ts
+    import { downloadFile } from 'modelence/client';
 
-const { downloadUrl } = await downloadFile('private/report.pdf');
-// Redirect the user to downloadUrl or fetch it server-side
-```
+    const { downloadUrl } = await downloadFile('private/report.pdf');
+    // Redirect the user to downloadUrl or fetch it client-side
+    ```
+  </Tab>
+  <Tab title="Server">
+    ```ts
+    import { downloadFile } from 'modelence/server';
+
+    const { downloadUrl } = await downloadFile('private/report.pdf');
+    // Redirect the user to downloadUrl or fetch it server-side
+    ```
+  </Tab>
+</Tabs>
 
 ## Deleting a File
 
-Use [`deleteFile`](/api-reference/modelence/server/functions/deleteFile) to permanently remove a file:
+<Tabs>
+  <Tab title="Client">
+    ```ts
+    import { deleteFile } from 'modelence/client';
+
+    await deleteFile('public/photo.png');
+    await deleteFile('private/report.pdf');
+    ```
+  </Tab>
+  <Tab title="Server">
+    ```ts
+    import { deleteFile } from 'modelence/server';
+
+    await deleteFile('public/photo.png');
+    await deleteFile('private/report.pdf');
+    ```
+  </Tab>
+</Tabs>
+
+## File Paths
+
+File paths always include the visibility prefix: `public/<path>` or `private/<path>`. The upload functions return the full `filePath` (including prefix) in their result, which you can store and pass to the other functions.
 
 ```ts
-import { deleteFile } from 'modelence/server';
+import { uploadFile } from 'modelence/client';
 
-await deleteFile('public/photo.png');
-await deleteFile('private/report.pdf');
-```
-
-## File paths
-
-File paths always include the visibility prefix: `public/<path>` or `private/<path>`. The `uploadFile` function returns the full `filePath` (including prefix) in its result, which you can store and pass to the other functions.
-
-```ts
-const { filePath } = await uploadFile({ filePath: 'avatars/user-123.png', contentType: 'image/png', visibility: 'private' });
+const { filePath } = await uploadFile(file, {
+  filePath: 'avatars/user-123.png',
+  contentType: 'image/png',
+  visibility: 'private',
+});
 // filePath === 'private/avatars/user-123.png'
 
 const { url } = await getFileUrl(filePath);

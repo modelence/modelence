@@ -21,6 +21,7 @@ import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
 import lockModule, { acquireLock, releaseLock } from '../lock';
+import filesModule from '../files';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
@@ -96,6 +97,7 @@ export async function startApp({
     rateLimitModule,
     systemModule,
     lockModule,
+    filesModule,
   ];
   const combinedModules = [...systemModules, ...modules];
 
@@ -145,12 +147,12 @@ export async function startApp({
     await createIndexesWithLock(stores);
   }
 
-  startMigrations(migrations);
-
   if (hasRemoteBackend) {
     await initMetrics();
     startConfigSync();
   }
+
+  startMigrations(migrations);
 
   startCronJobs().catch(console.error);
 

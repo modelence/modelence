@@ -1,15 +1,10 @@
+import { Module } from '../app/module';
 import { callCloudApi } from '../app/backendApi';
 
 export type FileVisibility = 'public' | 'private';
 
-type UploadFileParams = {
-  filePath: string;
-  contentType: string;
-  visibility: FileVisibility;
-};
-
-type UploadFileResult = {
-  uploadUrl: string;
+export type GetUploadUrlResult = {
+  url: string;
   filePath: string;
 };
 
@@ -21,12 +16,16 @@ type GetFileUrlResult = {
   url: string;
 };
 
-export async function uploadFile({
+export async function getUploadUrl({
   filePath,
   contentType,
   visibility,
-}: UploadFileParams): Promise<UploadFileResult> {
-  return await callCloudApi<UploadFileResult>(
+}: {
+  filePath: string;
+  contentType: string;
+  visibility: FileVisibility;
+}): Promise<GetUploadUrlResult> {
+  return await callCloudApi<GetUploadUrlResult>(
     '/api/files/upload',
     'POST',
     JSON.stringify({ filePath, contentType, visibility }),
@@ -63,3 +62,26 @@ export async function getFileUrl(filePath: string): Promise<GetFileUrlResult> {
     }
   );
 }
+
+export default new Module('_system.files', {
+  queries: {
+    async downloadFile({ filePath }) {
+      return downloadFile(filePath as string);
+    },
+    async getFileUrl({ filePath }) {
+      return getFileUrl(filePath as string);
+    },
+  },
+  mutations: {
+    async getUploadUrl({ filePath, contentType, visibility }) {
+      return getUploadUrl({
+        filePath: filePath as string,
+        contentType: contentType as string,
+        visibility: visibility as FileVisibility,
+      });
+    },
+    async deleteFile({ filePath }) {
+      return deleteFile(filePath as string);
+    },
+  },
+});

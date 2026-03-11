@@ -103,6 +103,10 @@ export function getApm() {
   return apm;
 }
 
+export function isLoggerReady() {
+  return logger !== null;
+}
+
 export function getLogger() {
   if (!logger) {
     throw new Error('Logger is not initialized');

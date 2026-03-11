@@ -44,4 +44,4 @@ export type {
 } from './live-query';
 
 // Files
-export { uploadFile, deleteFile, downloadFile, getFileUrl, type FileVisibility } from './files';
+export { getUploadUrl, deleteFile, downloadFile, getFileUrl, type FileVisibility } from './files';
