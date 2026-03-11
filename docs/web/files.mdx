@@ -14,7 +14,7 @@ Each file operation is available in two forms:
 
 <Tabs>
   <Tab title="Client">
-    `uploadFile` takes a `File` or `Blob`, requests a presigned URL from the backend, then PUTs the file directly to storage:
+    `uploadFile` takes a `File` or `Blob`, requests a presigned upload URL from the backend, then POSTs the file directly to storage using a signed form:
 
     ```ts
     import { uploadFile } from 'modelence/client';
@@ -30,24 +30,26 @@ Each file operation is available in two forms:
     ```
   </Tab>
   <Tab title="Server">
-    `getUploadUrl` returns a presigned URL you can use to PUT the file contents directly to storage:
+    `getUploadUrl` returns a presigned URL and form fields. POST these together as `FormData` to upload the file directly to storage:
 
     ```ts
     import { getUploadUrl } from 'modelence/server';
     import fs from 'fs/promises';
 
-    const { uploadUrl, filePath } = await getUploadUrl({
+    const { url, fields, filePath } = await getUploadUrl({
       filePath: 'photo.png',
       contentType: 'image/png',
       visibility: 'public',
     });
 
     const data = await fs.readFile('./photo.png');
-    await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: data,
-    });
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      formData.append(key, value);
+    }
+    formData.append('file', new Blob([data], { type: 'image/png' }));
+
+    await fetch(url, { method: 'POST', body: formData });
 
     console.log(filePath); // e.g. 'public/photo.png'
     ```

@@ -15,15 +15,25 @@ export async function uploadFile(
   file: File | Blob,
   { filePath, contentType, visibility }: UploadFileParams
 ): Promise<UploadFileResult> {
-  const { url, filePath: resolvedFilePath } = await callMethod<GetUploadUrlResult>(
-    '_system.files.getUploadUrl',
-    { filePath, contentType, visibility }
-  );
+  const {
+    url,
+    fields,
+    filePath: resolvedFilePath,
+  } = await callMethod<GetUploadUrlResult>('_system.files.getUploadUrl', {
+    filePath,
+    contentType,
+    visibility,
+  });
+
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    formData.append(key, value);
+  }
+  formData.append('file', file);
 
   const uploadResponse = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file,
+    method: 'POST',
+    body: formData,
   });
 
   if (!uploadResponse.ok) {
