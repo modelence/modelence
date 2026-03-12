@@ -1,13 +1,7 @@
 import { Module } from '../app/module';
 import { callCloudApi } from '../app/backendApi';
-
-export type FileVisibility = 'public' | 'private';
-
-export type GetUploadUrlResult = {
-  url: string;
-  fields: Record<string, string>;
-  filePath: string;
-};
+export type { FileVisibility, GetUploadUrlResult } from './types';
+import type { FileVisibility, GetUploadUrlResult } from './types';
 
 type DownloadFileResult = {
   downloadUrl: string;

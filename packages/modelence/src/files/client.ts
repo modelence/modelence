@@ -1,5 +1,5 @@
 import { callMethod } from '../client/method';
-import { FileVisibility, GetUploadUrlResult } from './index';
+import type { FileVisibility, GetUploadUrlResult } from './types';
 
 type UploadFileParams = {
   filePath: string;

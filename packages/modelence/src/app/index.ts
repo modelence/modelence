@@ -147,12 +147,12 @@ export async function startApp({
     await createIndexesWithLock(stores);
   }
 
+  startMigrations(migrations);
+
   if (hasRemoteBackend) {
     await initMetrics();
     startConfigSync();
   }
-
-  startMigrations(migrations);
 
   startCronJobs().catch(console.error);
 
