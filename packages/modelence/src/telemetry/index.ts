@@ -1,4 +1,4 @@
-import { getLogger, getApm } from '@/app/metrics';
+import { getLogger, getApm, isLoggerReady } from '@/app/metrics';
 import { isTelemetryEnabled } from '@/app/state';
 
 type LogLevel = 'error' | 'info' | 'debug' | '';
@@ -23,7 +23,7 @@ function getLogLevel(): LogLevel {
 }
 
 export function logDebug(message: string, args: object) {
-  if (isTelemetryEnabled()) {
+  if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().debug(message, args);
   }
   if (getLogLevel() === 'debug') {
@@ -32,7 +32,7 @@ export function logDebug(message: string, args: object) {
 }
 
 export function logInfo(message: string, args: object) {
-  if (isTelemetryEnabled()) {
+  if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().info(message, args);
   }
   if (['debug', 'info'].includes(getLogLevel())) {
@@ -41,7 +41,7 @@ export function logInfo(message: string, args: object) {
 }
 
 export function logError(message: string, args: object) {
-  if (isTelemetryEnabled()) {
+  if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().error(message, args);
   }
   if (['debug', 'info', 'error'].includes(getLogLevel())) {

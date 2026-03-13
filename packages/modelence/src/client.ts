@@ -32,3 +32,4 @@ export {
 } from './websocket/client';
 export { ClientChannel } from './websocket/clientChannel';
 export { getLocalStorageSession } from './client/localStorage';
+export { uploadFile, deleteFile, downloadFile, getFileUrl } from './files/client';

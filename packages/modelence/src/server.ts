@@ -42,3 +42,6 @@ export type {
   LiveQueryCleanup,
   LiveQueryWatch,
 } from './live-query';
+
+// Files
+export { getUploadUrl, deleteFile, downloadFile, getFileUrl, type FileVisibility } from './files';

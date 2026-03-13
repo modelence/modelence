@@ -103,6 +103,7 @@ jest.unstable_mockModule('./state', () => ({
 
 jest.unstable_mockModule('./backendApi', () => ({
   connectCloudBackend: mockConnectCloudBackend,
+  callCloudApi: jest.fn(),
 }));
 
 jest.unstable_mockModule('./metrics', () => ({
