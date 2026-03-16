@@ -8,8 +8,6 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 
-const DEFAULT_TIMEOUT = time.minutes(1);
-
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 
@@ -24,7 +22,7 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
 // TODO: allow changing interval and timeout with cron jobconfigs
 export function defineCronJob(
   alias: CronJob['alias'],
-  { description = '', interval, timeout = DEFAULT_TIMEOUT, handler }: CronJobInputParams
+  { description = '', interval, timeout = interval, handler }: CronJobInputParams
 ) {
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
