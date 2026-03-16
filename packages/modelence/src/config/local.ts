@@ -3,7 +3,7 @@ import { AppConfig, ConfigSchema, ConfigType } from './types';
 type LocalConfigVariant = 'withRemoteServer' | 'withoutRemoteServer';
 
 const localConfigMap = {
-  withRemoteServer: {
+  withoutRemoteServer: {
     MONGODB_URI: '_system.mongodbUri',
     MODELENCE_AUTH_GOOGLE_ENABLED: '_system.user.auth.google.enabled',
     MODELENCE_AUTH_GOOGLE_CLIENT_ID: '_system.user.auth.google.clientId',
@@ -27,7 +27,7 @@ const localConfigMap = {
     GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
     GOOGLE_AUTH_CLIENT_SECRET: '_system.user.auth.google.clientSecret',
   },
-  withoutRemoteServer: {
+  withRemoteServer: {
     MODELENCE_SITE_URL: '_system.site.url',
   },
 } as const;
