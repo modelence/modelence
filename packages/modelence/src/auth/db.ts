@@ -27,6 +27,9 @@ export const usersCollection = new Store('_modelenceUsers', {
       )
       .optional(),
     status: schema.enum(['active', 'disabled', 'deleted']).optional(),
+    firstName: schema.string().optional(),
+    lastName: schema.string().optional(),
+    avatarUrl: schema.string().optional(),
     createdAt: schema.date(),
     disabledAt: schema.date().optional(),
     deletedAt: schema.date().optional(),
@@ -59,12 +62,14 @@ export const usersCollection = new Store('_modelenceUsers', {
       key: { 'emails.address': 1, status: 1 },
     },
     {
-      key: { 'authMethods.google.id': 1, status: 1 },
+      key: { 'authMethods.google.id': 1 },
       sparse: true,
+      unique: true,
     },
     {
-      key: { 'authMethods.github.id': 1, status: 1 },
+      key: { 'authMethods.github.id': 1 },
       sparse: true,
+      unique: true,
     },
   ],
 });

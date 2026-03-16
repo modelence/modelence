@@ -36,6 +36,7 @@ function resubscribeAll() {
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
   socketClient = io('/', {
+    transports: ['websocket'],
     auth: {
       token: getAuthToken(),
     },

@@ -62,6 +62,11 @@ jest.unstable_mockModule('@/rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
+const mockGetConfig = jest.fn();
+jest.unstable_mockModule('@/config/server', () => ({
+  getConfig: mockGetConfig,
+}));
+
 const verificationModule = await import('./verification');
 const { handleVerifyEmail, sendVerificationEmail, handleResendEmailVerification } =
   verificationModule;

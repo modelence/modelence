@@ -15,6 +15,7 @@ const mockHandleResendEmailVerification = jest.fn();
 const mockHandleSendResetPasswordToken = jest.fn();
 const mockHandleResetPassword = jest.fn();
 const mockGetOwnProfile = jest.fn();
+const mockHandleUpdateProfile = jest.fn();
 
 const moduleCtorMock = jest.fn();
 
@@ -42,6 +43,7 @@ jest.unstable_mockModule('./login', () => ({
 
 jest.unstable_mockModule('./profile', () => ({
   getOwnProfile: mockGetOwnProfile,
+  handleUpdateProfile: mockHandleUpdateProfile,
 }));
 
 jest.unstable_mockModule('./signup', () => ({
@@ -61,6 +63,7 @@ jest.unstable_mockModule('./resetPassword', () => ({
 const mockTime = {
   seconds: jest.fn((value: number) => value * 1000),
   minutes: jest.fn((value: number) => value * 60 * 1000),
+  hours: jest.fn((value: number) => value * 60 * 60 * 1000),
   days: jest.fn((value: number) => value * 24 * 60 * 60 * 1000),
 };
 
@@ -131,6 +134,7 @@ describe('auth/user', () => {
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,
+          updateProfile: mockHandleUpdateProfile,
         }),
         cronJobs: {
           updateDisposableEmailList: mockUpdateDisposableEmailListCron,
@@ -147,6 +151,7 @@ describe('auth/user', () => {
     );
 
     expect(mockTime.minutes).toHaveBeenCalledWith(15);
+    expect(mockTime.hours).toHaveBeenCalledWith(1);
     expect(mockTime.days).toHaveBeenCalledWith(1);
   });
 });

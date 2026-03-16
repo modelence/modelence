@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'modelence@*'
+      - 'create-modelence-app@*'
       - '@modelence/*@*'
 
 jobs:

@@ -12,19 +12,20 @@ type Provider = 'openai' | 'anthropic' | 'google';
 
 // Extract the original generateText parameters and override the model property
 type OriginalGenerateTextParams = Parameters<typeof originalGenerateText>[0];
+type ModelenceGenerateTextOptions<T> = T extends unknown
+  ? Omit<T, 'model'> & {
+      provider: Provider;
+      model: string;
+    }
+  : never;
 
 /**
  * Options for the Modelence generateText function.
  * 
- * This interface extends all the standard AI SDK generateText options,
+ * This type extends all the standard AI SDK generateText options,
  * but replaces the model parameter with separate provider and model parameters.
  */
-export interface GenerateTextOptions extends Omit<OriginalGenerateTextParams, 'model'> {
-  /** The AI provider name */
-  provider: Provider;
-  /** The specific model name */
-  model: string;
-}
+export type GenerateTextOptions = ModelenceGenerateTextOptions<OriginalGenerateTextParams>;
 
 function getProviderModel(provider: Provider, model: string) {
   switch (provider) {
@@ -62,8 +63,8 @@ function getProviderModel(provider: Provider, model: string) {
  * import { generateText } from '@modelence/ai';
  * 
  * const response = await generateText({
- *   provider: 'openai',
- *   model: 'gpt-4o',
+ *   provider: 'anthropic',
+ *   model: 'claude-sonnet-4-6',
  *   messages: [
  *     { role: 'user', content: 'Write a haiku about programming' }
  *   ],
@@ -73,7 +74,9 @@ function getProviderModel(provider: Provider, model: string) {
  * console.log(response.text);
  * ```
  */
-export async function generateText(options: GenerateTextOptions) {
+export async function generateText(
+  options: GenerateTextOptions
+): Promise<Awaited<ReturnType<typeof originalGenerateText>>> {
   const { provider, model, ...restOptions } = options;
   
   const transaction = startTransaction('ai', 'ai:generateText', {
@@ -84,18 +87,26 @@ export async function generateText(options: GenerateTextOptions) {
   });
 
   try {
+    const providerModel = getProviderModel(provider, model);
     const result = await originalGenerateText({
-      model: getProviderModel(provider, model),
       ...restOptions,
+      model: providerModel,
     });
+    const usage = result.usage as {
+      inputTokens?: number;
+      outputTokens?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+    };
     
     if ('setContext' in transaction) {
       transaction.end('success', {
         context: {
           usage: {
-            promptTokens: result.usage.promptTokens,
-            completionTokens: result.usage.completionTokens,
-            totalTokens: result.usage.totalTokens,
+            promptTokens: usage.inputTokens ?? usage.promptTokens,
+            completionTokens: usage.outputTokens ?? usage.completionTokens,
+            totalTokens: usage.totalTokens,
           }
         }
       });

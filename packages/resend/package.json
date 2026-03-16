@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/resend",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Resend Adapter fro Modelence",
   "exports": {
     ".": {
@@ -16,17 +16,22 @@
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/resend"
+  },
   "author": "Modelence",
   "license": "SEE LICENSE IN LICENSE",
   "peerDependencies": {
     "modelence": "*"
   },
   "devDependencies": {
-    "modelence": "^0.6.2",
-    "tsup": "^8.3.6",
-    "typescript": "^5.7.2"
+    "modelence": "^0.12.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "resend": "^4.6.0"
+    "resend": "^6.9.2"
   }
 }

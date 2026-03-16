@@ -139,23 +139,28 @@ describe('auth/providers/google', () => {
           id: 'google-id',
           email: 'user@example.com',
           verified_email: true,
-          name: 'User',
+          name: 'User Test',
+          given_name: 'User',
+          family_name: 'Test',
           picture: 'pic',
         }),
       } as never);
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      clearCookie: jest.fn(),
+    } as unknown as Response;
 
     await handler(
       {
         query: { code: 'code', state: 'valid-state' },
         cookies: { authStateGoogle: 'valid-state' },
       } as unknown as Request,
-      {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-        clearCookie: jest.fn(),
-      } as unknown as Response
+      res
     );
 
+    expect(res.clearCookie).toHaveBeenCalledWith('authStateGoogle');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(
       expect.anything(),
@@ -165,6 +170,9 @@ describe('auth/providers/google', () => {
         email: 'user@example.com',
         emailVerified: true,
         providerName: 'google',
+        firstName: 'User',
+        lastName: 'Test',
+        avatarUrl: 'pic',
       }
     );
   });

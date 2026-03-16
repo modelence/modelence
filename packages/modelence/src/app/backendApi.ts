@@ -1,6 +1,7 @@
 import os from 'os';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
+import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
 import { AppConfig } from '../config/types';
 
@@ -29,11 +30,13 @@ export async function connectCloudBackend({
   configSchema,
   cronJobsMetadata,
   stores,
+  roles,
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any, any>[];
+  roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
   if (!containerId) {
@@ -50,12 +53,13 @@ export async function connectCloudBackend({
       };
     });
 
-    const data = await callApi('/api/connect', 'POST', {
+    const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
       containerId,
       dataModels,
       configSchema,
       cronJobsMetadata,
+      roles,
     });
 
     if (data.status === 'error') {
@@ -72,8 +76,7 @@ export async function connectCloudBackend({
 }
 
 export async function fetchConfigs() {
-  const data = await callApi('/api/configs', 'GET');
-  return data;
+  return callApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
 }
 
 export async function syncStatus() {
@@ -83,7 +86,21 @@ export async function syncStatus() {
   return data;
 }
 
-async function callApi(endpoint: string, method: string, payload?: object) {
+async function callApi<T = unknown>(endpoint: string, method: string, payload?: object) {
+  return callCloudApi<T>(
+    endpoint,
+    method,
+    payload ? JSON.stringify(payload) : undefined,
+    payload ? { 'Content-Type': 'application/json' } : {}
+  );
+}
+
+export async function callCloudApi<T>(
+  endpoint: string,
+  method: string,
+  body?: BodyInit,
+  extraHeaders?: Record<string, string>
+): Promise<T> {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
 
   if (!MODELENCE_SERVICE_ENDPOINT) {
@@ -94,9 +111,9 @@ async function callApi(endpoint: string, method: string, payload?: object) {
     method,
     headers: {
       Authorization: `Bearer ${MODELENCE_SERVICE_TOKEN}`,
-      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+      ...extraHeaders,
     },
-    body: payload ? JSON.stringify(payload) : undefined,
+    body,
   });
 
   if (!response.ok) {
@@ -113,5 +130,9 @@ async function callApi(endpoint: string, method: string, payload?: object) {
     }
   }
 
-  return await response.json();
+  if (response.status === 204 || response.headers?.get('content-length') === '0') {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
 }

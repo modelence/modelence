@@ -10,7 +10,7 @@ import {
 } from './db';
 import { updateDisposableEmailListCron } from './disposableEmails';
 import { handleLoginWithPassword, handleLogout } from './login';
-import { getOwnProfile } from './profile';
+import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
@@ -52,6 +52,7 @@ export default new Module('_system.user', {
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,
+    updateProfile: handleUpdateProfile,
   },
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron,
@@ -102,6 +103,30 @@ export default new Module('_system.user', {
     {
       bucket: 'verification',
       type: 'user',
+      window: time.days(1),
+      limit: 10,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: 10,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.days(1),
+      limit: 100,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
+      window: time.hours(1),
+      limit: 5,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
       window: time.days(1),
       limit: 10,
     },

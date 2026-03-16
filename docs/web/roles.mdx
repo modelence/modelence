@@ -1,14 +1,40 @@
 ---
 title: 'Roles'
-description: 'Define custom roles and manage user permissions'
+description: 'Define custom roles and manage user access'
 icon: 'user-shield'
 ---
 
-Modelence provides built-in support for user roles, allowing you to define custom roles and check user permissions.
+Modelence provides built-in support for user roles. You can define roles in
+`startApp`, assign them to users, and check them on both the server and client.
 
-## Backend Usage
+## Defining Roles
 
-### Checking User Roles
+Register the roles your app uses in your `startApp` call:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  roles: {
+    admin: { description: 'Full access to all features' },
+    editor: { description: 'Can edit content' },
+    viewer: {},
+  },
+});
+```
+
+Each role has an optional `description` that is shown in the Modelence Cloud
+dashboard.
+
+<Note>
+Roles defined in `startApp` are synced to Modelence Cloud so you can assign
+them to users directly from the dashboard.
+</Note>
+
+## Checking Roles in Handlers
+
+Use `user.requireRole` to throw an error if the user lacks a role, or
+`user.hasRole` for manual checking:
 
 ```typescript
 import { Module } from 'modelence/server';
@@ -22,7 +48,7 @@ export default new Module('myModule', {
           throw new AuthError('Not authenticated');
         }
 
-        // Throws exception if the user doesn't have an "admin" role
+        // Throws if the user doesn't have the "admin" role
         user.requireRole('admin');
 
         // Admin-only logic here
@@ -35,7 +61,7 @@ export default new Module('myModule', {
           throw new AuthError('Not authenticated');
         }
 
-        // Alternatively, manually check for the role for custom error handling
+        // Check without throwing for custom error handling
         if (!user.hasRole('admin')) {
           throw new Error('Admin access required');
         }
@@ -47,12 +73,16 @@ export default new Module('myModule', {
 });
 ```
 
-### Assigning Roles
+## Assigning Roles
+
+The recommended way to assign roles is through the Modelence Cloud user
+management dashboard. If that is not available, you can update roles
+directly via the `dbUsers` collection:
 
 ```typescript
 import { dbUsers, ObjectId } from 'modelence/server';
 
-// Make user admin
+// Add a role
 await dbUsers.updateOne(
   { _id: new ObjectId(userId) },
   { $addToSet: { roles: 'admin' } }
@@ -61,7 +91,7 @@ await dbUsers.updateOne(
 // Add multiple roles
 await dbUsers.updateOne(
   { _id: new ObjectId(userId) },
-  { $addToSet: { roles: { $each: ['moderator', 'editor'] } } }
+  { $addToSet: { roles: { $each: ['editor', 'viewer'] } } }
 );
 
 // Remove a role
@@ -73,7 +103,7 @@ await dbUsers.updateOne(
 
 ## Frontend Usage
 
-### Using User Methods
+Use `useSession` to check roles on the client and conditionally render UI:
 
 ```typescript
 import { useSession } from 'modelence/client';
@@ -89,8 +119,6 @@ function AdminPanel() {
 }
 ```
 
-### Conditional Rendering
-
 ```typescript
 import { useSession } from 'modelence/client';
 
@@ -101,7 +129,7 @@ function Navigation() {
     <nav>
       <a href="/">Home</a>
       {user?.hasRole('admin') && <a href="/admin">Admin Panel</a>}
-      {user?.hasRole('moderator') && <a href="/moderate">Moderation</a>}
+      {user?.hasRole('editor') && <a href="/editor">Editor</a>}
     </nav>
   );
 }
@@ -109,6 +137,13 @@ function Navigation() {
 
 ## API Reference
 
-**User Methods:**
-- `user.hasRole(role: string): boolean` - Check if user has a specific role
-- `user.requireRole(role: string): void` - Throw error if user doesn't have role
+**`startApp` options:**
+- `roles` — `Record<string, RoleDefinition>` — role definitions keyed by name
+
+**`RoleDefinition`:**
+- `description?: string` — optional human-readable description shown in the Modelence Cloud dashboard
+
+**User methods:**
+- `user.roles: string[]` — the roles assigned to the user
+- `user.hasRole(role: string): boolean` — check if user has a specific role
+- `user.requireRole(role: string): void` — throw error if user doesn't have role

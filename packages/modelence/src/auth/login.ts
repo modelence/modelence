@@ -48,7 +48,7 @@ export async function handleLoginWithPassword(
       throw incorrectCredentialsError();
     }
 
-    const emailDoc = userDoc.emails?.find((e) => e.address === email);
+    const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
     if (!emailDoc?.verified && getEmailConfig()?.provider) {
       if (ip) {
@@ -95,6 +95,9 @@ export async function handleLoginWithPassword(
         id: userDoc._id,
         handle: userDoc.handle,
         roles: userDoc.roles || [],
+        firstName: userDoc.firstName ?? undefined,
+        lastName: userDoc.lastName ?? undefined,
+        avatarUrl: userDoc.avatarUrl ?? undefined,
       },
     };
   } catch (error) {

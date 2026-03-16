@@ -12,6 +12,9 @@ type User = {
   roles: string[];
   hasRole: (role: string) => boolean;
   requireRole: (role: string) => void;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 };
 
 type SessionStore = {
@@ -32,6 +35,9 @@ const userSchema = z.object({
   id: z.string(),
   handle: z.string(),
   roles: z.array(z.string()),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  avatarUrl: z.string().optional(),
 });
 
 function parseUser(user: unknown): User | null {
@@ -39,10 +45,20 @@ function parseUser(user: unknown): User | null {
     return null;
   }
 
-  const parsedData = userSchema.parse(user);
+  const result = userSchema.safeParse(user);
+
+  if (!result.success) {
+    console.error('Session Error: Invalid user payload', result.error);
+    return null;
+  }
+
+  const parsedData = result.data;
 
   return Object.freeze({
     ...parsedData,
+    firstName: parsedData.firstName ?? undefined,
+    lastName: parsedData.lastName ?? undefined,
+    avatarUrl: parsedData.avatarUrl ?? undefined,
     hasRole: (role: string) => parsedData.roles.includes(role),
     requireRole: (role: string) => {
       if (!parsedData.roles.includes(role)) {

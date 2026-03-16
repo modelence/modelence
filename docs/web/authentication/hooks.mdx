@@ -2,30 +2,162 @@
 title: 'Auth Hooks'
 ---
 
-The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events:
+The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events. Configure these in your `startApp` call:
+
+## Validation Hooks
+
+### `validateSignup`
+
+Called before a new user is created during email/password signup. Use this to enforce custom validation rules on signup data. Throw an error to reject the signup.
 
 ```typescript
 import { startApp } from 'modelence/server';
 
 startApp({
   auth: {
-    onAfterLogin: ({ user, session, connectionInfo }) => {
-      // Called after successful login
-      console.log(`${user.handle} logged in from ${connectionInfo.ip}`);
-    },
-    onLoginError: ({ error, session, connectionInfo }) => {
-      // Called when login fails
-      console.error('Login error:', error.message);
-    },
-    onAfterSignup: ({ user, session, connectionInfo }) => {
-      // Called after successful signup
-      // Perfect place to send welcome emails or analytics
-    },
-    onSignupError: ({ error, session, connectionInfo }) => {
-      // Called when signup fails
-      console.error('Signup error:', error.message);
+    validateSignup: ({ email, firstName, lastName, password, handle, avatarUrl }) => {
+      // Custom validation logic
+      if (password.length < 12) {
+        throw new Error('Password must be at least 12 characters');
+      }
+      if (!firstName) {
+        throw new Error('First name is required');
+      }
     },
   },
 });
 ```
 
+**Props:**
+
+| Property    | Type                | 
+| ----------- | ------------------- | 
+| `email`     | `string`            |
+| `password`  | `string`            |
+| `firstName` | `string \| undefined` | 
+| `lastName`  | `string \| undefined` | 
+| `avatarUrl` | `string \| undefined` | 
+| `handle`    | `string \| undefined` | 
+
+**Returns:** `void | Promise<void>` 
+
+### `validateProfileUpdate`
+
+Called before a user's profile is updated. Use this to enforce custom validation rules on profile updates. Throw an error to reject the update.
+
+```typescript
+startApp({
+  auth: {
+    validateProfileUpdate: ({ firstName, lastName, avatarUrl, handle }) => {
+      if (handle && handle.length < 3) {
+        throw new Error('Handle must be at least 3 characters');
+      }
+    },
+  },
+});
+```
+
+**Props:**
+
+| Property    | Type                | 
+| ----------- | ------------------- | 
+| `firstName` | `string \| undefined` | 
+| `lastName`  | `string \| undefined` | 
+| `avatarUrl` | `string \| undefined` | 
+| `handle`    | `string \| undefined` | 
+
+**Returns:** `void | Promise<void>` 
+
+## Custom Handle Generation
+
+### `generateHandle`
+
+By default, handles are derived from the user's email address. This hook lets you generate custom handles based on the user's email and profile information.
+
+```typescript
+startApp({
+  auth: {
+    generateHandle: ({ email, firstName, lastName }) => {
+      // Generate a custom handle
+      if (firstName && lastName) {
+        return `${firstName.toLowerCase()}-${lastName.toLowerCase()}`;
+      }
+      return email.split('@')[0];
+    },
+  },
+});
+```
+
+**Props:**
+
+| Property    | Type                |
+| ----------- | ------------------- | 
+| `email`     | `string`            |
+| `firstName` | `string \| undefined` | 
+| `lastName`  | `string \| undefined` | 
+
+**Returns:** `string | Promise<string>` — The generated handle. If the handle conflicts with an existing one, Modelence will automatically append a numeric suffix.
+
+## Auth Events
+
+```typescript
+startApp({
+  auth: {
+    onAfterLogin: ({ user, provider, session, connectionInfo }) => {
+      // Called after successful login
+      console.log(`${user.handle} logged in via ${provider} from ${connectionInfo.ip}`);
+    },
+    onLoginError: ({ error, provider, session, connectionInfo }) => {
+      // Called when login fails
+      console.error('Login error:', error.message);
+    },
+    onAfterSignup: ({ user, provider, session, connectionInfo }) => {
+      // Called after successful signup
+      // Perfect place to send welcome emails or analytics
+    },
+    onSignupError: ({ error, provider, session, connectionInfo }) => {
+      // Called when signup fails
+      console.error('Signup error:', error.message);
+    },
+    onAfterEmailVerification: ({ user, session, connectionInfo }) => {
+      // Called after successful email verification
+    },
+    onEmailVerificationError: ({ error, session, connectionInfo }) => {
+      // Called when email verification fails
+    },
+  },
+});
+```
+
+## Full Example
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    validateSignup: ({ email, password, firstName }) => {
+      if (!firstName) {
+        throw new Error('First name is required');
+      }
+    },
+    validateProfileUpdate: ({ handle }) => {
+      if (handle && !/^[a-z0-9-]+$/.test(handle)) {
+        throw new Error('Handle can only contain lowercase letters, numbers, and hyphens');
+      }
+    },
+    generateHandle: ({ email, firstName, lastName }) => {
+      if (firstName && lastName) {
+        return `${firstName}-${lastName}`.toLowerCase();
+      }
+      return email.split('@')[0];
+    },
+    onAfterSignup: ({ user }) => {
+      console.log('Welcome!', user.handle);
+    },
+    onAfterLogin: ({ user, provider }) => {
+      console.log(`${user.handle} logged in via ${provider}`);
+    },
+  },
+});
+```
