@@ -692,4 +692,99 @@ describe('data/store', () => {
       expect(calledFilter?.$expr).toEqual({ $gt: ['$value', 10] });
     });
   });
+
+  describe('ObjectId serialization', () => {
+    test('findOne returns _id as string', async () => {
+      const store = createStore();
+      const rawId = new ObjectId();
+      const collectionMock = {
+        findOne: jest.fn().mockResolvedValue({ _id: rawId, name: 'test' } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await store.findOne({} as never);
+      expect(typeof doc?._id).toBe('string');
+      expect(doc?._id).toBe(rawId.toHexString());
+    });
+
+    test('fetch returns _id as string for all documents', async () => {
+      const store = createStore();
+      const rawId1 = new ObjectId();
+      const rawId2 = new ObjectId();
+      const cursorMock = {
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        toArray: jest.fn().mockResolvedValue([
+          { _id: rawId1, name: 'a' },
+          { _id: rawId2, name: 'b' },
+        ] as never),
+      };
+      const collectionMock = { find: jest.fn().mockReturnValue(cursorMock as never) };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const docs = await store.fetch({} as never);
+      expect(typeof docs[0]?._id).toBe('string');
+      expect(docs[0]?._id).toBe(rawId1.toHexString());
+      expect(docs[1]?._id).toBe(rawId2.toHexString());
+    });
+
+    test('ref and userId fields are serialized to string', async () => {
+      const store = new Store('test', {
+        schema: {
+          ownerId: schema.userId(),
+          parentId: schema.ref('other'),
+        },
+        indexes: [],
+      });
+      const rawOwnerId = new ObjectId();
+      const rawParentId = new ObjectId();
+      const collectionMock = {
+        findOne: jest
+          .fn()
+          .mockResolvedValue({
+            _id: new ObjectId(),
+            ownerId: rawOwnerId,
+            parentId: rawParentId,
+          } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await store.findOne({} as never);
+      expect(typeof doc?.ownerId).toBe('string');
+      expect(doc?.ownerId).toBe(rawOwnerId.toHexString());
+      expect(typeof doc?.parentId).toBe('string');
+      expect(doc?.parentId).toBe(rawParentId.toHexString());
+    });
+
+    test('findOne converts string _id in filter to ObjectId', async () => {
+      const store = createStore();
+      const collectionMock = {
+        findOne: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const hexId = '507f1f77bcf86cd799439011';
+      await store.findOne({ _id: hexId } as never);
+
+      const calledFilter = collectionMock.findOne.mock.calls[0]?.[0] as { _id?: unknown };
+      expect(calledFilter?._id).toBeInstanceOf(ObjectId);
+      expect((calledFilter?._id as ObjectId).toHexString()).toBe(hexId);
+    });
+
+    test('deleteOne converts string _id in filter to ObjectId', async () => {
+      const store = createStore();
+      const collectionMock = {
+        deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const hexId = '507f1f77bcf86cd799439011';
+      await store.deleteOne({ _id: hexId } as never);
+
+      const calledFilter = collectionMock.deleteOne.mock.calls[0]?.[0] as { _id?: unknown };
+      expect(calledFilter?._id).toBeInstanceOf(ObjectId);
+      expect((calledFilter?._id as ObjectId).toHexString()).toBe(hexId);
+    });
+  });
 });

@@ -8,7 +8,7 @@ describe('auth/types', () => {
   });
 
   test('should have valid Session type', () => {
-    const userId = new ObjectId();
+    const userId = new ObjectId().toString();
     const session: Session = {
       userId,
       authToken: 'token123',

@@ -1,4 +1,4 @@
-import { Document, ObjectId } from 'mongodb';
+import { Document } from 'mongodb';
 import { ConnectionInfo } from '@/methods/types';
 
 export interface UserEmail {
@@ -7,7 +7,7 @@ export interface UserEmail {
 }
 
 export interface User extends Document {
-  _id: ObjectId;
+  _id: string;
 
   handle: string;
 
@@ -61,7 +61,7 @@ export type DefaultRoles = Record<'authenticated' | 'unauthenticated', Role | nu
 export type Session = {
   authToken: string;
   expiresAt: Date;
-  userId: ObjectId | null;
+  userId: string | null;
 };
 
 export type Permission = string;

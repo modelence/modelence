@@ -32,7 +32,7 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
   return await createSession();
 }
 
-export async function setSessionUser(authToken: string, userId: ObjectId) {
+export async function setSessionUser(authToken: string, userId: string | ObjectId) {
   await sessionsCollection.updateOne(
     { authToken },
     {
@@ -50,7 +50,7 @@ export async function clearSessionUser(authToken: string) {
   );
 }
 
-export async function createSession(userId: ObjectId | null = null): Promise<Session> {
+export async function createSession(userId: string | ObjectId | null = null): Promise<Session> {
   // TODO: add rate-limiting and captcha handling
 
   const authToken = randomBytes(32).toString('base64url');
@@ -67,7 +67,7 @@ export async function createSession(userId: ObjectId | null = null): Promise<Ses
   return {
     authToken,
     expiresAt,
-    userId,
+    userId: userId ? userId.toString() : null,
   };
 }
 

@@ -94,7 +94,7 @@ const createContext = (overrides: Partial<Context> = {}): Context => ({
 
 const createMockUser = (
   overrides: Partial<{
-    _id: ObjectId;
+    _id: string;
     handle: string;
     emails: { address: string; verified: boolean }[];
     status: 'active' | 'disabled' | 'deleted';
@@ -107,7 +107,7 @@ const createMockUser = (
   }> = {}
 ) =>
   ({
-    _id: overrides._id ?? new ObjectId(),
+    _id: overrides._id ?? new ObjectId().toString(),
     handle: overrides.handle ?? 'testuser',
     emails: overrides.emails ?? [{ address: 'test@example.com', verified: true }],
     status: overrides.status ?? 'active',
@@ -117,16 +117,16 @@ const createMockUser = (
 
 const createMockResetToken = (
   overrides: Partial<{
-    _id: ObjectId;
-    userId: ObjectId;
+    _id: string;
+    userId: string;
     token: string;
     expiresAt: Date;
     createdAt: Date;
   }> = {}
 ) =>
   ({
-    _id: overrides._id ?? new ObjectId(),
-    userId: overrides.userId ?? new ObjectId(),
+    _id: overrides._id ?? new ObjectId().toString(),
+    userId: overrides.userId ?? new ObjectId().toString(),
     token: overrides.token ?? 'token123',
     expiresAt: overrides.expiresAt ?? new Date(Date.now() + 1000000),
     createdAt: overrides.createdAt ?? new Date(),
@@ -187,7 +187,7 @@ describe('auth/resetPassword', () => {
     });
     test('sends reset email for valid user with password auth', async () => {
       const email = 'user@example.com';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
       const resetToken = 'abc123token';
 
       mockValidateEmail.mockReturnValue(email);
@@ -515,7 +515,7 @@ describe('auth/resetPassword', () => {
       const token = 'validtoken123';
       const password = 'NewP@ssw0rd!';
       const hashedPassword = 'hashedNewPassword';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(
@@ -541,14 +541,11 @@ describe('auth/resetPassword', () => {
       expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
-        { _id: userId },
-        {
-          $set: {
-            'authMethods.password.hash': hashedPassword,
-          },
-        }
-      );
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(userId, {
+        $set: {
+          'authMethods.password.hash': hashedPassword,
+        },
+      });
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(result).toEqual({
         success: true,
@@ -574,7 +571,7 @@ describe('auth/resetPassword', () => {
     test('throws error and deletes token if token is expired', async () => {
       const token = 'expiredtoken';
       const password = 'NewP@ssw0rd!';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(
@@ -598,7 +595,7 @@ describe('auth/resetPassword', () => {
     test('throws error if user not found', async () => {
       const token = 'validtoken';
       const password = 'NewP@ssw0rd!';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(
@@ -623,7 +620,7 @@ describe('auth/resetPassword', () => {
     test('validates password before resetting', async () => {
       const token = 'validtoken';
       const weakPassword = '123';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockImplementation(() => {
         throw new Error('Password must be at least 8 characters');
@@ -648,7 +645,7 @@ describe('auth/resetPassword', () => {
     test('uses bcrypt with salt rounds 10', async () => {
       const token = 'validtoken';
       const password = 'SecureP@ssw0rd';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(
@@ -675,7 +672,7 @@ describe('auth/resetPassword', () => {
     test('deletes reset token after successful password reset', async () => {
       const token = 'onetimetoken';
       const password = 'NewP@ssw0rd!';
-      const userId = new ObjectId();
+      const userId = new ObjectId().toString();
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(

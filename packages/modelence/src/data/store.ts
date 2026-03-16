@@ -30,6 +30,60 @@ import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 
 /**
+ * Recursively maps ObjectId fields to string in a document type.
+ * This reflects the runtime behavior: ObjectIds are serialized to strings
+ * at the Store boundary so callers always receive plain strings.
+ * @internal
+ */
+export type SerializeObjectIds<T> = T extends ObjectId
+  ? string
+  : T extends Date
+    ? Date
+    : T extends (infer U)[]
+      ? SerializeObjectIds<U>[]
+      : T extends object
+        ? { [K in keyof T]: SerializeObjectIds<T[K]> }
+        : T;
+
+function serializeValue(value: unknown): unknown {
+  if (value instanceof ObjectId) return value.toString();
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map(serializeValue);
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = serializeValue(v);
+    }
+    return result;
+  }
+  return value;
+}
+
+function serializeDocumentIds<T extends object>(doc: T): SerializeObjectIds<T> {
+  return serializeValue(doc) as SerializeObjectIds<T>;
+}
+
+/**
+ * Recursively converts 24-char hex strings to ObjectId instances within a MongoDB filter,
+ * so callers can pass strings wherever ObjectId is expected.
+ * @internal
+ */
+function serializeFilter<T>(filter: T): T {
+  if (filter === null || filter === undefined || typeof filter !== 'object') return filter;
+  if (filter instanceof ObjectId || filter instanceof Date) return filter;
+  if (Array.isArray(filter)) return filter.map(serializeFilter) as unknown as T;
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(filter as Record<string, unknown>)) {
+    if (typeof v === 'string' && v.length === 24 && ObjectId.isValid(v)) {
+      result[k] = new ObjectId(v);
+    } else {
+      result[k] = serializeFilter(v);
+    }
+  }
+  return result as T;
+}
+
+/**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
  * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
  * @internal
@@ -238,6 +292,7 @@ const normalizeIndexName = (index: IndexDescription): IndexDescription => {
  * Custom filter value type that handles array fields specially:
  * - For array fields: allows element type, full array type, or FilterOperators
  * - For non-array fields: allows exact type or FilterOperators
+ * - ObjectId fields also accept string (the Store converts them at runtime)
  * We use [T] to prevent distribution when T is a union type
  * @internal
  */
@@ -245,7 +300,9 @@ type FilterValue<T> = [T] extends [unknown[]]
   ? ArrayElement<T> | T | EnhancedFilterOperators<T>
   : [T] extends [never]
     ? never
-    : T | EnhancedFilterOperators<[T] extends [never] ? never : T>;
+    : [T] extends [ObjectId]
+      ? string | T | EnhancedFilterOperators<T>
+      : T | EnhancedFilterOperators<[T] extends [never] ? never : T>;
 
 /**
  * Type-safe MongoDB filter that ensures only schema fields can be queried
@@ -356,7 +413,7 @@ export class Store<
   /** @internal */
   readonly _type!: InferDocumentType<TSchema>;
   /** @internal */
-  readonly _rawDoc!: WithId<this['_type']>;
+  readonly _rawDoc!: SerializeObjectIds<WithId<this['_type']>>;
   /** @internal */
   readonly _doc!: this['_rawDoc'] & TMethods;
 
@@ -654,15 +711,16 @@ export class Store<
     }
   }
 
-  private wrapDocument(document: this['_rawDoc']): this['_doc'] {
+  private wrapDocument(document: WithId<this['_type']>): this['_doc'] {
+    const serialized = serializeDocumentIds(document);
     if (!this.methods) {
-      return document as unknown as this['_doc'];
+      return serialized as unknown as this['_doc'];
     }
 
     const result = Object.create(
       null,
       Object.getOwnPropertyDescriptors({
-        ...document,
+        ...(serialized as object),
         ...this.methods,
       })
     );
@@ -725,8 +783,8 @@ export class Store<
    * ```
    */
   async findOne(query: TypedFilter<this['_type']>, options?: FindOptions) {
-    const document = await this.requireCollection().findOne<this['_rawDoc']>(
-      query as Filter<this['_type']>,
+    const document = await this.requireCollection().findOne<WithId<this['_type']>>(
+      serializeFilter(query) as Filter<this['_type']>,
       options
     );
     return document ? this.wrapDocument(document) : null;
@@ -746,7 +804,7 @@ export class Store<
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
     const cursor = this.requireCollection().find(
-      query as Filter<this['_type']>,
+      serializeFilter(query) as Filter<this['_type']>,
       options?.projection ? { projection: options.projection } : undefined
     );
     if (options?.sort) {
@@ -796,7 +854,7 @@ export class Store<
    * @returns The number of documents that match the query
    */
   countDocuments(query: TypedFilter<this['_type']>): Promise<number> {
-    return this.requireCollection().countDocuments(query as Filter<this['_type']>);
+    return this.requireCollection().countDocuments(serializeFilter(query) as Filter<this['_type']>);
   }
 
   /**
@@ -830,7 +888,7 @@ export class Store<
     options?: FetchOptions<this['_type']>
   ): Promise<this['_doc'][]> {
     const cursor = this.find(query, options);
-    return (await cursor.toArray()).map(this.wrapDocument.bind(this));
+    return (await cursor.toArray()).map((doc) => this.wrapDocument(doc));
   }
 
   /**
@@ -868,7 +926,10 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(this.getSelector(selector), update);
+    return await this.requireCollection().updateOne(
+      serializeFilter(this.getSelector(selector)),
+      update
+    );
   }
 
   /**
@@ -882,9 +943,11 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(this.getSelector(selector), update, {
-      upsert: true,
-    });
+    return await this.requireCollection().updateOne(
+      serializeFilter(this.getSelector(selector)),
+      update,
+      { upsert: true }
+    );
   }
 
   /**
@@ -900,7 +963,7 @@ export class Store<
     options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(
-      selector as Filter<this['_type']>,
+      serializeFilter(selector) as Filter<this['_type']>,
       update,
       options
     );
@@ -917,9 +980,11 @@ export class Store<
     selector: TypedFilter<this['_type']>,
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateMany(selector as Filter<this['_type']>, update, {
-      upsert: true,
-    });
+    return await this.requireCollection().updateMany(
+      serializeFilter(selector) as Filter<this['_type']>,
+      update,
+      { upsert: true }
+    );
   }
 
   /**
@@ -929,7 +994,9 @@ export class Store<
    * @returns The result of the delete operation
    */
   async deleteOne(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteOne(selector as Filter<this['_type']>);
+    return await this.requireCollection().deleteOne(
+      serializeFilter(selector) as Filter<this['_type']>
+    );
   }
 
   /**
@@ -939,7 +1006,9 @@ export class Store<
    * @returns The result of the delete operation
    */
   async deleteMany(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteMany(selector as Filter<this['_type']>);
+    return await this.requireCollection().deleteMany(
+      serializeFilter(selector) as Filter<this['_type']>
+    );
   }
 
   /**

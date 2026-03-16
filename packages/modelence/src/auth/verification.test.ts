@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
+const mockUsersFindById = jest.fn();
 const mockUsersUpdateOne = jest.fn();
 const mockTokensFindOne = jest.fn();
 const mockTokensInsertOne = jest.fn();
 const mockTokensDeleteOne = jest.fn();
 const mockGetEmailConfig = jest.fn();
-const mockRandomBytes = jest.fn();
+const mockRandomBytes = jest.fn().mockReturnValue({ toString: (_encoding?: string) => 'token123' });
 const mockTimeHours = jest.fn();
 const mockHtmlToText = jest.fn<(html: string) => string>();
 const mockTemplate =
@@ -19,6 +20,7 @@ const mockConsumeRateLimit = jest.fn();
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
+    findById: mockUsersFindById,
     updateOne: mockUsersUpdateOne,
   },
   emailVerificationTokensCollection: {
@@ -26,24 +28,33 @@ jest.unstable_mockModule('./db', () => ({
     insertOne: mockTokensInsertOne,
     deleteOne: mockTokensDeleteOne,
   },
+  dbDisposableEmailDomains: { findOne: jest.fn(), insertMany: jest.fn() },
+  resetPasswordTokensCollection: { findOne: jest.fn(), insertOne: jest.fn(), deleteOne: jest.fn() },
 }));
 
 jest.unstable_mockModule('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
+  setEmailConfig: jest.fn(),
 }));
 
 jest.unstable_mockModule('crypto', () => ({
+  default: { randomBytes: mockRandomBytes, randomUUID: jest.fn() },
   randomBytes: mockRandomBytes,
+  randomUUID: jest.fn(),
 }));
 
 jest.unstable_mockModule('@/time', () => ({
   time: {
     hours: mockTimeHours,
+    days: jest.fn().mockReturnValue(24 * 60 * 60 * 1000),
+    minutes: jest.fn().mockReturnValue(60 * 1000),
+    seconds: jest.fn().mockReturnValue(1000),
   },
 }));
 
 jest.unstable_mockModule('@/utils', () => ({
   htmlToText: mockHtmlToText,
+  requireServer: jest.fn(),
 }));
 
 jest.unstable_mockModule('./templates/emailVerficationTemplate', () => ({
@@ -52,19 +63,29 @@ jest.unstable_mockModule('./templates/emailVerficationTemplate', () => ({
 
 jest.unstable_mockModule('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
+  setAuthConfig: jest.fn(),
 }));
 
 jest.unstable_mockModule('./validators', () => ({
   validateEmail: mockValidateEmail,
+  validateProfileFields: jest.fn(),
+  validatePassword: jest.fn(),
+  validateHandle: jest.fn(),
+  MIN_HANDLE_LENGTH: 3,
+  MAX_HANDLE_LENGTH: 50,
 }));
 
 jest.unstable_mockModule('@/rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
+  initRateLimits: jest.fn(),
 }));
 
 const mockGetConfig = jest.fn();
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+  getPublicConfigs: jest.fn().mockReturnValue({}),
+  loadConfigs: jest.fn(),
+  setSchema: jest.fn(),
 }));
 
 const verificationModule = await import('./verification');
@@ -94,7 +115,7 @@ describe('auth/verification', () => {
         `<p>${email} ${verificationUrl}</p>`
     );
     mockRandomBytes.mockReturnValue({
-      toString: () => 'token123',
+      toString: (_encoding?: string) => 'token123',
     });
     mockTimeHours.mockReturnValue(24 * 60 * 60 * 1000);
   });
@@ -140,9 +161,8 @@ describe('auth/verification', () => {
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindOne
-        .mockResolvedValueOnce({ _id: 'user123' } as never)
-        .mockResolvedValueOnce(userDoc as never);
+      mockUsersFindById.mockResolvedValue({ _id: 'user123' } as never);
+      mockUsersFindOne.mockResolvedValue(userDoc as never);
       mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
 
       const result = await handleVerifyEmail(baseParams as never);
@@ -151,7 +171,7 @@ describe('auth/verification', () => {
         token: 'token',
         expiresAt: { $gt: expect.any(Date) },
       });
-      expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: tokenDoc.userId });
+      expect(mockUsersFindById).toHaveBeenCalledWith(tokenDoc.userId);
       expect(mockUsersUpdateOne).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,
@@ -221,7 +241,7 @@ describe('auth/verification', () => {
         expiresAt: new Date(Date.now() + 1000),
       };
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindOne.mockResolvedValue(null as never);
+      mockUsersFindById.mockResolvedValue(null as never);
 
       const result = await handleVerifyEmail(baseParams as never);
 
@@ -253,8 +273,9 @@ describe('auth/verification', () => {
         verification: {},
       });
 
+      const userId = new ObjectId('64b64b64b64b64b64b64b64b').toString();
       await sendVerificationEmail({
-        userId: 'user123' as never,
+        userId: userId as never,
         email: 'user@example.com',
         baseUrl: 'https://example.com',
       });
@@ -262,7 +283,7 @@ describe('auth/verification', () => {
       expect(mockRandomBytes).toHaveBeenCalledWith(32);
       expect(mockTokensInsertOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: 'user123',
+          userId,
           email: 'user@example.com',
           token: 'token123',
           expiresAt: expect.any(Date),

@@ -36,7 +36,7 @@ describe('auth/session', () => {
   });
 
   test('createSession inserts session with generated token and returns metadata', async () => {
-    const userId = new ObjectId();
+    const userId = new ObjectId().toString();
     insertOneMock.mockResolvedValue({ acknowledged: true } as never);
 
     const result = await createSession(userId);
@@ -83,7 +83,7 @@ describe('auth/session', () => {
 
   test('setSessionUser stores user id for session', async () => {
     updateOneMock.mockResolvedValue({ acknowledged: true } as never);
-    const userId = new ObjectId();
+    const userId = new ObjectId().toString();
 
     await setSessionUser('token', userId);
 

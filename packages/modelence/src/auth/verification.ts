@@ -121,7 +121,7 @@ export async function sendVerificationEmail({
   email,
   baseUrl = getConfig('_system.site.url') as string | undefined,
 }: {
-  userId: ObjectId;
+  userId: string | ObjectId;
   email: string;
   baseUrl?: string;
 }) {

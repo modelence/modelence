@@ -19,7 +19,7 @@ export interface OAuthUserData {
   avatarUrl?: string;
 }
 
-export async function authenticateUser(res: Response, userId: ObjectId) {
+export async function authenticateUser(res: Response, userId: string | ObjectId) {
   const { authToken } = await createSession(userId);
 
   res.cookie('authToken', authToken, {

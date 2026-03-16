@@ -39,16 +39,20 @@ export const schema = {
   embedding(): ZodArray<ZodNumber> {
     return z.array(z.number());
   },
-  objectId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('ObjectId');
+  objectId(): z.ZodType<ObjectId | string> {
+    return z
+      .union([z.instanceof(ObjectId), z.string().regex(/^[0-9a-f]{24}$/i)])
+      .describe('ObjectId');
   },
-  userId(): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('UserId');
+  userId(): z.ZodType<ObjectId | string> {
+    return z
+      .union([z.instanceof(ObjectId), z.string().regex(/^[0-9a-f]{24}$/i)])
+      .describe('UserId');
   },
   ref<T extends ModelSchema>(
     _collection: string | Store<T, InferDocumentType<T>>
-  ): z.ZodType<ObjectId> {
-    return z.instanceof(ObjectId).describe('Ref');
+  ): z.ZodType<ObjectId | string> {
+    return z.union([z.instanceof(ObjectId), z.string().regex(/^[0-9a-f]{24}$/i)]).describe('Ref');
   },
   union: z.union.bind(z),
   infer<T extends SchemaTypeDefinition>(_schema: T): InferDocumentType<T> {
