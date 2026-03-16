@@ -541,11 +541,14 @@ describe('auth/resetPassword', () => {
       expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(userId, {
-        $set: {
-          'authMethods.password.hash': hashedPassword,
-        },
-      });
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: userId },
+        {
+          $set: {
+            'authMethods.password.hash': hashedPassword,
+          },
+        }
+      );
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(result).toEqual({
         success: true,

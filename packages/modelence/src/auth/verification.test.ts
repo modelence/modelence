@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
-const mockUsersFindById = jest.fn();
 const mockUsersUpdateOne = jest.fn();
 const mockTokensFindOne = jest.fn();
 const mockTokensInsertOne = jest.fn();
@@ -20,7 +19,6 @@ const mockConsumeRateLimit = jest.fn();
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
-    findById: mockUsersFindById,
     updateOne: mockUsersUpdateOne,
   },
   emailVerificationTokensCollection: {
@@ -161,8 +159,8 @@ describe('auth/verification', () => {
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindById.mockResolvedValue({ _id: 'user123' } as never);
-      mockUsersFindOne.mockResolvedValue(userDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockUsersFindOne.mockResolvedValueOnce(userDoc as never);
       mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
 
       const result = await handleVerifyEmail(baseParams as never);
@@ -171,7 +169,7 @@ describe('auth/verification', () => {
         token: 'token',
         expiresAt: { $gt: expect.any(Date) },
       });
-      expect(mockUsersFindById).toHaveBeenCalledWith(tokenDoc.userId);
+      expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: tokenDoc.userId });
       expect(mockUsersUpdateOne).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,
@@ -241,7 +239,7 @@ describe('auth/verification', () => {
         expiresAt: new Date(Date.now() + 1000),
       };
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindById.mockResolvedValue(null as never);
+      mockUsersFindOne.mockResolvedValue(null as never);
 
       const result = await handleVerifyEmail(baseParams as never);
 

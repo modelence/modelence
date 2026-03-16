@@ -96,7 +96,7 @@ describe('auth/providers/oauth-common', () => {
 
       await moduleExports.authenticateUser(res, userId);
 
-      expect(mockCreateSession).toHaveBeenCalledWith(userId.toString());
+      expect(mockCreateSession).toHaveBeenCalledWith(userId);
       expect(res.cookie).toHaveBeenCalledWith(
         'authToken',
         'tok',
@@ -180,9 +180,12 @@ describe('auth/providers/oauth-common', () => {
 
         await moduleExports.handleOAuthUserAuthentication(req, res, userData);
 
-        expect(mockUsersUpdateOne).toHaveBeenCalledWith(existingUser._id, {
-          $set: { firstName: 'John', lastName: 'Doe', avatarUrl: 'https://pic.com' },
-        });
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+          { _id: existingUser._id },
+          {
+            $set: { firstName: 'John', lastName: 'Doe', avatarUrl: 'https://pic.com' },
+          }
+        );
 
         const mergedUser = {
           ...existingUser,
@@ -217,9 +220,12 @@ describe('auth/providers/oauth-common', () => {
 
         await moduleExports.handleOAuthUserAuthentication(req, res, userData);
 
-        expect(mockUsersUpdateOne).toHaveBeenCalledWith(existingUser._id, {
-          $set: { lastName: 'Doe', avatarUrl: 'https://pic.com' },
-        });
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+          { _id: existingUser._id },
+          {
+            $set: { lastName: 'Doe', avatarUrl: 'https://pic.com' },
+          }
+        );
 
         const mergedUser = { ...existingUser, lastName: 'Doe', avatarUrl: 'https://pic.com' };
         expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
@@ -415,7 +421,7 @@ describe('auth/providers/oauth-common', () => {
           },
           { $set: { 'authMethods.google.id': 'google-id' } }
         );
-        expect(mockCreateSession).toHaveBeenCalledWith(existingUser._id.toString());
+        expect(mockCreateSession).toHaveBeenCalledWith(existingUser._id);
         expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
           expect.objectContaining({ user: updatedUser, provider: 'google' })
         );
@@ -497,7 +503,7 @@ describe('auth/providers/oauth-common', () => {
         });
 
         expect(mockUsersUpdateOne).toHaveBeenCalled();
-        expect(mockCreateSession).toHaveBeenCalledWith(existingUser._id.toString());
+        expect(mockCreateSession).toHaveBeenCalledWith(existingUser._id);
         expect(authConfig.onAfterLogin).toHaveBeenCalledWith(
           expect.objectContaining({ user: updatedUser, provider: 'google' })
         );
