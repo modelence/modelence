@@ -545,7 +545,6 @@ describe('app/index', () => {
       { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
     ]);
     expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, [
-      { key: '_system.mongodbUri', type: 'string', value: 'mongodb://localhost:27017/local' },
       { key: '_system.site.url', type: 'string', value: 'https://local.example.com' },
     ]);
   });
@@ -573,6 +572,10 @@ describe('app/index', () => {
 
     expect(mockConnectCloudBackend).not.toHaveBeenCalled();
     expect(mockLoadConfigs).toHaveBeenCalledWith([
+      expect.objectContaining({
+        key: '_system.mongodbUri',
+        value: 'mongodb://localhost:27017/test',
+      }),
       expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
     ]);
     expect(mockInitMetrics).not.toHaveBeenCalled();
