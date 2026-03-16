@@ -22,6 +22,7 @@ const localConfigMap = {
     MODELENCE_EMAIL_SMTP_PASS: '_system.email.smtp.pass',
     MODELENCE_SITE_URL: '_system.site.url',
     MODELENCE_ENV: '_system.env',
+    MODELENCE_ENV_TYPE: '_system.env.type',
     // deprecated
     GOOGLE_AUTH_ENABLED: '_system.user.auth.google.enabled',
     GOOGLE_AUTH_CLIENT_ID: '_system.user.auth.google.clientId',
@@ -29,6 +30,7 @@ const localConfigMap = {
   },
   withRemoteServer: {
     MODELENCE_SITE_URL: '_system.site.url',
+    MODELENCE_ENV_TYPE: '_system.env.type',
   },
 } as const;
 
