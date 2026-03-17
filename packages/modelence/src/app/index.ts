@@ -11,7 +11,7 @@ import { RoleDefinition } from '../auth/types';
 import userModule from '../auth/user';
 import { getLocalConfigs } from '../config/local';
 import { loadConfigs, setSchema } from '../config/server';
-import { startConfigSync } from '../config/sync';
+import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
@@ -127,8 +127,7 @@ export async function startApp({
         stores,
         roles,
       });
-    loadConfigs(configs);
-    loadConfigs(getLocalConfigs(configSchema, 'withRemoteServer'));
+    loadRemoteConfigs(configs);
     setMetadata({ environmentId, appAlias, environmentAlias, telemetry });
   } else {
     loadConfigs(getLocalConfigs(configSchema));

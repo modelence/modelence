@@ -33,6 +33,7 @@ const mockConnectCloudBackend = jest.fn<
 >();
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
+const mockLoadRemoteConfigs = jest.fn();
 const mockStartMigrations = jest.fn();
 const mockStartCronJobs = jest.fn<() => Promise<void>>();
 const mockDefineCronJob = jest.fn();
@@ -112,6 +113,7 @@ jest.unstable_mockModule('./metrics', () => ({
 
 jest.unstable_mockModule('../config/sync', () => ({
   startConfigSync: mockStartConfigSync,
+  loadRemoteConfigs: mockLoadRemoteConfigs,
 }));
 
 jest.unstable_mockModule('../migration', () => ({
@@ -511,7 +513,9 @@ describe('app/index', () => {
       stores: expect.any(Array),
       roles: {},
     });
-    expect(mockLoadConfigs).toHaveBeenCalledWith([{ key: 'test', type: 'string', value: 'value' }]);
+    expect(mockLoadRemoteConfigs).toHaveBeenCalledWith([
+      { key: 'test', type: 'string', value: 'value' },
+    ]);
     expect(mockSetMetadata).toHaveBeenCalledWith({
       environmentId: 'env-123',
       appAlias: 'test-app',
@@ -540,12 +544,9 @@ describe('app/index', () => {
 
     await startApp({});
 
-    expect(mockLoadConfigs).toHaveBeenNthCalledWith(1, [
+    expect(mockLoadRemoteConfigs).toHaveBeenCalledWith([
       { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
       { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
-    ]);
-    expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, [
-      { key: '_system.site.url', type: 'string', value: 'https://local.example.com' },
     ]);
   });
 
