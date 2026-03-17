@@ -24,11 +24,13 @@ jest.unstable_mockModule('@/server', () => ({
 
 const mockGetRedirectUri = jest.fn<() => string>();
 const mockHandleOAuthUserAuthentication = jest.fn();
+const mockHandleOAuthProviderLink = jest.fn();
 const mockValidateOAuthCode = jest.fn<() => string | null>();
 
 jest.unstable_mockModule('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
+  handleOAuthProviderLink: mockHandleOAuthProviderLink,
   validateOAuthCode: mockValidateOAuthCode,
 }));
 
@@ -96,7 +98,7 @@ describe('auth/providers/github', () => {
     const redirect = jest.fn();
     const cookie = jest.fn();
 
-    handler({} as Request, { redirect, cookie } as unknown as Response);
+    handler({ query: {} } as Request, { redirect, cookie } as unknown as Response);
 
     expect(cookie).toHaveBeenCalledWith('authStateGithub', expect.any(String), expect.any(Object));
     const redirectUrl = redirect.mock.calls[0][0] as string;

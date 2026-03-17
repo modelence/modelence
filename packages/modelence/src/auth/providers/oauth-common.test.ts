@@ -677,4 +677,195 @@ describe('auth/providers/oauth-common', () => {
       });
     });
   });
+
+  describe('handleOAuthProviderLink', () => {
+    const linkAuthConfig = {
+      ...authConfig,
+      onAfterOAuthLink: jest.fn(),
+      onOAuthLinkError: jest.fn(),
+    };
+
+    const userData = {
+      id: 'google-provider-id',
+      email: 'user@example.com',
+      emailVerified: true,
+      providerName: 'google' as const,
+      firstName: 'John',
+      lastName: 'Doe',
+      avatarUrl: 'https://pic.com',
+    };
+
+    test('returns 401 when user is not signed in (no session userId)', async () => {
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: null },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'You must be signed in to link a provider.',
+      });
+      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when provider is already linked to a different user', async () => {
+      const currentUserId = new ObjectId();
+      const otherUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // Provider is already claimed by another user
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: otherUserId,
+        handle: 'other-user',
+      } as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'This google account is already linked to a different user.',
+      });
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          error: expect.any(Error),
+        })
+      );
+      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when user account is not active (update matches 0)', async () => {
+      const currentUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // No existing provider claim
+      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // User was deleted/disabled between check and update
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'User account is not active.',
+      });
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          error: expect.objectContaining({ message: 'User account not found or not active' }),
+        })
+      );
+    });
+
+    test('successfully links provider and calls onAfterOAuthLink hook', async () => {
+      const currentUserId = new ObjectId();
+      const updatedUser = {
+        _id: currentUserId,
+        handle: 'demo',
+        status: 'active',
+        authMethods: { google: { id: 'google-provider-id' } },
+      };
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // No existing provider claim
+      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // Update succeeds
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
+      // Fetch updated user
+      mockUsersFindOne.mockResolvedValueOnce(updatedUser as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        {
+          _id: currentUserId,
+          status: { $nin: ['deleted', 'disabled'] },
+        },
+        {
+          $set: { 'authMethods.google.id': 'google-provider-id' },
+        }
+      );
+      expect(linkAuthConfig.onAfterOAuthLink).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          user: updatedUser,
+        })
+      );
+      expect(res.status).toHaveBeenCalledWith(302);
+      expect(res.redirect).toHaveBeenCalledWith('/');
+    });
+
+    test('allows linking when provider is already linked to the SAME user', async () => {
+      const currentUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // Provider already linked to THIS user (same _id)
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: currentUserId,
+        handle: 'demo',
+      } as never);
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: currentUserId,
+        handle: 'demo',
+        authMethods: { google: { id: 'google-provider-id' } },
+      } as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      // Should still proceed and update (idempotent)
+      expect(mockUsersUpdateOne).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(302);
+    });
+
+    test('calls onOAuthLinkError when an unexpected error occurs', async () => {
+      const currentUserId = new ObjectId();
+      const dbError = new Error('database connection lost');
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // No existing provider claim
+      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // Update throws
+      mockUsersUpdateOne.mockRejectedValueOnce(dbError as never);
+
+      await expect(moduleExports.handleOAuthProviderLink(req, res, userData)).rejects.toThrow(
+        'database connection lost'
+      );
+
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          error: dbError,
+        })
+      );
+    });
+  });
 });

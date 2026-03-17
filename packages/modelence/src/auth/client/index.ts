@@ -170,6 +170,37 @@ export async function resetPassword(options: { token: string; password: string }
 }
 
 /**
+ * Link an OAuth provider to the currently signed-in user's account.
+ * Redirects the browser to the OAuth provider's authorization page.
+ * The provider will redirect back and the account will be linked.
+ *
+ * @example
+ * ```ts
+ * linkOAuthProvider({ provider: 'google' });
+ * ```
+ * @param options.provider - The OAuth provider to link ('google' or 'github').
+ */
+export function linkOAuthProvider(options: { provider: 'google' | 'github' }): void {
+  const { provider } = options;
+  window.location.href = `/api/_internal/auth/${provider}?mode=link`;
+}
+/**
+ * Unlink an OAuth provider from the currently signed-in user's account.
+ *
+ * @example
+ * ```ts
+ * await unlinkOAuthProvider({ provider: 'github' });
+ * ```
+ * @param options.provider - The OAuth provider to unlink ('google' or 'github').
+ */
+export async function unlinkOAuthProvider(options: {
+  provider: 'google' | 'github';
+}): Promise<void> {
+  const { provider } = options;
+  await callMethod('_system.user.unlinkOAuthProvider', { provider });
+}
+
+/**
  * Get the current auth token associated with the current session.
  * @returns The auth token or undefined if not authenticated.
  */

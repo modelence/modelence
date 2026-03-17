@@ -83,4 +83,24 @@ describe('auth/client', () => {
       password: 'newpass',
     });
   });
+
+  test('linkOAuthProvider is a synchronous function', () => {
+    expect(typeof authClient.linkOAuthProvider).toBe('function');
+  });
+
+  test('unlinkOAuthProvider calls backend method with provider', async () => {
+    await authClient.unlinkOAuthProvider({ provider: 'google' });
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.unlinkOAuthProvider', {
+      provider: 'google',
+    });
+  });
+
+  test('unlinkOAuthProvider calls backend method for github', async () => {
+    await authClient.unlinkOAuthProvider({ provider: 'github' });
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.unlinkOAuthProvider', {
+      provider: 'github',
+    });
+  });
 });

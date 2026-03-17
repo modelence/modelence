@@ -345,6 +345,92 @@ export async function handleOAuthUserAuthentication(
   return handleNewUserSignup(res, userData, session, connectionInfo);
 }
 
+export async function handleOAuthProviderLink(
+  req: Request,
+  res: Response,
+  userData: OAuthUserData
+): Promise<void> {
+  const authConfig = getAuthConfig();
+  const { session, connectionInfo } = await getCallContext(req);
+
+  if (!session?.userId) {
+    res.status(401).json({
+      error: 'You must be signed in to link a provider.',
+    });
+    return;
+  }
+
+  const userId = session.userId;
+
+  try {
+    // Check if this provider ID is already claimed by a DIFFERENT account
+    const existingUserWithProvider = await usersCollection.findOne({
+      [`authMethods.${userData.providerName}.id`]: userData.id,
+    });
+    if (existingUserWithProvider && !existingUserWithProvider._id.equals(userId)) {
+      res.status(400).json({
+        error: `This ${userData.providerName} account is already linked to a different user.`,
+      });
+
+      authConfig.onOAuthLinkError?.({
+        provider: userData.providerName,
+        error: new Error(`${userData.providerName} account already linked to another user`),
+        session,
+        connectionInfo,
+      });
+      return;
+    }
+
+    // Atomically attach the provider to the current user
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: userId,
+        status: { $nin: ['deleted', 'disabled'] },
+      },
+      {
+        $set: {
+          [`authMethods.${userData.providerName}.id`]: userData.id,
+        },
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      res.status(400).json({ error: 'User account is not active.' });
+      authConfig.onOAuthLinkError?.({
+        provider: userData.providerName,
+        error: new Error('User account not found or not active'),
+        session,
+        connectionInfo,
+      });
+      return;
+    }
+
+    const updatedUser = await usersCollection.findOne({ _id: userId });
+
+    if (updatedUser) {
+      authConfig.onAfterOAuthLink?.({
+        provider: userData.providerName,
+        user: updatedUser,
+        session,
+        connectionInfo,
+      });
+    }
+
+    // Redirect back to the app after successful link
+    res.status(302).redirect('/');
+  } catch (error) {
+    if (error instanceof Error) {
+      authConfig.onOAuthLinkError?.({
+        provider: userData.providerName,
+        error,
+        session,
+        connectionInfo,
+      });
+    }
+    throw error;
+  }
+}
+
 export function validateOAuthCode(code: unknown): string | null {
   if (!code || typeof code !== 'string') {
     return null;

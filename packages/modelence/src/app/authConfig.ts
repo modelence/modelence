@@ -68,7 +68,9 @@ export type AuthConfig = {
   onSignupError?: (props: AuthErrorProps) => void;
   onAfterEmailVerification?: (props: AuthSuccessProps) => void;
   onEmailVerificationError?: (props: AuthErrorProps) => void;
-
+  // OAuth account linking callbacks
+  onAfterOAuthLink?: (props: AuthSuccessProps) => void;
+  onOAuthLinkError?: (props: AuthErrorProps) => void;
   // Custom handle generator.
   // If provided, this overrides the default handle generation logic.
   generateHandle?: (props: GenerateHandleProps) => Promise<string> | string;

@@ -11,6 +11,7 @@ import {
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
+  handleOAuthProviderLink,
   validateOAuthCode,
   type OAuthUserData,
 } from './oauth-common';
@@ -115,7 +116,9 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
-  if (!state || !storedState || state !== storedState) {
+  const [storedStateValue, storedMode] = storedState.split(':');
+
+  if (!state || !storedState || state !== storedStateValue) {
     res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
     return;
   }
@@ -163,7 +166,11 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       avatarUrl: githubUser.avatar_url || undefined,
     };
 
-    await handleOAuthUserAuthentication(req, res, userData);
+    if (storedMode === 'link') {
+      await handleOAuthProviderLink(req, res, userData);
+    } else {
+      await handleOAuthUserAuthentication(req, res, userData);
+    }
   } catch (error) {
     console.error('GitHub OAuth error:', error);
     res.status(500).json({ error: 'Authentication failed' });
@@ -204,7 +211,9 @@ function getRouter(): ExpressRouter {
 
       const state = randomBytes(32).toString('hex');
 
-      res.cookie('authStateGithub', state, {
+      const mode = req.query.mode === 'link' ? 'link' : 'login';
+
+      res.cookie('authStateGithub', `${state}:${mode}`, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

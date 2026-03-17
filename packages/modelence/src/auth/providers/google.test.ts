@@ -24,11 +24,13 @@ jest.unstable_mockModule('@/server', () => ({
 
 const mockGetRedirectUri = jest.fn<() => string>();
 const mockHandleOAuthUserAuthentication = jest.fn();
+const mockHandleOAuthProviderLink = jest.fn();
 const mockValidateOAuthCode = jest.fn<() => string | null>();
 
 jest.unstable_mockModule('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
+  handleOAuthProviderLink: mockHandleOAuthProviderLink,
   validateOAuthCode: mockValidateOAuthCode,
 }));
 
@@ -99,7 +101,7 @@ describe('auth/providers/google', () => {
     const cookieMock = jest.fn();
     const res = { redirect: redirectMock, cookie: cookieMock } as unknown as Response;
 
-    handler({} as Request, res);
+    handler({ query: {} } as Request, res);
 
     expect(cookieMock).toHaveBeenCalledWith(
       'authStateGoogle',
