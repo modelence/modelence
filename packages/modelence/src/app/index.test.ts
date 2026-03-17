@@ -526,10 +526,8 @@ describe('app/index', () => {
     expect(mockStartConfigSync).toHaveBeenCalled();
   });
 
-  test('overrides cloud config with local env when remote backend is enabled', async () => {
+  test('passes cloud configs to loadRemoteConfigs when remote backend is enabled', async () => {
     process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
-    process.env.MODELENCE_SITE_URL = 'https://local.example.com';
-    process.env.MONGODB_URI = 'mongodb://localhost:27017/local';
 
     mockConnectCloudBackend.mockResolvedValue({
       configs: [
