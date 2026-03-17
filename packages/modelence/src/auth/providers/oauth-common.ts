@@ -25,7 +25,7 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
   res.cookie('authToken', authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
   });
   res.status(302);
   res.redirect('/');

@@ -102,7 +102,7 @@ describe('auth/providers/oauth-common', () => {
         'tok',
         expect.objectContaining({
           httpOnly: true,
-          sameSite: 'strict',
+          sameSite: 'lax',
         })
       );
       expect(res.status).toHaveBeenCalledWith(302);
