@@ -71,43 +71,7 @@ This command will create a new directory named `my-app` with the necessary files
 
 ### Project structure
 
-The project structure for a Modelence app is as follows:
-
-```
-my-app/
-├── src/
-│   ├── client/
-│   │   ├── index.html
-│   │   ├── index.css
-│   │   ├── index.tsx
-│   │   ├── routes.ts
-│   ├── server/
-│   │   ├── app.ts
-├── .modelence.env
-```
-
-<AccordionGroup>
-  <Accordion icon="code" title="Client Files">
-    - **`client/index.html`** The main layout for your application. You usually don't need to edit this file.
-    - **`client/index.css`** Global CSS styles, including Tailwind CSS configuration.
-    - **`client/index.tsx`** Entry point for your React frontend where you initialize the client app.
-    - **`client/routes.ts`** Define your client-side routes and their corresponding components.
-  </Accordion>
-
-  <Accordion icon="server" title="Server Files">
-    - **`server/app.ts`** Server entry point where you configure your backend modules and start the server.
-  </Accordion>
-
-  <Accordion icon="gear" title="Config Files">
-    - **`.modelence.env`** Environment variables for your application (including API tokens for applications connected to Modelence Cloud)
-  </Accordion>
-</AccordionGroup>
-
-<Tip>
-All client-side code goes in the `src/client` directory, while server-side code belongs in `src/server`.
-Modelence uses a clear separation between client and server code to help maintain a clean architecture.
-You can also use any other directories at the same level as `src/client` and `src/server` for shared code between client and server.
-</Tip>
+For a detailed breakdown of the project structure, see [Project Structure](/core-concepts/project-structure).
 
 ### Start your application
 
