@@ -6,8 +6,8 @@ export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Co
     throw new Error('You must be signed in to unlink a provider.');
   }
 
-  if (typeof provider !== 'string') {
-    throw new Error('Invalid provider.');
+  if (provider !== 'google' && provider !== 'github') {
+    throw new Error('Invalid provider. Only Google and GitHub can be unlinked.');
   }
 
   // Safety: prevent removing the last auth method

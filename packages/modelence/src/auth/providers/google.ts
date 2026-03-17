@@ -85,7 +85,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
-  const [storedStateValue, storedMode] = storedState.split(':');
+  const [storedStateValue, storedMode] = (storedState || '').split(':');
 
   if (!state || !storedState || state !== storedStateValue) {
     res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
