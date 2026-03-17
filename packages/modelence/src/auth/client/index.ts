@@ -185,7 +185,8 @@ export function linkOAuthProvider(options: { provider: 'google' | 'github' }): v
   const token = getAuthToken();
   if (token) {
     // Set a short-lived cookie so the server's getCallContext can read it during the OAuth redirect flow
-    document.cookie = `authToken=${token}; path=/; max-age=300; SameSite=Lax`;
+    const isSecure = window.location.protocol === 'https:';
+    document.cookie = `authToken=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }

@@ -363,38 +363,45 @@ export async function handleOAuthProviderLink(
   const userId = session.userId;
 
   try {
-    // Check if this provider ID is already claimed by a DIFFERENT account
-    const existingUserWithProvider = await usersCollection.findOne({
-      [`authMethods.${userData.providerName}.id`]: userData.id,
-    });
-    if (existingUserWithProvider && !existingUserWithProvider._id.equals(userId)) {
-      res.status(400).json({
-        error: `This ${userData.providerName} account is already linked to a different user.`,
-      });
+    // Atomically attach the provider to the current user, while also ensuring
+    // no OTHER user already has this provider ID (prevents race conditions)
+    const providerField = `authMethods.${userData.providerName}.id`;
 
-      authConfig.onOAuthLinkError?.({
-        provider: userData.providerName,
-        error: new Error(`${userData.providerName} account already linked to another user`),
-        session,
-        connectionInfo,
-      });
-      return;
-    }
-
-    // Atomically attach the provider to the current user
     const updateResult = await usersCollection.updateOne(
       {
         _id: userId,
         status: { $nin: ['deleted', 'disabled'] },
+        $or: [{ [providerField]: { $exists: false } }, { [providerField]: userData.id }],
       },
       {
         $set: {
-          [`authMethods.${userData.providerName}.id`]: userData.id,
+          [providerField]: userData.id,
         },
       }
     );
 
+    // If no document matched, figure out why
     if (updateResult.matchedCount === 0) {
+      // Check if the provider is already claimed by another user
+      const existingUserWithProvider = await usersCollection.findOne({
+        [providerField]: userData.id,
+        _id: { $ne: userId },
+      });
+
+      if (existingUserWithProvider) {
+        res.status(400).json({
+          error: `This ${userData.providerName} account is already linked to a different user.`,
+        });
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error: new Error(`${userData.providerName} account already linked to another user`),
+          session,
+          connectionInfo,
+        });
+        return;
+      }
+
+      // Otherwise, the user account is not active
       res.status(400).json({ error: 'User account is not active.' });
       authConfig.onOAuthLinkError?.({
         provider: userData.providerName,

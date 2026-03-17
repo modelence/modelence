@@ -10,26 +10,42 @@ export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Co
     throw new Error('Invalid provider. Only Google and GitHub can be unlinked.');
   }
 
-  // Safety: prevent removing the last auth method
+  // requireById throws if user is not found, so no null check needed
   const userDoc = await usersCollection.requireById(user.id);
-  if (!userDoc) {
-    throw new Error('User not found.');
-  }
+
   const methods = userDoc.authMethods ?? {};
-  const activeMethodsCount = Object.values(methods).filter(Boolean).length;
-  // Count whether provider is actually linked
   const providerKey = provider as keyof typeof methods;
+
   if (!methods[providerKey]) {
     throw new Error(`${provider} is not linked to your account.`);
   }
-  // Don't allow removing the only auth method (would lock the user out)
+
+  const activeMethodsCount = Object.values(methods).filter(Boolean).length;
   if (activeMethodsCount <= 1) {
     throw new Error(
       'Cannot unlink your only authentication method. Please add another method first.'
     );
   }
-  await usersCollection.updateOne(
-    { _id: userDoc._id },
+
+  // Determine the OTHER auth method fields that must still exist for lockout prevention.
+  // This atomic filter ensures that between our read and write, at least one other method
+  // hasn't been concurrently removed (prevents two simultaneous unlinks from both succeeding).
+  const otherMethods = Object.keys(methods).filter(
+    (key) => key !== provider && methods[key as keyof typeof methods]
+  );
+  const otherMethodGuard =
+    otherMethods.length > 0
+      ? { $or: otherMethods.map((key) => ({ [`authMethods.${key}`]: { $exists: true } })) }
+      : {};
+
+  const result = await usersCollection.updateOne(
+    { _id: userDoc._id, ...otherMethodGuard },
     { $unset: { [`authMethods.${provider}`]: '' } }
   );
+
+  if (result.matchedCount === 0) {
+    throw new Error(
+      'Cannot unlink your only authentication method. Please add another method first.'
+    );
+  }
 }

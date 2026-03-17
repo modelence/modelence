@@ -51,9 +51,9 @@ describe('auth/unlinkOAuthProvider', () => {
     expect(mockRequireById).not.toHaveBeenCalled();
   });
 
-  test('throws error when provider argument is not a string', async () => {
+  test('throws error when provider argument is not a valid OAuth provider', async () => {
     await expect(handleUnlinkOAuthProvider({ provider: 123 }, mockContext)).rejects.toThrow(
-      'Invalid provider.'
+      'Invalid provider. Only Google and GitHub can be unlinked.'
     );
 
     expect(mockRequireById).not.toHaveBeenCalled();
@@ -97,6 +97,22 @@ describe('auth/unlinkOAuthProvider', () => {
     expect(mockUpdateOne).not.toHaveBeenCalled();
   });
 
+  test('throws when atomic guard prevents unlink due to concurrent removal', async () => {
+    mockRequireById.mockResolvedValueOnce({
+      _id: userId,
+      authMethods: {
+        google: { id: 'google-id' },
+        github: { id: 'github-id' },
+      },
+    } as never);
+
+    mockUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+
+    await expect(handleUnlinkOAuthProvider({ provider: 'google' }, mockContext)).rejects.toThrow(
+      'Cannot unlink your only authentication method. Please add another method first.'
+    );
+  });
+
   test('successfully unlinks provider when user has multiple auth methods', async () => {
     mockRequireById.mockResolvedValueOnce({
       _id: userId,
@@ -105,12 +121,12 @@ describe('auth/unlinkOAuthProvider', () => {
         google: { id: 'google-id-123' },
       },
     } as never);
-    mockUpdateOne.mockResolvedValueOnce({} as never);
+    mockUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
 
     await handleUnlinkOAuthProvider({ provider: 'google' }, mockContext);
 
     expect(mockUpdateOne).toHaveBeenCalledWith(
-      { _id: userId },
+      { _id: userId, $or: [{ 'authMethods.password': { $exists: true } }] },
       { $unset: { 'authMethods.google': '' } }
     );
   });
@@ -123,12 +139,12 @@ describe('auth/unlinkOAuthProvider', () => {
         github: { id: 'github-id' },
       },
     } as never);
-    mockUpdateOne.mockResolvedValueOnce({} as never);
+    mockUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
 
     await handleUnlinkOAuthProvider({ provider: 'github' }, mockContext);
 
     expect(mockUpdateOne).toHaveBeenCalledWith(
-      { _id: userId },
+      { _id: userId, $or: [{ 'authMethods.google': { $exists: true } }] },
       { $unset: { 'authMethods.github': '' } }
     );
   });
@@ -142,12 +158,18 @@ describe('auth/unlinkOAuthProvider', () => {
         github: { id: 'github-id' },
       },
     } as never);
-    mockUpdateOne.mockResolvedValueOnce({} as never);
+    mockUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
 
     await handleUnlinkOAuthProvider({ provider: 'google' }, mockContext);
 
     expect(mockUpdateOne).toHaveBeenCalledWith(
-      { _id: userId },
+      {
+        _id: userId,
+        $or: [
+          { 'authMethods.password': { $exists: true } },
+          { 'authMethods.github': { $exists: true } },
+        ],
+      },
       { $unset: { 'authMethods.google': '' } }
     );
   });

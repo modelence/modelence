@@ -721,7 +721,10 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // Provider is already claimed by another user
+      // updateOne is called first with an atomic $or guard to allow linking
+      // only if the provider is not already linked or already linked to this user
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+      // Then findOne is called to check WHY it failed — finds the other user
       mockUsersFindOne.mockResolvedValueOnce({
         _id: otherUserId,
         handle: 'other-user',
@@ -739,7 +742,6 @@ describe('auth/providers/oauth-common', () => {
           error: expect.any(Error),
         })
       );
-      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
     test('returns 400 when user account is not active (update matches 0)', async () => {
@@ -751,10 +753,10 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // No existing provider claim
-      mockUsersFindOne.mockResolvedValueOnce(null as never);
-      // User was deleted/disabled between check and update
+      // updateOne returns 0 matches (user deleted/disabled)
       mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+      // findOne check reveals it's NOT a provider conflict
+      mockUsersFindOne.mockResolvedValueOnce(null as never);
 
       await moduleExports.handleOAuthProviderLink(req, res, userData);
 
@@ -785,8 +787,7 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // No existing provider claim
-      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // No initial findOne needed — the new code does updateOne first with $or guard
       // Update succeeds
       mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
       // Fetch updated user
@@ -798,6 +799,10 @@ describe('auth/providers/oauth-common', () => {
         {
           _id: currentUserId,
           status: { $nin: ['deleted', 'disabled'] },
+          $or: [
+            { 'authMethods.google.id': { $exists: false } },
+            { 'authMethods.google.id': 'google-provider-id' },
+          ],
         },
         {
           $set: { 'authMethods.google.id': 'google-provider-id' },
@@ -822,11 +827,8 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // Provider already linked to THIS user (same _id)
-      mockUsersFindOne.mockResolvedValueOnce({
-        _id: currentUserId,
-        handle: 'demo',
-      } as never);
+      // Provider already linked to THIS user — updateOne still matches
+      // because the $or condition allows the same provider ID
       mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 1 } as never);
       mockUsersFindOne.mockResolvedValueOnce({
         _id: currentUserId,
@@ -851,8 +853,7 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // No existing provider claim
-      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // No initial findOne needed — updateOne with $or guard is first
       // Update throws
       mockUsersUpdateOne.mockRejectedValueOnce(dbError as never);
 
