@@ -25,7 +25,7 @@ export function defineCronJob(
   {
     description = '',
     interval,
-    timeout = Math.max(interval, time.minutes(1)),
+    timeout = Math.min(Math.max(interval, time.minutes(1)), time.days(1)),
     handler,
   }: CronJobInputParams
 ) {
