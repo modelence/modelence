@@ -22,7 +22,12 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
 // TODO: allow changing interval and timeout with cron jobconfigs
 export function defineCronJob(
   alias: CronJob['alias'],
-  { description = '', interval, timeout = interval, handler }: CronJobInputParams
+  {
+    description = '',
+    interval,
+    timeout = Math.max(interval, time.minutes(1)),
+    handler,
+  }: CronJobInputParams
 ) {
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
