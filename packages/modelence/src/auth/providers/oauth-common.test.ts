@@ -713,7 +713,6 @@ describe('auth/providers/oauth-common', () => {
 
     test('returns 400 when provider is already linked to a different user', async () => {
       const currentUserId = new ObjectId();
-      const otherUserId = new ObjectId();
 
       mockGetCallContext.mockResolvedValue({
         session: { authToken: 'token', userId: currentUserId },
@@ -721,14 +720,9 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // updateOne is called first with an atomic $or guard to allow linking
-      // only if the provider is not already linked or already linked to this user
-      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
-      // Then findOne is called to check WHY it failed — finds the other user
-      mockUsersFindOne.mockResolvedValueOnce({
-        _id: otherUserId,
-        handle: 'other-user',
-      } as never);
+      const err = new Error('E11000 duplicate key error');
+      (err as any).code = 11000;
+      mockUsersUpdateOne.mockRejectedValueOnce(err as never);
 
       await moduleExports.handleOAuthProviderLink(req, res, userData);
 
@@ -739,7 +733,7 @@ describe('auth/providers/oauth-common', () => {
       expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
         expect.objectContaining({
           provider: 'google',
-          error: expect.any(Error),
+          error: err,
         })
       );
     });
@@ -753,10 +747,13 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      // updateOne returns 0 matches (user deleted/disabled)
+      // updateOne returns 0 matches
       mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
-      // findOne check reveals it's NOT a provider conflict
-      mockUsersFindOne.mockResolvedValueOnce(null as never);
+      // findOne returns disabled user
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: currentUserId,
+        status: 'disabled',
+      } as never);
 
       await moduleExports.handleOAuthProviderLink(req, res, userData);
 
@@ -768,6 +765,81 @@ describe('auth/providers/oauth-common', () => {
         expect.objectContaining({
           provider: 'google',
           error: expect.objectContaining({ message: 'User account not found or not active' }),
+        })
+      );
+    });
+
+    test('returns 400 when user already has a different provider ID linked', async () => {
+      const currentUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // updateOne returns 0 matches (because user already has a different ID for this provider)
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+      // findOne returns an active user
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: currentUserId,
+        status: 'active',
+        authMethods: {
+          google: { id: 'different-google-id' },
+        },
+      } as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: `You have already linked a different google account.`,
+      });
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          error: expect.objectContaining({
+            message: `User already has a different google account linked`,
+          }),
+        })
+      );
+    });
+
+    test('returns fallback error when update matches 0 but provider state is unexpected', async () => {
+      const currentUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId: currentUserId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
+
+      // updateOne fails to match
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+
+      // user exists but provider field is malformed / unexpected
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: currentUserId,
+        status: 'active',
+        authMethods: {
+          google: {}, // no id present → triggers fallback
+        },
+      } as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Unable to link google account.',
+      });
+
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'google',
+          error: expect.objectContaining({
+            message: 'Unexpected OAuth linking state for google',
+          }),
         })
       );
     });

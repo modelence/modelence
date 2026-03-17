@@ -363,8 +363,9 @@ export async function handleOAuthProviderLink(
   const userId = session.userId;
 
   try {
-    // Atomically attach the provider to the current user, while also ensuring
-    // no OTHER user already has this provider ID (prevents race conditions)
+    // Atomically attach the provider to the current user while preventing
+    // overwriting an existing provider ID on the same user.
+    // A unique index on the provider ID ensures it cannot be linked to another user.
     const providerField = `authMethods.${userData.providerName}.id`;
 
     const updateResult = await usersCollection.updateOne(
@@ -382,33 +383,50 @@ export async function handleOAuthProviderLink(
 
     // If no document matched, figure out why
     if (updateResult.matchedCount === 0) {
-      // Check if the provider is already claimed by another user
-      const existingUserWithProvider = await usersCollection.findOne({
-        [providerField]: userData.id,
-        _id: { $ne: userId },
-      });
+      const currentUser = await usersCollection.findOne({ _id: userId });
 
-      if (existingUserWithProvider) {
-        res.status(400).json({
-          error: `This ${userData.providerName} account is already linked to a different user.`,
-        });
+      if (!currentUser || currentUser.status === 'deleted' || currentUser.status === 'disabled') {
+        res.status(400).json({ error: 'User account is not active.' });
+
         authConfig.onOAuthLinkError?.({
           provider: userData.providerName,
-          error: new Error(`${userData.providerName} account already linked to another user`),
+          error: new Error('User account not found or not active'),
           session,
           connectionInfo,
         });
         return;
       }
 
-      // Otherwise, the user account is not active
-      res.status(400).json({ error: 'User account is not active.' });
+      // Detect if the user already linked a different OAuth account
+      const existingProviderId = currentUser?.authMethods?.[userData.providerName]?.id;
+
+      if (existingProviderId && existingProviderId !== userData.id) {
+        res.status(400).json({
+          error: `You have already linked a different ${userData.providerName} account.`,
+        });
+
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error: new Error(`User already has a different ${userData.providerName} account linked`),
+          session,
+          connectionInfo,
+        });
+
+        return;
+      }
+
+      // Fallback safety guard in case the DB state does not match any expected branch
+      res.status(400).json({
+        error: `Unable to link ${userData.providerName} account.`,
+      });
+
       authConfig.onOAuthLinkError?.({
         provider: userData.providerName,
-        error: new Error('User account not found or not active'),
+        error: new Error(`Unexpected OAuth linking state for ${userData.providerName}`),
         session,
         connectionInfo,
       });
+
       return;
     }
 
@@ -426,6 +444,21 @@ export async function handleOAuthProviderLink(
     // Redirect back to the app after successful link
     res.status(302).redirect('/');
   } catch (error) {
+    if (error instanceof Error && (error as any).code === 11000) {
+      res.status(400).json({
+        error: `This ${userData.providerName} account is already linked to a different user.`,
+      });
+
+      authConfig.onOAuthLinkError?.({
+        provider: userData.providerName,
+        error,
+        session,
+        connectionInfo,
+      });
+
+      return;
+    }
+
     if (error instanceof Error) {
       authConfig.onOAuthLinkError?.({
         provider: userData.providerName,
