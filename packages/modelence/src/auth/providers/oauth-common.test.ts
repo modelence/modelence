@@ -915,6 +915,26 @@ describe('auth/providers/oauth-common', () => {
       expect(res.status).toHaveBeenCalledWith(302);
     });
 
+    test('does not crash if onOAuthLinkError throws', async () => {
+      linkAuthConfig.onOAuthLinkError.mockImplementation(() => {
+        throw new Error('hook failed');
+      });
+
+      const currentUserId = new ObjectId();
+
+      mockGetCallContext.mockResolvedValue({
+        session: { userId: currentUserId },
+        connectionInfo: {},
+      } as never);
+
+      mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+      mockUsersFindOne.mockResolvedValueOnce(null as never);
+
+      await moduleExports.handleOAuthProviderLink(req, res, userData);
+
+      expect(res.status).toHaveBeenCalled(); // still works
+    });
+
     test('calls onOAuthLinkError when an unexpected error occurs', async () => {
       const currentUserId = new ObjectId();
       const dbError = new Error('database connection lost');

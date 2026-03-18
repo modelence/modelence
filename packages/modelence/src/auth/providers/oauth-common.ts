@@ -26,6 +26,7 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
+    path: '/',
   });
   res.status(302);
   res.redirect('/');
@@ -355,6 +356,16 @@ export function clearOAuthLinkCookie(res: Response) {
   });
 }
 
+function safelyCallHook(hook?: () => void) {
+  if (!hook) return;
+
+  try {
+    hook();
+  } catch (err) {
+    console.error('Error executing OAuth hook:', err);
+  }
+}
+
 export async function handleOAuthProviderLink(
   req: Request,
   res: Response,
@@ -397,16 +408,18 @@ export async function handleOAuthProviderLink(
       const currentUser = await usersCollection.findOne({ _id: userId });
 
       if (!currentUser || currentUser.status === 'deleted' || currentUser.status === 'disabled') {
+        safelyCallHook(() =>
+          authConfig.onOAuthLinkError?.({
+            provider: userData.providerName,
+            error: new Error('User account not found or not active'),
+            session,
+            connectionInfo,
+          })
+        );
+
         clearOAuthLinkCookie(res);
 
         res.status(400).json({ error: 'User account is not active.' });
-
-        authConfig.onOAuthLinkError?.({
-          provider: userData.providerName,
-          error: new Error('User account not found or not active'),
-          session,
-          connectionInfo,
-        });
         return;
       }
 
@@ -414,34 +427,40 @@ export async function handleOAuthProviderLink(
       const existingProviderId = currentUser?.authMethods?.[userData.providerName]?.id;
 
       if (existingProviderId && existingProviderId !== userData.id) {
+        safelyCallHook(() =>
+          authConfig.onOAuthLinkError?.({
+            provider: userData.providerName,
+            error: new Error(
+              `User already has a different ${userData.providerName} account linked`
+            ),
+            session,
+            connectionInfo,
+          })
+        );
+
         clearOAuthLinkCookie(res);
 
         res.status(400).json({
           error: `You have already linked a different ${userData.providerName} account.`,
         });
 
-        authConfig.onOAuthLinkError?.({
-          provider: userData.providerName,
-          error: new Error(`User already has a different ${userData.providerName} account linked`),
-          session,
-          connectionInfo,
-        });
-
         return;
       }
 
       // Fallback safety guard in case the DB state does not match any expected branch
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error: new Error(`Unexpected OAuth linking state for ${userData.providerName}`),
+          session,
+          connectionInfo,
+        })
+      );
+
       clearOAuthLinkCookie(res);
 
       res.status(400).json({
         error: `Unable to link ${userData.providerName} account.`,
-      });
-
-      authConfig.onOAuthLinkError?.({
-        provider: userData.providerName,
-        error: new Error(`Unexpected OAuth linking state for ${userData.providerName}`),
-        session,
-        connectionInfo,
       });
 
       return;
@@ -450,12 +469,14 @@ export async function handleOAuthProviderLink(
     const updatedUser = await usersCollection.findOne({ _id: userId });
 
     if (updatedUser) {
-      authConfig.onAfterOAuthLink?.({
-        provider: userData.providerName,
-        user: updatedUser,
-        session,
-        connectionInfo,
-      });
+      safelyCallHook(() =>
+        authConfig.onAfterOAuthLink?.({
+          provider: userData.providerName,
+          user: updatedUser,
+          session,
+          connectionInfo,
+        })
+      );
     }
 
     // Redirect back to the app after successful link
@@ -464,33 +485,39 @@ export async function handleOAuthProviderLink(
     res.status(302).redirect('/');
   } catch (error) {
     if (error instanceof Error && (error as any).code === 11000) {
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+
       clearOAuthLinkCookie(res);
 
       res.status(400).json({
         error: `This ${userData.providerName} account is already linked to a different user.`,
       });
 
-      authConfig.onOAuthLinkError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-
       return;
     }
 
     if (error instanceof Error) {
-      authConfig.onOAuthLinkError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
     }
 
     clearOAuthLinkCookie(res);
-    throw error;
+    if (!res.headersSent) {
+      throw error;
+    }
   }
 }
 
