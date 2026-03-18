@@ -350,10 +350,21 @@ export async function handleOAuthProviderLink(
   res: Response,
   userData: OAuthUserData
 ): Promise<void> {
+  // Important: must clear temporary non-httpOnly cookie used during OAuth linking
+  const clearTempAuthCookie = () => {
+    res.cookie('authToken', '', {
+      maxAge: 0,
+      path: '/',
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
+  };
+
   const authConfig = getAuthConfig();
   const { session, connectionInfo } = await getCallContext(req);
 
   if (!session?.userId) {
+    clearTempAuthCookie();
     res.status(401).json({
       error: 'You must be signed in to link a provider.',
     });
@@ -386,6 +397,8 @@ export async function handleOAuthProviderLink(
       const currentUser = await usersCollection.findOne({ _id: userId });
 
       if (!currentUser || currentUser.status === 'deleted' || currentUser.status === 'disabled') {
+        clearTempAuthCookie();
+
         res.status(400).json({ error: 'User account is not active.' });
 
         authConfig.onOAuthLinkError?.({
@@ -401,6 +414,8 @@ export async function handleOAuthProviderLink(
       const existingProviderId = currentUser?.authMethods?.[userData.providerName]?.id;
 
       if (existingProviderId && existingProviderId !== userData.id) {
+        clearTempAuthCookie();
+
         res.status(400).json({
           error: `You have already linked a different ${userData.providerName} account.`,
         });
@@ -416,6 +431,8 @@ export async function handleOAuthProviderLink(
       }
 
       // Fallback safety guard in case the DB state does not match any expected branch
+      clearTempAuthCookie();
+
       res.status(400).json({
         error: `Unable to link ${userData.providerName} account.`,
       });
@@ -442,13 +459,13 @@ export async function handleOAuthProviderLink(
     }
 
     // Redirect back to the app after successful link
-    res.cookie('authToken', '', {
-      maxAge: 0,
-      path: '/',
-    });
+    clearTempAuthCookie();
+
     res.status(302).redirect('/');
   } catch (error) {
     if (error instanceof Error && (error as any).code === 11000) {
+      clearTempAuthCookie();
+
       res.status(400).json({
         error: `This ${userData.providerName} account is already linked to a different user.`,
       });
