@@ -25,7 +25,7 @@
             "pages": [
               "core-concepts/project-structure",
               "core-concepts/modules",
-              "core-concepts/configuration"
+              "core-concepts/environment-and-setup"
             ]
           },
           {
@@ -176,6 +176,10 @@
     {
       "source": "/quick-start/intro",
       "destination": "/quickstart"
+    },
+    {
+      "source": "/core-concepts/configuration",
+      "destination": "/core-concepts/environment-and-setup"
     }
   ]
 }
