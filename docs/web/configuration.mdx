@@ -1,0 +1,239 @@
+---
+title: 'Configuration'
+description: 'Define typed configuration schemas for your modules'
+icon: 'sliders'
+---
+
+Modelence modules support a `configSchema` that lets you define typed, named
+configuration values. These values can be managed through Modelence Cloud and
+accessed at runtime via `getConfig`.
+
+This is the recommended way to store settings like API keys, feature toggles,
+default values, and any other configuration your module needs — without
+hardcoding them or relying solely on environment variables.
+
+## Defining a Config Schema
+
+Add a `configSchema` to your module definition. Each key becomes a configuration
+value namespaced under the module name:
+
+```typescript title="src/server/payments/index.ts"
+import { Module } from 'modelence/server';
+
+export default new Module('payments', {
+  configSchema: {
+    apiKey: {
+      type: 'secret',
+      default: '',
+      isPublic: false,
+    },
+    currency: {
+      type: 'string',
+      default: 'USD',
+      isPublic: true,
+    },
+    maxRetries: {
+      type: 'number',
+      default: 3,
+      isPublic: false,
+    },
+  },
+});
+```
+
+Each config field requires three properties:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `type` | `ConfigType` | The data type — see [Config Types](#config-types) below |
+| `default` | _(matches type)_ | Default value used when no value has been set |
+| `isPublic` | `boolean` | Whether this value is accessible on the client |
+
+## Config Types
+
+The `type` field accepts one of five values:
+
+| Type | Value Type | Description |
+| --- | --- | --- |
+| `'string'` | `string` | A short text value (single line) |
+| `'text'` | `string` | A longer text value (multi-line, rendered as a textarea in Cloud) |
+| `'number'` | `number` | A numeric value |
+| `'boolean'` | `boolean` | A true/false toggle |
+| `'secret'` | `string` | A sensitive value like an API key or token. Masked in the Cloud dashboard. **Cannot be `isPublic`.** |
+
+<Warning>
+Config values with `type: 'secret'` cannot have `isPublic: true`. Modelence
+will throw an error at startup if this rule is violated.
+</Warning>
+
+## Reading Config Values
+
+### Server-side
+
+Use `getConfig` from `modelence/server` to read values in queries, mutations,
+cron jobs, or any server code:
+
+```typescript
+import { getConfig } from 'modelence/server';
+
+const apiKey = getConfig('payments.apiKey') as string;
+const maxRetries = getConfig('payments.maxRetries') as number;
+```
+
+The key is always `moduleName.configKey`.
+
+### Client-side
+
+Values marked `isPublic: true` are also available on the client:
+
+```typescript
+import { getConfig } from 'modelence/client';
+
+const currency = getConfig('payments.currency');
+```
+
+Non-public values (including all `secret` values) are **not** sent to the
+client and will return `undefined`.
+
+## Managing Values in Modelence Cloud
+
+Once your module defines a `configSchema`, the configuration fields appear
+automatically in the Modelence Cloud dashboard:
+
+1. Go to [cloud.modelence.com](https://cloud.modelence.com)
+2. Select your environment
+3. Open the **Application** tab
+4. Find your module's configuration section
+5. Set values and save
+
+Changes sync to your running application automatically (within ~10 seconds).
+
+<Tip>
+Config values set in Modelence Cloud take precedence over defaults defined in
+your code. Environment variables take precedence over both.
+</Tip>
+
+## Examples
+
+### Storing a third-party API key
+
+```typescript
+import { Module, getConfig } from 'modelence/server';
+
+export default new Module('ai', {
+  configSchema: {
+    apiKey: {
+      type: 'secret',
+      default: '',
+      isPublic: false,
+    },
+    model: {
+      type: 'string',
+      default: 'gpt-4o',
+      isPublic: false,
+    },
+  },
+
+  mutations: {
+    async generateResponse({ prompt }) {
+      const apiKey = getConfig('ai.apiKey') as string;
+      const model = getConfig('ai.model') as string;
+
+      if (!apiKey) {
+        throw new Error('AI API key not configured');
+      }
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      return response.json();
+    },
+  },
+});
+```
+
+### Feature toggle with a boolean config
+
+```typescript
+import { Module, getConfig } from 'modelence/server';
+
+export default new Module('notifications', {
+  configSchema: {
+    emailEnabled: {
+      type: 'boolean',
+      default: true,
+      isPublic: false,
+    },
+    footer: {
+      type: 'text',
+      default: 'You are receiving this because you signed up for our service.',
+      isPublic: false,
+    },
+  },
+
+  mutations: {
+    async sendNotification({ userId, message }) {
+      const emailEnabled = getConfig('notifications.emailEnabled') as boolean;
+
+      if (!emailEnabled) {
+        return { skipped: true };
+      }
+
+      const footer = getConfig('notifications.footer') as string;
+      // Send email with message + footer...
+    },
+  },
+});
+```
+
+### Exposing config to the client
+
+```typescript title="Server module"
+export default new Module('app', {
+  configSchema: {
+    appName: {
+      type: 'string',
+      default: 'My App',
+      isPublic: true,
+    },
+    maintenanceMode: {
+      type: 'boolean',
+      default: false,
+      isPublic: true,
+    },
+  },
+});
+```
+
+```typescript title="Client component"
+import { getConfig } from 'modelence/client';
+
+function Header() {
+  const appName = getConfig('app.appName');
+  const maintenance = getConfig('app.maintenanceMode');
+
+  if (maintenance) {
+    return <div>We are currently undergoing maintenance. Please check back soon.</div>;
+  }
+
+  return <h1>{appName}</h1>;
+}
+```
+
+## Type Reference
+
+See the full API reference for config types:
+
+- [`ConfigSchema`](/api-reference/modelence/server/type-aliases/ConfigSchema) — The schema object passed to a module
+- [`ConfigType`](/api-reference/modelence/server/type-aliases/ConfigType) — The union of allowed type values
+- [`getConfig` (server)](/api-reference/modelence/server/functions/getConfig) — Read config on the server
+- [`getConfig` (client)](/api-reference/modelence/client/functions/getConfig) — Read public config on the client

@@ -49,6 +49,7 @@
               "email",
               "files",
               "stores",
+              "configuration",
               "websockets",
               "telemetry",
               "rate-limiting"
@@ -106,7 +107,9 @@
             "group": "Config",
             "pages": [
               "api-reference/modelence/server/functions/getConfig",
-              "api-reference/modelence/client/functions/getConfig"
+              "api-reference/modelence/client/functions/getConfig",
+              "api-reference/modelence/server/type-aliases/ConfigSchema",
+              "api-reference/modelence/server/type-aliases/ConfigType"
             ]
           },
           {
