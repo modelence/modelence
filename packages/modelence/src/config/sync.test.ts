@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, jest, test, afterEach } from '@jest/globals';
 
 const mockSeconds = jest.fn(() => 5000);
 const mockSyncStatus = jest.fn();
 const mockFetchConfigs = jest.fn();
 const mockLoadConfigs = jest.fn();
+const mockGetSchema = jest.fn(() => ({}));
+const mockGetLocalConfigs = jest.fn((_schema: unknown, _variant?: unknown) => []);
 const mockAcquireLock = jest.fn();
 
 jest.unstable_mockModule('../time', () => ({
@@ -17,14 +19,20 @@ jest.unstable_mockModule('../app/backendApi', () => ({
   fetchConfigs: mockFetchConfigs,
 }));
 
+jest.unstable_mockModule('./local', () => ({
+  getLocalConfigs: mockGetLocalConfigs,
+}));
+
 jest.unstable_mockModule('./server', () => ({
   loadConfigs: mockLoadConfigs,
+  getSchema: mockGetSchema,
 }));
 
 describe('config/sync', () => {
   let intervalCallback: (() => Promise<void>) | null = null;
   let intervalDelay: number | undefined;
   let startConfigSync: typeof import('./sync').startConfigSync;
+  let loadRemoteConfigs: typeof import('./sync').loadRemoteConfigs;
   const originalSetInterval = global.setInterval;
 
   beforeEach(async () => {
@@ -38,7 +46,7 @@ describe('config/sync', () => {
     }) as unknown as typeof setInterval;
     mockAcquireLock.mockResolvedValue(true as never);
     mockSyncStatus.mockResolvedValue(undefined as never);
-    ({ startConfigSync } = await import('./sync'));
+    ({ startConfigSync, loadRemoteConfigs } = await import('./sync'));
   });
 
   afterEach(() => {
@@ -58,7 +66,31 @@ describe('config/sync', () => {
 
     expect(mockSyncStatus).toHaveBeenCalled();
     expect(mockFetchConfigs).toHaveBeenCalled();
-    expect(mockLoadConfigs).toHaveBeenCalledWith([{ key: 'demo', type: 'string', value: 'v' }]);
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(1, [
+      { key: 'demo', type: 'string', value: 'v' },
+    ]);
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, []);
+    expect(mockGetLocalConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({}),
+      'withRemoteServer'
+    );
+  });
+
+  test('loadRemoteConfigs loads remote configs then local withRemoteServer overrides', async () => {
+    const remoteConfigs = [
+      { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
+      { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
+    ];
+    const localOverrides = [
+      { key: '_system.site.url', type: 'string', value: 'https://local.example.com' },
+    ];
+    mockGetLocalConfigs.mockReturnValue(localOverrides as never);
+
+    loadRemoteConfigs(remoteConfigs as never);
+
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(1, remoteConfigs);
+    expect(mockGetLocalConfigs).toHaveBeenCalledWith(expect.anything(), 'withRemoteServer');
+    expect(mockLoadConfigs).toHaveBeenNthCalledWith(2, localOverrides);
   });
 
   test('avoids concurrent sync executions using isSyncing guard', async () => {

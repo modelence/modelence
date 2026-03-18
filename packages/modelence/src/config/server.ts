@@ -86,6 +86,10 @@ export function loadConfigs(configs: AppConfig[]) {
   isInitialized = true;
 }
 
+export function getSchema() {
+  return configSchema;
+}
+
 export function setSchema(schema: ConfigSchema) {
   // TODO: more validation on the schema structure
   Object.entries(schema).forEach(([key, value]) => {
