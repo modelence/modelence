@@ -25,7 +25,7 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
   res.cookie('authToken', authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
   });
   res.status(302);
@@ -350,7 +350,7 @@ export function clearOAuthLinkCookie(res: Response) {
   // Important: must clear temporary non-httpOnly cookie used during OAuth linking
   res.cookie('oauthLinkToken', '', {
     maxAge: 0,
-    path: '/',
+    path: '/api/_internal/auth/',
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
