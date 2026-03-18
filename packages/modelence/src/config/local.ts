@@ -5,6 +5,7 @@ type LocalConfigVariant = 'withRemoteServer' | 'withoutRemoteServer';
 const localConfigMap = {
   withoutRemoteServer: {
     MONGODB_URI: '_system.mongodbUri',
+    MONGODB_POOL_SIZE: '_system.mongodbPoolSize',
     MODELENCE_AUTH_GOOGLE_ENABLED: '_system.user.auth.google.enabled',
     MODELENCE_AUTH_GOOGLE_CLIENT_ID: '_system.user.auth.google.clientId',
     MODELENCE_AUTH_GOOGLE_CLIENT_SECRET: '_system.user.auth.google.clientSecret',

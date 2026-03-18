@@ -12,12 +12,17 @@ export async function connect() {
     throw new Error('MongoDB URI is not set');
   }
 
+  const poolSizeConfig = getConfig('_system.mongodbPoolSize');
+  const maxPoolSize =
+    typeof poolSizeConfig === 'number' && poolSizeConfig > 0 ? poolSizeConfig : 10;
+
   client = new MongoClient(mongodbUri, {
     driverInfo: {
       name: 'Modelence',
       version: packageJson.version,
     },
     ignoreUndefined: true,
+    maxPoolSize,
   });
 
   try {
