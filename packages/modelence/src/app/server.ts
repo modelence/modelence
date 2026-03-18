@@ -157,11 +157,18 @@ export async function startServer(
 }
 
 export async function getCallContext(req: Request) {
+  const isOAuthCallback =
+    req.path.startsWith('/api/_internal/auth/') && req.path.endsWith('/callback');
+
   const authToken = z
     .string()
     .nullish()
     .transform((val) => val ?? null)
-    .parse(req.cookies.authToken || req.cookies.oauth_link_token || req.body.authToken);
+    .parse(
+      req.cookies.authToken ||
+        (isOAuthCallback ? req.cookies.oauth_link_token : null) ||
+        req.body.authToken
+    );
 
   const clientInfo = z
     .object({
