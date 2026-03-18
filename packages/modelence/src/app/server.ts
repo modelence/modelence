@@ -157,8 +157,9 @@ export async function startServer(
 }
 
 export async function getCallContext(req: Request) {
-  const isOAuthCallback =
-    req.path.startsWith('/api/_internal/auth/') && req.path.endsWith('/callback');
+  const path = req.path ?? req.url ?? '';
+
+  const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
 
   const authToken = z
     .string()
