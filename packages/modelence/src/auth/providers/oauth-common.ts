@@ -352,7 +352,7 @@ export async function handleOAuthProviderLink(
 ): Promise<void> {
   // Important: must clear temporary non-httpOnly cookie used during OAuth linking
   const clearTempAuthCookie = () => {
-    res.cookie('authToken', '', {
+    res.cookie('oauth_link_token', '', {
       maxAge: 0,
       path: '/',
       sameSite: 'lax',

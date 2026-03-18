@@ -161,7 +161,7 @@ export async function getCallContext(req: Request) {
     .string()
     .nullish()
     .transform((val) => val ?? null)
-    .parse(req.cookies.authToken || req.body.authToken);
+    .parse(req.cookies.authToken || req.cookies.oauth_link_token || req.body.authToken);
 
   const clientInfo = z
     .object({

@@ -189,7 +189,7 @@ export function linkOAuthProvider(options: { provider: 'google' | 'github' }): v
     // can recover the session (needed for password-authenticated users).
 
     const isSecure = window.location.protocol === 'https:';
-    document.cookie = `authToken=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    document.cookie = `oauth_link_token=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
