@@ -14,6 +14,7 @@ import {
   handleOAuthProviderLink,
   validateOAuthCode,
   type OAuthUserData,
+  clearOAuthLinkCookie,
 } from './oauth-common';
 
 interface GitHubTokenResponse {
@@ -112,6 +113,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const storedState = req.cookies.authStateGithub;
 
   if (!code) {
+    clearOAuthLinkCookie(res);
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
@@ -119,6 +121,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const [storedStateValue, storedMode] = (storedState || '').split(':');
 
   if (!state || !storedState || state !== storedStateValue) {
+    clearOAuthLinkCookie(res);
     res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
     return;
   }
@@ -173,6 +176,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     }
   } catch (error) {
     console.error('GitHub OAuth error:', error);
+    clearOAuthLinkCookie(res);
     res.status(500).json({ error: 'Authentication failed' });
   }
 }

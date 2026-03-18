@@ -26,12 +26,14 @@ const mockGetRedirectUri = jest.fn<() => string>();
 const mockHandleOAuthUserAuthentication = jest.fn();
 const mockHandleOAuthProviderLink = jest.fn();
 const mockValidateOAuthCode = jest.fn<() => string | null>();
+const mockClearOAuthLinkCookie = jest.fn();
 
 jest.unstable_mockModule('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
   handleOAuthProviderLink: mockHandleOAuthProviderLink,
   validateOAuthCode: mockValidateOAuthCode,
+  clearOAuthLinkCookie: mockClearOAuthLinkCookie,
 }));
 
 const fetchMock = jest.fn();

@@ -14,6 +14,7 @@ import {
   handleOAuthProviderLink,
   validateOAuthCode,
   type OAuthUserData,
+  clearOAuthLinkCookie,
 } from './oauth-common';
 
 interface GoogleTokenResponse {
@@ -81,6 +82,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const storedState = req.cookies.authStateGoogle;
 
   if (!code) {
+    clearOAuthLinkCookie(res);
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
@@ -88,6 +90,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const [storedStateValue, storedMode] = (storedState || '').split(':');
 
   if (!state || !storedState || state !== storedStateValue) {
+    clearOAuthLinkCookie(res);
     res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
     return;
   }
@@ -119,7 +122,6 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       lastName: googleUser.family_name || undefined,
       avatarUrl: googleUser.picture || undefined,
     };
-
     if (storedMode === 'link') {
       await handleOAuthProviderLink(req, res, userData);
     } else {
@@ -127,6 +129,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     }
   } catch (error) {
     console.error('Google OAuth error:', error);
+    clearOAuthLinkCookie(res);
     res.status(500).json({ error: 'Authentication failed' });
   }
 }
