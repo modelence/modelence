@@ -29,7 +29,10 @@ export { CronJobInputParams } from './cron/types';
 export type { RateLimitRule, RateLimitType } from './rate-limit/types';
 export { consumeRateLimit } from './rate-limit/rules';
 
+// Config
 export { getConfig } from './config/server';
+export type { ConfigType, ConfigSchema } from './config/types';
+
 export type { CloudBackendConnectResponse } from './app/backendApi';
 export { ServerChannel } from './websocket/serverChannel';
 export { authenticate } from './auth';
