@@ -3,6 +3,7 @@ import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
+import { time } from '@/time';
 
 export type UserInfo = {
   id: string;
@@ -190,7 +191,7 @@ export function linkOAuthProvider(options: { provider: OAuthProvider }): void {
     // can recover the session (needed for password-authenticated users).
 
     const isSecure = window.location.protocol === 'https:';
-    document.cookie = `oauthLinkToken=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    document.cookie = `oauthLinkToken=${token}; path=/; max-age=${time.minutes(10) / 1000}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
