@@ -488,6 +488,8 @@ export async function handleOAuthProviderLink(
         connectionInfo,
       });
     }
+
+    clearOAuthLinkCookie(res);
     throw error;
   }
 }
