@@ -11,10 +11,27 @@ jest.unstable_mockModule('../../client/session', () => ({
   setCurrentUser: mockSetCurrentUser,
 }));
 
+const mockGetLocalStorageSession = jest.fn();
+jest.unstable_mockModule('../../client/localStorage', () => ({
+  getLocalStorageSession: mockGetLocalStorageSession,
+}));
+
 const authClient = await import('./index');
+
+Object.defineProperty(globalThis, 'window', {
+  value: { location: { href: '', protocol: 'http:' } },
+  writable: true,
+});
+
+Object.defineProperty(globalThis, 'document', {
+  value: { cookie: '' },
+  writable: true,
+});
 
 describe('auth/client', () => {
   beforeEach(() => {
+    window.location.href = '';
+    document.cookie = '';
     jest.clearAllMocks();
   });
 
@@ -86,6 +103,28 @@ describe('auth/client', () => {
 
   test('linkOAuthProvider is a synchronous function', () => {
     expect(typeof authClient.linkOAuthProvider).toBe('function');
+  });
+
+  test('linkOAuthProvider sets cookie when token exists', () => {
+    mockGetLocalStorageSession.mockReturnValue({ authToken: 'test-token' });
+
+    document.cookie = ''; // reset
+
+    authClient.linkOAuthProvider({ provider: 'google' });
+
+    expect(document.cookie).toContain('authToken=test-token');
+    expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
+  });
+
+  test('linkOAuthProvider does not set cookie when token is missing', () => {
+    mockGetLocalStorageSession.mockReturnValue(undefined);
+
+    document.cookie = ''; // reset
+
+    authClient.linkOAuthProvider({ provider: 'google' });
+
+    expect(document.cookie).toBe('');
+    expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
   });
 
   test('unlinkOAuthProvider calls backend method with provider', async () => {

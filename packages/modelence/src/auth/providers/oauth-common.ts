@@ -442,6 +442,10 @@ export async function handleOAuthProviderLink(
     }
 
     // Redirect back to the app after successful link
+    res.cookie('authToken', '', {
+      maxAge: 0,
+      path: '/',
+    });
     res.status(302).redirect('/');
   } catch (error) {
     if (error instanceof Error && (error as any).code === 11000) {

@@ -183,8 +183,14 @@ export async function resetPassword(options: { token: string; password: string }
 export function linkOAuthProvider(options: { provider: 'google' | 'github' }): void {
   const { provider } = options;
 
-  // The existing httpOnly authToken cookie will automatically be sent
-  // with this same-origin redirect request.
+  const token = getAuthToken();
+  if (token) {
+    // Temporarily expose auth token as a cookie so the OAuth callback
+    // can recover the session (needed for password-authenticated users).
+
+    const isSecure = window.location.protocol === 'https:';
+    document.cookie = `authToken=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+  }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
 /**
