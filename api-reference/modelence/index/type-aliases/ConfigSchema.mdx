@@ -7,7 +7,31 @@ title: ConfigSchema
 
 > **ConfigSchema** = `object`
 
-Defined in: [packages/modelence/src/config/types.ts:17](https://github.com/modelence/modelence/blob/17586d0f2d7e599eb458572359e839f2c68e943c/packages/modelence/src/config/types.ts#L17)
+Defined in: [packages/modelence/src/config/types.ts:69](https://github.com/modelence/modelence/blob/f73c05af956b345dde3084f8fc63e7abd2668c96/packages/modelence/src/config/types.ts#L69)
+
+Defines the configuration schema for a module. Each key becomes a namespaced
+config value accessible via `getConfig('moduleName.key')`.
+
+## Example
+
+```ts
+import { Module } from 'modelence/server';
+
+export default new Module('payments', {
+  configSchema: {
+    apiKey: {
+      type: 'secret',
+      default: '',
+      isPublic: false,
+    },
+    currency: {
+      type: 'string',
+      default: 'USD',
+      isPublic: true,
+    },
+  },
+});
+```
 
 ## Index Signature
 
