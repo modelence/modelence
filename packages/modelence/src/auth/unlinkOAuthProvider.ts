@@ -1,13 +1,19 @@
 import { usersCollection } from './db';
 import { Args, Context } from '@/methods/types';
+import { OAuthProvider, SUPPORTED_OAUTH_PROVIDERS } from './types';
 
 export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Context) {
   if (!user) {
     throw new Error('You must be signed in to unlink a provider.');
   }
 
-  if (provider !== 'google' && provider !== 'github') {
-    throw new Error('Invalid provider. Only Google and GitHub can be unlinked.');
+  if (
+    typeof provider !== 'string' ||
+    !SUPPORTED_OAUTH_PROVIDERS.includes(provider as OAuthProvider)
+  ) {
+    throw new Error(
+      `Invalid provider. Supported providers are: ${SUPPORTED_OAUTH_PROVIDERS.join(', ')}.`
+    );
   }
 
   // requireById throws if user is not found, so no null check needed

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ObjectId } from 'mongodb';
+import { SUPPORTED_OAUTH_PROVIDERS } from './types';
 
 const mockRequireById = jest.fn();
 const mockUpdateOne = jest.fn();
@@ -53,7 +54,7 @@ describe('auth/unlinkOAuthProvider', () => {
 
   test('throws error when provider argument is not a valid OAuth provider', async () => {
     await expect(handleUnlinkOAuthProvider({ provider: 123 }, mockContext)).rejects.toThrow(
-      'Invalid provider. Only Google and GitHub can be unlinked.'
+      `Invalid provider. Supported providers are: ${SUPPORTED_OAUTH_PROVIDERS.join(', ')}.`
     );
 
     expect(mockRequireById).not.toHaveBeenCalled();

@@ -112,7 +112,7 @@ describe('auth/client', () => {
 
     authClient.linkOAuthProvider({ provider: 'google' });
 
-    expect(document.cookie).toContain('oauth_link_token=test-token');
+    expect(document.cookie).toContain('oauthLinkToken=test-token');
     expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
   });
 

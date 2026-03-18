@@ -6,14 +6,14 @@ import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
 import { resolveUniqueHandle } from '../utils';
-import { User, Session, UserEmail } from '@/auth/types';
+import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
 
 export interface OAuthUserData {
   id: string;
   email: string;
   emailVerified: boolean;
-  providerName: 'google' | 'github';
+  providerName: OAuthProvider;
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
@@ -347,7 +347,7 @@ export async function handleOAuthUserAuthentication(
 
 export function clearOAuthLinkCookie(res: Response) {
   // Important: must clear temporary non-httpOnly cookie used during OAuth linking
-  res.cookie('oauth_link_token', '', {
+  res.cookie('oauthLinkToken', '', {
     maxAge: 0,
     path: '/',
     sameSite: 'lax',

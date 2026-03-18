@@ -2,6 +2,7 @@ import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
+import { OAuthProvider } from '../types';
 
 export type UserInfo = {
   id: string;
@@ -180,7 +181,7 @@ export async function resetPassword(options: { token: string; password: string }
  * ```
  * @param options.provider - The OAuth provider to link ('google' or 'github').
  */
-export function linkOAuthProvider(options: { provider: 'google' | 'github' }): void {
+export function linkOAuthProvider(options: { provider: OAuthProvider }): void {
   const { provider } = options;
 
   const token = getAuthToken();
@@ -189,7 +190,7 @@ export function linkOAuthProvider(options: { provider: 'google' | 'github' }): v
     // can recover the session (needed for password-authenticated users).
 
     const isSecure = window.location.protocol === 'https:';
-    document.cookie = `oauth_link_token=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    document.cookie = `oauthLinkToken=${token}; path=/; max-age=300; SameSite=Lax${isSecure ? '; Secure' : ''}`;
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
@@ -202,9 +203,7 @@ export function linkOAuthProvider(options: { provider: 'google' | 'github' }): v
  * ```
  * @param options.provider - The OAuth provider to unlink ('google' or 'github').
  */
-export async function unlinkOAuthProvider(options: {
-  provider: 'google' | 'github';
-}): Promise<void> {
+export async function unlinkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
   const { provider } = options;
   await callMethod('_system.user.unlinkOAuthProvider', { provider });
 }

@@ -167,7 +167,7 @@ export async function getCallContext(req: Request) {
     .transform((val) => val ?? null)
     .parse(
       req.cookies.authToken ||
-        (isOAuthCallback ? req.cookies.oauth_link_token : null) ||
+        (isOAuthCallback ? req.cookies.oauthLinkToken : null) ||
         req.body.authToken
     );
 

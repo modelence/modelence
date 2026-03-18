@@ -148,6 +148,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     const githubEmail = await getGitHubUserEmail(githubUser, tokenData.access_token);
 
     if (!githubEmail) {
+      clearOAuthLinkCookie(res);
+
       res.status(400).json({
         error:
           'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
