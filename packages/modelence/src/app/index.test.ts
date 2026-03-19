@@ -75,6 +75,7 @@ jest.unstable_mockModule('./server', () => ({
 jest.unstable_mockModule('../config/server', () => ({
   setSchema: mockSetSchema,
   loadConfigs: mockLoadConfigs,
+  getConfig: jest.fn(),
 }));
 
 jest.unstable_mockModule('../auth/role', () => ({
