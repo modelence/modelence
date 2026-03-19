@@ -139,7 +139,9 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     const githubEmail = await getGitHubUserEmail(githubUser, tokenData.access_token);
 
     if (!githubEmail) {
-      clearOAuthLinkCookie(res);
+      if (mode === 'link') {
+        clearOAuthLinkCookie(res);
+      }
 
       res.status(400).json({
         error:
