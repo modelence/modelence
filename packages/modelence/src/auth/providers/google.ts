@@ -15,6 +15,7 @@ import {
   validateOAuthCode,
   type OAuthUserData,
   clearOAuthLinkCookie,
+  validateOAuthStateAndGetMode,
 } from './oauth-common';
 
 interface GoogleTokenResponse {
@@ -78,24 +79,14 @@ async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleUserInfo>
 
 async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
-  const state = req.query.state as string;
-  const storedState = req.cookies.authStateGoogle;
 
   if (!code) {
-    clearOAuthLinkCookie(res);
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
 
-  const [storedStateValue, storedMode] = (storedState || '').split(':');
-
-  if (!state || !storedState || state !== storedStateValue) {
-    clearOAuthLinkCookie(res);
-    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
-    return;
-  }
-
-  res.clearCookie('authStateGoogle');
+  const mode = validateOAuthStateAndGetMode(req, res, 'authStateGoogle');
+  if (!mode) return;
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -122,14 +113,16 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       lastName: googleUser.family_name || undefined,
       avatarUrl: googleUser.picture || undefined,
     };
-    if (storedMode === 'link') {
+    if (mode === 'link') {
       await handleOAuthProviderLink(req, res, userData);
     } else {
       await handleOAuthUserAuthentication(req, res, userData);
     }
   } catch (error) {
     console.error('Google OAuth error:', error);
-    clearOAuthLinkCookie(res);
+    if (mode === 'link') {
+      clearOAuthLinkCookie(res);
+    }
     res.status(500).json({ error: 'Authentication failed' });
   }
 }

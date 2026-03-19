@@ -366,6 +366,25 @@ function safelyCallHook(hook?: () => void) {
   }
 }
 
+export function validateOAuthStateAndGetMode(
+  req: Request,
+  res: Response,
+  stateCookieName: string
+): string | null {
+  const state = req.query.state as string;
+  const storedState = req.cookies[stateCookieName];
+
+  const [storedStateValue, storedMode] = (storedState || '').split(':');
+
+  if (!state || !storedState || state !== storedStateValue) {
+    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+    return null;
+  }
+
+  res.clearCookie(stateCookieName);
+  return storedMode || 'login';
+}
+
 export async function handleOAuthProviderLink(
   req: Request,
   res: Response,
