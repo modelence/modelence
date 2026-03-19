@@ -930,12 +930,14 @@ describe('auth/providers/oauth-common', () => {
         connectionInfo: {},
       } as never);
 
+      mockGetAuthConfig.mockReturnValue(linkAuthConfig);
       mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
       mockUsersFindOne.mockResolvedValueOnce(null as never);
 
       await moduleExports.handleOAuthProviderLink(req, res, userData);
 
-      expect(res.status).toHaveBeenCalled(); // still works
+      expect(linkAuthConfig.onOAuthLinkError).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
     });
 
     test('calls onOAuthLinkError when an unexpected error occurs', async () => {
