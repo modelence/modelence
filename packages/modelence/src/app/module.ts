@@ -2,6 +2,7 @@ import { ConfigSchema, ConfigParams, ValueType } from '../config/types';
 import { getConfig as _getConfig } from '../config/server';
 import { CronJobInputParams } from '../cron/types';
 import { Store } from '../data/store';
+import { AnyMethodShape } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 import { RateLimitRule } from '../rate-limit/types';
 import { ServerChannel } from '@/websocket/serverChannel';
@@ -9,9 +10,6 @@ import { ServerChannel } from '@/websocket/serverChannel';
 /** Array of Store instances that will be provisioned when the module is loaded */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Stores = Store<any, any>[];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyMethodShape = ((...args: any[]) => any) | { handler: (...args: any[]) => any };
 
 /** Record of query methods that can be called from the client */
 type Queries = Record<string, AnyMethodShape>;

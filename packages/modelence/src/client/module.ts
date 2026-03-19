@@ -2,13 +2,12 @@
 
 import type { ConfigParams, ConfigType, ValueType } from '../config/types';
 import { callMethod, type MethodArgs } from './method';
+import type { AnyMethodShape } from '../methods/types';
 
 // Pulls the config store value without importing server-side code
 import { getConfig as _getClientConfig } from '../config/client';
 
 // ── type helpers ─────────────────────────────────────────────────────────────
-
-type AnyMethodShape = ((...args: any[]) => any) | { handler: (...args: any[]) => any }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 type ExtractArgs<M> = M extends (args: infer A, ...rest: any[]) => any // eslint-disable-line @typescript-eslint/no-explicit-any
   ? A
@@ -82,8 +81,11 @@ export function createClientModule<TModule extends AnyModule>(moduleName: string
 
     query<K extends keyof TModule['queries'] & string>(
       name: K,
-      args: ExtractArgs<TModule['queries'][K]> = {} as ExtractArgs<TModule['queries'][K]>
+      ...rest: {} extends ExtractArgs<TModule['queries'][K]>
+        ? [args?: ExtractArgs<TModule['queries'][K]>]
+        : [args: ExtractArgs<TModule['queries'][K]>]
     ) {
+      const args = (rest[0] ?? {}) as ExtractArgs<TModule['queries'][K]>;
       return {
         queryKey: [moduleName, name, args] as const,
         queryFn: (): Promise<ExtractResult<TModule['queries'][K]>> =>
