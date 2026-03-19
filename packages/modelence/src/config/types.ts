@@ -11,6 +11,18 @@ export type ConfigType = 'text' | 'string' | 'number' | 'boolean' | 'secret';
 
 export type ConfigKey = string;
 
+export type ValueType<T extends ConfigType = ConfigType> = T extends 'number'
+  ? number
+  : T extends 'string'
+    ? string
+    : T extends 'text'
+      ? string
+      : T extends 'boolean'
+        ? boolean
+        : T extends 'secret'
+          ? string
+          : never;
+
 /**
  * Defines a single configuration field within a module's `configSchema`.
  *
@@ -23,17 +35,17 @@ export type ConfigKey = string;
  * }
  * ```
  */
-type ConfigParams = {
+export type ConfigParams<T extends ConfigType = ConfigType, IsPublic extends boolean = boolean> = {
   /** The data type of this configuration value. */
-  type: ConfigType;
+  type: T;
   /** The default value used when no value has been set. */
-  default: ValueType<ConfigType>;
+  default: ValueType<T>;
   /**
    * Whether this config value is accessible on the client via `getConfig()` from `modelence/client`.
    *
    * Config values with `type: 'secret'` cannot be public.
    */
-  isPublic: boolean;
+  isPublic: IsPublic;
 };
 
 export type AppConfig = {
@@ -71,15 +83,3 @@ export type ConfigSchema = {
 };
 
 export type Configs = Record<ConfigKey, AppConfig>;
-
-type ValueType<T> = T extends 'number'
-  ? number
-  : T extends 'string'
-    ? string
-    : T extends 'text'
-      ? string
-      : T extends 'boolean'
-        ? boolean
-        : T extends 'secret'
-          ? string
-          : never;
