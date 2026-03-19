@@ -485,7 +485,10 @@ export async function handleOAuthProviderLink(
       return;
     }
 
-    const updatedUser = await usersCollection.findOne({ _id: userId });
+    const updatedUser = await usersCollection.findOne(
+      { _id: userId },
+      { readPreference: 'primary' }
+    );
 
     if (updatedUser) {
       safelyCallHook(() =>
