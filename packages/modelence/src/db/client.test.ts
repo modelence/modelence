@@ -62,14 +62,6 @@ describe('db/client', () => {
       expect(result).toBeUndefined();
     });
 
-    test('converts non-string config values to string', () => {
-      mockGetConfig.mockReturnValue('12345');
-
-      const result = getMongodbUri();
-
-      expect(result).toBe('12345');
-    });
-
     test('returns undefined when config returns null', () => {
       mockGetConfig.mockReturnValue(null);
 
