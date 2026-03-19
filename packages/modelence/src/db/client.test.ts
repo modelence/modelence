@@ -112,6 +112,7 @@ describe('db/client', () => {
       const { connect } = await import('./client');
       mockGetConfig.mockImplementation((key: string) => {
         if (key === '_system.mongodbUri') return 'mongodb://localhost:27017';
+        if (key === '_system.mongodbPoolSize') return 10;
         return undefined;
       });
       mockConnect.mockResolvedValue(undefined);
