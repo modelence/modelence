@@ -1,5 +1,5 @@
 import { type Request, type Response } from 'express';
-import { ObjectId } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
 import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
@@ -506,7 +506,7 @@ export async function handleOAuthProviderLink(
 
     res.status(302).redirect('/');
   } catch (error) {
-    if (error instanceof Error && (error as any).code === 11000) {
+    if (error instanceof MongoServerError && error.code === 11000) {
       safelyCallHook(() =>
         authConfig.onOAuthLinkError?.({
           provider: userData.providerName,

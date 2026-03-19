@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import type { Request, Response } from 'express';
-import { ObjectId } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersInsertOne = jest.fn();
@@ -721,8 +721,10 @@ describe('auth/providers/oauth-common', () => {
       } as never);
       mockGetAuthConfig.mockReturnValue(linkAuthConfig);
 
-      const err = new Error('E11000 duplicate key error');
-      (err as any).code = 11000;
+      const err = new MongoServerError({
+        message: 'E11000 duplicate key error',
+        code: 11000,
+      });
       mockUsersUpdateOne.mockRejectedValueOnce(err as never);
 
       await moduleExports.handleOAuthProviderLink(req, res, userData);
