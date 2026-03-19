@@ -7,6 +7,11 @@ export default new Module('_system', {
       isPublic: false,
       default: '',
     },
+    mongodbPoolSize: {
+      type: 'number',
+      isPublic: false,
+      default: 10,
+    },
     'env.type': {
       type: 'string',
       isPublic: true,
