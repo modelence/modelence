@@ -63,7 +63,7 @@ describe('db/client', () => {
     });
 
     test('converts non-string config values to string', () => {
-      mockGetConfig.mockReturnValue(12345);
+      mockGetConfig.mockReturnValue('12345');
 
       const result = getMongodbUri();
 

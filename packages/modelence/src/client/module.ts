@@ -105,5 +105,45 @@ export function createClientModule<TModule extends AnyModule>(moduleName: string
           ),
       };
     },
+
+    /**
+     * Returns options for `useInfiniteQuery`. The `getArgs` callback receives the
+     * current `pageParam` and returns the args to pass to the query handler.
+     * Spread the result into `useInfiniteQuery` alongside `getNextPageParam`.
+     *
+     * Annotate the `pageParam` type in the callback so TypeScript can infer the
+     * page param type — no manual generic needed on `useInfiniteQuery`.
+     *
+     * @example
+     * ```ts
+     * useInfiniteQuery({
+     *   ...appFilesClient.infiniteQuery('listFiles', (cursor: string | undefined) => ({
+     *     environmentId,
+     *     ...(cursor ? { cursor } : {}),
+     *   })),
+     *   getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+     * });
+     * // data is typed as InfiniteData<{ files: AppFile[]; nextCursor: string | null }>
+     * ```
+     */
+    infiniteQuery<K extends keyof TModule['queries'] & string, TPageParam = unknown>(
+      name: K,
+      getArgs: (pageParam: TPageParam | undefined) => ExtractArgs<TModule['queries'][K]>
+    ) {
+      return {
+        queryKey: [moduleName, name, 'infinite'] as const,
+        // Included so TanStack infers TPageParam from the callback type, not from a bare `undefined`.
+        initialPageParam: undefined as TPageParam | undefined,
+        queryFn: ({
+          pageParam,
+        }: {
+          pageParam: TPageParam | undefined;
+        }): Promise<ExtractResult<TModule['queries'][K]>> =>
+          callMethod<ExtractResult<TModule['queries'][K]>>(
+            `${moduleName}.${name}`,
+            getArgs(pageParam) as MethodArgs
+          ),
+      };
+    },
   };
 }
