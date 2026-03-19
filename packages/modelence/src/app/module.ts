@@ -120,12 +120,22 @@ export class Module<
 
   /**
    * Retrieves a typed configuration value for this module.
-   * The return type is inferred from the schema definition.
+   * The return type is inferred from the schema — no casts needed.
    *
    * @example
    * ```ts
-   * const poolSize = systemModule.getConfig('mongodbPoolSize'); // number
-   * const uri = systemModule.getConfig('mongodbUri');           // string
+   * const myModule = new Module('payments', {
+   *   configSchema: {
+   *     apiKey:     { type: 'secret', default: '', isPublic: false },
+   *     maxRetries: { type: 'number', default: 3,  isPublic: false },
+   *   },
+   *   mutations: {
+   *     async charge({ amount }) {
+   *       const apiKey     = myModule.getConfig('apiKey');     // string
+   *       const maxRetries = myModule.getConfig('maxRetries'); // number
+   *     },
+   *   },
+   * });
    * ```
    */
   getConfig<K extends keyof TSchema & string>(key: K): ValueType<TSchema[K]['type']> {

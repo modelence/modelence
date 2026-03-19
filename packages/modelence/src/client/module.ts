@@ -39,23 +39,36 @@ type AnyModule = {
 
 /**
  * Creates a typed client accessor for a module's public configs, queries, and mutations.
- * Use `import type` to reference the module — no server code is bundled.
+ *
+ * Use `import type` to reference the module so no server code is bundled on the client.
+ * Arg and return types for queries and mutations are inferred automatically from the
+ * server-side handler signatures.
+ *
+ * @param moduleName - The module's name as passed to `new Module(name, ...)`.
  *
  * @example
  * ```ts
- * import type adminModule from '../server/admin/module';
+ * // src/client/payments.ts
+ * import type paymentsModule from '../server/payments';
  * import { createClientModule } from 'modelence/client';
  *
- * export const admin = createClientModule<typeof adminModule>('admin');
+ * export const payments = createClientModule<typeof paymentsModule>('payments');
+ * ```
  *
- * // Typed config (public only):
- * admin.getConfig('currency');  // → string | undefined
+ * ```ts
+ * // src/components/Checkout.tsx
+ * import { useQuery, useMutation } from '@tanstack/react-query';
+ * import { payments } from '../client/payments';
  *
- * // Typed query options (pass directly to useQuery):
- * admin.query('getUsers', { page: 1 });
+ * // Typed config — public keys only, private and secret keys excluded:
+ * const currency = payments.getConfig('currency'); // string | undefined
  *
- * // Typed mutation options (pass directly to useMutation):
- * admin.mutation('previewBulkCredits');
+ * // Typed query — pass directly to useQuery:
+ * const { data: products } = useQuery(payments.query('getProducts', { page: 1 }));
+ *
+ * // Typed mutation — pass directly to useMutation:
+ * const { mutate: charge } = useMutation(payments.mutation('charge'));
+ * charge({ amount: 100 }); // args typed from handler signature
  * ```
  */
 export function createClientModule<TModule extends AnyModule>(moduleName: string) {
