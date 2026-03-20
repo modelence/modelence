@@ -63,26 +63,233 @@ function serializeDocumentIds<T extends object>(doc: T): SerializeObjectIds<T> {
   return serializeValue(doc) as SerializeObjectIds<T>;
 }
 
+type ZodDefLike = {
+  typeName?: string;
+  description?: string;
+  innerType?: unknown;
+  type?: unknown;
+  schema?: unknown;
+  options?: unknown[];
+  shape?: () => Record<string, unknown>;
+};
+
+type ZodTypeLike = {
+  _def?: ZodDefLike;
+};
+
+const OBJECT_ID_SCHEMA_SENTINEL = Symbol('ObjectIdSchema');
+const OBJECT_ID_TYPE_DESCRIPTIONS = new Set(['ObjectId', 'UserId', 'Ref']);
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isObjectIdHexString(value: string): boolean {
+  return value.length === 24 && ObjectId.isValid(value);
+}
+
+function isArrayIndexSegment(segment: string): boolean {
+  return (
+    /^\d+$/.test(segment) ||
+    segment === '$' ||
+    segment === '$[]' ||
+    (segment.startsWith('$[') && segment.endsWith(']'))
+  );
+}
+
+function isZodTypeLike(value: unknown): value is ZodTypeLike {
+  return isObjectRecord(value) && '_def' in value;
+}
+
+function unwrapSchemaNode(schemaNode: unknown): unknown {
+  let current = schemaNode;
+  while (isZodTypeLike(current)) {
+    const def = current._def;
+    if (!def) return current;
+    if (
+      def.typeName === 'ZodOptional' ||
+      def.typeName === 'ZodNullable' ||
+      def.typeName === 'ZodDefault' ||
+      def.typeName === 'ZodCatch' ||
+      def.typeName === 'ZodBranded' ||
+      def.typeName === 'ZodReadonly'
+    ) {
+      const innerType = def.innerType ?? def.type;
+      if (!innerType) {
+        return current;
+      }
+      current = innerType;
+      continue;
+    }
+    if (def.typeName === 'ZodEffects' && def.schema) {
+      current = def.schema;
+      continue;
+    }
+    break;
+  }
+  return current;
+}
+
+function getArrayItemSchemaNode(schemaNode: unknown): unknown {
+  const unwrapped = unwrapSchemaNode(schemaNode);
+  if (Array.isArray(unwrapped)) {
+    return unwrapped[0];
+  }
+  if (isZodTypeLike(unwrapped) && unwrapped._def?.typeName === 'ZodArray') {
+    return unwrapped._def.type;
+  }
+  return undefined;
+}
+
+function getSchemaForPath(schemaNode: unknown, path: string): unknown {
+  if (!path) return schemaNode;
+  if (path === '_id' || path.endsWith('._id')) {
+    return OBJECT_ID_SCHEMA_SENTINEL;
+  }
+
+  let current = schemaNode;
+  for (const rawSegment of path.split('.')) {
+    const segment = rawSegment.trim();
+    if (!segment) continue;
+
+    const unwrapped = unwrapSchemaNode(current);
+    if (Array.isArray(unwrapped)) {
+      const itemSchema = unwrapped[0];
+      current = isArrayIndexSegment(segment) ? itemSchema : getSchemaForPath(itemSchema, segment);
+      continue;
+    }
+
+    if (isZodTypeLike(unwrapped)) {
+      const def = unwrapped._def;
+      if (!def) {
+        return undefined;
+      }
+      if (def.typeName === 'ZodObject' && typeof def.shape === 'function') {
+        current = def.shape()[segment];
+        continue;
+      }
+      if (def.typeName === 'ZodArray') {
+        const itemSchema = def.type;
+        current = isArrayIndexSegment(segment) ? itemSchema : getSchemaForPath(itemSchema, segment);
+        continue;
+      }
+      return undefined;
+    }
+
+    if (isObjectRecord(unwrapped)) {
+      current = unwrapped[segment];
+      continue;
+    }
+
+    return undefined;
+  }
+
+  return current;
+}
+
+function isObjectIdSchemaNode(schemaNode: unknown): boolean {
+  if (schemaNode === OBJECT_ID_SCHEMA_SENTINEL) return true;
+
+  const unwrapped = unwrapSchemaNode(schemaNode);
+  if (!isZodTypeLike(unwrapped)) return false;
+
+  const def = unwrapped._def;
+  if (!def) return false;
+  if (def.description && OBJECT_ID_TYPE_DESCRIPTIONS.has(def.description)) {
+    return true;
+  }
+
+  if (def.typeName === 'ZodUnion' && Array.isArray(def.options)) {
+    return def.options.some((option) => isObjectIdSchemaNode(option));
+  }
+
+  return false;
+}
+
 /**
- * Recursively converts 24-char hex strings to ObjectId instances within a MongoDB filter,
- * so callers can pass strings wherever ObjectId is expected.
+ * Recursively converts ObjectId-like string values to ObjectId instances within a MongoDB filter.
+ * Conversion is schema-aware, and only applies to ObjectId-like fields (`_id`, `schema.objectId()`,
+ * `schema.userId()`, and `schema.ref()`).
  * @internal
  */
-function serializeFilter<T>(filter: T): T {
+function serializeFilterValue(filter: unknown, schemaNode: unknown): unknown {
   if (filter === null || filter === undefined) return filter;
   if (typeof filter === 'string') {
-    return (filter.length === 24 && ObjectId.isValid(filter)
+    return isObjectIdSchemaNode(schemaNode) && isObjectIdHexString(filter)
       ? new ObjectId(filter)
-      : filter) as unknown as T;
+      : filter;
   }
   if (typeof filter !== 'object') return filter;
-  if (filter instanceof ObjectId || filter instanceof Date) return filter;
-  if (Array.isArray(filter)) return filter.map(serializeFilter) as unknown as T;
+  if (filter instanceof ObjectId || filter instanceof Date || filter instanceof RegExp)
+    return filter;
+  if (Array.isArray(filter)) {
+    const itemSchemaNode = getArrayItemSchemaNode(schemaNode) ?? schemaNode;
+    return filter.map((value) => serializeFilterValue(value, itemSchemaNode));
+  }
+
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(filter as Record<string, unknown>)) {
-    result[k] = serializeFilter(v);
+    if (k.startsWith('$')) {
+      if (k === '$elemMatch') {
+        result[k] = serializeFilterValue(v, getArrayItemSchemaNode(schemaNode));
+      } else {
+        result[k] = serializeFilterValue(v, schemaNode);
+      }
+      continue;
+    }
+
+    result[k] = serializeFilterValue(v, getSchemaForPath(schemaNode, k));
   }
-  return result as T;
+  return result;
+}
+
+function serializeFilter<T>(filter: T, schemaNode: unknown): T {
+  return serializeFilterValue(filter, schemaNode) as T;
+}
+
+function serializeWriteValue(value: unknown, schemaNode: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    return isObjectIdSchemaNode(schemaNode) && isObjectIdHexString(value)
+      ? new ObjectId(value)
+      : value;
+  }
+  if (typeof value !== 'object') return value;
+  if (value instanceof ObjectId || value instanceof Date || value instanceof RegExp) return value;
+  if (Array.isArray(value)) {
+    const itemSchemaNode = getArrayItemSchemaNode(schemaNode);
+    return value.map((item) => serializeWriteValue(item, itemSchemaNode));
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    result[k] = serializeWriteValue(v, getSchemaForPath(schemaNode, k));
+  }
+  return result;
+}
+
+function serializeWriteDocument<T>(document: T, schemaNode: unknown): T {
+  return serializeWriteValue(document, schemaNode) as T;
+}
+
+function serializeUpdate<T>(update: UpdateFilter<T>, schemaNode: unknown): UpdateFilter<T> {
+  if (!isObjectRecord(update)) {
+    return update;
+  }
+
+  const serializedUpdate = { ...(update as Record<string, unknown>) };
+  for (const operator of ['$set', '$setOnInsert'] as const) {
+    const updateValue = serializedUpdate[operator];
+    if (!isObjectRecord(updateValue)) continue;
+
+    const serializedFieldMap: Record<string, unknown> = {};
+    for (const [path, value] of Object.entries(updateValue)) {
+      serializedFieldMap[path] = serializeWriteValue(value, getSchemaForPath(schemaNode, path));
+    }
+    serializedUpdate[operator] = serializedFieldMap;
+  }
+
+  return serializedUpdate as UpdateFilter<T>;
 }
 
 /**
@@ -786,7 +993,7 @@ export class Store<
    */
   async findOne(query: TypedFilter<this['_type']>, options?: FindOptions) {
     const document = await this.requireCollection().findOne<WithId<this['_type']>>(
-      serializeFilter(query) as Filter<this['_type']>,
+      serializeFilter(query, this.schema) as Filter<this['_type']>,
       options
     );
     return document ? this.wrapDocument(document) : null;
@@ -806,7 +1013,7 @@ export class Store<
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
     const cursor = this.requireCollection().find(
-      serializeFilter(query) as Filter<this['_type']>,
+      serializeFilter(query, this.schema) as Filter<this['_type']>,
       options?.projection ? { projection: options.projection } : undefined
     );
     if (options?.sort) {
@@ -856,7 +1063,9 @@ export class Store<
    * @returns The number of documents that match the query
    */
   countDocuments(query: TypedFilter<this['_type']>): Promise<number> {
-    return this.requireCollection().countDocuments(serializeFilter(query) as Filter<this['_type']>);
+    return this.requireCollection().countDocuments(
+      serializeFilter(query, this.schema) as Filter<this['_type']>
+    );
   }
 
   /**
@@ -902,7 +1111,7 @@ export class Store<
   async insertOne(
     document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>
   ): Promise<InsertOneResult> {
-    return await this.requireCollection().insertOne(document);
+    return await this.requireCollection().insertOne(serializeWriteDocument(document, this.schema));
   }
 
   /**
@@ -914,7 +1123,9 @@ export class Store<
   async insertMany(
     documents: OptionalUnlessRequiredId<InferDocumentType<TSchema>>[]
   ): Promise<InsertManyResult> {
-    return await this.requireCollection().insertMany(documents);
+    return await this.requireCollection().insertMany(
+      documents.map((document) => serializeWriteDocument(document, this.schema))
+    );
   }
 
   /**
@@ -929,8 +1140,8 @@ export class Store<
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(
-      serializeFilter(this.getSelector(selector)),
-      update
+      serializeFilter(this.getSelector(selector), this.schema),
+      serializeUpdate(update, this.schema)
     );
   }
 
@@ -946,8 +1157,8 @@ export class Store<
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(
-      serializeFilter(this.getSelector(selector)),
-      update,
+      serializeFilter(this.getSelector(selector), this.schema),
+      serializeUpdate(update, this.schema),
       { upsert: true }
     );
   }
@@ -965,8 +1176,8 @@ export class Store<
     options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(
-      serializeFilter(selector) as Filter<this['_type']>,
-      update,
+      serializeFilter(selector, this.schema) as Filter<this['_type']>,
+      serializeUpdate(update, this.schema),
       options
     );
   }
@@ -983,8 +1194,8 @@ export class Store<
     update: UpdateFilter<this['_type']>
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(
-      serializeFilter(selector) as Filter<this['_type']>,
-      update,
+      serializeFilter(selector, this.schema) as Filter<this['_type']>,
+      serializeUpdate(update, this.schema),
       { upsert: true }
     );
   }
@@ -997,7 +1208,7 @@ export class Store<
    */
   async deleteOne(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
     return await this.requireCollection().deleteOne(
-      serializeFilter(selector) as Filter<this['_type']>
+      serializeFilter(selector, this.schema) as Filter<this['_type']>
     );
   }
 
@@ -1009,7 +1220,7 @@ export class Store<
    */
   async deleteMany(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
     return await this.requireCollection().deleteMany(
-      serializeFilter(selector) as Filter<this['_type']>
+      serializeFilter(selector, this.schema) as Filter<this['_type']>
     );
   }
 

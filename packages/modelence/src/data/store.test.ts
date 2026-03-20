@@ -316,6 +316,94 @@ describe('data/store', () => {
     expect((calledFilter?._id as ObjectId).toHexString()).toBe(id);
   });
 
+  test('findOne keeps RegExp values in filters', async () => {
+    const store = createStore();
+    const collectionMock = {
+      findOne: jest.fn().mockResolvedValue(null as never),
+    };
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const pattern = /test-user/i;
+    await store.findOne({ name: pattern } as never);
+
+    const calledFilter = collectionMock.findOne.mock.calls[0]?.[0] as { name?: unknown };
+    expect(calledFilter?.name).toBe(pattern);
+  });
+
+  test('findOne only converts 24-char hex strings on ObjectId-like fields', async () => {
+    const store = new Store('tokenCollection', {
+      schema: {
+        userId: schema.objectId(),
+        externalId: schema.string(),
+      },
+      indexes: [],
+    });
+    const collectionMock = {
+      findOne: jest.fn().mockResolvedValue(null as never),
+    };
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const hexValue = '507f1f77bcf86cd799439011';
+    await store.findOne({ userId: hexValue, externalId: hexValue } as never);
+
+    const calledFilter = collectionMock.findOne.mock.calls[0]?.[0] as {
+      userId?: unknown;
+      externalId?: unknown;
+    };
+    expect(calledFilter?.userId).toBeInstanceOf(ObjectId);
+    expect((calledFilter?.userId as ObjectId).toHexString()).toBe(hexValue);
+    expect(calledFilter?.externalId).toBe(hexValue);
+  });
+
+  test('insertOne converts ObjectId-like string fields to ObjectId', async () => {
+    const store = new Store('tokenCollection', {
+      schema: {
+        userId: schema.objectId(),
+        token: schema.string(),
+      },
+      indexes: [],
+    });
+    const collectionMock = {
+      insertOne: jest.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
+    };
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const userId = '507f1f77bcf86cd799439011';
+    await store.insertOne({ userId, token: 'abc' } as never);
+
+    const insertedDoc = collectionMock.insertOne.mock.calls[0]?.[0] as {
+      userId?: unknown;
+      token?: string;
+    };
+    expect(insertedDoc?.userId).toBeInstanceOf(ObjectId);
+    expect((insertedDoc?.userId as ObjectId).toHexString()).toBe(userId);
+    expect(insertedDoc?.token).toBe('abc');
+  });
+
+  test('updateOne converts $set ObjectId-like string fields to ObjectId', async () => {
+    const store = new Store('tokenCollection', {
+      schema: {
+        userId: schema.objectId(),
+      },
+      indexes: [],
+    });
+    const collectionMock = {
+      updateOne: jest.fn().mockResolvedValue(undefined as never),
+    };
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const userId = '507f1f77bcf86cd799439011';
+    await store.updateOne({ userId } as never, { $set: { userId } } as never);
+
+    const calledFilter = collectionMock.updateOne.mock.calls[0]?.[0] as { userId?: unknown };
+    const calledUpdate = collectionMock.updateOne.mock.calls[0]?.[1] as {
+      $set?: { userId?: unknown };
+    };
+    expect(calledFilter?.userId).toBeInstanceOf(ObjectId);
+    expect(calledUpdate?.$set?.userId).toBeInstanceOf(ObjectId);
+    expect((calledUpdate?.$set?.userId as ObjectId).toHexString()).toBe(userId);
+  });
+
   test('fetch forwards projection and cursor options to MongoDB find', async () => {
     const store = createStore();
     const cursorMock = {
