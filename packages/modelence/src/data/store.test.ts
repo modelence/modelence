@@ -740,13 +740,11 @@ describe('data/store', () => {
       const rawOwnerId = new ObjectId();
       const rawParentId = new ObjectId();
       const collectionMock = {
-        findOne: jest
-          .fn()
-          .mockResolvedValue({
-            _id: new ObjectId(),
-            ownerId: rawOwnerId,
-            parentId: rawParentId,
-          } as never),
+        findOne: jest.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          ownerId: rawOwnerId,
+          parentId: rawParentId,
+        } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
