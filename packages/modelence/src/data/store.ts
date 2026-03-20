@@ -69,16 +69,18 @@ function serializeDocumentIds<T extends object>(doc: T): SerializeObjectIds<T> {
  * @internal
  */
 function serializeFilter<T>(filter: T): T {
-  if (filter === null || filter === undefined || typeof filter !== 'object') return filter;
+  if (filter === null || filter === undefined) return filter;
+  if (typeof filter === 'string') {
+    return (filter.length === 24 && ObjectId.isValid(filter)
+      ? new ObjectId(filter)
+      : filter) as unknown as T;
+  }
+  if (typeof filter !== 'object') return filter;
   if (filter instanceof ObjectId || filter instanceof Date) return filter;
   if (Array.isArray(filter)) return filter.map(serializeFilter) as unknown as T;
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(filter as Record<string, unknown>)) {
-    if (typeof v === 'string' && v.length === 24 && ObjectId.isValid(v)) {
-      result[k] = new ObjectId(v);
-    } else {
-      result[k] = serializeFilter(v);
-    }
+    result[k] = serializeFilter(v);
   }
   return result as T;
 }
