@@ -16,6 +16,7 @@
           {
             "group": "Get Started",
             "pages": [
+              "index",
               "quickstart",
               "setup"
             ]
@@ -25,7 +26,7 @@
             "pages": [
               "core-concepts/project-structure",
               "core-concepts/modules",
-              "core-concepts/configuration"
+              "core-concepts/environment-and-setup"
             ]
           },
           {
@@ -49,6 +50,7 @@
               "email",
               "files",
               "stores",
+              "configuration",
               "websockets",
               "telemetry",
               "rate-limiting"
@@ -106,7 +108,9 @@
             "group": "Config",
             "pages": [
               "api-reference/modelence/server/functions/getConfig",
-              "api-reference/modelence/client/functions/getConfig"
+              "api-reference/modelence/client/functions/getConfig",
+              "api-reference/modelence/server/type-aliases/ConfigSchema",
+              "api-reference/modelence/server/type-aliases/ConfigType"
             ]
           },
           {
@@ -173,6 +177,10 @@
     {
       "source": "/quick-start/intro",
       "destination": "/quickstart"
+    },
+    {
+      "source": "/core-concepts/configuration",
+      "destination": "/core-concepts/environment-and-setup"
     }
   ]
 }

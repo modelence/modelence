@@ -33,6 +33,7 @@ const mockConnectCloudBackend = jest.fn<
 >();
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
+const mockLoadRemoteConfigs = jest.fn();
 const mockStartMigrations = jest.fn();
 const mockStartCronJobs = jest.fn<() => Promise<void>>();
 const mockDefineCronJob = jest.fn();
@@ -112,6 +113,7 @@ jest.unstable_mockModule('./metrics', () => ({
 
 jest.unstable_mockModule('../config/sync', () => ({
   startConfigSync: mockStartConfigSync,
+  loadRemoteConfigs: mockLoadRemoteConfigs,
 }));
 
 jest.unstable_mockModule('../migration', () => ({
@@ -511,7 +513,9 @@ describe('app/index', () => {
       stores: expect.any(Array),
       roles: {},
     });
-    expect(mockLoadConfigs).toHaveBeenCalledWith([{ key: 'test', type: 'string', value: 'value' }]);
+    expect(mockLoadRemoteConfigs).toHaveBeenCalledWith([
+      { key: 'test', type: 'string', value: 'value' },
+    ]);
     expect(mockSetMetadata).toHaveBeenCalledWith({
       environmentId: 'env-123',
       appAlias: 'test-app',
@@ -520,6 +524,28 @@ describe('app/index', () => {
     });
     expect(mockInitMetrics).toHaveBeenCalled();
     expect(mockStartConfigSync).toHaveBeenCalled();
+  });
+
+  test('passes cloud configs to loadRemoteConfigs when remote backend is enabled', async () => {
+    process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.example.com';
+
+    mockConnectCloudBackend.mockResolvedValue({
+      configs: [
+        { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
+        { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
+      ],
+      environmentId: 'env-123',
+      appAlias: 'test-app',
+      environmentAlias: 'test-env',
+      telemetry: { enabled: true },
+    });
+
+    await startApp({});
+
+    expect(mockLoadRemoteConfigs).toHaveBeenCalledWith([
+      { key: '_system.site.url', type: 'string', value: 'https://cloud.example.com' },
+      { key: '_system.mongodbUri', type: 'string', value: 'mongodb://cloud:27017/app' },
+    ]);
   });
 
   test('passes roles to cloud backend', async () => {
@@ -544,15 +570,13 @@ describe('app/index', () => {
     });
 
     expect(mockConnectCloudBackend).not.toHaveBeenCalled();
-    expect(mockLoadConfigs).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: '_system.mongodbUri',
-          value: 'mongodb://localhost:27017/test',
-        }),
-        expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
-      ])
-    );
+    expect(mockLoadConfigs).toHaveBeenCalledWith([
+      expect.objectContaining({
+        key: '_system.mongodbUri',
+        value: 'mongodb://localhost:27017/test',
+      }),
+      expect.objectContaining({ key: '_system.site.url', value: 'https://example.com' }),
+    ]);
     expect(mockInitMetrics).not.toHaveBeenCalled();
     expect(mockStartConfigSync).not.toHaveBeenCalled();
   });

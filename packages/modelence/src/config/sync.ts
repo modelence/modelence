@@ -1,6 +1,8 @@
 import { time } from '../time';
 import { fetchConfigs, syncStatus } from '../app/backendApi';
-import { loadConfigs } from './server';
+import { getLocalConfigs } from './local';
+import { loadConfigs, getSchema } from './server';
+import { AppConfig } from './types';
 
 let isSyncing = false;
 
@@ -31,7 +33,12 @@ export function startConfigSync() {
   }, SYNC_INTERVAL);
 }
 
+export function loadRemoteConfigs(configs: AppConfig[]) {
+  loadConfigs(configs);
+  loadConfigs(getLocalConfigs(getSchema(), 'withRemoteServer'));
+}
+
 async function syncConfig() {
   const { configs } = await fetchConfigs();
-  loadConfigs(configs);
+  loadRemoteConfigs(configs);
 }

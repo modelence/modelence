@@ -108,6 +108,42 @@ describe('db/client', () => {
       expect(client).toBeDefined();
     });
 
+    test('uses default pool size of 10 when config is not set', async () => {
+      const { connect } = await import('./client');
+      mockGetConfig.mockImplementation((key: string) => {
+        if (key === '_system.mongodbUri') return 'mongodb://localhost:27017';
+        if (key === '_system.mongodbPoolSize') return 10;
+        return undefined;
+      });
+      mockConnect.mockResolvedValue(undefined);
+      mockCommand.mockResolvedValue({ ok: 1 });
+
+      await connect();
+
+      expect(MockMongoClient).toHaveBeenCalledWith(
+        'mongodb://localhost:27017',
+        expect.objectContaining({ maxPoolSize: 10 })
+      );
+    });
+
+    test('uses configured pool size when set', async () => {
+      const { connect } = await import('./client');
+      mockGetConfig.mockImplementation((key: string) => {
+        if (key === '_system.mongodbUri') return 'mongodb://localhost:27017';
+        if (key === '_system.mongodbPoolSize') return 25;
+        return undefined;
+      });
+      mockConnect.mockResolvedValue(undefined);
+      mockCommand.mockResolvedValue({ ok: 1 });
+
+      await connect();
+
+      expect(MockMongoClient).toHaveBeenCalledWith(
+        'mongodb://localhost:27017',
+        expect.objectContaining({ maxPoolSize: 25 })
+      );
+    });
+
     test('throws error when MongoDB URI is not set', async () => {
       const { connect } = await import('./client');
       mockGetConfig.mockReturnValue(undefined);
