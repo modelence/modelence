@@ -1,7 +1,9 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
-import { getLocalStorageSession } from '@/client/localStorage';
+import { getLocalStorageSession, setLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
+import { _setConfig } from '@/config/client';
+import type { Configs } from '@/config/types';
 
 export type UserInfo = {
   id: string;
@@ -117,7 +119,33 @@ export async function updateProfile(options: {
  */
 export async function verifyEmail(options: { token: string }) {
   const { token } = options;
-  await callMethod<{ user: RawUserData }>('_system.user.verifyEmail', { token });
+  const { user } = await callMethod<{ user: RawUserData }>('_system.user.verifyEmail', { token });
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
+ * Initialize a session from an auth token (e.g. after email verification redirect).
+ * Call this with the token from the URL query param after the server redirects back.
+ *
+ * @example
+ * ```ts
+ * const params = new URLSearchParams(window.location.search);
+ * const token = params.get('token');
+ * if (token) await loginFromToken(token);
+ * ```
+ */
+export async function loginFromToken(authToken: string) {
+  setLocalStorageSession({ authToken });
+  const { configs, session, user } = await callMethod<{
+    configs: Configs;
+    session: object;
+    user: object;
+  }>('_system.session.init');
+  _setConfig(configs);
+  setLocalStorageSession(session);
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
 }
 
 /**

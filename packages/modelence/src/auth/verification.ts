@@ -13,6 +13,58 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
+import { createSession, setSessionUser } from './session';
+
+async function verifyEmailToken(token: string) {
+  const tokenDoc = await emailVerificationTokensCollection.findOne({
+    token,
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (!tokenDoc) {
+    throw new Error('Invalid or expired verification token');
+  }
+
+  const userDoc = await usersCollection.findOne({ _id: tokenDoc.userId });
+
+  if (!userDoc) {
+    throw new Error('User not found');
+  }
+
+  const email = tokenDoc.email;
+
+  if (!email) {
+    throw new Error('Email not found in token');
+  }
+
+  // Mark the specific email as verified atomically
+  const updateResult = await usersCollection.updateOne(
+    {
+      _id: tokenDoc.userId,
+      'emails.address': email,
+      'emails.verified': { $ne: true },
+    },
+    { $set: { 'emails.$.verified': true } }
+  );
+
+  if (updateResult.matchedCount === 0) {
+    const existingUser = await usersCollection.findOne({
+      _id: tokenDoc.userId,
+      'emails.address': email,
+    });
+
+    if (existingUser) {
+      throw new Error('Email is already verified');
+    } else {
+      throw new Error('Email address not found for this user');
+    }
+  }
+
+  // Delete the used token
+  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+
+  return { userDoc, email };
+}
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = getConfig('_system.site.url') as string | undefined;
@@ -23,61 +75,15 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     '/';
   try {
     const token = z.string().parse(params.query.token);
-    // Find token in database
-    const tokenDoc = await emailVerificationTokensCollection.findOne({
-      token,
-      expiresAt: { $gt: new Date() },
-    });
+    const { userDoc } = await verifyEmailToken(token);
 
-    if (!tokenDoc) {
-      throw new Error('Invalid or expired verification token');
-    }
-
-    // Find user by token's userId
-    const userDoc = await usersCollection.findOne({ _id: tokenDoc.userId });
-
-    if (!userDoc) {
-      throw new Error('User not found');
-    }
-
-    const email = tokenDoc.email;
-
-    if (!email) {
-      throw new Error('Email not found in token');
-    }
-
-    // Mark the specific email as verified atomically
-    const updateResult = await usersCollection.updateOne(
-      {
-        _id: tokenDoc.userId,
-        'emails.address': email,
-        'emails.verified': { $ne: true },
-      },
-      { $set: { 'emails.$.verified': true } }
-    );
-
-    if (updateResult.matchedCount === 0) {
-      // Check if email exists but is already verified
-      const existingUser = await usersCollection.findOne({
-        _id: tokenDoc.userId,
-        'emails.address': email,
-      });
-
-      if (existingUser) {
-        throw new Error('Email is already verified');
-      } else {
-        throw new Error('Email address not found for this user');
-      }
-    }
-
-    // Delete the used token
-    await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+    const session = await createSession(userDoc._id);
 
     const authConfig = getAuthConfig();
     authConfig.onAfterEmailVerification?.({
       provider: 'email',
-      user: (await usersCollection.findOne({ 'emails.address': tokenDoc?.email })) as User,
-      session: null,
+      user: userDoc as User,
+      session,
       connectionInfo: {
         baseUrl,
         ip: params.req.ip || params.req.socket.remoteAddress,
@@ -86,6 +92,11 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
         referrer: params.headers['referer'],
       },
     });
+
+    return {
+      status: 301,
+      redirect: `${emailVerifiedRedirectUrl}?status=verified&token=${encodeURIComponent(session.authToken)}`,
+    };
   } catch (error) {
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
@@ -113,6 +124,36 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
   return {
     status: 301,
     redirect: `${emailVerifiedRedirectUrl}?status=verified`,
+  };
+}
+
+export async function handleVerifyEmailMutation(args: Args, { session, connectionInfo }: Context) {
+  if (!session) {
+    throw new Error('Session is not initialized');
+  }
+
+  const token = z.string().parse(args.token);
+  const { userDoc } = await verifyEmailToken(token);
+
+  await setSessionUser(session.authToken, userDoc._id);
+
+  const authConfig = getAuthConfig();
+  authConfig.onAfterEmailVerification?.({
+    provider: 'email',
+    user: userDoc as User,
+    session,
+    connectionInfo,
+  });
+
+  return {
+    user: {
+      id: userDoc._id,
+      handle: userDoc.handle,
+      roles: userDoc.roles || [],
+      firstName: userDoc.firstName ?? undefined,
+      lastName: userDoc.lastName ?? undefined,
+      avatarUrl: userDoc.avatarUrl ?? undefined,
+    },
   };
 }
 
