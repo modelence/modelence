@@ -15,6 +15,7 @@ import { handleSignupWithPassword } from './signup';
 import {
   handleVerifyEmail,
   handleVerifyEmailMutation,
+  handleLoginFromToken,
   handleResendEmailVerification,
 } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
@@ -54,6 +55,7 @@ export default new Module('_system.user', {
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
     verifyEmail: handleVerifyEmailMutation,
+    loginFromToken: handleLoginFromToken,
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,

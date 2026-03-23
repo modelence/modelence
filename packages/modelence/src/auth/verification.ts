@@ -13,7 +13,7 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
-import { createSession, setSessionUser } from './session';
+import { createSession, setSessionUser, sessionsCollection } from './session';
 
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
@@ -77,13 +77,11 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     const token = z.string().parse(params.query.token);
     const { userDoc } = await verifyEmailToken(token);
 
-    const session = await createSession(userDoc._id);
-
     const authConfig = getAuthConfig();
     authConfig.onAfterEmailVerification?.({
       provider: 'email',
       user: userDoc as User,
-      session,
+      session: null,
       connectionInfo: {
         baseUrl,
         ip: params.req.ip || params.req.socket.remoteAddress,
@@ -92,6 +90,8 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
         referrer: params.headers['referer'],
       },
     });
+
+    const session = await createSession(userDoc._id, time.minutes(15));
 
     return {
       status: 301,
@@ -157,6 +157,43 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
   };
 }
 
+export async function handleLoginFromToken(args: Args, { session }: Context) {
+  if (!session) {
+    throw new Error('Session is not initialized');
+  }
+
+  const authToken = z.string().parse(args.authToken);
+  const sourceSession = await sessionsCollection.findOne({
+    authToken,
+    userId: { $ne: null },
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (!sourceSession || !sourceSession.userId) {
+    throw new Error('Invalid or expired login token');
+  }
+
+  await setSessionUser(session.authToken, sourceSession.userId);
+  await sessionsCollection.deleteOne({ authToken: sourceSession.authToken });
+
+  const userDoc = await usersCollection.findOne({ _id: sourceSession.userId });
+
+  if (!userDoc) {
+    throw new Error('User not found');
+  }
+
+  return {
+    user: {
+      id: userDoc._id,
+      handle: userDoc.handle,
+      roles: userDoc.roles || [],
+      firstName: userDoc.firstName ?? undefined,
+      lastName: userDoc.lastName ?? undefined,
+      avatarUrl: userDoc.avatarUrl ?? undefined,
+    },
+  };
+}
+
 export async function sendVerificationEmail({
   userId,
   email,
@@ -182,7 +219,10 @@ export async function sendVerificationEmail({
       expiresAt,
     });
 
-    const verificationUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
+    const clientPageUrl = getEmailConfig()?.verification?.clientPageUrl;
+    const verificationUrl = clientPageUrl
+      ? `${baseUrl}${clientPageUrl}?token=${verificationToken}`
+      : `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
 
     const template = getEmailConfig()?.verification?.template || emailVerificationTemplate;
     // TODO: we should have also the name on this step

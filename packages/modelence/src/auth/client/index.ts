@@ -1,9 +1,7 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
-import { getLocalStorageSession, setLocalStorageSession } from '@/client/localStorage';
+import { getLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
-import { _setConfig } from '@/config/client';
-import type { Configs } from '@/config/types';
 
 export type UserInfo = {
   id: string;
@@ -125,8 +123,8 @@ export async function verifyEmail(options: { token: string }) {
 }
 
 /**
- * Initialize a session from an auth token (e.g. after email verification redirect).
- * Call this with the token from the URL query param after the server redirects back.
+ * Sign in from an auth token passed in the URL after server-side email verification.
+ * Call this with the `token` query param when landing on the redirect page.
  *
  * @example
  * ```ts
@@ -136,14 +134,9 @@ export async function verifyEmail(options: { token: string }) {
  * ```
  */
 export async function loginFromToken(authToken: string) {
-  setLocalStorageSession({ authToken });
-  const { configs, session, user } = await callMethod<{
-    configs: Configs;
-    session: object;
-    user: object;
-  }>('_system.session.init');
-  _setConfig(configs);
-  setLocalStorageSession(session);
+  const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginFromToken', {
+    authToken,
+  });
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }

@@ -50,12 +50,15 @@ export async function clearSessionUser(authToken: string) {
   );
 }
 
-export async function createSession(userId: ObjectId | null = null): Promise<Session> {
+export async function createSession(
+  userId: ObjectId | null = null,
+  expiresIn = time.days(7)
+): Promise<Session> {
   // TODO: add rate-limiting and captcha handling
 
   const authToken = randomBytes(32).toString('base64url');
   const now = Date.now();
-  const expiresAt = new Date(now + time.days(7));
+  const expiresAt = new Date(now + expiresIn);
 
   await sessionsCollection.insertOne({
     authToken,
