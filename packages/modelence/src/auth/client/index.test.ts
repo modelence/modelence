@@ -112,6 +112,18 @@ describe('auth/client', () => {
     expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
   });
 
+  test('linkOAuthProvider throws error and halts redirect when set-link-cookie fails', async () => {
+    mockGetLocalStorageSession.mockReturnValue({ authToken: 'test-token' });
+
+    mockFetch.mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(authClient.linkOAuthProvider({ provider: 'google' })).rejects.toThrow(
+      'Failed to initialize OAuth linking. Please ensure you are logged in.'
+    );
+
+    expect(window.location.href).toBe('');
+  });
+
   test('linkOAuthProvider does not call set-link-cookie when token is missing', async () => {
     mockGetLocalStorageSession.mockReturnValue(undefined);
 

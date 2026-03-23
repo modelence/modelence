@@ -187,12 +187,15 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
   const token = getAuthToken();
   if (token) {
     // Ask the server to set a secure httpOnly cookie for the OAuth linking flow
-    await fetch('/api/_internal/auth/set-link-cookie', {
+    const response = await fetch('/api/_internal/auth/set-link-cookie', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authToken: token }),
       credentials: 'include',
     });
+    if (!response.ok) {
+      throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+    }
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
