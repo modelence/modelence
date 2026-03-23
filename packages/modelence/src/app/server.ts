@@ -100,6 +100,26 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
+  // Set httpOnly cookie for OAuth linking flow
+  app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
+    const { session } = await getCallContext(req);
+
+    if (!session?.userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    res.cookie('oauthLinkToken', session.authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/api/_internal/auth/',
+      maxAge: 10 * 60 * 1000, // 10 minutes
+    });
+
+    res.json({ ok: true });
+  });
+
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
     const context = await getCallContext(req);
@@ -157,7 +177,7 @@ export async function startServer(
 }
 
 export async function getCallContext(req: Request) {
-  const path = req.path ?? req.url ?? '';
+  const path = (req.path ?? req.url ?? '').split('?')[0];
 
   const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
 

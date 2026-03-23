@@ -15,6 +15,8 @@ const mockGetLocalStorageSession = jest.fn();
 jest.unstable_mockModule('../../client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
 }));
+const mockFetch: jest.MockedFunction<typeof fetch> = jest.fn();
+globalThis.fetch = mockFetch;
 
 const authClient = await import('./index');
 
@@ -23,16 +25,11 @@ Object.defineProperty(globalThis, 'window', {
   writable: true,
 });
 
-Object.defineProperty(globalThis, 'document', {
-  value: { cookie: '' },
-  writable: true,
-});
-
 describe('auth/client', () => {
   beforeEach(() => {
     window.location.href = '';
-    document.cookie = '';
     jest.clearAllMocks();
+    mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
   });
 
   test('signupWithPassword forwards credentials to server method', async () => {
@@ -101,29 +98,26 @@ describe('auth/client', () => {
     });
   });
 
-  test('linkOAuthProvider is a synchronous function', () => {
-    expect(typeof authClient.linkOAuthProvider).toBe('function');
-  });
-
-  test('linkOAuthProvider sets cookie when token exists', () => {
+  test('linkOAuthProvider calls set-link-cookie endpoint when token exists', async () => {
     mockGetLocalStorageSession.mockReturnValue({ authToken: 'test-token' });
 
-    document.cookie = ''; // reset
+    await authClient.linkOAuthProvider({ provider: 'google' });
 
-    authClient.linkOAuthProvider({ provider: 'google' });
-
-    expect(document.cookie).toContain('oauthLinkToken=test-token');
+    expect(mockFetch).toHaveBeenCalledWith('/api/_internal/auth/set-link-cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authToken: 'test-token' }),
+      credentials: 'include',
+    });
     expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
   });
 
-  test('linkOAuthProvider does not set cookie when token is missing', () => {
+  test('linkOAuthProvider does not call set-link-cookie when token is missing', async () => {
     mockGetLocalStorageSession.mockReturnValue(undefined);
 
-    document.cookie = ''; // reset
+    await authClient.linkOAuthProvider({ provider: 'google' });
 
-    authClient.linkOAuthProvider({ provider: 'google' });
-
-    expect(document.cookie).toBe('');
+    expect(mockFetch).not.toHaveBeenCalled();
     expect(window.location.href).toBe('/api/_internal/auth/google?mode=link');
   });
 

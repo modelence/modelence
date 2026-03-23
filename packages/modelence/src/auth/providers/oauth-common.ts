@@ -347,8 +347,9 @@ export async function handleOAuthUserAuthentication(
 }
 
 export function clearOAuthLinkCookie(res: Response) {
-  // Important: must clear temporary non-httpOnly cookie used during OAuth linking
+  // Important: must clear the httpOnly cookie used during OAuth linking
   res.cookie('oauthLinkToken', '', {
+    httpOnly: true,
     maxAge: 0,
     path: '/api/_internal/auth/',
     sameSite: 'lax',

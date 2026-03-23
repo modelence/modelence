@@ -3,7 +3,6 @@ import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
-import { time } from '@/time';
 
 export type UserInfo = {
   id: string;
@@ -182,16 +181,18 @@ export async function resetPassword(options: { token: string; password: string }
  * ```
  * @param options.provider - The OAuth provider to link ('google' or 'github').
  */
-export function linkOAuthProvider(options: { provider: OAuthProvider }): void {
+export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
   const { provider } = options;
 
   const token = getAuthToken();
   if (token) {
-    // Temporarily expose auth token as a cookie so the OAuth callback
-    // can recover the session (needed for password-authenticated users).
-
-    const isSecure = window.location.protocol === 'https:';
-    document.cookie = `oauthLinkToken=${token}; path=/api/_internal/auth/; max-age=${time.minutes(10) / 1000}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+    // Ask the server to set a secure httpOnly cookie for the OAuth linking flow
+    await fetch('/api/_internal/auth/set-link-cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authToken: token }),
+      credentials: 'include',
+    });
   }
   window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }

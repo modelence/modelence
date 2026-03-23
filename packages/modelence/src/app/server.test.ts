@@ -150,6 +150,16 @@ const getRegisteredMethodHandler = (app: MockExpressApp) => {
   return call[1] as (req: Request, res: Response) => Promise<unknown>;
 };
 
+const getRegisteredSetLinkCookieHandler = (app: MockExpressApp) => {
+  const call = app.post.mock.calls.find(([path]) =>
+    String(path).includes('/api/_internal/auth/set-link-cookie')
+  );
+  if (!call) {
+    throw new Error('Set-link-cookie handler not registered');
+  }
+  return call[1] as (req: Request, res: Response) => Promise<unknown>;
+};
+
 jest.unstable_mockModule('express', () => {
   const express = jest.fn(() => {
     // Return the app set in beforeEach
@@ -942,5 +952,98 @@ describe('app/server method endpoint', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('String error');
+  });
+});
+
+describe('app/server set-link-cookie endpoint', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetSecurityConfig.mockReturnValue({});
+    mockGetWebsocketConfig.mockReturnValue(null);
+
+    mockExpressJson.mockReturnValue('json-middleware');
+    mockExpressUrlencoded.mockReturnValue('urlencoded-middleware');
+    mockCookieParser.mockReturnValue('cookie-parser-middleware');
+    mockGoogleAuthRouter.mockReturnValue('google-router');
+    mockGithubAuthRouter.mockReturnValue('github-router');
+    mockHttpCreateServer.mockReturnValue({
+      listen: jest.fn((_port: unknown, callback?: () => void) => {
+        if (callback) callback();
+      }),
+    });
+  });
+
+  test('returns 401 when user is not authenticated', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const handler = getRegisteredSetLinkCookieHandler(mockApp);
+
+    const req = createRequest({
+      body: { authToken: 'some-token' },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+    (res as any).cookie = jest.fn();
+
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'some-token', userId: null },
+      user: null,
+      roles: [],
+    } as never);
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Not authenticated' });
+    expect((res as any).cookie).not.toHaveBeenCalled();
+  });
+
+  test('sets httpOnly oauthLinkToken cookie when authenticated', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const handler = getRegisteredSetLinkCookieHandler(mockApp);
+
+    const userId = new ObjectId();
+    const req = createRequest({
+      body: { authToken: 'session-token' },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+    (res as any).cookie = jest.fn();
+
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'session-token', expiresAt: new Date(), userId },
+      user: { id: userId.toString(), handle: 'testuser', roles: [] },
+      roles: ['user'],
+    } as never);
+
+    await handler(req, res);
+
+    expect((res as any).cookie).toHaveBeenCalledWith('oauthLinkToken', 'session-token', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      path: '/api/_internal/auth/',
+      maxAge: 10 * 60 * 1000,
+    });
+    expect(res.json).toHaveBeenCalledWith({ ok: true });
   });
 });
