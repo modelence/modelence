@@ -37,17 +37,18 @@ async function verifyEmailToken(token: string) {
     throw new Error('Email not found in token');
   }
 
-  // Mark the specific email as verified atomically
-  const updateResult = await usersCollection.updateOne(
+  // Mark the specific email as verified atomically, returning the updated doc
+  const updatedUserDoc = await usersCollection.rawCollection().findOneAndUpdate(
     {
       _id: tokenDoc.userId,
       'emails.address': email,
       'emails.verified': { $ne: true },
     },
-    { $set: { 'emails.$.verified': true } }
+    { $set: { 'emails.$.verified': true } },
+    { returnDocument: 'after' }
   );
 
-  if (updateResult.matchedCount === 0) {
+  if (!updatedUserDoc) {
     const existingUser = await usersCollection.findOne({
       _id: tokenDoc.userId,
       'emails.address': email,
@@ -63,7 +64,7 @@ async function verifyEmailToken(token: string) {
   // Delete the used token
   await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
 
-  return { userDoc, email };
+  return { userDoc: updatedUserDoc, email };
 }
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
