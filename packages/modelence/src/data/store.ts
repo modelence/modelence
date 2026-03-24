@@ -929,10 +929,12 @@ export class Store<
    */
   async upsertMany(
     selector: TypedFilter<this['_type']>,
-    update: UpdateFilter<this['_type']>
+    update: UpdateFilter<this['_type']>,
+    options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector as Filter<this['_type']>, update, {
       upsert: true,
+      ...options,
     });
   }
 
