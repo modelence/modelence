@@ -25,6 +25,8 @@ export {
   logout,
   sendResetPasswordToken,
   resetPassword,
+  linkOAuthProvider,
+  unlinkOAuthProvider,
   type UserInfo,
 } from './auth/client';
 export {

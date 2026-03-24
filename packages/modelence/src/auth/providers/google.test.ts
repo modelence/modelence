@@ -24,12 +24,19 @@ jest.unstable_mockModule('@/server', () => ({
 
 const mockGetRedirectUri = jest.fn<() => string>();
 const mockHandleOAuthUserAuthentication = jest.fn();
+const mockHandleOAuthProviderLink = jest.fn();
 const mockValidateOAuthCode = jest.fn<() => string | null>();
+const mockClearOAuthLinkCookie = jest.fn();
+const mockValidateOAuthStateAndGetMode =
+  jest.fn<(req: Request, res: Response, cookieName: string) => string | null>();
 
 jest.unstable_mockModule('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
+  handleOAuthProviderLink: mockHandleOAuthProviderLink,
   validateOAuthCode: mockValidateOAuthCode,
+  validateOAuthStateAndGetMode: mockValidateOAuthStateAndGetMode,
+  clearOAuthLinkCookie: mockClearOAuthLinkCookie,
 }));
 
 const fetchMock = jest.fn();
@@ -46,6 +53,7 @@ describe('auth/providers/google', () => {
       'https://app.example.com/api/_internal/auth/google/callback'
     );
     mockValidateOAuthCode.mockReturnValue('auth-code');
+    mockValidateOAuthStateAndGetMode.mockReturnValue('login');
     mockGetConfig.mockImplementation((key: string) => {
       const defaults: Record<string, unknown> = {
         '_system.user.auth.google.enabled': true,
@@ -99,7 +107,7 @@ describe('auth/providers/google', () => {
     const cookieMock = jest.fn();
     const res = { redirect: redirectMock, cookie: cookieMock } as unknown as Response;
 
-    handler({} as Request, res);
+    handler({ query: {} } as Request, res);
 
     expect(cookieMock).toHaveBeenCalledWith(
       'authStateGoogle',
@@ -155,12 +163,11 @@ describe('auth/providers/google', () => {
     await handler(
       {
         query: { code: 'code', state: 'valid-state' },
-        cookies: { authStateGoogle: 'valid-state' },
+        cookies: { authStateGoogle: 'valid-state:login' },
       } as unknown as Request,
       res
     );
 
-    expect(res.clearCookie).toHaveBeenCalledWith('authStateGoogle');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockHandleOAuthUserAuthentication).toHaveBeenCalledWith(
       expect.anything(),
@@ -190,6 +197,10 @@ describe('auth/providers/google', () => {
   });
 
   test('callback handler returns 400 when state invalid', async () => {
+    mockValidateOAuthStateAndGetMode.mockImplementationOnce((req, res) => {
+      res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+      return null;
+    });
     const route = findRoute('/api/_internal/auth/google/callback');
     const handler = route.handlers[1];
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
@@ -197,7 +208,7 @@ describe('auth/providers/google', () => {
     await handler(
       {
         query: { code: 'code', state: 'bad' },
-        cookies: { authStateGoogle: 'good' },
+        cookies: { authStateGoogle: 'good:login' },
       } as unknown as Request,
       res
     );
@@ -208,6 +219,7 @@ describe('auth/providers/google', () => {
 
   test('callback handler responds 500 when token exchange fails', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockValidateOAuthStateAndGetMode.mockReturnValueOnce('login');
     fetchMock.mockResolvedValueOnce({
       ok: false,
       statusText: 'Bad Request',

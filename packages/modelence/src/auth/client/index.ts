@@ -2,6 +2,7 @@ import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
 import { ClientInfo } from '@/methods/types';
+import { OAuthProvider } from '../types';
 
 export type UserInfo = {
   id: string;
@@ -167,6 +168,49 @@ export async function resetPassword(options: { token: string; password: string }
     token,
     password,
   });
+}
+
+/**
+ * Link an OAuth provider to the currently signed-in user's account.
+ * Redirects the browser to the OAuth provider's authorization page.
+ * The provider will redirect back and the account will be linked.
+ *
+ * @example
+ * ```ts
+ * linkOAuthProvider({ provider: 'google' });
+ * ```
+ * @param options.provider - The OAuth provider to link ('google' or 'github').
+ */
+export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
+  const { provider } = options;
+
+  const token = getAuthToken();
+  if (token) {
+    // Ask the server to set a secure httpOnly cookie for the OAuth linking flow
+    const response = await fetch('/api/_internal/auth/set-link-cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authToken: token }),
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+    }
+  }
+  window.location.href = `/api/_internal/auth/${provider}?mode=link`;
+}
+/**
+ * Unlink an OAuth provider from the currently signed-in user's account.
+ *
+ * @example
+ * ```ts
+ * await unlinkOAuthProvider({ provider: 'github' });
+ * ```
+ * @param options.provider - The OAuth provider to unlink ('google' or 'github').
+ */
+export async function unlinkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
+  const { provider } = options;
+  await callMethod('_system.user.unlinkOAuthProvider', { provider });
 }
 
 /**
