@@ -11,8 +11,11 @@ import {
 import {
   getRedirectUri,
   handleOAuthUserAuthentication,
+  handleOAuthProviderLink,
   validateOAuthCode,
   type OAuthUserData,
+  clearOAuthLinkCookie,
+  validateOAuthStateAndGetMode,
 } from './oauth-common';
 
 interface GitHubTokenResponse {
@@ -107,20 +110,14 @@ async function getGitHubUserEmail(
 
 async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
-  const state = req.query.state as string;
-  const storedState = req.cookies.authStateGithub;
 
   if (!code) {
     res.status(400).json({ error: 'Missing authorization code' });
     return;
   }
 
-  if (!state || !storedState || state !== storedState) {
-    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
-    return;
-  }
-
-  res.clearCookie('authStateGithub');
+  const mode = validateOAuthStateAndGetMode(req, res, 'authStateGithub');
+  if (!mode) return;
 
   const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
   const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
@@ -142,6 +139,10 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     const githubEmail = await getGitHubUserEmail(githubUser, tokenData.access_token);
 
     if (!githubEmail) {
+      if (mode === 'link') {
+        clearOAuthLinkCookie(res);
+      }
+
       res.status(400).json({
         error:
           'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
@@ -163,9 +164,16 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       avatarUrl: githubUser.avatar_url || undefined,
     };
 
-    await handleOAuthUserAuthentication(req, res, userData);
+    if (mode === 'link') {
+      await handleOAuthProviderLink(req, res, userData);
+    } else {
+      await handleOAuthUserAuthentication(req, res, userData);
+    }
   } catch (error) {
     console.error('GitHub OAuth error:', error);
+    if (mode === 'link') {
+      clearOAuthLinkCookie(res);
+    }
     res.status(500).json({ error: 'Authentication failed' });
   }
 }
@@ -204,7 +212,9 @@ function getRouter(): ExpressRouter {
 
       const state = randomBytes(32).toString('hex');
 
-      res.cookie('authStateGithub', state, {
+      const mode = req.query.mode === 'link' ? 'link' : 'login';
+
+      res.cookie('authStateGithub', `${state}:${mode}`, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

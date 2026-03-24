@@ -1,19 +1,19 @@
 import { type Request, type Response } from 'express';
-import { ObjectId } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
 import { createSession } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
 import { resolveUniqueHandle } from '../utils';
-import { User, Session, UserEmail } from '@/auth/types';
+import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
 
 export interface OAuthUserData {
   id: string;
   email: string;
   emailVerified: boolean;
-  providerName: 'google' | 'github';
+  providerName: OAuthProvider;
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
@@ -26,6 +26,7 @@ export async function authenticateUser(res: Response, userId: ObjectId) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
+    path: '/',
   });
   res.status(302);
   res.redirect('/');
@@ -343,6 +344,204 @@ export async function handleOAuthUserAuthentication(
 
   //New User
   return handleNewUserSignup(res, userData, session, connectionInfo);
+}
+
+export function clearOAuthLinkCookie(res: Response) {
+  // Important: must clear the httpOnly cookie used during OAuth linking
+  res.cookie('oauthLinkToken', '', {
+    httpOnly: true,
+    maxAge: 0,
+    path: '/api/_internal/auth/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+function safelyCallHook(hook?: () => void) {
+  if (!hook) return;
+
+  try {
+    hook();
+  } catch (err) {
+    console.error('Error executing OAuth hook:', err);
+  }
+}
+
+export function validateOAuthStateAndGetMode(
+  req: Request,
+  res: Response,
+  stateCookieName: string
+): string | null {
+  const state = req.query.state as string;
+  const storedState = req.cookies[stateCookieName];
+
+  const [storedStateValue, storedMode] = (storedState || '').split(':');
+
+  if (!state || !storedState || state !== storedStateValue) {
+    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+    return null;
+  }
+
+  res.clearCookie(stateCookieName);
+  return storedMode || 'login';
+}
+
+export async function handleOAuthProviderLink(
+  req: Request,
+  res: Response,
+  userData: OAuthUserData
+): Promise<void> {
+  const authConfig = getAuthConfig();
+  const { session, connectionInfo } = await getCallContext(req);
+
+  if (!session?.userId) {
+    clearOAuthLinkCookie(res);
+    res.status(401).json({
+      error: 'You must be signed in to link a provider.',
+    });
+    return;
+  }
+
+  const userId = session.userId;
+
+  try {
+    // Atomically attach the provider to the current user while preventing
+    // overwriting an existing provider ID on the same user.
+    // A unique index on the provider ID ensures it cannot be linked to another user.
+    const providerField = `authMethods.${userData.providerName}.id`;
+
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: userId,
+        status: { $nin: ['deleted', 'disabled'] },
+        $or: [{ [providerField]: { $exists: false } }, { [providerField]: userData.id }],
+      },
+      {
+        $set: {
+          [providerField]: userData.id,
+        },
+      }
+    );
+
+    // If no document matched, figure out why
+    if (updateResult.matchedCount === 0) {
+      const currentUser = await usersCollection.findOne({ _id: userId });
+
+      if (!currentUser || currentUser.status === 'deleted' || currentUser.status === 'disabled') {
+        safelyCallHook(() =>
+          authConfig.onOAuthLinkError?.({
+            provider: userData.providerName,
+            error: new Error('User account not found or not active'),
+            session,
+            connectionInfo,
+          })
+        );
+
+        clearOAuthLinkCookie(res);
+
+        res.status(400).json({ error: 'User account is not active.' });
+        return;
+      }
+
+      // Detect if the user already linked a different OAuth account
+      const existingProviderId = currentUser?.authMethods?.[userData.providerName]?.id;
+
+      if (existingProviderId && existingProviderId !== userData.id) {
+        safelyCallHook(() =>
+          authConfig.onOAuthLinkError?.({
+            provider: userData.providerName,
+            error: new Error(
+              `User already has a different ${userData.providerName} account linked`
+            ),
+            session,
+            connectionInfo,
+          })
+        );
+
+        clearOAuthLinkCookie(res);
+
+        res.status(400).json({
+          error: `You have already linked a different ${userData.providerName} account.`,
+        });
+
+        return;
+      }
+
+      // Fallback safety guard in case the DB state does not match any expected branch
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error: new Error(`Unexpected OAuth linking state for ${userData.providerName}`),
+          session,
+          connectionInfo,
+        })
+      );
+
+      clearOAuthLinkCookie(res);
+
+      res.status(400).json({
+        error: `Unable to link ${userData.providerName} account.`,
+      });
+
+      return;
+    }
+
+    const updatedUser = await usersCollection.findOne(
+      { _id: userId },
+      { readPreference: 'primary' }
+    );
+
+    if (updatedUser) {
+      safelyCallHook(() =>
+        authConfig.onAfterOAuthLink?.({
+          provider: userData.providerName,
+          user: updatedUser,
+          session,
+          connectionInfo,
+        })
+      );
+    }
+
+    // Redirect back to the app after successful link
+    clearOAuthLinkCookie(res);
+
+    res.status(302).redirect('/');
+  } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000) {
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+
+      clearOAuthLinkCookie(res);
+
+      res.status(400).json({
+        error: `This ${userData.providerName} account is already linked to a different user.`,
+      });
+
+      return;
+    }
+
+    if (error instanceof Error) {
+      safelyCallHook(() =>
+        authConfig.onOAuthLinkError?.({
+          provider: userData.providerName,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+    }
+
+    clearOAuthLinkCookie(res);
+    if (!res.headersSent) {
+      throw error;
+    }
+  }
 }
 
 export function validateOAuthCode(code: unknown): string | null {
