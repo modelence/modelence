@@ -26,7 +26,7 @@ Visit https://cloud.modelence.com/showcase to see examples of what users have bu
 ## Getting Started
 
 The fastest way to create an application is through the App Builder:
-1. Go to cloud.modelence.com
+1. Go to https://cloud.modelence.com
 1. Describe the app you want to build
 1. Submit your prompt - the App Builder will generate and deploy your app
 
