@@ -133,7 +133,7 @@ export function createClientModule<TModule extends AnyModule>(moduleName: string
       getArgs: (pageParam: TPageParam | undefined) => ExtractArgs<TModule['queries'][K]>
     ) {
       return {
-        queryKey: [moduleName, name, 'infinite'] as const,
+        queryKey: [moduleName, name, 'infinite', getArgs(undefined)] as const,
         // Included so TanStack infers TPageParam from the callback type, not from a bare `undefined`.
         initialPageParam: undefined as TPageParam | undefined,
         queryFn: ({
