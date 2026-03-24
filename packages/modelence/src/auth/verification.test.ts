@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersUpdateOne = jest.fn();
+const mockFindOneAndUpdate = jest.fn();
 const mockTokensFindOne = jest.fn();
 const mockTokensInsertOne = jest.fn();
 const mockTokensDeleteOne = jest.fn();
@@ -20,6 +21,7 @@ jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     updateOne: mockUsersUpdateOne,
+    rawCollection: () => ({ findOneAndUpdate: mockFindOneAndUpdate }),
   },
   emailVerificationTokensCollection: {
     findOne: mockTokensFindOne,
@@ -36,9 +38,11 @@ jest.unstable_mockModule('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
+const mockTimeMinutes = jest.fn();
 jest.unstable_mockModule('@/time', () => ({
   time: {
     hours: mockTimeHours,
+    minutes: mockTimeMinutes,
   },
 }));
 
@@ -65,6 +69,20 @@ jest.unstable_mockModule('@/rate-limit/rules', () => ({
 const mockGetConfig = jest.fn();
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+}));
+
+const mockCreateSession = jest.fn();
+const mockSetSessionUser = jest.fn();
+const mockSessionsCollection = {
+  findOne: jest.fn(),
+  insertOne: jest.fn(),
+  deleteOne: jest.fn(),
+  updateOne: jest.fn(),
+};
+jest.unstable_mockModule('./session', () => ({
+  createSession: mockCreateSession,
+  setSessionUser: mockSetSessionUser,
+  sessionsCollection: mockSessionsCollection,
 }));
 
 const verificationModule = await import('./verification');
@@ -97,6 +115,7 @@ describe('auth/verification', () => {
       toString: () => 'token123',
     });
     mockTimeHours.mockReturnValue(24 * 60 * 60 * 1000);
+    mockTimeMinutes.mockImplementation((n: unknown) => (n as number) * 60 * 1000);
   });
 
   describe('handleVerifyEmail', () => {
@@ -140,10 +159,9 @@ describe('auth/verification', () => {
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindOne
-        .mockResolvedValueOnce({ _id: 'user123' } as never)
-        .mockResolvedValueOnce(userDoc as never);
-      mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValue(userDoc as never);
+      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
 
       const result = await handleVerifyEmail(baseParams as never);
 
@@ -152,13 +170,14 @@ describe('auth/verification', () => {
         expiresAt: { $gt: expect.any(Date) },
       });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: tokenDoc.userId });
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+      expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,
           'emails.address': tokenDoc.email,
           'emails.verified': { $ne: true },
         },
-        { $set: { 'emails.$.verified': true } }
+        { $set: { 'emails.$.verified': true } },
+        { returnDocument: 'after' }
       );
       expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
       expect(authConfig.onAfterEmailVerification).toHaveBeenCalledWith({
@@ -173,9 +192,10 @@ describe('auth/verification', () => {
           referrer: 'https://example.com/signup',
         },
       });
+      expect(mockCreateSession).toHaveBeenCalledWith('user123', expect.any(Number));
       expect(result).toEqual({
         status: 301,
-        redirect: '/verified?status=verified',
+        redirect: '/verified?status=verified&token=session-token-123',
       });
     });
 

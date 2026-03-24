@@ -11,6 +11,8 @@ const mockHandleLoginWithPassword = jest.fn();
 const mockHandleLogout = jest.fn();
 const mockHandleSignupWithPassword = jest.fn();
 const mockHandleVerifyEmail = jest.fn();
+const mockHandleVerifyEmailMutation = jest.fn();
+const mockHandleLoginFromToken = jest.fn();
 const mockHandleResendEmailVerification = jest.fn();
 const mockHandleSendResetPasswordToken = jest.fn();
 const mockHandleResetPassword = jest.fn();
@@ -52,6 +54,8 @@ jest.unstable_mockModule('./signup', () => ({
 
 jest.unstable_mockModule('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
+  handleVerifyEmailMutation: mockHandleVerifyEmailMutation,
+  handleLoginFromToken: mockHandleLoginFromToken,
   handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
