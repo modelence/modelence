@@ -99,6 +99,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       redirect: `${emailVerifiedRedirectUrl}?status=verified&token=${encodeURIComponent(session.authToken)}`,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
       authConfig.onEmailVerificationError?.({
@@ -114,18 +115,13 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
         },
       });
       console.error('Error verifying email:', error);
-
-      return {
-        status: 301,
-        redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(error.message)}`,
-      };
     }
-  }
 
-  return {
-    status: 301,
-    redirect: `${emailVerifiedRedirectUrl}?status=verified`,
-  };
+    return {
+      status: 301,
+      redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(message)}`,
+    };
+  }
 }
 
 export async function handleVerifyEmailMutation(args: Args, { session, connectionInfo }: Context) {
@@ -134,28 +130,42 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
   }
 
   const token = z.string().parse(args.token);
-  const { userDoc } = await verifyEmailToken(token);
 
-  await setSessionUser(session.authToken, userDoc._id);
+  try {
+    const { userDoc } = await verifyEmailToken(token);
 
-  const authConfig = getAuthConfig();
-  authConfig.onAfterEmailVerification?.({
-    provider: 'email',
-    user: userDoc as User,
-    session,
-    connectionInfo,
-  });
+    await setSessionUser(session.authToken, userDoc._id);
 
-  return {
-    user: {
-      id: userDoc._id,
-      handle: userDoc.handle,
-      roles: userDoc.roles || [],
-      firstName: userDoc.firstName ?? undefined,
-      lastName: userDoc.lastName ?? undefined,
-      avatarUrl: userDoc.avatarUrl ?? undefined,
-    },
-  };
+    const authConfig = getAuthConfig();
+    authConfig.onAfterEmailVerification?.({
+      provider: 'email',
+      user: userDoc as User,
+      session,
+      connectionInfo,
+    });
+
+    return {
+      user: {
+        id: userDoc._id,
+        handle: userDoc.handle,
+        roles: userDoc.roles || [],
+        firstName: userDoc.firstName ?? undefined,
+        lastName: userDoc.lastName ?? undefined,
+        avatarUrl: userDoc.avatarUrl ?? undefined,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      const authConfig = getAuthConfig();
+      authConfig.onEmailVerificationError?.({
+        provider: 'email',
+        error,
+        session,
+        connectionInfo,
+      });
+    }
+    throw error;
+  }
 }
 
 export async function handleLoginFromToken(args: Args, { session }: Context) {
@@ -164,7 +174,7 @@ export async function handleLoginFromToken(args: Args, { session }: Context) {
   }
 
   const authToken = z.string().parse(args.authToken);
-  const sourceSession = await sessionsCollection.findOne({
+  const sourceSession = await sessionsCollection.rawCollection().findOneAndDelete({
     authToken,
     userId: { $ne: null },
     expiresAt: { $gt: new Date() },
@@ -174,14 +184,13 @@ export async function handleLoginFromToken(args: Args, { session }: Context) {
     throw new Error('Invalid or expired login token');
   }
 
-  await setSessionUser(session.authToken, sourceSession.userId);
-  await sessionsCollection.deleteOne({ authToken: sourceSession.authToken });
-
   const userDoc = await usersCollection.findOne({ _id: sourceSession.userId });
 
   if (!userDoc) {
     throw new Error('User not found');
   }
+
+  await setSessionUser(session.authToken, sourceSession.userId);
 
   return {
     user: {
