@@ -68,6 +68,7 @@ type StrictRootFilterOperators<TSchema> = {
  * @internal
  */
 type ArrayElement<T> = T extends (infer E)[] ? E : never;
+type Flatten<T> = T extends ReadonlyArray<infer E> ? E : T;
 
 /**
  * Helper type for $in/$nin that accepts any array/tuple where elements are assignable to T
@@ -1053,11 +1054,11 @@ export class Store<
    * @returns An array of distinct values
    */
 
-  async distinct(
-    key: string,
+  async distinct<K extends keyof this['_rawDoc'] & string>(
+    key: K,
     filter?: TypedFilter<this['_type']>,
     options?: DistinctOptions
-  ): Promise<any[]> {
+  ): Promise<Array<Flatten<this['_rawDoc'][K]>>> {
     const f = (filter ?? {}) as Filter<this['_type']>;
     return options !== undefined
       ? await this.requireCollection().distinct(key, f, options)
