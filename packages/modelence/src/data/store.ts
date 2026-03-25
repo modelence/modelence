@@ -31,7 +31,6 @@ import {
   ReplaceOptions,
   ChangeStream,
   ChangeStreamOptions,
-  DropCollectionOptions,
   DistinctOptions,
 } from 'mongodb';
 

@@ -769,46 +769,6 @@ describe('data/store', () => {
     });
   });
 
-  describe('drop', () => {
-    test('calls collection.drop and returns result', async () => {
-      const store = createStore();
-      const collectionMock = {
-        drop: jest.fn().mockResolvedValue(true as never),
-      };
-      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
-
-      const result = await store.drop();
-
-      expect(collectionMock.drop).toHaveBeenCalledWith(undefined);
-      expect(result).toBe(true);
-    });
-
-    test('returns false when collection does not exist', async () => {
-      const store = createStore();
-      const collectionMock = {
-        drop: jest.fn().mockResolvedValue(false as never),
-      };
-      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
-
-      const result = await store.drop();
-
-      expect(result).toBe(false);
-    });
-
-    test('forwards options to MongoDB', async () => {
-      const store = createStore();
-      const collectionMock = {
-        drop: jest.fn().mockResolvedValue(true as never),
-      };
-      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
-
-      const session = {} as never;
-      await store.drop({ session });
-
-      expect(collectionMock.drop).toHaveBeenCalledWith({ session });
-    });
-  });
-
   describe('StrictRootFilterOperators', () => {
     test('$and operator works correctly', async () => {
       const store = createStore();
