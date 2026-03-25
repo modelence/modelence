@@ -975,7 +975,7 @@ export class Store<
   async findOneAndUpdate(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: FindOneAndUpdateOptions
+    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
   ): Promise<this['_doc'] | null> {
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
@@ -994,7 +994,7 @@ export class Store<
    */
   async findOneAndDelete(
     selector: TypedFilter<this['_type']> | string | ObjectId,
-    options?: FindOneAndDeleteOptions
+    options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
   ): Promise<this['_doc'] | null> {
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
@@ -1014,7 +1014,7 @@ export class Store<
   async findOneAndReplace(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     replacement: WithoutId<this['_type']>,
-    options?: FindOneAndReplaceOptions
+    options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
   ): Promise<this['_doc'] | null> {
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
@@ -1073,16 +1073,6 @@ export class Store<
    */
   watch(pipeline?: Document[], options?: ChangeStreamOptions): ChangeStream {
     return this.requireCollection().watch(pipeline, options);
-  }
-
-  /**
-   * Drops the collection from the database
-   *
-   * @param options - Optional drop options including `session`
-   * @returns `true` if the collection was dropped, `false` if it didn't exist
-   */
-  async drop(options?: DropCollectionOptions): Promise<boolean> {
-    return await this.requireCollection().drop(options);
   }
 
   /**
