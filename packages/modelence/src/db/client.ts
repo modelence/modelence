@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import { getConfig } from '../config/server';
+import systemModule from '../system';
 import packageJson from '../../package.json';
 
 let client: MongoClient | null = null;
@@ -12,7 +12,7 @@ export async function connect() {
     throw new Error('MongoDB URI is not set');
   }
 
-  const maxPoolSize = getConfig('_system.mongodbPoolSize') as number;
+  const maxPoolSize = systemModule.getConfig('mongodbPoolSize');
 
   client = new MongoClient(mongodbUri, {
     driverInfo: {
@@ -38,8 +38,7 @@ export async function connect() {
 }
 
 export function getMongodbUri() {
-  const value = getConfig('_system.mongodbUri');
-  return value ? String(value) : undefined;
+  return systemModule.getConfig('mongodbUri') || undefined;
 }
 
 export function getClient() {

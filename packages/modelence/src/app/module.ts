@@ -1,7 +1,8 @@
-import { ConfigSchema } from '../config/types';
+import { ConfigSchema, ConfigParams, ValueType } from '../config/types';
+import { getConfig as _getConfig } from '../config/server';
 import { CronJobInputParams } from '../cron/types';
 import { Store } from '../data/store';
-import { MethodDefinition } from '../methods/types';
+import { AnyMethodShape } from '../methods/types';
 import { RouteDefinition } from '../routes/types';
 import { RateLimitRule } from '../rate-limit/types';
 import { ServerChannel } from '@/websocket/serverChannel';
@@ -11,12 +12,10 @@ import { ServerChannel } from '@/websocket/serverChannel';
 type Stores = Store<any, any>[];
 
 /** Record of query methods that can be called from the client */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Queries = Record<string, MethodDefinition<any>>;
+type Queries = Record<string, AnyMethodShape>;
 
 /** Record of mutation methods that can be called from the client */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Mutations = Record<string, MethodDefinition<any>>;
+type Mutations = Record<string, AnyMethodShape>;
 
 /**
  * The Module class is a core building block of a Modelence application that encapsulates related functionality.
@@ -41,18 +40,23 @@ type Mutations = Record<string, MethodDefinition<any>>;
  * });
  * ```
  */
-export class Module {
+export class Module<
+  TName extends string = string,
+  TSchema extends Record<string, ConfigParams> = ConfigSchema,
+  TQueries extends Queries = Queries,
+  TMutations extends Mutations = Mutations,
+> {
   /** @internal */
-  public readonly name: string;
+  public readonly name: TName;
 
   /** @internal */
   public readonly stores: Stores;
 
   /** @internal */
-  public readonly queries: Queries;
+  public readonly queries: TQueries;
 
   /** @internal */
-  public readonly mutations: Mutations;
+  public readonly mutations: TMutations;
 
   /** @internal */
   public readonly routes: RouteDefinition[];
@@ -61,7 +65,7 @@ export class Module {
   public readonly cronJobs: Record<string, CronJobInputParams>;
 
   /** @internal */
-  public readonly configSchema: ConfigSchema;
+  public readonly configSchema: TSchema;
 
   /** @internal */
   public readonly rateLimits: RateLimitRule[];
@@ -79,27 +83,27 @@ export class Module {
    * @param options - Module configuration options
    */
   constructor(
-    name: string,
+    name: TName,
     {
       stores = [],
-      queries = {},
-      mutations = {},
+      queries = {} as TQueries,
+      mutations = {} as TMutations,
       routes = [],
       cronJobs = {},
-      configSchema = {},
+      configSchema = {} as TSchema,
       rateLimits = [],
       channels = [],
     }: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stores?: Store<any, any>[];
-      queries?: Queries;
-      mutations?: Mutations;
+      queries?: TQueries;
+      mutations?: TMutations;
       routes?: RouteDefinition[];
       cronJobs?: Record<string, CronJobInputParams>;
-      configSchema?: ConfigSchema;
+      configSchema?: TSchema;
       rateLimits?: RateLimitRule[];
       channels?: ServerChannel[];
-    }
+    } = {}
   ) {
     this.name = name;
     this.stores = stores;
@@ -110,5 +114,29 @@ export class Module {
     this.configSchema = configSchema;
     this.rateLimits = rateLimits;
     this.channels = channels;
+  }
+
+  /**
+   * Retrieves a typed configuration value for this module.
+   * The return type is inferred from the schema — no casts needed.
+   *
+   * @example
+   * ```ts
+   * const myModule = new Module('payments', {
+   *   configSchema: {
+   *     apiKey:     { type: 'secret', default: '', isPublic: false },
+   *     maxRetries: { type: 'number', default: 3,  isPublic: false },
+   *   },
+   *   mutations: {
+   *     async charge({ amount }) {
+   *       const apiKey     = myModule.getConfig('apiKey');     // string
+   *       const maxRetries = myModule.getConfig('maxRetries'); // number
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  getConfig<K extends keyof TSchema & string>(key: K): ValueType<TSchema[K]['type']> {
+    return _getConfig(`${this.name}.${key}`) as ValueType<TSchema[K]['type']>;
   }
 }
