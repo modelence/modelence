@@ -5,7 +5,7 @@ title: Module
 
 [API Reference](/api-reference/modelence/server/classes/../../../index) / [modelence](/api-reference/modelence/server/classes/../../index) / [server](/api-reference/modelence/server/classes/../index) / Module
 
-Defined in: [packages/modelence/src/app/module.ts:44](https://github.com/modelence/modelence/blob/371e0f42c036ad308ca3e93f1a750d370b224302/packages/modelence/src/app/module.ts#L44)
+Defined in: [packages/modelence/src/app/module.ts:43](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/app/module.ts#L43)
 
 The Module class is a core building block of a Modelence application that encapsulates related functionality.
 Modules can contain stores, queries, mutations, routes, cron jobs and configurations.
@@ -28,13 +28,22 @@ const todoModule = new Module('todo', {
 });
 ```
 
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `TName` *extends* `string` | `string` |
+| `TSchema` *extends* `Record`\<`string`, `ConfigParams`\> | [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema) |
+| `TQueries` *extends* `Queries` | `Queries` |
+| `TMutations` *extends* `Mutations` | `Mutations` |
+
 ## Constructors
 
 ### Constructor
 
-> **new Module**(`name`, `options`): `Module`
+> **new Module**\<`TName`, `TSchema`, `TQueries`, `TMutations`\>(`name`, `options`): `Module`\<`TName`, `TSchema`, `TQueries`, `TMutations`\>
 
-Defined in: [packages/modelence/src/app/module.ts:81](https://github.com/modelence/modelence/blob/371e0f42c036ad308ca3e93f1a750d370b224302/packages/modelence/src/app/module.ts#L81)
+Defined in: [packages/modelence/src/app/module.ts:85](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/app/module.ts#L85)
 
 Creates a new Module instance
 
@@ -42,17 +51,61 @@ Creates a new Module instance
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `name` | `string` | The unique name of the module. This name is used to namespace queries, mutations, cron jobs and configuration values with a prefix (e.g. "todo.create") |
-| `options` | \{ `channels?`: [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`unknown`\>[]; `configSchema?`: [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema); `cronJobs?`: `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\>; `mutations?`: `Mutations`; `queries?`: `Queries`; `rateLimits?`: [`RateLimitRule`](/api-reference/modelence/server/classes/../type-aliases/RateLimitRule)[]; `routes?`: [`RouteDefinition`](/api-reference/modelence/server/classes/../type-aliases/RouteDefinition)[]; `stores?`: [`Store`](/api-reference/modelence/server/classes/Store)\<`any`, `any`\>[]; \} | Module configuration options |
+| `name` | `TName` | The unique name of the module. This name is used to namespace queries, mutations, cron jobs and configuration values with a prefix (e.g. "todo.create") |
+| `options` | \{ `channels?`: [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`unknown`\>[]; `configSchema?`: `TSchema`; `cronJobs?`: `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\>; `mutations?`: `TMutations`; `queries?`: `TQueries`; `rateLimits?`: [`RateLimitRule`](/api-reference/modelence/server/classes/../type-aliases/RateLimitRule)[]; `routes?`: [`RouteDefinition`](/api-reference/modelence/server/classes/../type-aliases/RouteDefinition)[]; `stores?`: [`Store`](/api-reference/modelence/server/classes/Store)\<`any`, `any`\>[]; \} | Module configuration options |
 | `options.channels?` | [`ServerChannel`](/api-reference/modelence/server/classes/ServerChannel)\<`unknown`\>[] | - |
-| `options.configSchema?` | [`ConfigSchema`](/api-reference/modelence/server/classes/../../index/type-aliases/ConfigSchema) | - |
+| `options.configSchema?` | `TSchema` | - |
 | `options.cronJobs?` | `Record`\<`string`, [`CronJobInputParams`](/api-reference/modelence/server/classes/../type-aliases/CronJobInputParams)\> | - |
-| `options.mutations?` | `Mutations` | - |
-| `options.queries?` | `Queries` | - |
+| `options.mutations?` | `TMutations` | - |
+| `options.queries?` | `TQueries` | - |
 | `options.rateLimits?` | [`RateLimitRule`](/api-reference/modelence/server/classes/../type-aliases/RateLimitRule)[] | - |
 | `options.routes?` | [`RouteDefinition`](/api-reference/modelence/server/classes/../type-aliases/RouteDefinition)[] | - |
 | `options.stores?` | [`Store`](/api-reference/modelence/server/classes/Store)\<`any`, `any`\>[] | - |
 
 #### Returns
 
-`Module`
+`Module`\<`TName`, `TSchema`, `TQueries`, `TMutations`\>
+
+## Methods
+
+### getConfig()
+
+> **getConfig**\<`K`\>(`key`): [`ValueType`](/api-reference/modelence/server/classes/../type-aliases/ValueType)\<`TSchema`\[`K`\]\[`"type"`\]\>
+
+Defined in: [packages/modelence/src/app/module.ts:139](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/app/module.ts#L139)
+
+Retrieves a typed configuration value for this module.
+The return type is inferred from the schema — no casts needed.
+
+#### Example
+
+```ts
+const myModule = new Module('payments', {
+  configSchema: {
+    apiKey:     { type: 'secret', default: '', isPublic: false },
+    maxRetries: { type: 'number', default: 3,  isPublic: false },
+  },
+  mutations: {
+    async charge({ amount }) {
+      const apiKey     = myModule.getConfig('apiKey');     // string
+      const maxRetries = myModule.getConfig('maxRetries'); // number
+    },
+  },
+});
+```
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `K` *extends* `string` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `key` | `K` |
+
+#### Returns
+
+[`ValueType`](/api-reference/modelence/server/classes/../type-aliases/ValueType)\<`TSchema`\[`K`\]\[`"type"`\]\>

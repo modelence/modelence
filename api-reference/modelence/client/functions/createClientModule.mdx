@@ -1,0 +1,63 @@
+---
+sidebar_position: 1
+title: createClientModule
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / createClientModule
+
+> **createClientModule**\<`TModule`\>(`moduleName`): `object`
+
+Defined in: [packages/modelence/src/client/module.ts:73](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/client/module.ts#L73)
+
+Creates a typed client accessor for a module's public configs, queries, and mutations.
+
+Use `import type` to reference the module so no server code is bundled on the client.
+Arg and return types for queries and mutations are inferred automatically from the
+server-side handler signatures.
+
+## Example
+
+```ts
+// src/client/payments.ts
+import type paymentsModule from '../server/payments';
+import { createClientModule } from 'modelence/client';
+
+export const payments = createClientModule<typeof paymentsModule>('payments');
+```
+
+```ts
+// src/components/Checkout.tsx
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { payments } from '../client/payments';
+
+// Typed config — public keys only, private and secret keys excluded:
+const currency = payments.getConfig('currency'); // string | undefined
+
+// Typed query — pass directly to useQuery:
+const { data: products } = useQuery(payments.query('getProducts', { page: 1 }));
+
+// Typed mutation — pass directly to useMutation:
+const { mutate: charge } = useMutation(payments.mutation('charge'));
+charge({ amount: 100 }); // args typed from handler signature
+```
+
+## Type Parameters
+
+| Type Parameter |
+| ------ |
+| `TModule` *extends* `AnyModule` |
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `moduleName` | `string` | The module's name as passed to `new Module(name, ...)`. |
+
+## Returns
+
+| Name | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| `getConfig()` | (`key`) => `undefined` \| `PublicKeyOf`\<`TModule`\[`"configSchema"`\]\>\[`K`\] | - | [packages/modelence/src/client/module.ts:75](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/client/module.ts#L75) |
+| `infiniteQuery()` | (`name`, `getArgs`) => `object` | Returns options for `useInfiniteQuery`. The `getArgs` callback receives the current `pageParam` and returns the args to pass to the query handler. Spread the result into `useInfiniteQuery` alongside `getNextPageParam`. Annotate the `pageParam` type in the callback so TypeScript can infer the page param type — no manual generic needed on `useInfiniteQuery`. **Example** `useInfiniteQuery({ ...appFilesClient.infiniteQuery('listFiles', (cursor: string | undefined) => ({ environmentId, ...(cursor ? { cursor } : {}), })), getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined, }); // data is typed as InfiniteData<{ files: AppFile[]; nextCursor: string | null }>` | [packages/modelence/src/client/module.ts:131](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/client/module.ts#L131) |
+| `mutation()` | (`name`) => `object` | - | [packages/modelence/src/client/module.ts:99](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/client/module.ts#L99) |
+| `query()` | (`name`, ...`rest`) => `object` | - | [packages/modelence/src/client/module.ts:82](https://github.com/modelence/modelence/blob/23aa2dbc912a35032932dd7160886d9adee5e9d4/packages/modelence/src/client/module.ts#L82) |
