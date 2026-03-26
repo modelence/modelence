@@ -234,10 +234,7 @@ export async function sendVerificationEmail({
       expiresAt,
     });
 
-    const clientPageUrl = getEmailConfig()?.verification?.clientPageUrl;
-    const verificationUrl = clientPageUrl
-      ? `${baseUrl}${clientPageUrl}?token=${verificationToken}`
-      : `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${baseUrl}/api/_internal/auth/verify-email?token=${verificationToken}`;
 
     const template = getEmailConfig()?.verification?.template || emailVerificationTemplate;
     // TODO: we should have also the name on this step
