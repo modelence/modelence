@@ -140,10 +140,23 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
     throw new Error('Session is not initialized');
   }
 
+  let userDoc;
   try {
     const token = z.string().parse(args.token);
-    const { userDoc } = await verifyEmailToken(token);
+    ({ userDoc } = await verifyEmailToken(token));
+  } catch (error) {
+    if (error instanceof Error) {
+      getAuthConfig().onEmailVerificationError?.({
+        provider: 'email',
+        error,
+        session,
+        connectionInfo,
+      });
+    }
+    throw error;
+  }
 
+  try {
     await setSessionUser(session.authToken, userDoc._id);
 
     const authConfig = getAuthConfig();
@@ -167,12 +180,6 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
   } catch (error) {
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
-      authConfig.onEmailVerificationError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
       authConfig.onLoginError?.({
         provider: 'email',
         error,
