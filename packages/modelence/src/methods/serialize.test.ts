@@ -1,6 +1,58 @@
-import { getResponseTypeMap, reviveResponseTypes } from './serialize';
+import { ObjectId } from 'mongodb';
+import { getResponseTypeMap, reviveResponseTypes, sanitizeResult } from './serialize';
 
 describe('serialize', () => {
+  describe('sanitizeResult', () => {
+    test('should convert ObjectId to hex string', () => {
+      const id = new ObjectId('507f1f77bcf86cd799439011');
+      expect(sanitizeResult(id)).toBe('507f1f77bcf86cd799439011');
+    });
+
+    test('should convert ObjectId fields in objects', () => {
+      const id = new ObjectId('507f1f77bcf86cd799439011');
+      const result = sanitizeResult({ _id: id, name: 'test' });
+      expect(result).toEqual({ _id: '507f1f77bcf86cd799439011', name: 'test' });
+    });
+
+    test('should convert nested ObjectId fields', () => {
+      const id = new ObjectId('507f1f77bcf86cd799439011');
+      const refId = new ObjectId('607f1f77bcf86cd799439022');
+      const result = sanitizeResult({
+        _id: id,
+        author: { userId: refId, name: 'Alice' },
+      });
+      expect(result).toEqual({
+        _id: '507f1f77bcf86cd799439011',
+        author: { userId: '607f1f77bcf86cd799439022', name: 'Alice' },
+      });
+    });
+
+    test('should convert ObjectIds in arrays', () => {
+      const id1 = new ObjectId('507f1f77bcf86cd799439011');
+      const id2 = new ObjectId('607f1f77bcf86cd799439022');
+      const result = sanitizeResult([{ _id: id1 }, { _id: id2 }]);
+      expect(result).toEqual([
+        { _id: '507f1f77bcf86cd799439011' },
+        { _id: '607f1f77bcf86cd799439022' },
+      ]);
+    });
+
+    test('should preserve Date instances', () => {
+      const date = new Date('2024-01-01');
+      const result = sanitizeResult({ createdAt: date, name: 'test' });
+      expect(result).toEqual({ createdAt: date, name: 'test' });
+      expect((result as Record<string, unknown>).createdAt).toBeInstanceOf(Date);
+    });
+
+    test('should pass through primitives unchanged', () => {
+      expect(sanitizeResult('hello')).toBe('hello');
+      expect(sanitizeResult(42)).toBe(42);
+      expect(sanitizeResult(true)).toBe(true);
+      expect(sanitizeResult(null)).toBeNull();
+      expect(sanitizeResult(undefined)).toBeUndefined();
+    });
+  });
+
   describe('getResponseTypeMap', () => {
     test('should detect Date objects', () => {
       const date = new Date('2024-01-01');

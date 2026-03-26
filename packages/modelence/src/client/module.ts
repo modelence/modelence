@@ -1,5 +1,6 @@
 'use client';
 
+import type { ObjectId } from 'mongodb';
 import type { ConfigParams, ConfigType, ValueType } from '../config/types';
 import { callMethod, type MethodArgs } from './method';
 import type { AnyMethodShape } from '../methods/types';
@@ -9,6 +10,20 @@ import { getConfig as _getClientConfig } from '../config/client';
 
 // ── type helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Recursively maps ObjectId → string to match the sanitized runtime values
+ * sent over the wire. Dates are preserved (revived via typeMap on the client).
+ */
+type Sanitized<T> = T extends ObjectId
+  ? string
+  : T extends Date
+    ? Date
+    : T extends (infer U)[]
+      ? Sanitized<U>[]
+      : T extends object
+        ? { [K in keyof T]: Sanitized<T[K]> }
+        : T;
+
 type ExtractArgs<M> = M extends (args: infer A, ...rest: any[]) => any // eslint-disable-line @typescript-eslint/no-explicit-any
   ? A
   : M extends { handler: (args: infer A, ...rest: any[]) => any } // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -16,9 +31,9 @@ type ExtractArgs<M> = M extends (args: infer A, ...rest: any[]) => any // eslint
     : MethodArgs;
 
 type ExtractResult<M> = M extends (...args: any[]) => Promise<infer R> // eslint-disable-line @typescript-eslint/no-explicit-any
-  ? R
+  ? Sanitized<R>
   : M extends { handler: (...args: any[]) => Promise<infer R> } // eslint-disable-line @typescript-eslint/no-explicit-any
-    ? R
+    ? Sanitized<R>
     : unknown;
 
 type PublicKeyOf<TSchema extends Record<string, ConfigParams>> = {
