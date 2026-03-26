@@ -170,35 +170,56 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
   }
 }
 
-export async function handleLoginFromToken(args: Args, { session }: Context) {
+export async function handleLoginFromToken(args: Args, { session, connectionInfo }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
   }
 
-  const token = z.string().parse(args.authToken);
-  const loginToken = await loginTokensCollection.rawCollection().findOneAndDelete({
-    token,
-    expiresAt: { $gt: new Date() },
-  });
+  try {
+    const token = z.string().parse(args.authToken);
+    const loginToken = await loginTokensCollection.rawCollection().findOneAndDelete({
+      token,
+      expiresAt: { $gt: new Date() },
+    });
 
-  if (!loginToken || !loginToken.userId) {
-    throw new Error('Invalid or expired login token');
+    if (!loginToken || !loginToken.userId) {
+      throw new Error('Invalid or expired login token');
+    }
+
+    const userDoc = await usersCollection.findOne({
+      _id: loginToken.userId,
+      status: { $nin: ['deleted', 'disabled'] },
+    });
+
+    if (!userDoc) {
+      throw new Error('User not found');
+    }
+
+    await setSessionUser(session.authToken, loginToken.userId);
+
+    getAuthConfig().onAfterLogin?.({
+      provider: 'email',
+      user: userDoc,
+      session,
+      connectionInfo,
+    });
+    getAuthConfig().login?.onSuccess?.(userDoc);
+
+    return {
+      user: serializeUserForClient(userDoc),
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      getAuthConfig().onLoginError?.({
+        provider: 'email',
+        error,
+        session,
+        connectionInfo,
+      });
+      getAuthConfig().login?.onError?.(error);
+    }
+    throw error;
   }
-
-  const userDoc = await usersCollection.findOne({
-    _id: loginToken.userId,
-    status: { $nin: ['deleted', 'disabled'] },
-  });
-
-  if (!userDoc) {
-    throw new Error('User not found');
-  }
-
-  await setSessionUser(session.authToken, loginToken.userId);
-
-  return {
-    user: serializeUserForClient(userDoc),
-  };
 }
 
 export async function sendVerificationEmail({
