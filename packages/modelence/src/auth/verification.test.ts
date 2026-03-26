@@ -162,7 +162,10 @@ describe('auth/verification', () => {
         token: 'token',
         expiresAt: { $gt: expect.any(Date) },
       });
-      expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: tokenDoc.userId });
+      expect(mockUsersFindOne).toHaveBeenCalledWith({
+        _id: tokenDoc.userId,
+        status: { $nin: ['deleted', 'disabled'] },
+      });
       expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,

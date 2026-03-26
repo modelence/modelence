@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
+import { serializeUserForClient } from './types';
 import { clearSessionUser, setSessionUser } from './session';
 import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';
@@ -91,14 +92,7 @@ export async function handleLoginWithPassword(
     getAuthConfig().login?.onSuccess?.(userDoc);
 
     return {
-      user: {
-        id: userDoc._id,
-        handle: userDoc.handle,
-        roles: userDoc.roles || [],
-        firstName: userDoc.firstName ?? undefined,
-        lastName: userDoc.lastName ?? undefined,
-        avatarUrl: userDoc.avatarUrl ?? undefined,
-      },
+      user: serializeUserForClient(userDoc),
     };
   } catch (error) {
     if (error instanceof Error) {

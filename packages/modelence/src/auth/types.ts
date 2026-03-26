@@ -92,6 +92,17 @@ export type RoleDefinition = {
   permissions?: Permission[];
 };
 
+export function serializeUserForClient(userDoc: User) {
+  return {
+    id: userDoc._id,
+    handle: userDoc.handle,
+    roles: userDoc.roles || [],
+    firstName: userDoc.firstName ?? undefined,
+    lastName: userDoc.lastName ?? undefined,
+    avatarUrl: userDoc.avatarUrl ?? undefined,
+  };
+}
+
 export type AuthProvider = 'google' | 'github' | 'email';
 
 export type AuthSuccessProps = {

@@ -8,7 +8,7 @@ import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
-import { User } from './types';
+import { serializeUserForClient, User } from './types';
 import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
@@ -25,7 +25,10 @@ async function verifyEmailToken(token: string) {
     throw new Error('Invalid or expired verification token');
   }
 
-  const userDoc = await usersCollection.findOne({ _id: tokenDoc.userId });
+  const userDoc = await usersCollection.findOne({
+    _id: tokenDoc.userId,
+    status: { $nin: ['deleted', 'disabled'] },
+  });
 
   if (!userDoc) {
     throw new Error('User not found');
@@ -151,14 +154,7 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
     });
 
     return {
-      user: {
-        id: userDoc._id,
-        handle: userDoc.handle,
-        roles: userDoc.roles || [],
-        firstName: userDoc.firstName ?? undefined,
-        lastName: userDoc.lastName ?? undefined,
-        avatarUrl: userDoc.avatarUrl ?? undefined,
-      },
+      user: serializeUserForClient(userDoc),
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -189,7 +185,10 @@ export async function handleLoginFromToken(args: Args, { session }: Context) {
     throw new Error('Invalid or expired login token');
   }
 
-  const userDoc = await usersCollection.findOne({ _id: loginToken.userId });
+  const userDoc = await usersCollection.findOne({
+    _id: loginToken.userId,
+    status: { $nin: ['deleted', 'disabled'] },
+  });
 
   if (!userDoc) {
     throw new Error('User not found');
@@ -198,14 +197,7 @@ export async function handleLoginFromToken(args: Args, { session }: Context) {
   await setSessionUser(session.authToken, loginToken.userId);
 
   return {
-    user: {
-      id: userDoc._id,
-      handle: userDoc.handle,
-      roles: userDoc.roles || [],
-      firstName: userDoc.firstName ?? undefined,
-      lastName: userDoc.lastName ?? undefined,
-      avatarUrl: userDoc.avatarUrl ?? undefined,
-    },
+    user: serializeUserForClient(userDoc),
   };
 }
 
