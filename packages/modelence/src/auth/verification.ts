@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { usersCollection, emailVerificationTokensCollection } from './db';
+import { usersCollection, emailVerificationTokensCollection, loginTokensCollection } from './db';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { getEmailConfig } from '@/app/emailConfig';
 import { randomBytes } from 'crypto';
@@ -13,7 +13,7 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
-import { createSession, setSessionUser, sessionsCollection } from './session';
+import { setSessionUser } from './session';
 
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
@@ -92,11 +92,17 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       },
     });
 
-    const session = await createSession(userDoc._id, time.minutes(15));
+    const loginToken = randomBytes(32).toString('base64url');
+    await loginTokensCollection.insertOne({
+      userId: userDoc._id,
+      token: loginToken,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + time.minutes(15)),
+    });
 
     return {
       status: 301,
-      redirect: `${emailVerifiedRedirectUrl}?status=verified&token=${encodeURIComponent(session.authToken)}`,
+      redirect: `${emailVerifiedRedirectUrl}?status=verified&token=${encodeURIComponent(loginToken)}`,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -173,24 +179,23 @@ export async function handleLoginFromToken(args: Args, { session }: Context) {
     throw new Error('Session is not initialized');
   }
 
-  const authToken = z.string().parse(args.authToken);
-  const sourceSession = await sessionsCollection.rawCollection().findOneAndDelete({
-    authToken,
-    userId: { $ne: null },
+  const token = z.string().parse(args.authToken);
+  const loginToken = await loginTokensCollection.rawCollection().findOneAndDelete({
+    token,
     expiresAt: { $gt: new Date() },
   });
 
-  if (!sourceSession || !sourceSession.userId) {
+  if (!loginToken || !loginToken.userId) {
     throw new Error('Invalid or expired login token');
   }
 
-  const userDoc = await usersCollection.findOne({ _id: sourceSession.userId });
+  const userDoc = await usersCollection.findOne({ _id: loginToken.userId });
 
   if (!userDoc) {
     throw new Error('User not found');
   }
 
-  await setSessionUser(session.authToken, sourceSession.userId);
+  await setSessionUser(session.authToken, loginToken.userId);
 
   return {
     user: {

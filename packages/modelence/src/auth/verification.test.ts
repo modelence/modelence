@@ -192,7 +192,7 @@ describe('auth/verification', () => {
           referrer: 'https://example.com/signup',
         },
       });
-      expect(mockCreateSession).toHaveBeenCalledWith('user123', expect.any(Number));
+      expect(mockCreateSession).toHaveBeenCalledWith('user123', expect.any(Number), 'verification');
       expect(result).toEqual({
         status: 301,
         redirect: '/verified?status=verified&token=session-token-123',
