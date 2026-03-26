@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
-import { serializeUserForClient } from './types';
+import { serializeUserForClient } from './utils';
 import { clearSessionUser, setSessionUser } from './session';
 import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';

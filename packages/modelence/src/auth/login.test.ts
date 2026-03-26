@@ -32,6 +32,9 @@ jest.unstable_mockModule('./verification', () => ({
 
 jest.unstable_mockModule('./validators', () => ({
   validateEmail: mockValidateEmail,
+  validateHandle: jest.fn((v: string) => v),
+  MAX_HANDLE_LENGTH: 50,
+  MIN_HANDLE_LENGTH: 3,
 }));
 
 jest.unstable_mockModule('@/app/emailConfig', () => ({
