@@ -5,6 +5,7 @@ import { time } from '../time';
 import {
   dbDisposableEmailDomains,
   emailVerificationTokensCollection,
+  loginTokensCollection,
   resetPasswordTokensCollection,
   usersCollection,
 } from './db';
@@ -45,6 +46,7 @@ export default new Module('_system.user', {
     usersCollection,
     dbDisposableEmailDomains,
     emailVerificationTokensCollection,
+    loginTokensCollection,
     resetPasswordTokensCollection,
   ],
   queries: {
