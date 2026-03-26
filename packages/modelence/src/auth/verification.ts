@@ -140,9 +140,8 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
     throw new Error('Session is not initialized');
   }
 
-  const token = z.string().parse(args.token);
-
   try {
+    const token = z.string().parse(args.token);
     const { userDoc } = await verifyEmailToken(token);
 
     await setSessionUser(session.authToken, userDoc._id);
