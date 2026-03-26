@@ -177,6 +177,15 @@ export async function handleLoginFromToken(args: Args, { session, connectionInfo
   }
 
   try {
+    const ip = connectionInfo?.ip;
+    if (ip) {
+      await consumeRateLimit({
+        bucket: 'signin',
+        type: 'ip',
+        value: ip,
+      });
+    }
+
     const token = z.string().parse(args.authToken);
     const loginToken = await loginTokensCollection.rawCollection().findOneAndDelete({
       token,
