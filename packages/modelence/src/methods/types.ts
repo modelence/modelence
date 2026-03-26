@@ -41,6 +41,9 @@ export type SignupProps = UpdateProfileProps & {
 
 export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyMethodShape = ((...args: any[]) => any) | { handler: (...args: any[]) => any };
+
 export type MethodType = 'query' | 'mutation';
 
 export type MethodDefinition<T = unknown> =

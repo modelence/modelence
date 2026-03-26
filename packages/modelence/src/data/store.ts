@@ -12,6 +12,7 @@ import {
   UpdateResult,
   Filter,
   WithId,
+  WithoutId,
   OptionalUnlessRequiredId,
   FindOptions,
   UpdateFilter,
@@ -24,6 +25,13 @@ import {
   MongoError,
   FilterOperators,
   SortDirection,
+  FindOneAndUpdateOptions,
+  FindOneAndDeleteOptions,
+  FindOneAndReplaceOptions,
+  ReplaceOptions,
+  ChangeStream,
+  ChangeStreamOptions,
+  DistinctOptions,
 } from 'mongodb';
 
 import { ModelSchema, InferDocumentType } from './types';
@@ -59,6 +67,7 @@ type StrictRootFilterOperators<TSchema> = {
  * @internal
  */
 type ArrayElement<T> = T extends (infer E)[] ? E : never;
+type Flatten<T> = T extends ReadonlyArray<infer E> ? E : T;
 
 /**
  * Helper type for $in/$nin that accepts any array/tuple where elements are assignable to T
@@ -840,9 +849,10 @@ export class Store<
    * @returns The result of the insert operation
    */
   async insertOne(
-    document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>
+    document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>,
+    options?: { session?: ClientSession }
   ): Promise<InsertOneResult> {
-    return await this.requireCollection().insertOne(document);
+    return await this.requireCollection().insertOne(document, options);
   }
 
   /**
@@ -852,9 +862,10 @@ export class Store<
    * @returns The result of the insert operation
    */
   async insertMany(
-    documents: OptionalUnlessRequiredId<InferDocumentType<TSchema>>[]
+    documents: OptionalUnlessRequiredId<InferDocumentType<TSchema>>[],
+    options?: { session?: ClientSession }
   ): Promise<InsertManyResult> {
-    return await this.requireCollection().insertMany(documents);
+    return await this.requireCollection().insertMany(documents, options);
   }
 
   /**
@@ -866,9 +877,10 @@ export class Store<
    */
   async updateOne(
     selector: TypedFilter<this['_type']> | string | ObjectId,
-    update: UpdateFilter<this['_type']>
+    update: UpdateFilter<this['_type']>,
+    options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
-    return await this.requireCollection().updateOne(this.getSelector(selector), update);
+    return await this.requireCollection().updateOne(this.getSelector(selector), update, options);
   }
 
   /**
@@ -880,10 +892,12 @@ export class Store<
    */
   async upsertOne(
     selector: TypedFilter<this['_type']> | string | ObjectId,
-    update: UpdateFilter<this['_type']>
+    update: UpdateFilter<this['_type']>,
+    options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(this.getSelector(selector), update, {
       upsert: true,
+      ...options,
     });
   }
 
@@ -915,10 +929,12 @@ export class Store<
    */
   async upsertMany(
     selector: TypedFilter<this['_type']>,
-    update: UpdateFilter<this['_type']>
+    update: UpdateFilter<this['_type']>,
+    options?: { session?: ClientSession }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateMany(selector as Filter<this['_type']>, update, {
       upsert: true,
+      ...options,
     });
   }
 
@@ -928,8 +944,11 @@ export class Store<
    * @param selector - The selector to find the document to delete
    * @returns The result of the delete operation
    */
-  async deleteOne(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteOne(selector as Filter<this['_type']>);
+  async deleteOne(
+    selector: TypedFilter<this['_type']>,
+    options?: { session?: ClientSession }
+  ): Promise<DeleteResult> {
+    return await this.requireCollection().deleteOne(selector as Filter<this['_type']>, options);
   }
 
   /**
@@ -938,8 +957,122 @@ export class Store<
    * @param selector - The selector to find the documents to delete
    * @returns The result of the delete operation
    */
-  async deleteMany(selector: TypedFilter<this['_type']>): Promise<DeleteResult> {
-    return await this.requireCollection().deleteMany(selector as Filter<this['_type']>);
+  async deleteMany(
+    selector: TypedFilter<this['_type']>,
+    options?: { session?: ClientSession }
+  ): Promise<DeleteResult> {
+    return await this.requireCollection().deleteMany(selector as Filter<this['_type']>, options);
+  }
+
+  /**
+   * Atomically finds a document and updates it, returning the document
+   *
+   * @param selector - The selector to find the document
+   * @param update - The update to apply
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @returns The document (before or after update, depending on options), or null if not found
+   */
+  async findOneAndUpdate(
+    selector: TypedFilter<this['_type']> | string | ObjectId,
+    update: UpdateFilter<this['_type']>,
+    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
+  ): Promise<this['_doc'] | null> {
+    const result = await this.requireCollection().findOneAndUpdate(
+      this.getSelector(selector),
+      update,
+      options ?? {}
+    );
+    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+  }
+
+  /**
+   * Atomically finds a document and deletes it, returning the deleted document
+   *
+   * @param selector - The selector to find the document
+   * @param options - Options including `session`, `projection`, etc.
+   * @returns The deleted document, or null if not found
+   */
+  async findOneAndDelete(
+    selector: TypedFilter<this['_type']> | string | ObjectId,
+    options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
+  ): Promise<this['_doc'] | null> {
+    const result = await this.requireCollection().findOneAndDelete(
+      this.getSelector(selector),
+      options ?? {}
+    );
+    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+  }
+
+  /**
+   * Atomically finds a document and replaces it, returning the document
+   *
+   * @param selector - The selector to find the document
+   * @param replacement - The replacement document
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @returns The document (before or after replacement, depending on options), or null if not found
+   */
+  async findOneAndReplace(
+    selector: TypedFilter<this['_type']> | string | ObjectId,
+    replacement: WithoutId<this['_type']>,
+    options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
+  ): Promise<this['_doc'] | null> {
+    const result = await this.requireCollection().findOneAndReplace(
+      this.getSelector(selector),
+      replacement,
+      options ?? {}
+    );
+    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+  }
+
+  /**
+   * Replaces a single document
+   *
+   * @param selector - The selector to find the document to replace
+   * @param replacement - The replacement document (must not contain update operators)
+   * @param options - Options including `upsert`, `session`, etc.
+   * @returns The result of the replace operation
+   */
+  async replaceOne(
+    selector: TypedFilter<this['_type']> | string | ObjectId,
+    replacement: WithoutId<this['_type']>,
+    options?: ReplaceOptions
+  ): Promise<UpdateResult> {
+    return await this.requireCollection().replaceOne(
+      this.getSelector(selector),
+      replacement,
+      options
+    );
+  }
+
+  /**
+   * Returns an array of distinct values for a field across the collection
+   *
+   * @param key - The field name (supports dot notation for nested fields)
+   * @param filter - Optional filter to narrow the documents
+   * @param options - Optional distinct options
+   * @returns An array of distinct values
+   */
+
+  async distinct<K extends keyof this['_rawDoc'] & string>(
+    key: K,
+    filter?: TypedFilter<this['_type']>,
+    options?: DistinctOptions
+  ): Promise<Array<Flatten<this['_rawDoc'][K]>>> {
+    const f = (filter ?? {}) as Filter<this['_type']>;
+    return options !== undefined
+      ? await this.requireCollection().distinct(key, f, options)
+      : await this.requireCollection().distinct(key, f);
+  }
+
+  /**
+   * Opens a change stream on the collection to watch for real-time changes
+   *
+   * @param pipeline - Optional aggregation pipeline to filter/transform change events
+   * @param options - Optional change stream options
+   * @returns A ChangeStream instance
+   */
+  watch(pipeline?: Document[], options?: ChangeStreamOptions): ChangeStream {
+    return this.requireCollection().watch(pipeline, options);
   }
 
   /**

@@ -3,6 +3,9 @@ import React from 'react';
 import { AppProvider as OriginalAppProvider } from './client/AppProvider';
 
 export { getConfig } from './config/client';
+export { createClientModule } from './client/module';
+export type { ValueType } from './config/types';
+export { systemConfig } from './system/client';
 
 export const AppProvider =
   'useClient' in React
@@ -23,6 +26,8 @@ export {
   logout,
   sendResetPasswordToken,
   resetPassword,
+  linkOAuthProvider,
+  unlinkOAuthProvider,
   type UserInfo,
 } from './auth/client';
 export {

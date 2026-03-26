@@ -40,7 +40,7 @@ let isInitialized = false;
  * MODELENCE_SITE_ENV=production
  * ```
  */
-export function getConfig(key: ConfigKey) {
+export function getConfig(key: ConfigKey): string | number | boolean | undefined {
   return config[key]?.value ?? configSchema[key]?.default;
 }
 

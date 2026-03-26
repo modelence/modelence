@@ -17,72 +17,22 @@
   [![Discord](https://img.shields.io/discord/1386659657535455253?label=Discord&logo=discord&logoColor=white&labelColor=5865F2&cacheSeconds=30)](https://discord.gg/ghxu5PDnkZ)
 </div>
 
-## 🚀 Showcase
+Modelence is a full-stack framework for building and running production web applications, with built-in authentication, database setup, scheduled jobs, monitoring and more.
 
-See what you can build in just a few hours with Modelence's batteries-included approach:
+## Example Projects
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <a href="https://finchat.modelence.app/" target="_blank">
-          <img src="/assets/finchat-preview.png" alt="FinChat" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
-        </a>
-        <br />
-        <strong>FinChat</strong>
-        <br />
-        <small>AI-powered financial chat assistant</small>
-      </td>
-      <td align="center">
-        <a href="https://smartrepos.modelence.app/" target="_blank">
-          <img src="/assets/smartrepos-preview.png" alt="SmartRepos" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
-        </a>
-        <br />
-        <strong>SmartRepos</strong>
-        <br />
-        <small>Intelligent repository management</small>
-      </td>
-      <td align="center">
-        <a href="https://typesonic.modelence.app/" target="_blank">
-          <img src="/assets/typesonic-preview.png" alt="TypeSonic" style="object-fit: cover; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;" />
-        </a>
-        <br />
-        <strong>TypeSonic</strong>
-        <br />
-        <small>Compete on typing speed</small>
-      </td>
-    </tr>
-  </table>
-</div>
+Visit https://cloud.modelence.com/showcase to see examples of what users have built with Modelence.
 
 ## Getting Started
-Modelence is an all-in-one TypeScript framework for startups shipping production apps, with the mission to eliminate all boilerplate for standard features that modern web applications need, like authentication, database setup, cron jobs, AI observability, email and more.
 
-> **Prerequisites:** Modelence requires [Node.js 20.20](https://nodejs.org/en/download) or higher.
+The fastest way to create an application is through the App Builder:
+1. Go to https://cloud.modelence.com
+1. Describe the app you want to build
+1. Submit your prompt - the App Builder will generate and deploy your app
 
+That’s it. No setup, no CLI, no configuration required.
 
-### Quick Start
-
-#### 1. Create a new project
-```bash
-npx create-modelence-app@latest my-app
-```
-
-#### 2. Install dependencies
-```bash
-cd my-app
-npm install
-```
-
-#### 3. Start the development server
-```bash
-npm run dev
-```
-
-Your app will be available at [http://localhost:3000](http://localhost:3000)
-
-
-For a more detailed guide, check out the [Todo App tutorial](https://docs.modelence.com/tutorial).
+For a more detailed guide, check out the [Quick Start](https://docs.modelence.com/quickstart) section in our documentation.
 
 ---
 

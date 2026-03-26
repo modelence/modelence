@@ -103,7 +103,10 @@ export function serializeUserForClient(userDoc: User) {
   };
 }
 
-export type AuthProvider = 'google' | 'github' | 'email';
+export const SUPPORTED_OAUTH_PROVIDERS = ['google', 'github'] as const;
+export type OAuthProvider = (typeof SUPPORTED_OAUTH_PROVIDERS)[number];
+
+export type AuthProvider = OAuthProvider | 'email';
 
 export type AuthSuccessProps = {
   provider: AuthProvider;
