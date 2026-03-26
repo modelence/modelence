@@ -154,6 +154,13 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
       session,
       connectionInfo,
     });
+    authConfig.onAfterLogin?.({
+      provider: 'email',
+      user: userDoc as User,
+      session,
+      connectionInfo,
+    });
+    authConfig.login?.onSuccess?.(userDoc as User);
 
     return {
       user: serializeUserForClient(userDoc),
@@ -167,6 +174,13 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
         session,
         connectionInfo,
       });
+      authConfig.onLoginError?.({
+        provider: 'email',
+        error,
+        session,
+        connectionInfo,
+      });
+      authConfig.login?.onError?.(error);
     }
     throw error;
   }
