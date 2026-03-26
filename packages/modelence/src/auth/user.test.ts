@@ -4,6 +4,7 @@ const mockRandomBytes = jest.fn();
 const mockInsertOne = jest.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
+const mockLoginTokensCollection = { name: 'login' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
 
 const mockUpdateDisposableEmailListCron = jest.fn();
@@ -31,6 +32,7 @@ jest.unstable_mockModule('./db', () => ({
   },
   dbDisposableEmailDomains: mockDbDisposableEmailDomains,
   emailVerificationTokensCollection: mockEmailVerificationTokensCollection,
+  loginTokensCollection: mockLoginTokensCollection,
   resetPasswordTokensCollection: mockResetPasswordTokensCollection,
 }));
 
@@ -126,6 +128,7 @@ describe('auth/user', () => {
           expect.objectContaining({ insertOne: mockInsertOne }),
           mockDbDisposableEmailDomains,
           mockEmailVerificationTokensCollection,
+          mockLoginTokensCollection,
           mockResetPasswordTokensCollection,
         ]),
         queries: {
