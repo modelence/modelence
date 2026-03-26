@@ -42,9 +42,10 @@ async function verifyEmailToken(token: string) {
   }
 
   // Mark the specific email as verified atomically, returning the updated doc
-  const updatedUserDoc = await usersCollection.rawCollection().findOneAndUpdate(
+  const updatedUserDoc = await usersCollection.findOneAndUpdate(
     {
       _id: tokenDoc.userId,
+      status: { $nin: ['deleted', 'disabled'] },
       'emails.address': email,
       'emails.verified': { $ne: true },
     },
@@ -187,7 +188,7 @@ export async function handleLoginFromToken(args: Args, { session, connectionInfo
     }
 
     const token = z.string().parse(args.authToken);
-    const loginToken = await loginTokensCollection.rawCollection().findOneAndDelete({
+    const loginToken = await loginTokensCollection.findOneAndDelete({
       token,
       expiresAt: { $gt: new Date() },
     });

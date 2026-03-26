@@ -138,6 +138,8 @@ describe('auth/user', () => {
           signupWithPassword: mockHandleSignupWithPassword,
           loginWithPassword: mockHandleLoginWithPassword,
           logout: mockHandleLogout,
+          verifyEmail: mockHandleVerifyEmailMutation,
+          loginFromToken: mockHandleLoginFromToken,
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,

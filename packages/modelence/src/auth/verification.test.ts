@@ -18,11 +18,12 @@ const mockValidateEmail = jest.fn<(value: string) => string>();
 const mockConsumeRateLimit = jest.fn();
 
 const mockLoginTokensInsertOne = jest.fn();
+const mockLoginTokensFindOneAndDelete = jest.fn();
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     updateOne: mockUsersUpdateOne,
-    rawCollection: () => ({ findOneAndUpdate: mockFindOneAndUpdate }),
+    findOneAndUpdate: mockFindOneAndUpdate,
   },
   emailVerificationTokensCollection: {
     findOne: mockTokensFindOne,
@@ -31,6 +32,7 @@ jest.unstable_mockModule('./db', () => ({
   },
   loginTokensCollection: {
     insertOne: mockLoginTokensInsertOne,
+    findOneAndDelete: mockLoginTokensFindOneAndDelete,
   },
 }));
 
@@ -172,6 +174,7 @@ describe('auth/verification', () => {
       expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,
+          status: { $nin: ['deleted', 'disabled'] },
           'emails.address': tokenDoc.email,
           'emails.verified': { $ne: true },
         },
