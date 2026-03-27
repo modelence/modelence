@@ -24,8 +24,8 @@ export function startWebsockets(props?: {
   }
 
   const provider = props?.provider || websocketProvider;
+  setWebsocketClientProvider(provider);
   provider.init({
     channels: props?.channels,
   });
-  setWebsocketClientProvider(provider);
 }
