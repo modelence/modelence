@@ -1,7 +1,7 @@
 import googleAuthRouter from '@/auth/providers/google';
 import githubAuthRouter from '@/auth/providers/github';
 import { runMethod } from '@/methods';
-import { getResponseTypeMap } from '@/methods/serialize';
+import { getResponseTypeMap, sanitizeResult } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
 import { logInfo } from '@/telemetry';
@@ -125,7 +125,7 @@ export async function startServer(
     const context = await getCallContext(req);
 
     try {
-      const result = await runMethod(methodName, req.body.args, context);
+      const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
       res.json({
         data: result,
         typeMap: getResponseTypeMap(result),
