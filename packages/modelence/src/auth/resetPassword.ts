@@ -88,6 +88,7 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   // Store reset token
   await resetPasswordTokensCollection.insertOne({
     userId: userDoc._id,
+    email,
     token: resetToken,
     createdAt,
     expiresAt,
@@ -142,12 +143,16 @@ export async function handleResetPassword(args: Args, {}: Context) {
   // Update user's password
   await usersCollection.updateOne(
     { _id: userDoc._id },
-    {
-      $set: {
-        'authMethods.password.hash': hash,
-      },
-    }
+    { $set: { 'authMethods.password.hash': hash } }
   );
+
+  // Mark the email as verified since the user proved ownership via the reset token
+  if (resetTokenDoc.email) {
+    await usersCollection.updateOne(
+      { _id: userDoc._id, 'emails.address': resetTokenDoc.email },
+      { $set: { 'emails.$.verified': true } }
+    );
+  }
 
   // Delete the used reset token
   await resetPasswordTokensCollection.deleteOne({ token });

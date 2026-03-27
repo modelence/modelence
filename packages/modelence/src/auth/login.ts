@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { clearSessionUser, setSessionUser } from './session';
-import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
@@ -51,27 +50,8 @@ export async function handleLoginWithPassword(
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
     if (!emailDoc?.verified && getEmailConfig()?.provider) {
-      if (ip) {
-        try {
-          await consumeRateLimit({
-            bucket: 'verification',
-            type: 'user',
-            value: userDoc._id.toString(),
-          });
-        } catch {
-          throw new Error(
-            "Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox."
-          );
-        }
-      }
-
-      await sendVerificationEmail({
-        userId: userDoc?._id,
-        email,
-        baseUrl: connectionInfo?.baseUrl,
-      });
       throw new Error(
-        "Your email address hasn't been verified yet. We've sent a new verification email to your inbox."
+        "Your email address hasn't been verified yet. Please check your inbox for the verification email."
       );
     }
 
