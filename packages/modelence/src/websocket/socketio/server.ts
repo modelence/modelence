@@ -33,7 +33,6 @@ export async function init({
   let mongoCollection: Collection<Document> | null = null;
 
   if (isMultiInstance && mongodbClient) {
-    console.log('[debug] Multi-instance mode enabled - setting up MongoDB adapter for Socket.IO');
     mongoCollection = mongodbClient.db().collection(COLLECTION);
 
     try {
