@@ -6,7 +6,7 @@ export { subscribeLiveQuery };
 
 let websocketClientProvider: WebsocketClientProvider | null = null;
 
-export function setWebsocketClientProvider(provider: WebsocketClientProvider) {
+export function setWebsocketClientProvider(provider: WebsocketClientProvider | null) {
   websocketClientProvider = provider;
 }
 
@@ -25,7 +25,12 @@ export function startWebsockets(props?: {
 
   const provider = props?.provider || websocketProvider;
   setWebsocketClientProvider(provider);
-  provider.init({
-    channels: props?.channels,
-  });
+  try {
+    provider.init({
+      channels: props?.channels,
+    });
+  } catch (error) {
+    setWebsocketClientProvider(null);
+    throw error;
+  }
 }
