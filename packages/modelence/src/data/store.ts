@@ -121,8 +121,6 @@ type FetchOptions<T> = {
   projection?: TypedProjection<T>;
 };
 
-export type IndexCreationMode = 'blocking' | 'background';
-
 const COMPARABLE_INDEX_OPTION_FIELDS = [
   'background',
   'bits',
@@ -376,7 +374,6 @@ export class Store<
   private readonly methods?: TMethods;
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
-  private readonly indexCreationMode: IndexCreationMode;
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -397,8 +394,10 @@ export class Store<
       indexes: IndexDescription[];
       /** MongoDB Atlas Search */
       searchIndexes?: SearchIndexDescription[];
-      /** Whether index creation should block startup or run in background (default: 'background') */
-      indexCreationMode?: IndexCreationMode;
+      /**
+       * @deprecated No longer has any effect. All indexes are now created in blocking mode. Will be removed in 1.0.0.
+       */
+      indexCreationMode?: 'blocking' | 'background';
     }
   ) {
     this.name = name;
@@ -407,15 +406,10 @@ export class Store<
     // Normalize all indexes to have _modelence_ prefix
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
-    this.indexCreationMode = options.indexCreationMode ?? 'background';
   }
 
   getName() {
     return this.name;
-  }
-
-  getIndexCreationMode() {
-    return this.indexCreationMode;
   }
 
   /** @internal */
@@ -473,8 +467,10 @@ export class Store<
     indexes?: IndexDescription[];
     methods?: TExtendedMethods;
     searchIndexes?: SearchIndexDescription[];
-    /** Whether index creation should block startup or run in background */
-    indexCreationMode?: IndexCreationMode;
+    /**
+     * @deprecated No longer has any effect. All indexes are now created in blocking mode. Will be removed in 1.0.0.
+     */
+    indexCreationMode?: 'blocking' | 'background';
   }): Store<
     TSchema & TExtendedSchema,
     PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
@@ -500,7 +496,6 @@ export class Store<
       methods: combinedMethods as unknown as CombinedMethods | undefined,
       indexes: extendedIndexes,
       searchIndexes: extendedSearchIndexes,
-      indexCreationMode: config.indexCreationMode ?? this.indexCreationMode,
     });
 
     if (this.client) {

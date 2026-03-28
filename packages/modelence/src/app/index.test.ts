@@ -249,17 +249,13 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
 
 type MinimalStore = Pick<
   Store<ModelSchema, Record<string, never>>,
-  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode'
+  'init' | 'createIndexes' | 'getName'
 >;
 
-const createStoreMock = (
-  name = 'testStore',
-  indexCreationMode: 'blocking' | 'background' = 'background'
-): MinimalStore => ({
+const createStoreMock = (name = 'testStore'): MinimalStore => ({
   init: jest.fn() as MinimalStore['init'],
   createIndexes: jest.fn() as MinimalStore['createIndexes'],
   getName: jest.fn(() => name) as MinimalStore['getName'],
-  getIndexCreationMode: jest.fn(() => indexCreationMode) as MinimalStore['getIndexCreationMode'],
 });
 
 describe('app/index', () => {
@@ -349,7 +345,7 @@ describe('app/index', () => {
     const mockClient = { db: jest.fn() };
     mockGetClient.mockReturnValue(mockClient);
 
-    const mockStore = createStoreMock('testStore', 'blocking');
+    const mockStore = createStoreMock('testStore');
 
     await startApp({
       modules: [
@@ -373,7 +369,7 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
     mockAcquireLock.mockResolvedValue(false);
 
-    const mockStore = createStoreMock('testStore', 'blocking');
+    const mockStore = createStoreMock('testStore');
 
     await startApp({
       modules: [
@@ -606,7 +602,6 @@ describe('app/index', () => {
       init: jest.fn() as MinimalStore['init'],
       createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
     const otherStore = createStoreMock('testCollection');
 
@@ -661,7 +656,6 @@ describe('app/index', () => {
         Promise.reject(indexCreationError)
       ) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
     const otherStore = createStoreMock('testCollection');
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -706,7 +700,6 @@ describe('app/index', () => {
         Promise.reject(criticalError)
       ) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
     const otherStore = createStoreMock('testCollection');
 
@@ -751,7 +744,6 @@ describe('app/index', () => {
       getName: jest.fn(() => {
         throw unexpectedError;
       }) as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
 
     await expect(

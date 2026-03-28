@@ -209,34 +209,12 @@ async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
     return;
   }
 
-  let releaseHandledByBackgroundTask = false;
-
   try {
-    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
-    const backgroundStores = stores.filter(
-      (store) => store.getIndexCreationMode() === 'background'
-    );
-
-    for (const store of blockingStores) {
+    for (const store of stores) {
       await createStoreIndexes(store);
     }
-
-    if (backgroundStores.length > 0) {
-      releaseHandledByBackgroundTask = true;
-      void Promise.resolve().then(async () => {
-        try {
-          for (const store of backgroundStores) {
-            await createStoreIndexes(store);
-          }
-        } finally {
-          await releaseLock(INDEXES_LOCK_RESOURCE);
-        }
-      });
-    }
   } finally {
-    if (!releaseHandledByBackgroundTask) {
-      await releaseLock(INDEXES_LOCK_RESOURCE);
-    }
+    await releaseLock(INDEXES_LOCK_RESOURCE);
   }
 }
 
