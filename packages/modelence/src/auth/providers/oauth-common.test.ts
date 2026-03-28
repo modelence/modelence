@@ -47,6 +47,7 @@ describe('auth/providers/oauth-common', () => {
     status: jest.fn().mockReturnThis(),
     redirect: jest.fn(),
     json: jest.fn(),
+    send: jest.fn(),
   } as unknown as Response;
 
   const req = {} as Request;
@@ -964,6 +965,40 @@ describe('auth/providers/oauth-common', () => {
           error: dbError,
         })
       );
+    });
+  });
+  describe('sendOAuthError', () => {
+    test('returns JSON error when no errorComponent is configured', () => {
+      mockGetAuthConfig.mockReturnValue({});
+
+      moduleExports.sendOAuthError(res, 400, 'Something went wrong');
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Something went wrong' });
+    });
+
+    test('returns HTML when errorComponent is configured', () => {
+      const mockErrorComponent = jest.fn().mockReturnValue('<html><body>Error</body></html>');
+      mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
+      (res as any).send = jest.fn();
+
+      moduleExports.sendOAuthError(res, 500, 'Auth failed');
+
+      expect(mockErrorComponent).toHaveBeenCalledWith({ error: 'Auth failed', statusCode: 500 });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect((res as any).send).toHaveBeenCalledWith('<html><body>Error</body></html>');
+      expect(res.json).not.toHaveBeenCalled();
+    });
+
+    test('falls back to JSON when errorComponent returns falsy', () => {
+      const mockErrorComponent = jest.fn().mockReturnValue(null);
+      mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
+
+      moduleExports.sendOAuthError(res, 403, 'Forbidden');
+
+      expect(mockErrorComponent).toHaveBeenCalledWith({ error: 'Forbidden', statusCode: 403 });
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Forbidden' });
     });
   });
 });

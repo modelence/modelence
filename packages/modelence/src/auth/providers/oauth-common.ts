@@ -18,6 +18,20 @@ export interface OAuthUserData {
   lastName?: string;
   avatarUrl?: string;
 }
+/*
+ * Sends OAuth error response.
+ * If `errorComponent` is configured, renders HTML.
+ * Otherwise falls back to JSON.
+ */
+export function sendOAuthError(res: Response, statusCode: number, errorMessage: string) {
+  const authConfig = getAuthConfig();
+  const response = res.status(statusCode);
+  if (authConfig.errorComponent) {
+    const html = authConfig.errorComponent({ error: errorMessage, statusCode });
+    if (html) return response.send(html);
+  }
+  return response.json({ error: errorMessage });
+}
 
 export async function authenticateUser(res: Response, userId: ObjectId) {
   const { authToken } = await createSession(userId);
@@ -43,9 +57,7 @@ async function handleExistingProviderLogin(
 
   try {
     if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
-      res.status(400).json({
-        error: 'User account is not active.',
-      });
+      sendOAuthError(res, 400, 'User account is not active.');
       return;
     }
 
@@ -104,9 +116,7 @@ async function handleExistingEmailLogin(
 
   if (linkingMode === 'auto' && userData.emailVerified) {
     if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
-      res.status(400).json({
-        error: 'User account is not active.',
-      });
+      sendOAuthError(res, 400, 'User account is not active.');
       return;
     }
 
@@ -116,9 +126,7 @@ async function handleExistingEmailLogin(
 
     // Prevent pre-registration takeover by requiring local ownership verification too.
     if (!matchedEmail?.verified) {
-      res.status(400).json({
-        error: 'User with this email already exists. Please log in instead.',
-      });
+      sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
       return;
     }
 
@@ -155,9 +163,7 @@ async function handleExistingEmailLogin(
 
       if (!autoLinkSuccessful) {
         // User was deleted/disabled between findOne and updateOne, or linked to a *different* ID
-        res.status(400).json({
-          error: 'User with this email already exists. Please log in instead.',
-        });
+        sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
         return;
       }
 
@@ -200,10 +206,7 @@ async function handleExistingEmailLogin(
   }
 
   // Manual mode (default) or unverified email — reject
-  // TODO: handle case with an HTML page
-  res.status(400).json({
-    error: 'User with this email already exists. Please log in instead.',
-  });
+  sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
   return;
 }
 
@@ -308,9 +311,11 @@ export async function handleOAuthUserAuthentication(
 
   // 2. Validate Email is provided by Provider
   if (!userData.email) {
-    res.status(400).json({
-      error: `Email address is required for ${userData.providerName} authentication.`,
-    });
+    sendOAuthError(
+      res,
+      400,
+      `Email address is required for ${userData.providerName} authentication.`
+    );
     return;
   }
 
@@ -378,7 +383,7 @@ export function validateOAuthStateAndGetMode(
   const [storedStateValue, storedMode] = (storedState || '').split(':');
 
   if (!state || !storedState || state !== storedStateValue) {
-    res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+    sendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
     return null;
   }
 
@@ -396,9 +401,7 @@ export async function handleOAuthProviderLink(
 
   if (!session?.userId) {
     clearOAuthLinkCookie(res);
-    res.status(401).json({
-      error: 'You must be signed in to link a provider.',
-    });
+    sendOAuthError(res, 401, 'You must be signed in to link a provider.');
     return;
   }
 
@@ -439,7 +442,7 @@ export async function handleOAuthProviderLink(
 
         clearOAuthLinkCookie(res);
 
-        res.status(400).json({ error: 'User account is not active.' });
+        sendOAuthError(res, 400, 'User account is not active.');
         return;
       }
 
@@ -460,10 +463,11 @@ export async function handleOAuthProviderLink(
 
         clearOAuthLinkCookie(res);
 
-        res.status(400).json({
-          error: `You have already linked a different ${userData.providerName} account.`,
-        });
-
+        sendOAuthError(
+          res,
+          400,
+          `You have already linked a different ${userData.providerName} account.`
+        );
         return;
       }
 
@@ -479,10 +483,7 @@ export async function handleOAuthProviderLink(
 
       clearOAuthLinkCookie(res);
 
-      res.status(400).json({
-        error: `Unable to link ${userData.providerName} account.`,
-      });
-
+      sendOAuthError(res, 400, `Unable to link ${userData.providerName} account.`);
       return;
     }
 
@@ -519,10 +520,11 @@ export async function handleOAuthProviderLink(
 
       clearOAuthLinkCookie(res);
 
-      res.status(400).json({
-        error: `This ${userData.providerName} account is already linked to a different user.`,
-      });
-
+      sendOAuthError(
+        res,
+        400,
+        `This ${userData.providerName} account is already linked to a different user.`
+      );
       return;
     }
 

@@ -29,6 +29,7 @@ const mockValidateOAuthCode = jest.fn<() => string | null>();
 const mockClearOAuthLinkCookie = jest.fn();
 const mockValidateOAuthStateAndGetMode =
   jest.fn<(req: Request, res: Response, cookieName: string) => string | null>();
+const mockSendOAuthError = jest.fn();
 
 jest.unstable_mockModule('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
@@ -37,6 +38,7 @@ jest.unstable_mockModule('./oauth-common', () => ({
   validateOAuthCode: mockValidateOAuthCode,
   validateOAuthStateAndGetMode: mockValidateOAuthStateAndGetMode,
   clearOAuthLinkCookie: mockClearOAuthLinkCookie,
+  sendOAuthError: mockSendOAuthError,
 }));
 
 const fetchMock = jest.fn();
@@ -95,8 +97,11 @@ describe('auth/providers/google', () => {
 
     check({} as Request, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(503);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Google authentication is not configured' });
+    expect(mockSendOAuthError).toHaveBeenCalledWith(
+      res,
+      503,
+      'Google authentication is not configured'
+    );
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -192,13 +197,12 @@ describe('auth/providers/google', () => {
 
     await handler({ query: {}, cookies: {} } as unknown as Request, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Missing authorization code' });
+    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 400, 'Missing authorization code');
   });
 
   test('callback handler returns 400 when state invalid', async () => {
     mockValidateOAuthStateAndGetMode.mockImplementationOnce((req, res) => {
-      res.status(400).json({ error: 'Invalid OAuth state - possible CSRF attack' });
+      mockSendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
       return null;
     });
     const route = findRoute('/api/_internal/auth/google/callback');
@@ -213,8 +217,11 @@ describe('auth/providers/google', () => {
       res
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid OAuth state - possible CSRF attack' });
+    expect(mockSendOAuthError).toHaveBeenCalledWith(
+      res,
+      400,
+      'Invalid OAuth state - possible CSRF attack'
+    );
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
@@ -240,8 +247,7 @@ describe('auth/providers/google', () => {
       res
     );
 
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
+    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed');
     consoleError.mockRestore();
   });
 });
