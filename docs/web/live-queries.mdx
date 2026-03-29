@@ -1,0 +1,370 @@
+---
+title: 'Live Queries'
+description: 'Real-time data synchronization with automatic updates using LiveData and TanStack Query'
+icon: 'rotate'
+---
+
+Live Queries in Modelence provide real-time data synchronization between your server and client. When underlying data changes, connected clients automatically receive updated data without manual polling or refetching.
+
+## Overview
+
+The live query system consists of three parts:
+
+1. **Server-side `LiveData`** - Defines how to fetch data and watch for changes
+2. **`ModelenceQueryClient`** - Connects Modelence's live query system to TanStack Query
+3. **`modelenceLiveQuery`** - Creates live query options for `useQuery`
+
+## Client Setup
+
+### 1. Connect ModelenceQueryClient
+
+Before using live queries, you must connect a `ModelenceQueryClient` to your TanStack Query `QueryClient`. This is required for `modelenceLiveQuery` to work.
+
+```tsx
+// src/client/index.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ModelenceQueryClient } from '@modelence/react-query';
+import { renderApp } from 'modelence/client';
+
+const queryClient = new QueryClient();
+new ModelenceQueryClient().connect(queryClient);
+
+renderApp({
+  app: () => (
+    <QueryClientProvider client={queryClient}>
+      <YourApp />
+    </QueryClientProvider>
+  ),
+});
+```
+
+<Warning>
+If you skip the `ModelenceQueryClient().connect()` step, `modelenceLiveQuery` will throw an error: `ModelenceQueryClient must be connected before using modelenceLiveQuery()`.
+</Warning>
+
+### 2. Use modelenceLiveQuery in Components
+
+Use `modelenceLiveQuery` with TanStack Query's `useQuery` hook. It works just like `modelenceQuery`, but data updates automatically when the server detects changes:
+
+```tsx
+import { useQuery } from '@tanstack/react-query';
+import { modelenceLiveQuery } from '@modelence/react-query';
+
+function TodoList({ userId }: { userId: string }) {
+  const { data: todos, isLoading } = useQuery(
+    modelenceLiveQuery('todo.getAll', { userId })
+  );
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <ul>
+      {todos?.map(todo => (
+        <li key={todo._id}>{todo.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## Server Setup
+
+### Returning LiveData from Query Handlers
+
+Live query handlers **must** return a `LiveData` object, not plain data. `LiveData` tells Modelence how to fetch the data and how to watch for changes.
+
+```typescript
+import { Module, LiveData } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  stores: [dbTodos],
+
+  queries: {
+    // Standard query - returns data directly
+    getById: async ({ id }) => {
+      return await dbTodos.findById(id);
+    },
+
+    // Live query - returns LiveData
+    getAll: async ({ userId }) => {
+      return new LiveData({
+        fetch: async () => await dbTodos.fetch({ userId }),
+        watch: ({ publish }) => {
+          const changeStream = dbTodos.watch();
+          changeStream.on('change', () => publish());
+          return () => changeStream.close();
+        },
+      });
+    },
+  },
+});
+```
+
+<Warning>
+If a live query handler returns plain data instead of a `LiveData` object, the server will throw: `Live query handler for 'X' must return a LiveData object with fetch and watch functions.`
+</Warning>
+
+### LiveData Configuration
+
+`LiveData` accepts two functions:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `fetch` | `() => Promise<T> \| T` | Fetches the current data. Called on initial subscription and whenever `publish()` is called. |
+| `watch` | `({ publish }) => (() => void) \| void` | Sets up real-time monitoring. Call `publish()` to trigger a re-fetch. Return a cleanup function to unsubscribe when the client disconnects. |
+
+### Using MongoDB Change Streams
+
+The most common pattern for the `watch` function is MongoDB change streams, which notify you when documents in a collection are inserted, updated, or deleted:
+
+```typescript
+import { LiveData } from 'modelence/server';
+import { dbTodos } from './db';
+
+// Watch all changes to a collection
+queries: {
+  getAll: async ({ userId }) => {
+    return new LiveData({
+      fetch: async () => await dbTodos.fetch({ userId }),
+      watch: ({ publish }) => {
+        const changeStream = dbTodos.watch();
+        changeStream.on('change', () => publish());
+        return () => changeStream.close();
+      },
+    });
+  },
+}
+```
+
+You can also use a [pipeline](https://www.mongodb.com/docs/manual/changeStreams/#modify-change-stream-output) to filter which changes trigger updates:
+
+```typescript
+// Only watch for changes to a specific user's todos
+queries: {
+  getAll: async ({ userId }) => {
+    return new LiveData({
+      fetch: async () => await dbTodos.fetch({ userId }),
+      watch: ({ publish }) => {
+        const pipeline = [
+          { $match: { 'fullDocument.userId': userId } },
+        ];
+        const changeStream = dbTodos.watch(pipeline);
+        changeStream.on('change', () => publish());
+        return () => changeStream.close();
+      },
+    });
+  },
+}
+```
+
+<Note>
+MongoDB change streams require a **replica set** or **sharded cluster**. If you're using MongoDB Atlas, this is enabled by default. For local development, you need to configure a replica set.
+</Note>
+
+## Complete Example
+
+Here's a full example of a live todo list:
+
+### Server
+
+```typescript
+// src/server/db.ts
+import { Store, schema } from 'modelence/server';
+
+export const dbTodos = new Store('todos', {
+  schema: {
+    title: schema.string(),
+    isCompleted: schema.boolean(),
+    userId: schema.userId(),
+    createdAt: schema.date(),
+  },
+  indexes: [
+    { key: { userId: 1 } },
+  ],
+});
+```
+
+```typescript
+// src/server/module.ts
+import { Module, LiveData } from 'modelence/server';
+import { z } from 'zod';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  stores: [dbTodos],
+
+  queries: {
+    getAll: async ({ userId }) => {
+      return new LiveData({
+        fetch: async () => await dbTodos.fetch(
+          { userId },
+          { sort: { createdAt: -1 } }
+        ),
+        watch: ({ publish }) => {
+          const changeStream = dbTodos.watch();
+          changeStream.on('change', () => publish());
+          return () => changeStream.close();
+        },
+      });
+    },
+  },
+
+  mutations: {
+    create: async (args, { user }) => {
+      const { title } = z.object({ title: z.string() }).parse(args);
+      await dbTodos.insertOne({
+        title,
+        isCompleted: false,
+        userId: user.id,
+        createdAt: new Date(),
+      });
+    },
+
+    toggleComplete: async (args) => {
+      const { id, isCompleted } = z.object({
+        id: z.string(),
+        isCompleted: z.boolean(),
+      }).parse(args);
+      await dbTodos.updateOne(id, { $set: { isCompleted } });
+    },
+  },
+});
+```
+
+### Client
+
+```tsx
+// src/client/index.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ModelenceQueryClient } from '@modelence/react-query';
+import { renderApp } from 'modelence/client';
+import TodoList from './pages/TodoList';
+
+const queryClient = new QueryClient();
+new ModelenceQueryClient().connect(queryClient);
+
+renderApp({
+  app: () => (
+    <QueryClientProvider client={queryClient}>
+      <TodoList />
+    </QueryClientProvider>
+  ),
+});
+```
+
+```tsx
+// src/client/pages/TodoList.tsx
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { modelenceLiveQuery, modelenceMutation } from '@modelence/react-query';
+import { useSession } from 'modelence/client';
+
+export default function TodoList() {
+  const { user } = useSession();
+
+  // Live query - automatically updates when todos change
+  const { data: todos, isLoading } = useQuery(
+    modelenceLiveQuery('todo.getAll', { userId: user?.id })
+  );
+
+  const { mutate: createTodo } = useMutation(
+    modelenceMutation('todo.create')
+  );
+
+  const { mutate: toggleComplete } = useMutation(
+    modelenceMutation('todo.toggleComplete')
+  );
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      <button onClick={() => createTodo({ title: 'New Todo' })}>
+        Add Todo
+      </button>
+
+      <ul>
+        {todos?.map(todo => (
+          <li key={todo._id}>
+            <input
+              type="checkbox"
+              checked={todo.isCompleted}
+              onChange={() => toggleComplete({
+                id: todo._id,
+                isCompleted: !todo.isCompleted,
+              })}
+            />
+            {todo.title}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+With this setup, when any client creates or updates a todo, all connected clients see the changes immediately.
+
+## Live Queries vs WebSockets
+
+| Feature | Live Queries | WebSockets |
+|---------|-------------|------------|
+| **Use case** | Automatic data sync with TanStack Query | Custom real-time messaging |
+| **Data flow** | Server watches data, pushes updates | Bidirectional messaging |
+| **Client API** | `useQuery(modelenceLiveQuery(...))` | `ClientChannel` + `joinChannel` |
+| **Server API** | `LiveData` with `fetch` + `watch` | `ServerChannel` + `broadcast` |
+| **Best for** | Lists, dashboards, any data-driven UI | Chat, notifications, collaborative editing |
+
+Live queries are built on top of WebSockets internally, but provide a higher-level abstraction for the common pattern of keeping query data in sync.
+
+## Common Pitfalls
+
+### Missing ModelenceQueryClient setup
+
+If you see `ModelenceQueryClient must be connected before using modelenceLiveQuery()`, add the setup code to your client entry point:
+
+```tsx
+const queryClient = new QueryClient();
+new ModelenceQueryClient().connect(queryClient);
+```
+
+### Returning plain data instead of LiveData
+
+If you see `Live query handler for 'X' must return a LiveData object`, your query handler is returning data directly. Wrap it in `LiveData`:
+
+```typescript
+// Wrong
+getAll: async () => {
+  return await dbItems.fetch({});
+},
+
+// Correct
+getAll: async () => {
+  return new LiveData({
+    fetch: async () => await dbItems.fetch({}),
+    watch: ({ publish }) => {
+      const changeStream = dbItems.watch();
+      changeStream.on('change', () => publish());
+      return () => changeStream.close();
+    },
+  });
+},
+```
+
+### Forgetting to close change streams
+
+Always return a cleanup function from `watch` to close change streams. Without this, streams accumulate and may exhaust database connections:
+
+```typescript
+watch: ({ publish }) => {
+  const changeStream = dbTodos.watch();
+  changeStream.on('change', () => publish());
+  return () => changeStream.close(); // Don't forget this!
+},
+```
+
+## API Reference
+
+- [modelenceQuery](/api-reference/@modelence/react-query/functions/modelenceQuery) - Standard (non-live) query helper
+- [modelenceMutation](/api-reference/@modelence/react-query/functions/modelenceMutation) - Mutation helper
+- [Store](/api-reference/modelence/server/classes/Store) - Database store with `watch()` support
