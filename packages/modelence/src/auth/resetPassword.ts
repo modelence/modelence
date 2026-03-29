@@ -10,6 +10,7 @@ import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
+import { invalidateAllUserSessions } from './session';
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
@@ -153,6 +154,10 @@ export async function handleResetPassword(args: Args, {}: Context) {
       { $set: { 'emails.$.verified': true } }
     );
   }
+
+  // Invalidate all existing sessions for this user so that other browsers/devices
+  // are forced to re-authenticate with the new password
+  await invalidateAllUserSessions(userDoc._id);
 
   // Delete the used reset token
   await resetPasswordTokensCollection.deleteOne({ token });
