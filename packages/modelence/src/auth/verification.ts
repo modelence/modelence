@@ -13,7 +13,7 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
-import { createSession } from './session';
+import { createSession, setAuthTokenCookie } from './session';
 
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
@@ -98,12 +98,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     const { authToken } = await createSession(userDoc._id);
 
-    params.res.cookie('authToken', authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-    });
+    setAuthTokenCookie(params.res, authToken);
 
     return {
       status: 301,

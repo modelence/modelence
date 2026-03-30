@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
 import { getPublicConfigs } from '../config/server';
@@ -84,6 +85,15 @@ async function processSessionHeartbeat(session: Session) {
       },
     }
   );
+}
+
+export function setAuthTokenCookie(res: Response, authToken: string) {
+  res.cookie('authToken', authToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
 }
 
 export default new Module('_system.session', {

@@ -77,6 +77,14 @@ jest.unstable_mockModule('@/config/server', () => ({
 const mockCreateSession = jest.fn();
 jest.unstable_mockModule('./session', () => ({
   createSession: mockCreateSession,
+  setAuthTokenCookie: jest.fn((res: any, authToken: string) => {
+    res.cookie('authToken', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    });
+  }),
 }));
 
 const verificationModule = await import('./verification');
