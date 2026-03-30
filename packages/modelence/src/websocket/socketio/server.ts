@@ -42,11 +42,18 @@ export async function init({
       );
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && (error as { code: number }).code === 85) {
-        await mongoCollection.dropIndex('createdAt_1');
-        await mongoCollection.createIndex(
-          { createdAt: 1 },
-          { expireAfterSeconds: ADAPTER_TTL_SECONDS, background: true }
-        );
+        try {
+          await mongoCollection.dropIndex('createdAt_1');
+          await mongoCollection.createIndex(
+            { createdAt: 1 },
+            { expireAfterSeconds: ADAPTER_TTL_SECONDS, background: true }
+          );
+        } catch (retryError: unknown) {
+          console.error(
+            'Failed to recreate index on MongoDB collection for Socket.IO:',
+            retryError
+          );
+        }
       } else {
         console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
       }
