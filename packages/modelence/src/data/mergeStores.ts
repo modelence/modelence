@@ -1,6 +1,8 @@
-import { Document, IndexDescription, SearchIndexDescription } from 'mongodb';
+import { isDeepStrictEqual } from 'node:util';
 
-import { Store, getComparableIndexOptions, IndexCreationMode } from './store';
+import { IndexDescription, SearchIndexDescription } from 'mongodb';
+
+import { Store, isSameIndexDefinition, IndexCreationMode } from './store';
 
 export type MergedStoreMetadata = {
   name: string;
@@ -11,25 +13,11 @@ export type MergedStoreMetadata = {
 };
 
 /**
- * Serialize an IndexDescription to a stable string for dedup / conflict detection.
- * Two indexes are "equivalent" when their key + comparable options are deeply equal.
- */
-const serializeIndex = (index: IndexDescription): string => {
-  const keyPart = JSON.stringify(index.key);
-  const optsPart = JSON.stringify(getComparableIndexOptions(index));
-  return `${index.name}|${keyPart}|${optsPart}`;
-};
-
-const serializeSearchIndex = (si: SearchIndexDescription): string => {
-  return JSON.stringify({ name: si.name, type: (si as Document).type, definition: si.definition });
-};
-
-/**
  * Groups stores by collection name and merges their metadata.
  *
  * - Schema fields are unioned by key; identical serialized definitions are
  *   deduped, mismatched definitions throw.
- * - Indexes and search indexes are deduped by serialized form; same-name but
+ * - Indexes and search indexes are deduped; same-name but
  *   different-definition conflicts throw.
  * - indexCreationMode resolves to 'blocking' if *any* contributor is blocking.
  *
@@ -43,10 +31,8 @@ export function mergeStoresByName(
     string,
     {
       schema: Record<string, unknown>;
-      indexes: Map<string, IndexDescription>; // keyed by name
-      indexSerialized: Map<string, string>; // name -> serialized form
-      searchIndexes: Map<string, SearchIndexDescription>; // keyed by name
-      searchSerialized: Map<string, string>; // name -> serialized form
+      indexes: Map<string, IndexDescription>;
+      searchIndexes: Map<string, SearchIndexDescription>;
       indexCreationMode: IndexCreationMode;
     }
   >();
@@ -59,9 +45,7 @@ export function mergeStoresByName(
       group = {
         schema: {},
         indexes: new Map(),
-        indexSerialized: new Map(),
         searchIndexes: new Map(),
-        searchSerialized: new Map(),
         indexCreationMode: 'background',
       };
       groups.set(name, group);
@@ -72,9 +56,7 @@ export function mergeStoresByName(
     for (const [field, def] of Object.entries(storeSchema)) {
       const existing = group.schema[field];
       if (existing !== undefined) {
-        const existingSerialized = JSON.stringify(existing);
-        const newSerialized = JSON.stringify(def);
-        if (existingSerialized !== newSerialized) {
+        if (!isDeepStrictEqual(existing, def)) {
           throw new Error(
             `Conflicting schema field '${field}' in collection '${name}': ` +
               `definitions do not match across stores`
@@ -85,16 +67,14 @@ export function mergeStoresByName(
       }
     }
 
-    // Merge indexes
+    // Merge indexes (reuses store.ts isSameIndexDefinition)
     for (const index of store.getIndexes()) {
       const indexName = index.name;
       if (!indexName) continue;
 
-      const serialized = serializeIndex(index);
-      const existingSerialized = group.indexSerialized.get(indexName);
-
-      if (existingSerialized !== undefined) {
-        if (existingSerialized !== serialized) {
+      const existing = group.indexes.get(indexName);
+      if (existing) {
+        if (!isSameIndexDefinition(existing, index)) {
           throw new Error(
             `Conflicting index '${indexName}' in collection '${name}': ` +
               `definitions do not match across stores`
@@ -102,7 +82,6 @@ export function mergeStoresByName(
         }
       } else {
         group.indexes.set(indexName, index);
-        group.indexSerialized.set(indexName, serialized);
       }
     }
 
@@ -111,11 +90,9 @@ export function mergeStoresByName(
       const siName = si.name;
       if (!siName) continue;
 
-      const serialized = serializeSearchIndex(si);
-      const existingSerialized = group.searchSerialized.get(siName);
-
-      if (existingSerialized !== undefined) {
-        if (existingSerialized !== serialized) {
+      const existing = group.searchIndexes.get(siName);
+      if (existing) {
+        if (!isDeepStrictEqual(existing, si)) {
           throw new Error(
             `Conflicting search index '${siName}' in collection '${name}': ` +
               `definitions do not match across stores`
@@ -123,7 +100,6 @@ export function mergeStoresByName(
         }
       } else {
         group.searchIndexes.set(siName, si);
-        group.searchSerialized.set(siName, serialized);
       }
     }
 

@@ -184,7 +184,11 @@ const isSameIndexKey = (left: unknown, right: unknown): boolean => {
   });
 };
 
-const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
+/** @internal */
+export const isSameIndexDefinition = (
+  existing: ExistingIndex,
+  desired: IndexDescription
+): boolean => {
   if (!isSameIndexKey(existing.key, desired.key)) {
     return false;
   }
