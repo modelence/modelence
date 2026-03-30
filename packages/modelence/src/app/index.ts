@@ -15,6 +15,7 @@ import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
+import { mergeStoresByName, MergedStoreMetadata } from '../data/mergeStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
@@ -119,12 +120,15 @@ export async function startApp({
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
 
+  const effectiveStores = mergeStoresByName(stores);
+
   if (hasRemoteBackend) {
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
         stores,
+        effectiveStores,
         roles,
       });
     loadRemoteConfigs(configs);
@@ -145,7 +149,7 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
-    await createIndexesWithLock(stores);
+    await createIndexesWithLock(effectiveStores);
   }
 
   startMigrations(migrations);
@@ -200,7 +204,7 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 
 const INDEXES_LOCK_RESOURCE = 'indexes';
 
-async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
+async function createIndexesWithLock(mergedStores: MergedStoreMetadata[]) {
   const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
     lockDuration: time.seconds(30),
     heartbeat: true,
@@ -209,11 +213,31 @@ async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
     return;
   }
 
+  const client = getClient();
+  if (!client) {
+    throw new Error('Failed to create indexes: MongoDB client not initialized');
+  }
+
+  // Build temporary Store instances from merged metadata so each collection
+  // is reconciled exactly once with the full union of indexes.
+  const tempStores = mergedStores.map((merged) => {
+    const store = new Store(merged.name, {
+      schema: merged.schema as ModelSchema,
+      indexes: merged.indexes,
+      searchIndexes: merged.searchIndexes,
+      indexCreationMode: merged.indexCreationMode,
+    });
+    store.init(client);
+    return store;
+  });
+
   let releaseHandledByBackgroundTask = false;
 
   try {
-    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
-    const backgroundStores = stores.filter(
+    const blockingStores = tempStores.filter(
+      (store) => store.getIndexCreationMode() === 'blocking'
+    );
+    const backgroundStores = tempStores.filter(
       (store) => store.getIndexCreationMode() === 'background'
     );
 
@@ -240,7 +264,8 @@ async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
   }
 }
 
-async function createStoreIndexes(store: Store<ModelSchema, never>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function createStoreIndexes(store: Store<any, any>) {
   const storeName = store.getName();
 
   try {

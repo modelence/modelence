@@ -149,7 +149,8 @@ const isDocumentRecord = (value: unknown): value is Document =>
 
 const hasModelencePrefix = (name: string): boolean => name.startsWith('_modelence_');
 
-const getComparableIndexOptions = (index: ExistingIndex | IndexDescription): Document => {
+/** @internal */
+export const getComparableIndexOptions = (index: ExistingIndex | IndexDescription): Document => {
   const options: Document = {};
 
   for (const field of COMPARABLE_INDEX_OPTION_FIELDS) {
@@ -426,6 +427,16 @@ export class Store<
   /** @internal */
   getSerializedSchema() {
     return serializeModelSchema(this.schema);
+  }
+
+  /** @internal – normalized indexes (already have _modelence_ prefix) */
+  getIndexes(): IndexDescription[] {
+    return this.indexes;
+  }
+
+  /** @internal */
+  getSearchIndexes(): SearchIndexDescription[] {
+    return this.searchIndexes;
   }
 
   /**

@@ -3,7 +3,10 @@ import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
+import { serializeModelSchema } from '../data/schemaSerializer';
 import { AppConfig } from '../config/types';
+import { ModelSchema } from '../data/types';
+import { MergedStoreMetadata } from '../data/mergeStores';
 
 type CloudBackendConnectOkResponse = {
   status: 'ok';
@@ -30,12 +33,14 @@ export async function connectCloudBackend({
   configSchema,
   cronJobsMetadata,
   stores,
+  effectiveStores,
   roles,
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any, any>[];
+  effectiveStores?: MergedStoreMetadata[];
   roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
@@ -44,14 +49,25 @@ export async function connectCloudBackend({
   }
 
   try {
-    const dataModels = Object.values(stores).map((store) => {
-      return {
-        name: store.getName(),
-        schema: store.getSerializedSchema(),
-        collections: [store.getName()],
-        version: 2,
-      };
-    });
+    const mergedModels = effectiveStores ?? [];
+
+    const dataModels =
+      mergedModels.length > 0
+        ? mergedModels.map((merged) => ({
+            name: merged.name,
+            schema: serializeModelSchema(merged.schema as ModelSchema),
+            collections: [merged.name],
+            version: 2,
+            indexes: merged.indexes,
+            searchIndexes: merged.searchIndexes,
+            indexCreationMode: merged.indexCreationMode,
+          }))
+        : Object.values(stores).map((store) => ({
+            name: store.getName(),
+            schema: store.getSerializedSchema(),
+            collections: [store.getName()],
+            version: 2,
+          }));
 
     const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
