@@ -130,7 +130,7 @@ describe('auth/login', () => {
     });
   });
 
-  test('resends verification email when email is unverified and provider configured', async () => {
+  test('throws unverified error when email is unverified and provider configured', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439012');
     mockFindOne.mockResolvedValue({
       _id: userId,
@@ -146,24 +146,16 @@ describe('auth/login', () => {
         baseContext as never
       )
     ).rejects.toThrow(
-      "Your email address hasn't been verified yet. We've sent a new verification email to your inbox."
+      "Your email address hasn't been verified yet. Please check your inbox for the verification email."
     );
 
-    expect(mockConsumeRateLimit).toHaveBeenNthCalledWith(1, {
+    expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
       bucket: 'signin',
       type: 'ip',
       value: '203.0.113.1',
     });
-    expect(mockConsumeRateLimit).toHaveBeenNthCalledWith(2, {
-      bucket: 'verification',
-      type: 'user',
-      value: userId.toString(),
-    });
-    expect(mockSendVerificationEmail).toHaveBeenCalledWith({
-      userId,
-      email: 'user@example.com',
-      baseUrl: 'https://app.example.com',
-    });
+    expect(mockSendVerificationEmail).not.toHaveBeenCalled();
     expect(authConfig.onLoginError).toHaveBeenCalledWith({
       provider: 'email',
       error: expect.any(Error),

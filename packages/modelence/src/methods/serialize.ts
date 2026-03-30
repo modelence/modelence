@@ -1,3 +1,38 @@
+function isObjectId(value: unknown): value is { toHexString(): string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'toHexString' in value &&
+    typeof (value as Record<string, unknown>).toHexString === 'function'
+  );
+}
+
+/**
+ * Recursively converts all MongoDB ObjectId instances to hex strings.
+ * Uses duck typing (checks for toHexString method) to avoid importing mongodb on the client.
+ */
+export function sanitizeResult(result: unknown): unknown {
+  if (result == null || typeof result !== 'object') {
+    return result;
+  }
+
+  if (isObjectId(result)) {
+    return result.toHexString();
+  }
+
+  if (result instanceof Date) {
+    return result;
+  }
+
+  if (Array.isArray(result)) {
+    return result.map(sanitizeResult);
+  }
+
+  return Object.fromEntries(
+    Object.entries(result).map(([key, value]) => [key, sanitizeResult(value)])
+  );
+}
+
 export function getResponseTypeMap(result: unknown) {
   if (result instanceof Date) {
     return { type: 'date' };

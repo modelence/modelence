@@ -22,5 +22,10 @@ export default new Module('_system', {
       isPublic: true,
       default: '',
     },
+    multiInstance: {
+      type: 'boolean',
+      isPublic: false,
+      default: false,
+    },
   },
 });
