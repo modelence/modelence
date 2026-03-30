@@ -562,6 +562,7 @@ describe('auth/resetPassword', () => {
         { _id: userId, 'emails.address': email },
         { $set: { 'emails.$.verified': true } }
       );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(result).toEqual({
         success: true,
@@ -595,6 +596,7 @@ describe('auth/resetPassword', () => {
         { _id: userId },
         { $set: { 'authMethods.password.hash': 'hashedPassword' } }
       );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     });
 
     test('throws error if reset token not found', async () => {
