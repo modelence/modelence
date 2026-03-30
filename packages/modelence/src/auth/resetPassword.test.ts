@@ -24,6 +24,11 @@ const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => 
 const mockTime = { hours: jest.fn() };
 const mockConsumeRateLimit = jest.fn();
 const mockGetConfig = jest.fn();
+const mockInvalidateAllUserSessions = jest.fn();
+
+jest.unstable_mockModule('./session', () => ({
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
+}));
 
 jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
@@ -31,6 +36,7 @@ jest.unstable_mockModule('@/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+  getPublicConfigs: jest.fn().mockReturnValue({}),
 }));
 
 jest.unstable_mockModule('./db', () => ({
