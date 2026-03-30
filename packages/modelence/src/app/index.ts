@@ -213,27 +213,27 @@ async function createIndexesWithLock(mergedStores: MergedStoreMetadata[]) {
     return;
   }
 
-  const client = getClient();
-  if (!client) {
-    throw new Error('Failed to create indexes: MongoDB client not initialized');
-  }
-
-  // Build temporary Store instances from merged metadata so each collection
-  // is reconciled exactly once with the full union of indexes.
-  const tempStores = mergedStores.map((merged) => {
-    const store = new Store(merged.name, {
-      schema: merged.schema as ModelSchema,
-      indexes: merged.indexes,
-      searchIndexes: merged.searchIndexes,
-      indexCreationMode: merged.indexCreationMode,
-    });
-    store.init(client);
-    return store;
-  });
-
   let releaseHandledByBackgroundTask = false;
 
   try {
+    const client = getClient();
+    if (!client) {
+      throw new Error('Failed to create indexes: MongoDB client not initialized');
+    }
+
+    // Build temporary Store instances from merged metadata so each collection
+    // is reconciled exactly once with the full union of indexes.
+    const tempStores = mergedStores.map((merged) => {
+      const store = new Store(merged.name, {
+        schema: merged.schema as ModelSchema,
+        indexes: merged.indexes,
+        searchIndexes: merged.searchIndexes,
+        indexCreationMode: merged.indexCreationMode,
+      });
+      store.init(client);
+      return store;
+    });
+
     const blockingStores = tempStores.filter(
       (store) => store.getIndexCreationMode() === 'blocking'
     );
