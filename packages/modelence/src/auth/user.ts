@@ -5,7 +5,6 @@ import { time } from '../time';
 import {
   dbDisposableEmailDomains,
   emailVerificationTokensCollection,
-  loginTokensCollection,
   resetPasswordTokensCollection,
   usersCollection,
 } from './db';
@@ -14,12 +13,7 @@ import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
-import {
-  handleVerifyEmail,
-  handleVerifyEmailMutation,
-  handleLoginFromToken,
-  handleResendEmailVerification,
-} from './verification';
+import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
 
 export async function createGuestUser() {
@@ -47,7 +41,6 @@ export default new Module('_system.user', {
     usersCollection,
     dbDisposableEmailDomains,
     emailVerificationTokensCollection,
-    loginTokensCollection,
     resetPasswordTokensCollection,
   ],
   queries: {
@@ -57,8 +50,6 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
-    verifyEmail: handleVerifyEmailMutation,
-    loginFromToken: handleLoginFromToken,
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,

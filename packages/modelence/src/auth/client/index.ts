@@ -118,28 +118,7 @@ export async function updateProfile(options: {
  */
 export async function verifyEmail(options: { token: string }) {
   const { token } = options;
-  const { user } = await callMethod<{ user: RawUserData }>('_system.user.verifyEmail', { token });
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
-}
-
-/**
- * Sign in from an auth token passed in the URL after server-side email verification.
- * Call this with the `token` query param when landing on the redirect page.
- *
- * @example
- * ```ts
- * const params = new URLSearchParams(window.location.search);
- * const token = params.get('token');
- * if (token) await loginFromToken(token);
- * ```
- */
-export async function loginFromToken(authToken: string) {
-  const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginFromToken', {
-    authToken,
-  });
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  await callMethod('_system.user.verifyEmail', { token });
 }
 
 /**

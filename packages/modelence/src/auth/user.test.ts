@@ -4,7 +4,6 @@ const mockRandomBytes = jest.fn();
 const mockInsertOne = jest.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
-const mockLoginTokensCollection = { name: 'login' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
 
 const mockUpdateDisposableEmailListCron = jest.fn();
@@ -12,8 +11,6 @@ const mockHandleLoginWithPassword = jest.fn();
 const mockHandleLogout = jest.fn();
 const mockHandleSignupWithPassword = jest.fn();
 const mockHandleVerifyEmail = jest.fn();
-const mockHandleVerifyEmailMutation = jest.fn();
-const mockHandleLoginFromToken = jest.fn();
 const mockHandleResendEmailVerification = jest.fn();
 const mockHandleSendResetPasswordToken = jest.fn();
 const mockHandleResetPassword = jest.fn();
@@ -32,7 +29,6 @@ jest.unstable_mockModule('./db', () => ({
   },
   dbDisposableEmailDomains: mockDbDisposableEmailDomains,
   emailVerificationTokensCollection: mockEmailVerificationTokensCollection,
-  loginTokensCollection: mockLoginTokensCollection,
   resetPasswordTokensCollection: mockResetPasswordTokensCollection,
 }));
 
@@ -56,8 +52,6 @@ jest.unstable_mockModule('./signup', () => ({
 
 jest.unstable_mockModule('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
-  handleVerifyEmailMutation: mockHandleVerifyEmailMutation,
-  handleLoginFromToken: mockHandleLoginFromToken,
   handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
@@ -128,7 +122,6 @@ describe('auth/user', () => {
           expect.objectContaining({ insertOne: mockInsertOne }),
           mockDbDisposableEmailDomains,
           mockEmailVerificationTokensCollection,
-          mockLoginTokensCollection,
           mockResetPasswordTokensCollection,
         ]),
         queries: {
@@ -138,8 +131,6 @@ describe('auth/user', () => {
           signupWithPassword: mockHandleSignupWithPassword,
           loginWithPassword: mockHandleLoginWithPassword,
           logout: mockHandleLogout,
-          verifyEmail: mockHandleVerifyEmailMutation,
-          loginFromToken: mockHandleLoginFromToken,
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,

@@ -17,8 +17,6 @@ const mockGetAuthConfig = jest.fn();
 const mockValidateEmail = jest.fn<(value: string) => string>();
 const mockConsumeRateLimit = jest.fn();
 
-const mockLoginTokensInsertOne = jest.fn();
-const mockLoginTokensFindOneAndDelete = jest.fn();
 jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -29,10 +27,6 @@ jest.unstable_mockModule('./db', () => ({
     findOne: mockTokensFindOne,
     insertOne: mockTokensInsertOne,
     deleteOne: mockTokensDeleteOne,
-  },
-  loginTokensCollection: {
-    insertOne: mockLoginTokensInsertOne,
-    findOneAndDelete: mockLoginTokensFindOneAndDelete,
   },
 }));
 
@@ -80,9 +74,9 @@ jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
 }));
 
-const mockSetSessionUser = jest.fn();
+const mockCreateSession = jest.fn();
 jest.unstable_mockModule('./session', () => ({
-  setSessionUser: mockSetSessionUser,
+  createSession: mockCreateSession,
 }));
 
 const verificationModule = await import('./verification');
@@ -119,6 +113,7 @@ describe('auth/verification', () => {
   });
 
   describe('handleVerifyEmail', () => {
+    const mockCookie = jest.fn();
     const baseParams = {
       query: { token: 'token' },
       headers: {
@@ -130,6 +125,7 @@ describe('auth/verification', () => {
         ip: '192.168.1.1',
         socket: { remoteAddress: '192.168.1.1' },
       },
+      res: { cookie: mockCookie },
     };
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -161,6 +157,7 @@ describe('auth/verification', () => {
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
       mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
       mockFindOneAndUpdate.mockResolvedValue(userDoc as never);
+      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(mockTokensFindOne).toHaveBeenCalledWith({
@@ -194,16 +191,16 @@ describe('auth/verification', () => {
           referrer: 'https://example.com/signup',
         },
       });
-      expect(mockLoginTokensInsertOne).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user123',
-          token: 'token123',
-          expiresAt: expect.any(Date),
-        })
-      );
+      expect(mockCreateSession).toHaveBeenCalledWith('user123');
+      expect(mockCookie).toHaveBeenCalledWith('authToken', 'session-token-123', {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'strict',
+        path: '/',
+      });
       expect(result).toEqual({
         status: 301,
-        redirect: expect.stringContaining('/verified?status=verified&token=token123'),
+        redirect: '/verified?status=verified',
       });
     });
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { usersCollection, emailVerificationTokensCollection, loginTokensCollection } from './db';
+import { usersCollection, emailVerificationTokensCollection } from './db';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { getEmailConfig } from '@/app/emailConfig';
 import { randomBytes } from 'crypto';
@@ -9,12 +9,11 @@ import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
 import { User } from './types';
-import { serializeUserForClient } from './utils';
 import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
-import { setSessionUser } from './session';
+import { createSession } from './session';
 
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
@@ -97,17 +96,18 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       },
     });
 
-    const loginToken = randomBytes(32).toString('base64url');
-    await loginTokensCollection.insertOne({
-      userId: userDoc._id,
-      token: loginToken,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + time.minutes(15)),
+    const { authToken } = await createSession(userDoc._id);
+
+    params.res.cookie('authToken', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
     });
 
     return {
       status: 301,
-      redirect: `${emailVerifiedRedirectUrl}?status=verified&token=${encodeURIComponent(loginToken)}`,
+      redirect: `${emailVerifiedRedirectUrl}?status=verified`,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -132,124 +132,6 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       status: 301,
       redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(message)}`,
     };
-  }
-}
-
-export async function handleVerifyEmailMutation(args: Args, { session, connectionInfo }: Context) {
-  if (!session) {
-    throw new Error('Session is not initialized');
-  }
-
-  let userDoc;
-  try {
-    const token = z.string().parse(args.token);
-    ({ userDoc } = await verifyEmailToken(token));
-  } catch (error) {
-    if (error instanceof Error) {
-      getAuthConfig().onEmailVerificationError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
-    }
-    throw error;
-  }
-
-  try {
-    await setSessionUser(session.authToken, userDoc._id);
-
-    const authConfig = getAuthConfig();
-    authConfig.onAfterEmailVerification?.({
-      provider: 'email',
-      user: userDoc as User,
-      session,
-      connectionInfo,
-    });
-    authConfig.onAfterLogin?.({
-      provider: 'email',
-      user: userDoc as User,
-      session,
-      connectionInfo,
-    });
-    authConfig.login?.onSuccess?.(userDoc as User);
-
-    return {
-      user: serializeUserForClient(userDoc),
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      const authConfig = getAuthConfig();
-      authConfig.onLoginError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
-      authConfig.login?.onError?.(error);
-    }
-    throw error;
-  }
-}
-
-export async function handleLoginFromToken(args: Args, { session, connectionInfo }: Context) {
-  if (!session) {
-    throw new Error('Session is not initialized');
-  }
-
-  try {
-    const ip = connectionInfo?.ip;
-    if (ip) {
-      await consumeRateLimit({
-        bucket: 'signin',
-        type: 'ip',
-        value: ip,
-      });
-    }
-
-    const token = z.string().parse(args.authToken);
-    const loginToken = await loginTokensCollection.findOneAndDelete({
-      token,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!loginToken || !loginToken.userId) {
-      throw new Error('Invalid or expired login token');
-    }
-
-    const userDoc = await usersCollection.findOne({
-      _id: loginToken.userId,
-      status: { $nin: ['deleted', 'disabled'] },
-    });
-
-    if (!userDoc) {
-      throw new Error('User not found');
-    }
-
-    await setSessionUser(session.authToken, loginToken.userId);
-
-    getAuthConfig().onAfterLogin?.({
-      provider: 'email',
-      user: userDoc,
-      session,
-      connectionInfo,
-    });
-    getAuthConfig().login?.onSuccess?.(userDoc);
-
-    return {
-      user: serializeUserForClient(userDoc),
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      getAuthConfig().onLoginError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
-      getAuthConfig().login?.onError?.(error);
-    }
-    throw error;
   }
 }
 
