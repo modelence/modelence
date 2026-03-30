@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { IndexDescription, SearchIndexDescription } from 'mongodb';
 
 import { Store, isSameIndexDefinition, IndexCreationMode } from './store';
+import { ModelSchema } from './types';
 
 export type MergedStoreMetadata = {
   name: string;
@@ -24,8 +25,7 @@ export type MergedStoreMetadata = {
  * @internal
  */
 export function mergeStoresByName(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  stores: Store<any, any>[]
+  stores: Store<ModelSchema, Record<string, never>>[]
 ): MergedStoreMetadata[] {
   const groups = new Map<
     string,
