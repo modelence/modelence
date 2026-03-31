@@ -1,6 +1,6 @@
 ---
 title: 'Configuration'
-description: 'Define typed configuration schemas for your modules'
+description: 'Define typed configuration schemas and access them with Module.getConfig and createClientModule(...).getConfig. Available since modelence@0.15.0.'
 icon: 'sliders'
 ---
 
@@ -11,6 +11,13 @@ accessed at runtime via typed accessors.
 This is the recommended way to store settings like API keys, feature toggles,
 default values, and any other configuration your module needs — without
 hardcoding them or relying solely on environment variables.
+
+## Version Requirements
+
+Configuration accessors in this guide require:
+
+- `Module.getConfig()` - available since `modelence@0.15.0`
+- `createClientModule(...).getConfig()` - available since `modelence@0.15.0`
 
 ## Defining a Config Schema
 
@@ -73,6 +80,8 @@ will throw an error at startup if this rule is violated.
 Call `getConfig` directly on the module instance. The return type is inferred
 automatically from the schema — no casts needed:
 
+`Module.getConfig()` is available since `modelence@0.15.0`.
+
 ```typescript title="src/server/payments/index.ts"
 import { Module } from 'modelence/server';
 
@@ -98,6 +107,8 @@ export default paymentsModule;
 Use `createClientModule` to create a typed accessor for a module's public config values.
 Pass the module type via `import type` — no server code is bundled on the client.
 
+`createClientModule(...).getConfig()` is available since `modelence@0.15.0`.
+
 ```typescript title="src/client/payments.ts"
 import type paymentsModule from '../server/payments';
 import { createClientModule } from 'modelence/client';
@@ -118,50 +129,10 @@ function Checkout() {
 Only values marked `isPublic: true` are available on the client. Private and
 `secret` values are **not** sent to the client and will not appear as valid keys.
 
-## Calling Queries and Mutations
+For typed query and mutation wrappers, see:
 
-`createClientModule` also provides typed wrappers for queries and mutations,
-compatible with TanStack Query's `useQuery` and `useMutation`. The argument and
-return types are inferred from the handler signatures — no manual type parameters needed.
-
-```typescript title="src/server/admin/index.ts"
-import { Module } from 'modelence/server';
-
-export default new Module('admin', {
-  queries: {
-    async getUsers({ page }: { page: number }) {
-      // returns User[]
-    },
-  },
-  mutations: {
-    async inviteUser({ email }: { email: string }) {
-      // returns { success: boolean }
-    },
-  },
-});
-```
-
-```typescript title="src/client/admin.ts"
-import type adminModule from '../server/admin';
-import { createClientModule } from 'modelence/client';
-
-export const admin = createClientModule<typeof adminModule>('admin');
-```
-
-```typescript title="src/components/AdminPanel.tsx"
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { admin } from '../client/admin';
-
-function AdminPanel() {
-  const { data: users } = useQuery(admin.query('getUsers', { page: 1 }));
-  // users is typed as User[]
-
-  const { mutate: invite } = useMutation(admin.mutation('inviteUser'));
-  // invite({ email: '...' }) — args are typed as { email: string }
-
-  return ...;
-}
-```
+- [Queries](/core-concepts/queries)
+- [Mutations](/core-concepts/mutations)
 
 ## Managing Values in Modelence Cloud
 
@@ -317,4 +288,4 @@ See the full API reference for config types:
 - [`ConfigSchema`](/api-reference/modelence/server/type-aliases/ConfigSchema) — The schema object passed to a module
 - [`ConfigType`](/api-reference/modelence/server/type-aliases/ConfigType) — The union of allowed type values
 - [`getConfig` (server)](/api-reference/modelence/server/functions/getConfig) — Read config on the server (untyped, for dynamic keys)
-- [`createClientModule`](/api-reference/modelence/client/functions/createClientModule) — Create a typed client accessor for a module
+- [`getConfig` (client)](/api-reference/modelence/client/functions/getConfig) — Read config on the client (untyped, for dynamic keys)
