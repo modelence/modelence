@@ -144,14 +144,14 @@ startApp({
   auth: {
     errorComponent: ({ error, statusCode }) => {
       // Safely escape the error string to prevent XSS vulnerabilities
-      const escapeHtml = (str: string) => str.replace(/[&<>"']/g, m => ({
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
       })[m as any] || m);
 
       return `
         <html>
           <body>
-            <h1>Error ${statusCode}</h1>
+            <h1>Error ${escapeHtml(statusCode)}</h1>
             <p>${escapeHtml(error)}</p>
           </body>
         </html>
@@ -185,10 +185,10 @@ startApp({
       return email.split('@')[0];
     },
     errorComponent: ({ error, statusCode }) => {
-      const escapeHtml = (str: string) => str.replace(/[&<>"']/g, m => ({
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
       })[m as any] || m);
-      return `<html><body><h1>Error ${statusCode}</h1><p>${escapeHtml(error)}</p></body></html>`;
+      return `<html><body><h1>Error ${escapeHtml(statusCode)}</h1><p>${escapeHtml(error)}</p></body></html>`;
     },
     onAfterSignup: ({ user }) => {
       console.log('Welcome!', user.handle);
