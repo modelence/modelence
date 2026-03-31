@@ -258,6 +258,36 @@ describe('data/store', () => {
     expect(collectionMock.dropSearchIndex).not.toHaveBeenCalled();
   });
 
+  test('createIndexes create-only mode drops and recreates search indexes on conflict', async () => {
+    const store = createStore({
+      searchIndexes: [{ name: 'searchIdx', definition: {} } as SearchIndexDescription],
+    });
+
+    const searchError = new MongoError('duplicate search') as MongoError & { code: number };
+    searchError.code = 68;
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest
+        .fn()
+        .mockRejectedValueOnce(searchError as never)
+        .mockResolvedValueOnce(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('create-only');
+
+    expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
+    expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+  });
+
   test('createIndexes handles non-existent collection (code 26)', async () => {
     const store = createStore({
       indexes: [{ key: { name: 1 } }],

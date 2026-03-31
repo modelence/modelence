@@ -669,10 +669,8 @@ export class Store<
           await collection.createSearchIndexes([searchIndex]);
         } catch (error) {
           if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
-            if (shouldDropIndexes) {
-              await collection.dropSearchIndex(searchIndex.name);
-              await collection.createSearchIndexes([searchIndex]);
-            }
+            await collection.dropSearchIndex(searchIndex.name);
+            await collection.createSearchIndexes([searchIndex]);
           } else {
             throw error;
           }
