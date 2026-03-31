@@ -204,6 +204,60 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
+  test('createIndexes drop-only mode drops orphaned indexes without creating new ones', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          { name: '_modelence_oldField_1', key: { oldField: 1 } },
+        ] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('drop-only');
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_oldField_1');
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+    expect(collectionMock.createSearchIndexes).not.toHaveBeenCalled();
+    expect(collectionMock.dropSearchIndex).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes create-only mode creates missing indexes without dropping any', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('create-only');
+
+    expect(collectionMock.createIndexes).toHaveBeenCalledWith([
+      { key: { name: 1 }, name: '_modelence_name_1' },
+    ]);
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.dropSearchIndex).not.toHaveBeenCalled();
+  });
+
   test('createIndexes handles non-existent collection (code 26)', async () => {
     const store = createStore({
       indexes: [{ key: { name: 1 } }],

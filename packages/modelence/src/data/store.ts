@@ -122,6 +122,7 @@ type FetchOptions<T> = {
 };
 
 export type IndexCreationMode = 'blocking' | 'background';
+export type IndexReconcileMode = 'full' | 'drop-only' | 'create-only';
 
 const COMPARABLE_INDEX_OPTION_FIELDS = [
   'background',
@@ -523,8 +524,10 @@ export class Store<
   }
 
   /** @internal */
-  async createIndexes() {
+  async createIndexes(mode: IndexReconcileMode = 'full') {
     const collection = this.requireCollection();
+    const shouldDropIndexes = mode !== 'create-only';
+    const shouldCreateIndexes = mode !== 'drop-only';
 
     // Get all existing indexes in the collection (returns [] if collection doesn't exist)
     const existingIndexes = await listIndexes(collection);
@@ -597,18 +600,22 @@ export class Store<
       removeIndexFromLookup(indexName);
     };
 
-    // Find all _modelence_ prefixed indexes that are not in the current schema
-    const currentIndexNames = new Set(
-      this.indexes.map((idx) => idx.name).filter((name): name is string => typeof name === 'string')
-    );
-    const orphanedIndexes = [...indexByName.values()].filter(
-      (existingIdx) =>
-        hasModelencePrefix(existingIdx.name) && !currentIndexNames.has(existingIdx.name)
-    );
+    if (shouldDropIndexes) {
+      // Find all _modelence_ prefixed indexes that are not in the current schema
+      const currentIndexNames = new Set(
+        this.indexes
+          .map((idx) => idx.name)
+          .filter((name): name is string => typeof name === 'string')
+      );
+      const orphanedIndexes = [...indexByName.values()].filter(
+        (existingIdx) =>
+          hasModelencePrefix(existingIdx.name) && !currentIndexNames.has(existingIdx.name)
+      );
 
-    // Drop orphaned indexes
-    for (const orphanedIndex of orphanedIndexes) {
-      await dropIndexIfNeeded(orphanedIndex.name);
+      // Drop orphaned indexes
+      for (const orphanedIndex of orphanedIndexes) {
+        await dropIndexIfNeeded(orphanedIndex.name);
+      }
     }
 
     // Reconcile code-defined indexes against the current DB metadata.
@@ -619,9 +626,14 @@ export class Store<
           continue;
         }
 
+        let requiresDropBeforeCreate = false;
         const existingByName = indexByName.get(index.name);
         if (existingByName && !isSameIndexDefinition(existingByName, index)) {
-          await dropIndexIfNeeded(existingByName.name);
+          if (shouldDropIndexes) {
+            await dropIndexIfNeeded(existingByName.name);
+          } else {
+            requiresDropBeforeCreate = true;
+          }
         }
 
         const keySignature = getIndexKeySignature(index.key);
@@ -629,7 +641,11 @@ export class Store<
           const existingNamesForKey = [...(indexNamesByKey.get(keySignature) || [])];
           for (const existingName of existingNamesForKey) {
             if (existingName !== index.name) {
-              await dropIndexIfNeeded(existingName);
+              if (shouldDropIndexes) {
+                await dropIndexIfNeeded(existingName);
+              } else {
+                requiresDropBeforeCreate = true;
+              }
             }
           }
         }
@@ -637,7 +653,7 @@ export class Store<
         const alignedIndex = indexByName.get(index.name);
         const hasAlignedIndex = !!alignedIndex && isSameIndexDefinition(alignedIndex, index);
 
-        if (!hasAlignedIndex) {
+        if (!hasAlignedIndex && shouldCreateIndexes && !requiresDropBeforeCreate) {
           await collection.createIndexes([index]);
           addIndexToLookup({
             name: index.name,
@@ -647,14 +663,16 @@ export class Store<
         }
       }
     }
-    if (this.searchIndexes.length > 0) {
+    if (shouldCreateIndexes && this.searchIndexes.length > 0) {
       for (const searchIndex of this.searchIndexes) {
         try {
           await collection.createSearchIndexes([searchIndex]);
         } catch (error) {
           if (error instanceof MongoError && error.code === 68 && searchIndex.name) {
-            await collection.dropSearchIndex(searchIndex.name);
-            await collection.createSearchIndexes([searchIndex]);
+            if (shouldDropIndexes) {
+              await collection.dropSearchIndex(searchIndex.name);
+              await collection.createSearchIndexes([searchIndex]);
+            }
           } else {
             throw error;
           }
