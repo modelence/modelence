@@ -27,6 +27,11 @@ A typical module includes:
 - **Configuration** - Module-specific settings
 - **Cron Jobs** - Scheduled tasks (optional)
 
+<Note>
+Data migrations are configured at the `startApp()` level (not inside individual
+modules). See the [Migrations documentation](/core-concepts/migrations).
+</Note>
+
 ## Stores
 
 Stores define your MongoDB collections with schemas, indexes, and custom methods. Including stores in your module ensures they're automatically provisioned when the server starts.
@@ -409,11 +414,11 @@ export default new Module('todo', {
 
 <CardGroup cols={2}>
   <Card
-    title="Configuration"
-    icon="gear"
-    href="/core-concepts/configuration"
+    title="Migrations"
+    icon="arrows-rotate"
+    href="/core-concepts/migrations"
   >
-    Learn how to configure your Modelence application
+    Learn how migration scripts run and how to handle cron race conditions
   </Card>
   <Card
     title="Stores"
