@@ -31,7 +31,7 @@ export { consumeRateLimit } from './rate-limit/rules';
 
 // Config
 export { getConfig } from './config/server';
-export type { ConfigType, ConfigSchema } from './config/types';
+export type { ConfigType, ConfigSchema, ValueType } from './config/types';
 
 export type { CloudBackendConnectResponse } from './app/backendApi';
 export { ServerChannel } from './websocket/serverChannel';

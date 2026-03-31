@@ -405,6 +405,370 @@ describe('data/store', () => {
     });
   });
 
+  describe('session support on write methods', () => {
+    test('insertOne forwards session option to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        insertOne: jest.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as Parameters<typeof store.insertOne>[1] extends { session?: infer S }
+        ? NonNullable<S>
+        : never;
+      await store.insertOne({ name: 'test' } as never, { session });
+
+      expect(collectionMock.insertOne).toHaveBeenCalledWith({ name: 'test' }, { session });
+    });
+
+    test('insertMany forwards session option to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        insertMany: jest.fn().mockResolvedValue({ insertedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as never;
+      await store.insertMany([{ name: 'a' }, { name: 'b' }] as never, { session });
+
+      expect(collectionMock.insertMany).toHaveBeenCalledWith([{ name: 'a' }, { name: 'b' }], {
+        session,
+      });
+    });
+
+    test('updateOne forwards session option to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as never;
+      await store.updateOne({ name: 'old' } as never, { $set: { name: 'new' } } as never, {
+        session,
+      });
+
+      expect(collectionMock.updateOne).toHaveBeenCalledWith(
+        { name: 'old' },
+        { $set: { name: 'new' } },
+        { session }
+      );
+    });
+
+    test('upsertOne merges session with upsert:true', async () => {
+      const store = createStore();
+      const collectionMock = {
+        updateOne: jest.fn().mockResolvedValue({ upsertedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as never;
+      await store.upsertOne({ name: 'x' } as never, { $set: { name: 'x' } } as never, { session });
+
+      expect(collectionMock.updateOne).toHaveBeenCalledWith(
+        { name: 'x' },
+        { $set: { name: 'x' } },
+        { upsert: true, session }
+      );
+    });
+
+    test('deleteOne forwards session option to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as never;
+      await store.deleteOne({ name: 'test' } as never, { session });
+
+      expect(collectionMock.deleteOne).toHaveBeenCalledWith({ name: 'test' }, { session });
+    });
+
+    test('deleteMany forwards session option to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        deleteMany: jest.fn().mockResolvedValue({ deletedCount: 2 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const session = {} as never;
+      await store.deleteMany({ name: 'test' } as never, { session });
+
+      expect(collectionMock.deleteMany).toHaveBeenCalledWith({ name: 'test' }, { session });
+    });
+  });
+
+  describe('findOneAndUpdate', () => {
+    test('calls collection.findOneAndUpdate with selector and update', async () => {
+      const store = createStore();
+      const doc = { _id: new ObjectId(), name: 'updated' };
+      const collectionMock = {
+        findOneAndUpdate: jest.fn().mockResolvedValue(doc as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.findOneAndUpdate(
+        { name: 'old' } as never,
+        { $set: { name: 'updated' } } as never
+      );
+
+      expect(collectionMock.findOneAndUpdate).toHaveBeenCalledWith(
+        { name: 'old' },
+        { $set: { name: 'updated' } },
+        {}
+      );
+      expect(result).toMatchObject({ name: 'updated' });
+    });
+
+    test('returns null when document not found', async () => {
+      const store = createStore();
+      const collectionMock = {
+        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.findOneAndUpdate(
+        { name: 'missing' } as never,
+        { $set: {} } as never
+      );
+
+      expect(result).toBeNull();
+    });
+
+    test('converts string selector to ObjectId', async () => {
+      const store = createStore();
+      const id = '507f1f77bcf86cd799439011';
+      const collectionMock = {
+        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOneAndUpdate(id, { $set: { name: 'x' } } as never);
+
+      const calledFilter = collectionMock.findOneAndUpdate.mock.calls[0]?.[0] as { _id?: ObjectId };
+      expect(calledFilter?._id).toBeInstanceOf(ObjectId);
+      expect((calledFilter?._id as ObjectId).toHexString()).toBe(id);
+    });
+
+    test('forwards options to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOneAndUpdate({ name: 'test' } as never, { $set: { name: 'x' } } as never, {
+        returnDocument: 'after',
+      });
+
+      expect(collectionMock.findOneAndUpdate).toHaveBeenCalledWith(
+        { name: 'test' },
+        { $set: { name: 'x' } },
+        { returnDocument: 'after' }
+      );
+    });
+  });
+
+  describe('findOneAndDelete', () => {
+    test('calls collection.findOneAndDelete with selector', async () => {
+      const store = createStore();
+      const doc = { _id: new ObjectId(), name: 'deleted' };
+      const collectionMock = {
+        findOneAndDelete: jest.fn().mockResolvedValue(doc as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.findOneAndDelete({ name: 'deleted' } as never);
+
+      expect(collectionMock.findOneAndDelete).toHaveBeenCalledWith({ name: 'deleted' }, {});
+      expect(result).toMatchObject({ name: 'deleted' });
+    });
+
+    test('returns null when document not found', async () => {
+      const store = createStore();
+      const collectionMock = {
+        findOneAndDelete: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.findOneAndDelete({ name: 'missing' } as never);
+
+      expect(result).toBeNull();
+    });
+
+    test('converts string selector to ObjectId', async () => {
+      const store = createStore();
+      const id = '507f1f77bcf86cd799439011';
+      const collectionMock = {
+        findOneAndDelete: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOneAndDelete(id);
+
+      const calledFilter = collectionMock.findOneAndDelete.mock.calls[0]?.[0] as { _id?: ObjectId };
+      expect(calledFilter?._id).toBeInstanceOf(ObjectId);
+    });
+  });
+
+  describe('findOneAndReplace', () => {
+    test('calls collection.findOneAndReplace with selector and replacement', async () => {
+      const store = createStore();
+      const doc = { _id: new ObjectId(), name: 'replacement' };
+      const collectionMock = {
+        findOneAndReplace: jest.fn().mockResolvedValue(doc as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const replacement = { name: 'replacement' } as never;
+      const result = await store.findOneAndReplace({ name: 'old' } as never, replacement);
+
+      expect(collectionMock.findOneAndReplace).toHaveBeenCalledWith(
+        { name: 'old' },
+        replacement,
+        {}
+      );
+      expect(result).toMatchObject({ name: 'replacement' });
+    });
+
+    test('returns null when document not found', async () => {
+      const store = createStore();
+      const collectionMock = {
+        findOneAndReplace: jest.fn().mockResolvedValue(null as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.findOneAndReplace(
+        { name: 'missing' } as never,
+        { name: 'new' } as never
+      );
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('replaceOne', () => {
+    test('calls collection.replaceOne with selector and replacement', async () => {
+      const store = createStore();
+      const collectionMock = {
+        replaceOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const replacement = { name: 'new' } as never;
+      await store.replaceOne({ name: 'old' } as never, replacement);
+
+      expect(collectionMock.replaceOne).toHaveBeenCalledWith(
+        { name: 'old' },
+        replacement,
+        undefined
+      );
+    });
+
+    test('converts string selector to ObjectId', async () => {
+      const store = createStore();
+      const id = '507f1f77bcf86cd799439011';
+      const collectionMock = {
+        replaceOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.replaceOne(id, { name: 'new' } as never);
+
+      const calledFilter = collectionMock.replaceOne.mock.calls[0]?.[0] as { _id?: ObjectId };
+      expect(calledFilter?._id).toBeInstanceOf(ObjectId);
+      expect((calledFilter?._id as ObjectId).toHexString()).toBe(id);
+    });
+
+    test('forwards options to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        replaceOne: jest.fn().mockResolvedValue({ upsertedCount: 1 } as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.replaceOne({ name: 'x' } as never, { name: 'x' } as never, { upsert: true });
+
+      expect(collectionMock.replaceOne).toHaveBeenCalledWith(
+        { name: 'x' },
+        { name: 'x' },
+        { upsert: true }
+      );
+    });
+  });
+
+  describe('distinct', () => {
+    test('returns distinct values for a field', async () => {
+      const store = createStore();
+      const collectionMock = {
+        distinct: jest.fn().mockResolvedValue(['alice', 'bob'] as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = await store.distinct('name');
+
+      expect(collectionMock.distinct).toHaveBeenCalledWith('name', {});
+      expect(result).toEqual(['alice', 'bob']);
+    });
+
+    test('passes filter to MongoDB', async () => {
+      const store = createStore();
+      const collectionMock = {
+        distinct: jest.fn().mockResolvedValue(['alice'] as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.distinct('name', { name: 'alice' } as never);
+
+      expect(collectionMock.distinct).toHaveBeenCalledWith('name', { name: 'alice' });
+    });
+
+    test('passes options to MongoDB when provided', async () => {
+      const store = createStore();
+      const collectionMock = {
+        distinct: jest.fn().mockResolvedValue([] as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const opts = { maxTimeMS: 1000 };
+      await store.distinct('name', {} as never, opts);
+
+      expect(collectionMock.distinct).toHaveBeenCalledWith('name', {}, opts);
+    });
+  });
+
+  describe('watch', () => {
+    test('calls collection.watch and returns the change stream', () => {
+      const store = createStore();
+      const changeStream = { on: jest.fn() };
+      const collectionMock = {
+        watch: jest.fn().mockReturnValue(changeStream as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const result = store.watch();
+
+      expect(collectionMock.watch).toHaveBeenCalledWith(undefined, undefined);
+      expect(result).toBe(changeStream);
+    });
+
+    test('forwards pipeline and options to MongoDB', () => {
+      const store = createStore();
+      const changeStream = {};
+      const collectionMock = {
+        watch: jest.fn().mockReturnValue(changeStream as never),
+      };
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const pipeline = [{ $match: { operationType: 'insert' } }];
+      const opts = { fullDocument: 'updateLookup' as const };
+      store.watch(pipeline, opts);
+
+      expect(collectionMock.watch).toHaveBeenCalledWith(pipeline, opts);
+    });
+  });
+
   describe('StrictRootFilterOperators', () => {
     test('$and operator works correctly', async () => {
       const store = createStore();

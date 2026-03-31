@@ -63,6 +63,16 @@ describe('client', () => {
     expect(typeof getLocalStorageSession).toBe('function');
   });
 
+  test('should export createClientModule', async () => {
+    const { createClientModule } = await import('./client');
+    expect(typeof createClientModule).toBe('function');
+  });
+
+  test('should export systemConfig', async () => {
+    const { systemConfig } = await import('./client');
+    expect(systemConfig).toBeDefined();
+  });
+
   test('should have all expected exports', async () => {
     const exports = await import('./client');
     const exportedKeys = Object.keys(exports);
@@ -84,6 +94,8 @@ describe('client', () => {
       'startWebsockets',
       'ClientChannel',
       'getLocalStorageSession',
+      'createClientModule',
+      'systemConfig',
     ];
 
     expectedExports.forEach((expectedExport) => {

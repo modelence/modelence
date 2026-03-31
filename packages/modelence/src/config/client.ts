@@ -8,7 +8,7 @@ let config: Record<ConfigKey, AppConfig> = {};
  * @param key
  * @returns
  */
-export function getConfig(key: ConfigKey) {
+export function getConfig(key: ConfigKey): string | number | boolean | undefined {
   return config[key]?.value;
 }
 

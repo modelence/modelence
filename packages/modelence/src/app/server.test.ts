@@ -87,6 +87,7 @@ jest.unstable_mockModule('@/methods', () => ({
 
 jest.unstable_mockModule('@/methods/serialize', () => ({
   getResponseTypeMap: mockGetResponseTypeMap,
+  sanitizeResult: (result: unknown) => result,
 }));
 
 jest.unstable_mockModule('@/routes/handler', () => ({
@@ -208,6 +209,7 @@ function createResponse(): Response {
     send: jest.fn(),
     status: jest.fn(),
     sendFile: jest.fn(),
+    cookie: jest.fn(),
   } as unknown as Response;
   (res.status as jest.Mock).mockReturnValue(res);
   return res;
@@ -991,7 +993,6 @@ describe('app/server set-link-cookie endpoint', () => {
       headers: { host: 'localhost' },
     });
     const res = createResponse();
-    (res as any).cookie = jest.fn();
 
     mockGetMongodbUri.mockReturnValue('mongodb://localhost');
     mockAuthenticate.mockResolvedValue({
@@ -1004,7 +1005,7 @@ describe('app/server set-link-cookie endpoint', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({ error: 'Not authenticated' });
-    expect((res as any).cookie).not.toHaveBeenCalled();
+    expect(res.cookie).not.toHaveBeenCalled();
   });
 
   test('sets httpOnly oauthLinkToken cookie when authenticated', async () => {
@@ -1026,7 +1027,6 @@ describe('app/server set-link-cookie endpoint', () => {
       headers: { host: 'localhost' },
     });
     const res = createResponse();
-    (res as any).cookie = jest.fn();
 
     mockGetMongodbUri.mockReturnValue('mongodb://localhost');
     mockAuthenticate.mockResolvedValue({
@@ -1037,7 +1037,7 @@ describe('app/server set-link-cookie endpoint', () => {
 
     await handler(req, res);
 
-    expect((res as any).cookie).toHaveBeenCalledWith('oauthLinkToken', 'session-token', {
+    expect(res.cookie).toHaveBeenCalledWith('oauthLinkToken', 'session-token', {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',

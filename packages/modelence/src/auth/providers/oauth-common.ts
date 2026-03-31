@@ -1,7 +1,7 @@
 import { type Request, type Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
-import { createSession } from '@/auth/session';
+import { createSession, setAuthTokenCookie } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
@@ -22,12 +22,7 @@ export interface OAuthUserData {
 export async function authenticateUser(res: Response, userId: ObjectId) {
   const { authToken } = await createSession(userId);
 
-  res.cookie('authToken', authToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/',
-  });
+  setAuthTokenCookie(res, authToken);
   res.status(302);
   res.redirect('/');
 }
