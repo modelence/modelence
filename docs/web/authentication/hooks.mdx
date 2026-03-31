@@ -143,12 +143,16 @@ This is useful when OAuth flows are triggered in a browser context.
 startApp({
   auth: {
     errorComponent: ({ error, statusCode }) => {
-      // ⚠️ Ensure proper escaping to avoid XSS vulnerabilities
+      // Safely escape the error string to prevent XSS vulnerabilities
+      const escapeHtml = (str: string) => str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+
       return `
         <html>
           <body>
             <h1>Error ${statusCode}</h1>
-            <p>${error}</p>
+            <p>${escapeHtml(error)}</p>
           </body>
         </html>
       `;
@@ -181,7 +185,10 @@ startApp({
       return email.split('@')[0];
     },
     errorComponent: ({ error, statusCode }) => {
-      return `<html><body><h1>Error ${statusCode}</h1><p>${error}</p></body></html>`;
+      const escapeHtml = (str: string) => str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+      return `<html><body><h1>Error ${statusCode}</h1><p>${escapeHtml(error)}</p></body></html>`;
     },
     onAfterSignup: ({ user }) => {
       console.log('Welcome!', user.handle);
