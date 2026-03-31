@@ -1,5 +1,6 @@
 import { usersCollection } from './db';
 import { Args, Context, UpdateProfileProps } from '../methods/types';
+import { serializeUserForClient } from './utils';
 import { validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 
@@ -80,13 +81,6 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
   }
 
   return {
-    user: {
-      id: profile._id,
-      handle: profile.handle,
-      roles: profile.roles || [],
-      firstName: profile.firstName ?? undefined,
-      lastName: profile.lastName ?? undefined,
-      avatarUrl: profile.avatarUrl ?? undefined,
-    },
+    user: serializeUserForClient(profile),
   };
 }
