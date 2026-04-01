@@ -3,8 +3,9 @@ title: 'Migrations'
 icon: 'arrows-rotate'
 ---
 
-Migrations let you evolve existing MongoDB data safely when your schema or
-business logic changes.
+Migrations let you run one-time tasks safely on application startup — such as
+evolving database schemas, backfilling data, or initializing external services
+like Stripe plans.
 
 ## Defining Migrations
 
@@ -12,29 +13,44 @@ Pass a `migrations` array to `startApp()`. Each migration has:
 
 - `version` - Unique numeric version
 - `description` - Human-readable summary
-- `handler` - Async function that performs the data change
+- `handler` - Async function that performs the task
+
+Define each migration in its own file under a `migrations/` directory, then
+re-export them from an index file:
+
+```typescript title="src/server/migrations/v1-backfill-todo-status.ts"
+import { dbTodos } from '../todo/db';
+
+export default {
+  version: 1,
+  description: 'Backfill status field on existing todos',
+  async handler() {
+    await dbTodos.updateMany(
+      { status: { $exists: false } },
+      { $set: { status: 'open' } }
+    );
+
+    return 'Backfilled todos without status';
+  },
+};
+```
+
+```typescript title="src/server/migrations/index.ts"
+import v1BackfillTodoStatus from './v1-backfill-todo-status';
+
+export const migrations = [
+  v1BackfillTodoStatus,
+];
+```
 
 ```typescript title="src/server/app.ts"
 import { startApp } from 'modelence/server';
 import todoModule from './todo';
-import { dbTodos } from './todo/db';
+import { migrations } from './migrations';
 
 startApp({
   modules: [todoModule],
-  migrations: [
-    {
-      version: 1,
-      description: 'Backfill status field on existing todos',
-      async handler() {
-        await dbTodos.updateMany(
-          { status: { $exists: false } },
-          { $set: { status: 'open' } }
-        );
-
-        return 'Backfilled todos without status';
-      },
-    },
-  ],
+  migrations,
 });
 ```
 
@@ -60,8 +76,8 @@ that array intentionally ordered and use unique versions.
 
 <Note>
 Store indexes run before migrations with this startup behavior:
-- Stores using `indexCreationMode: 'blocking'` are awaited before migrations begin.
-- Stores using `indexCreationMode: 'background'` may still be creating indexes while migrations run.
+- Stores using `indexCreationMode: 'blocking'` are awaited before migrations begin. Use this for small collections with critical index dependencies (e.g. unique indexes that a migration relies on).
+- Stores using `indexCreationMode: 'background'` may still be creating indexes while migrations run. Prefer this for large collections to avoid blocking app startup.
 
 See [Indexes: Index Creation Mode](/indexes#index-creation-mode) for configuration details.
 </Note>
