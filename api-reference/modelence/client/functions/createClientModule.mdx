@@ -7,7 +7,7 @@ title: createClientModule
 
 > **createClientModule**\<`TModule`\>(`moduleName`): `object`
 
-Defined in: [packages/modelence/src/client/module.ts:88](https://github.com/modelence/modelence/blob/68301d7afc335332b01306a912b7cf9c390ea0b5/packages/modelence/src/client/module.ts#L88)
+Defined in: [packages/modelence/src/client/module.ts:88](https://github.com/modelence/modelence/blob/1b85b1ec127ced8db69dbeddea16e7b7708f78b2/packages/modelence/src/client/module.ts#L88)
 
 Creates a typed client accessor for a module's public configs, queries, and mutations.
 
@@ -57,7 +57,7 @@ charge({ amount: 100 }); // args typed from handler signature
 
 | Name | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| `getConfig()` | (`key`) => `undefined` \| `PublicKeyOf`\<`TModule`\[`"configSchema"`\]\>\[`K`\] | - | [packages/modelence/src/client/module.ts:90](https://github.com/modelence/modelence/blob/68301d7afc335332b01306a912b7cf9c390ea0b5/packages/modelence/src/client/module.ts#L90) |
-| `infiniteQuery()` | (`name`, `getArgs`) => `object` | Returns options for `useInfiniteQuery`. The `getArgs` callback receives the current `pageParam` and returns the args to pass to the query handler. Spread the result into `useInfiniteQuery` alongside `getNextPageParam`. Annotate the `pageParam` type in the callback so TypeScript can infer the page param type — no manual generic needed on `useInfiniteQuery`. **Example** `useInfiniteQuery({ ...appFilesClient.infiniteQuery('listFiles', (cursor: string | undefined) => ({ environmentId, ...(cursor ? { cursor } : {}), })), getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined, }); // data is typed as InfiniteData<{ files: AppFile[]; nextCursor: string | null }>` | [packages/modelence/src/client/module.ts:146](https://github.com/modelence/modelence/blob/68301d7afc335332b01306a912b7cf9c390ea0b5/packages/modelence/src/client/module.ts#L146) |
-| `mutation()` | (`name`) => `object` | - | [packages/modelence/src/client/module.ts:114](https://github.com/modelence/modelence/blob/68301d7afc335332b01306a912b7cf9c390ea0b5/packages/modelence/src/client/module.ts#L114) |
-| `query()` | (`name`, ...`rest`) => `object` | - | [packages/modelence/src/client/module.ts:97](https://github.com/modelence/modelence/blob/68301d7afc335332b01306a912b7cf9c390ea0b5/packages/modelence/src/client/module.ts#L97) |
+| `getConfig()` | (`key`) => `undefined` \| `PublicKeyOf`\<`TModule`\[`"configSchema"`\]\>\[`K`\] | - | [packages/modelence/src/client/module.ts:90](https://github.com/modelence/modelence/blob/1b85b1ec127ced8db69dbeddea16e7b7708f78b2/packages/modelence/src/client/module.ts#L90) |
+| `infiniteQuery()` | (`name`, `getArgs`) => `object` | Returns options for `useInfiniteQuery`. The `getArgs` callback receives the current `pageParam` and returns the args to pass to the query handler. Spread the result into `useInfiniteQuery` alongside `getNextPageParam`. Annotate the `pageParam` type in the callback so TypeScript can infer the page param type — no manual generic needed on `useInfiniteQuery`. **Example** `useInfiniteQuery({ ...appFilesClient.infiniteQuery('listFiles', (cursor: string | undefined) => ({ environmentId, ...(cursor ? { cursor } : {}), })), getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined, }); // data is typed as InfiniteData<{ files: AppFile[]; nextCursor: string | null }>` | [packages/modelence/src/client/module.ts:146](https://github.com/modelence/modelence/blob/1b85b1ec127ced8db69dbeddea16e7b7708f78b2/packages/modelence/src/client/module.ts#L146) |
+| `mutation()` | (`name`) => `object` | - | [packages/modelence/src/client/module.ts:114](https://github.com/modelence/modelence/blob/1b85b1ec127ced8db69dbeddea16e7b7708f78b2/packages/modelence/src/client/module.ts#L114) |
+| `query()` | (`name`, ...`rest`) => `object` | - | [packages/modelence/src/client/module.ts:97](https://github.com/modelence/modelence/blob/1b85b1ec127ced8db69dbeddea16e7b7708f78b2/packages/modelence/src/client/module.ts#L97) |
