@@ -111,143 +111,19 @@ export default new Module('todo', {
 
 ## Queries
 
-Queries are functions that retrieve data without modifying it. They're similar to GET endpoints in REST or queries in GraphQL.
+Queries are read operations that fetch data without modifying state.
 
-```typescript
-import { Module } from 'modelence/server';
-import { dbTodos } from './db';
-
-export default new Module('todo', {
-  queries: {
-    // Get a single todo by ID
-    async getOne({ id }) {
-      return await dbTodos.findById(id);
-    },
-
-    // Get all todos for the current user
-    async getAll({}, { user }) {
-      return await dbTodos.fetch({ userId: user.id });
-    },
-
-    // Get todos with filtering
-    async getCompleted({}, { user }) {
-      return await dbTodos.fetch({
-        userId: user.id,
-        isCompleted: true
-      });
-    }
-  }
-});
-```
-
-### Query Parameters
-
-Queries receive two arguments:
-
-1. **Input parameters** - Data passed from the client
-2. **Context** - Server-side context including:
-   - `user` - Current authenticated user (if logged in)
-   - `req` - Express request object
-   - `res` - Express response object
-
-### Calling Queries from the Client
-
-```typescript
-import { callMethod } from 'modelence/client';
-
-// Call a query
-const todos = await callMethod('todo.getAll');
-
-// Call with parameters
-const todo = await callMethod('todo.getOne', { id: '123' });
-```
-
-With React Query:
-
-```typescript
-import { useQuery } from '@tanstack/react-query';
-import { modelenceQuery } from '@modelence/react-query';
-
-function TodoList() {
-  const { data: todos } = useQuery(
-    modelenceQuery('todo.getAll')
-  );
-
-  return <div>{/* render todos */}</div>;
-}
-```
+For full query patterns, including client usage with `callMethod`,
+`modelenceQuery`, and typed client modules, see
+[Queries](/core-concepts/queries).
 
 ## Mutations
 
-Mutations are functions that modify data. They're similar to POST/PUT/DELETE endpoints in REST or mutations in GraphQL.
+Mutations are write operations that create, update, or delete data.
 
-```typescript
-export default new Module('todo', {
-  mutations: {
-    // Create a new todo
-    async create({ title, dueDate }, { user }) {
-      const { insertedId } = await dbTodos.insertOne({
-        title,
-        dueDate,
-        userId: user.id,
-        isCompleted: false,
-        createdAt: new Date()
-      });
-      return insertedId;
-    },
-
-    // Update a todo
-    async update({ id, title, isCompleted }) {
-      return await dbTodos.updateOne(
-        { id },
-        { $set: { title, isCompleted } }
-      );
-    },
-
-    // Delete a todo
-    async delete({ id }) {
-      return await dbTodos.deleteOne({ id });
-    }
-  }
-});
-```
-
-### Calling Mutations from the Client
-
-```typescript
-import { callMethod } from 'modelence/client';
-
-// Call a mutation
-const todoId = await callMethod('todo.create', {
-  title: 'Buy groceries',
-  dueDate: new Date('2024-12-31')
-});
-```
-
-With React Query:
-
-```typescript
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { modelenceMutation } from '@modelence/react-query';
-
-function CreateTodo() {
-  const queryClient = useQueryClient();
-
-  const { mutate: createTodo } = useMutation({
-    ...modelenceMutation('todo.create'),
-    onSuccess: () => {
-      // Invalidate and refetch todos after creation
-      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
-    }
-  });
-
-  const handleSubmit = () => {
-    createTodo({ title: 'New todo', dueDate: new Date() });
-  };
-
-  return <button onClick={handleSubmit}>Create Todo</button>;
-}
-```
+For full mutation patterns, including client usage with `callMethod`,
+`modelenceMutation`, and typed client modules, see
+[Mutations](/core-concepts/mutations).
 
 ## Rate Limiting
 
@@ -414,11 +290,32 @@ export default new Module('todo', {
 
 <CardGroup cols={2}>
   <Card
+    title="Queries"
+    icon="magnifying-glass"
+    href="/core-concepts/queries"
+  >
+    Learn how to define and call query methods
+  </Card>
+  <Card
+    title="Mutations"
+    icon="pen-to-square"
+    href="/core-concepts/mutations"
+  >
+    Learn how to define and call mutation methods
+  </Card>
+  <Card
     title="Migrations"
     icon="arrows-rotate"
     href="/core-concepts/migrations"
   >
     Learn how migration scripts run and how to handle cron race conditions
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration"
+  >
+    Learn about configuration options
   </Card>
   <Card
     title="Stores"

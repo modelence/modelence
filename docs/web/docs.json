@@ -27,6 +27,8 @@
               "core-concepts/project-structure",
               "core-concepts/modules",
               "core-concepts/migrations",
+              "core-concepts/queries",
+              "core-concepts/mutations",
               "core-concepts/environment-and-setup"
             ]
           },
@@ -52,6 +54,7 @@
               "files",
               "stores",
               "indexes",
+              "live-queries",
               "configuration",
               "websockets",
               "telemetry",
