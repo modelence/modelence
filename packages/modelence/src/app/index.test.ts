@@ -34,6 +34,7 @@ const mockConnectCloudBackend = jest.fn<
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
 const mockLoadRemoteConfigs = jest.fn();
+const mockRunMigrations = jest.fn();
 const mockStartMigrations = jest.fn();
 const mockStartCronJobs = jest.fn<() => Promise<void>>();
 const mockDefineCronJob = jest.fn();
@@ -53,7 +54,7 @@ const mockAcquireLock = jest.fn<
 >();
 const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
 const mockSocketioServer = { listen: jest.fn() };
-const expectedIndexesLockOptions = {
+const expectedMigrationsLockOptions = {
   lockDuration: 30_000,
   heartbeat: true,
 };
@@ -128,6 +129,7 @@ jest.unstable_mockModule('../migration', () => ({
     cronJobs: {},
     configSchema: {},
   },
+  runMigrations: mockRunMigrations,
   startMigrations: mockStartMigrations,
 }));
 
@@ -267,6 +269,7 @@ describe('app/index', () => {
     jest.clearAllMocks();
     mockAcquireLock.mockResolvedValue(true);
     mockReleaseLock.mockResolvedValue(true);
+    mockRunMigrations.mockResolvedValue(undefined as never);
     mockGetMongodbUri.mockReturnValue('');
     mockConnectCloudBackend.mockResolvedValue({
       configs: [],
@@ -363,9 +366,11 @@ describe('app/index', () => {
     expect(mockStore.init).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.any(Function) })
     );
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(mockStore.createIndexes).toHaveBeenCalled();
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
+    expect(mockStore.createIndexes).toHaveBeenCalledWith('full');
+    expect(mockRunMigrations).toHaveBeenCalledWith([], { lockMode: 'skip' });
+    await Promise.resolve();
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('skips index creation when index lock is not acquired', async () => {
@@ -383,8 +388,9 @@ describe('app/index', () => {
       ],
     });
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
     expect(mockStore.createIndexes).not.toHaveBeenCalled();
+    expect(mockRunMigrations).not.toHaveBeenCalled();
     expect(mockReleaseLock).not.toHaveBeenCalled();
   });
 
@@ -591,24 +597,45 @@ describe('app/index', () => {
 
     await startApp({ migrations });
 
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
   });
 
-  test('starts migrations after waiting for blocking index creation and before cron jobs', async () => {
+  test('starts migrations after blocking + drop-only index phases and before cron jobs', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
-    let resolveLockIndexes: () => void = () => undefined;
-    const lockIndexesPromise = new Promise<void>((resolve) => {
-      resolveLockIndexes = resolve;
+    let resolveBlockingIndexes: () => void = () => undefined;
+    const blockingIndexesPromise = new Promise<void>((resolve) => {
+      resolveBlockingIndexes = resolve;
+    });
+    let resolveDropOnlyIndexes: () => void = () => undefined;
+    const dropOnlyIndexesPromise = new Promise<void>((resolve) => {
+      resolveDropOnlyIndexes = resolve;
+    });
+    let resolveBackgroundCreateIndexes: () => void = () => undefined;
+    const backgroundCreateIndexesPromise = new Promise<void>((resolve) => {
+      resolveBackgroundCreateIndexes = resolve;
     });
     const lockStore: MinimalStore = {
       init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
+      createIndexes: jest.fn(async () => blockingIndexesPromise) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
-    const otherStore = createStoreMock('testCollection');
+    const otherStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn(async (mode?: 'full' | 'drop-only' | 'create-only') => {
+        if (mode === 'drop-only') {
+          await dropOnlyIndexesPromise;
+        }
+
+        if (mode === 'create-only') {
+          await backgroundCreateIndexesPromise;
+        }
+      }) as MinimalStore['createIndexes'],
+      getName: jest.fn(() => 'testCollection') as MinimalStore['getName'],
+      getIndexCreationMode: jest.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
+    };
 
     const migrations: MigrationScript[] = [
       { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
@@ -630,24 +657,37 @@ describe('app/index', () => {
     await Promise.resolve();
 
     expect(mockAcquireLock).toHaveBeenCalledTimes(1);
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
+    expect(lockStore.createIndexes).toHaveBeenCalledWith('full');
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
-    expect(mockStartMigrations).not.toHaveBeenCalled();
+    expect(mockRunMigrations).not.toHaveBeenCalled();
     expect(mockStartCronJobs).not.toHaveBeenCalled();
 
-    resolveLockIndexes();
-    await startPromise;
+    resolveBlockingIndexes();
+    await Promise.resolve();
     await Promise.resolve();
 
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
-    expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
-      (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
+    resolveDropOnlyIndexes();
+    await startPromise;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(otherStore.createIndexes).toHaveBeenCalledWith('drop-only');
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
+    expect(mockRunMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
+      (otherStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
     );
-    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(otherStore.createIndexes).toHaveBeenCalledWith('create-only');
+    expect(mockReleaseLock).not.toHaveBeenCalled();
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+
+    resolveBackgroundCreateIndexes();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('warns and continues startup when blocking index creation fails', async () => {
@@ -684,12 +724,12 @@ describe('app/index', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(lockStore.createIndexes).toHaveBeenCalledWith('full');
     expect(warnSpy).toHaveBeenCalledWith(
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       indexCreationError
     );
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 
     warnSpy.mockRestore();
@@ -734,7 +774,7 @@ describe('app/index', () => {
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       criticalError
     );
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 
     warnSpy.mockRestore();
@@ -764,9 +804,9 @@ describe('app/index', () => {
       })
     ).rejects.toThrow('unexpected index path error');
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
     expect(mockReleaseLock).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('starts server with combined modules and channels', async () => {

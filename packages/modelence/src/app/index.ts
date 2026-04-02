@@ -14,10 +14,15 @@ import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
-import { Store } from '../data/store';
+import { type IndexReconcileMode, Store } from '../data/store';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
-import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
+import {
+  MigrationScript,
+  default as migrationModule,
+  runMigrations,
+  startMigrations,
+} from '../migration';
 import rateLimitModule from '../rate-limit';
 import { initRateLimits } from '../rate-limit/rules';
 import systemModule from '../system';
@@ -145,10 +150,10 @@ export async function startApp({
   if (mongodbUri) {
     await connect();
     initStores(stores);
-    await createIndexesWithLock(stores);
+    await createIndexesAndMigrationsWithLock(stores, migrations);
+  } else {
+    startMigrations(migrations);
   }
-
-  startMigrations(migrations);
 
   if (hasRemoteBackend) {
     await initMetrics();
@@ -198,10 +203,13 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
   console.warn(`Failed to create indexes for store '${storeName}'. Continuing startup.`, error);
 }
 
-const INDEXES_LOCK_RESOURCE = 'indexes';
+const MIGRATIONS_LOCK_RESOURCE = 'migrations';
 
-async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
-  const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
+async function createIndexesAndMigrationsWithLock(
+  stores: Store<ModelSchema, never>[],
+  migrations: MigrationScript[]
+) {
+  const hasLock = await acquireLock(MIGRATIONS_LOCK_RESOURCE, {
     lockDuration: time.seconds(30),
     heartbeat: true,
   });
@@ -209,42 +217,51 @@ async function createIndexesWithLock(stores: Store<ModelSchema, never>[]) {
     return;
   }
 
-  let releaseHandledByBackgroundTask = false;
+  const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
+  const backgroundStores = stores.filter((store) => store.getIndexCreationMode() === 'background');
 
   try {
-    const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
-    const backgroundStores = stores.filter(
-      (store) => store.getIndexCreationMode() === 'background'
-    );
-
     for (const store of blockingStores) {
-      await createStoreIndexes(store);
+      await createStoreIndexes(store, 'full');
     }
-
-    if (backgroundStores.length > 0) {
-      releaseHandledByBackgroundTask = true;
-      void Promise.resolve().then(async () => {
-        try {
-          for (const store of backgroundStores) {
-            await createStoreIndexes(store);
-          }
-        } finally {
-          await releaseLock(INDEXES_LOCK_RESOURCE);
-        }
-      });
+    for (const store of backgroundStores) {
+      await createStoreIndexes(store, 'drop-only');
     }
-  } finally {
-    if (!releaseHandledByBackgroundTask) {
-      await releaseLock(INDEXES_LOCK_RESOURCE);
-    }
+  } catch (error) {
+    await releaseLock(MIGRATIONS_LOCK_RESOURCE);
+    throw error;
   }
+
+  const backgroundIndexCreationPromise = (async () => {
+    for (const store of backgroundStores) {
+      await createStoreIndexes(store, 'create-only');
+    }
+  })();
+  const migrationPromise = runMigrations(migrations, { lockMode: 'skip' });
+
+  void Promise.allSettled([backgroundIndexCreationPromise, migrationPromise])
+    .then(([backgroundIndexesResult, migrationResult]) => {
+      if (backgroundIndexesResult.status === 'rejected') {
+        console.error('Error creating background indexes:', backgroundIndexesResult.reason);
+      }
+
+      if (migrationResult.status === 'rejected') {
+        console.error('Error running migrations:', migrationResult.reason);
+      }
+    })
+    .finally(async () => {
+      await releaseLock(MIGRATIONS_LOCK_RESOURCE);
+    });
 }
 
-async function createStoreIndexes(store: Store<ModelSchema, never>) {
+async function createStoreIndexes(
+  store: Store<ModelSchema, never>,
+  reconcileMode: IndexReconcileMode = 'full'
+) {
   const storeName = store.getName();
 
   try {
-    await store.createIndexes();
+    await store.createIndexes(reconcileMode);
   } catch (error) {
     warnIndexCreationFailure(storeName, error);
   }
