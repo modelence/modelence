@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import type { Server as HttpServer } from 'http';
 
 export interface ModelenceConfig {
   serverDir: string;
@@ -12,8 +13,12 @@ export type ExpressMiddleware = (
   next: NextFunction
 ) => void | Promise<void>;
 
+export interface AppServerInitOptions {
+  httpServer: HttpServer;
+}
+
 export interface AppServer {
-  init: () => Promise<void>;
+  init: (options: AppServerInitOptions) => Promise<void>;
   handler: (req: Request, res: Response) => void;
   middlewares?: () => ExpressMiddleware[];
 }
