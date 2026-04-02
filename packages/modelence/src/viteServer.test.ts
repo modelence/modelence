@@ -62,7 +62,7 @@ const createLoadConfigResult = (config: UserConfig = {}) => ({
 });
 
 type TestViteServer = {
-  init(): Promise<void>;
+  init(options: { httpServer: import('http').Server }): Promise<void>;
   middlewares(): ExpressMiddleware[];
   handler(req: Request, res: Response): void;
 };
@@ -102,7 +102,7 @@ describe('ViteServer', () => {
         private viteServer?: ViteDevServer;
         private config?: UserConfig;
 
-        async init() {
+        async init(_options: { httpServer: import('http').Server }) {
           this.config = {} as UserConfig;
           if (this.isDev()) {
             this.viteServer = (await mockCreateServer(this.config)) as ViteDevServer;
@@ -151,7 +151,7 @@ describe('ViteServer', () => {
       mockCreateServer.mockResolvedValue(mockViteServer);
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
 
       expect(mockCreateServer).toHaveBeenCalled();
     });
@@ -160,7 +160,7 @@ describe('ViteServer', () => {
       process.env.NODE_ENV = 'production';
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
 
       expect(mockCreateServer).not.toHaveBeenCalled();
     });
@@ -170,7 +170,7 @@ describe('ViteServer', () => {
       mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult({ publicDir: 'public' }));
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
 
       // Verify init completed without errors
       expect(viteServer).toBeDefined();
@@ -189,7 +189,7 @@ describe('ViteServer', () => {
       } as unknown as ViteDevServer);
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       const middlewares = viteServer.middlewares();
 
       expect(middlewares).toEqual(mockMiddlewares);
@@ -210,7 +210,7 @@ describe('ViteServer', () => {
       mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       const middlewares = viteServer.middlewares();
 
       expect(mockExpressStatic).toHaveBeenCalledWith('./.modelence/build/client');
@@ -224,7 +224,7 @@ describe('ViteServer', () => {
       mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       const middlewares = viteServer.middlewares();
 
       expect(mockExpressStatic).toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('ViteServer', () => {
       const mockRes = createResponse();
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       viteServer.handler(mockReq, mockRes);
 
       expect(mockRes.sendFile).toHaveBeenCalledWith('index.html', { root: './src/client' });
@@ -251,7 +251,7 @@ describe('ViteServer', () => {
       const mockRes = createResponse();
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       viteServer.handler(mockReq, mockRes);
 
       expect(mockRes.sendFile).toHaveBeenCalledWith('index.html', {
@@ -271,7 +271,7 @@ describe('ViteServer', () => {
       });
 
       viteServer = new ViteServer();
-      await viteServer.init();
+      await viteServer.init({ httpServer: {} as import('http').Server });
       viteServer.handler(mockReq, mockRes);
 
       expect(statusMock).toHaveBeenCalledWith(500);

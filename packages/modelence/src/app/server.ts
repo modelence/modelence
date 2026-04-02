@@ -135,7 +135,9 @@ export async function startServer(
     }
   });
 
-  await server.init();
+  const httpServer = http.createServer(app);
+
+  await server.init({ httpServer });
 
   if (server.middlewares) {
     app.use(server.middlewares());
@@ -157,8 +159,6 @@ export async function startServer(
     console.error(error.stack); // This gives you the full stack trace
     console.trace('Full application stack:'); // Additional context
   });
-
-  const httpServer = http.createServer(app);
 
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
