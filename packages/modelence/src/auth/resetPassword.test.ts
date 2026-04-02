@@ -24,6 +24,11 @@ const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => 
 const mockTime = { hours: jest.fn() };
 const mockConsumeRateLimit = jest.fn();
 const mockGetConfig = jest.fn();
+const mockInvalidateAllUserSessions = jest.fn();
+
+jest.unstable_mockModule('./session', () => ({
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
+}));
 
 jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
@@ -31,6 +36,7 @@ jest.unstable_mockModule('@/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+  getPublicConfigs: jest.fn().mockReturnValue({}),
 }));
 
 jest.unstable_mockModule('./db', () => ({
@@ -556,6 +562,7 @@ describe('auth/resetPassword', () => {
         { _id: userId, 'emails.address': email },
         { $set: { 'emails.$.verified': true } }
       );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(result).toEqual({
         success: true,
@@ -589,6 +596,7 @@ describe('auth/resetPassword', () => {
         { _id: userId },
         { $set: { 'authMethods.password.hash': 'hashedPassword' } }
       );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     });
 
     test('throws error if reset token not found', async () => {
