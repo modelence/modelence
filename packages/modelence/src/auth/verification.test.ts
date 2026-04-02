@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
 const mockUsersUpdateOne = jest.fn();
+const mockFindOneAndUpdate = jest.fn();
 const mockTokensFindOne = jest.fn();
 const mockTokensInsertOne = jest.fn();
 const mockTokensDeleteOne = jest.fn();
@@ -20,6 +21,7 @@ jest.unstable_mockModule('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     updateOne: mockUsersUpdateOne,
+    findOneAndUpdate: mockFindOneAndUpdate,
   },
   emailVerificationTokensCollection: {
     findOne: mockTokensFindOne,
@@ -36,9 +38,11 @@ jest.unstable_mockModule('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
+const mockTimeMinutes = jest.fn();
 jest.unstable_mockModule('@/time', () => ({
   time: {
     hours: mockTimeHours,
+    minutes: mockTimeMinutes,
   },
 }));
 
@@ -56,6 +60,9 @@ jest.unstable_mockModule('@/app/authConfig', () => ({
 
 jest.unstable_mockModule('./validators', () => ({
   validateEmail: mockValidateEmail,
+  validateHandle: jest.fn((v: string) => v),
+  MAX_HANDLE_LENGTH: 50,
+  MIN_HANDLE_LENGTH: 3,
 }));
 
 jest.unstable_mockModule('@/rate-limit/rules', () => ({
@@ -65,6 +72,19 @@ jest.unstable_mockModule('@/rate-limit/rules', () => ({
 const mockGetConfig = jest.fn();
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+}));
+
+const mockCreateSession = jest.fn();
+jest.unstable_mockModule('./session', () => ({
+  createSession: mockCreateSession,
+  setAuthTokenCookie: jest.fn((res: any, authToken: string) => {
+    res.cookie('authToken', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    });
+  }),
 }));
 
 const verificationModule = await import('./verification');
@@ -97,9 +117,11 @@ describe('auth/verification', () => {
       toString: () => 'token123',
     });
     mockTimeHours.mockReturnValue(24 * 60 * 60 * 1000);
+    mockTimeMinutes.mockImplementation((n: unknown) => (n as number) * 60 * 1000);
   });
 
   describe('handleVerifyEmail', () => {
+    const mockCookie = jest.fn();
     const baseParams = {
       query: { token: 'token' },
       headers: {
@@ -111,6 +133,7 @@ describe('auth/verification', () => {
         ip: '192.168.1.1',
         socket: { remoteAddress: '192.168.1.1' },
       },
+      res: { cookie: mockCookie },
     };
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -140,25 +163,28 @@ describe('auth/verification', () => {
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindOne
-        .mockResolvedValueOnce({ _id: 'user123' } as never)
-        .mockResolvedValueOnce(userDoc as never);
-      mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
-
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValue(userDoc as never);
+      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(mockTokensFindOne).toHaveBeenCalledWith({
         token: 'token',
         expiresAt: { $gt: expect.any(Date) },
       });
-      expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: tokenDoc.userId });
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+      expect(mockUsersFindOne).toHaveBeenCalledWith({
+        _id: tokenDoc.userId,
+        status: { $nin: ['deleted', 'disabled'] },
+      });
+      expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
         {
           _id: tokenDoc.userId,
+          status: { $nin: ['deleted', 'disabled'] },
           'emails.address': tokenDoc.email,
           'emails.verified': { $ne: true },
         },
-        { $set: { 'emails.$.verified': true } }
+        { $set: { 'emails.$.verified': true } },
+        { returnDocument: 'after' }
       );
       expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
       expect(authConfig.onAfterEmailVerification).toHaveBeenCalledWith({
@@ -172,6 +198,13 @@ describe('auth/verification', () => {
           acceptLanguage: 'en-US',
           referrer: 'https://example.com/signup',
         },
+      });
+      expect(mockCreateSession).toHaveBeenCalledWith('user123');
+      expect(mockCookie).toHaveBeenCalledWith('authToken', 'session-token-123', {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'strict',
+        path: '/',
       });
       expect(result).toEqual({
         status: 301,

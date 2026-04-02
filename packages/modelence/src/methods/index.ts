@@ -117,7 +117,7 @@ export async function runLiveMethod(name: string, args: Args, context: Context):
 
     if (!(result instanceof LiveData)) {
       throw new Error(
-        `Live query handler for '${name}' must return a LiveData object with fetch and watch functions.`
+        `Live query handler for '${name}' must return a LiveData object with fetch and watch functions. See https://docs.modelence.com/live-queries`
       );
     }
   } catch (error) {

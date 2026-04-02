@@ -1,6 +1,18 @@
 import { randomBytes } from 'crypto';
 import { usersCollection } from './db';
+import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
+
+export function serializeUserForClient(userDoc: User) {
+  return {
+    id: userDoc._id,
+    handle: userDoc.handle,
+    roles: userDoc.roles || [],
+    firstName: userDoc.firstName ?? undefined,
+    lastName: userDoc.lastName ?? undefined,
+    avatarUrl: userDoc.avatarUrl ?? undefined,
+  };
+}
 
 /**
 Finds an available handle by appending incremental suffixes (_2, _3, …)
