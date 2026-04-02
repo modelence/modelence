@@ -130,18 +130,6 @@ export function createClientModule<TModule extends AnyModule>(moduleName: string
      *
      * Annotate the `pageParam` type in the callback so TypeScript can infer the
      * page param type — no manual generic needed on `useInfiniteQuery`.
-     *
-     * @example
-     * ```ts
-     * useInfiniteQuery({
-     *   ...appFilesClient.infiniteQuery('listFiles', (cursor: string | undefined) => ({
-     *     environmentId,
-     *     ...(cursor ? { cursor } : {}),
-     *   })),
-     *   getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-     * });
-     * // data is typed as InfiniteData<{ files: AppFile[]; nextCursor: string | null }>
-     * ```
      */
     infiniteQuery<K extends keyof TModule['queries'] & string, TPageParam = unknown>(
       name: K,
