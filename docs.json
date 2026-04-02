@@ -26,6 +26,8 @@
             "pages": [
               "core-concepts/project-structure",
               "core-concepts/modules",
+              "core-concepts/queries",
+              "core-concepts/mutations",
               "core-concepts/environment-and-setup"
             ]
           },
