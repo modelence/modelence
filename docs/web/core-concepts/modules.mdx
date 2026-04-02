@@ -1,5 +1,6 @@
 ---
 title: 'Modules'
+description: 'Organize your backend into self-contained units with queries, mutations, stores, and configuration'
 icon: 'puzzle-piece'
 ---
 
@@ -26,6 +27,11 @@ A typical module includes:
 - **Mutations** - Write operations that modify data
 - **Configuration** - Module-specific settings
 - **Cron Jobs** - Scheduled tasks (optional)
+
+<Note>
+Data migrations are configured at the `startApp()` level (not inside individual
+modules). See the [Migrations documentation](/core-concepts/migrations).
+</Note>
 
 ## Stores
 
@@ -299,11 +305,18 @@ export default new Module('todo', {
     Learn how to define and call mutation methods
   </Card>
   <Card
+    title="Migrations"
+    icon="arrows-rotate"
+    href="/core-concepts/migrations"
+  >
+    Learn how migration scripts run and how to handle cron race conditions
+  </Card>
+  <Card
     title="Configuration"
     icon="gear"
     href="/configuration"
   >
-    Learn how to configure your Modelence application
+    Learn about configuration options
   </Card>
   <Card
     title="Stores"
