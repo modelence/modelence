@@ -15,7 +15,7 @@ import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { Store } from '../data/store';
-import { mergeStoresByName, MergedStoreMetadata } from '../data/mergeStores';
+import { resolveStores, toEffectiveStoreMetadata } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import { MigrationScript, default as migrationModule, startMigrations } from '../migration';
@@ -112,7 +112,7 @@ export async function startApp({
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
-  const stores = getStores(combinedModules) as Store<ModelSchema, never>[];
+  const rawStores = getStores(combinedModules) as Store<ModelSchema, never>[];
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
@@ -120,15 +120,19 @@ export async function startApp({
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
 
-  const effectiveStores = mergeStoresByName(stores);
+  const { storesToInit, effectiveStores } = resolveStores(rawStores) as {
+    storesToInit: Store<ModelSchema, never>[];
+    effectiveStores: Store<ModelSchema, never>[];
+  };
+  const effectiveStoreMetadata = toEffectiveStoreMetadata(effectiveStores);
 
   if (hasRemoteBackend) {
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
-        stores,
-        effectiveStores,
+        stores: rawStores,
+        effectiveStores: effectiveStoreMetadata,
         roles,
       });
     loadRemoteConfigs(configs);
@@ -148,7 +152,7 @@ export async function startApp({
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    initStores(stores);
+    initStores(storesToInit);
     await createIndexesWithLock(effectiveStores);
   }
 
@@ -204,7 +208,7 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 
 const INDEXES_LOCK_RESOURCE = 'indexes';
 
-async function createIndexesWithLock(mergedStores: MergedStoreMetadata[]) {
+async function createIndexesWithLock(effectiveStores: Store<ModelSchema, never>[]) {
   const hasLock = await acquireLock(INDEXES_LOCK_RESOURCE, {
     lockDuration: time.seconds(30),
     heartbeat: true,
@@ -216,28 +220,10 @@ async function createIndexesWithLock(mergedStores: MergedStoreMetadata[]) {
   let releaseHandledByBackgroundTask = false;
 
   try {
-    const client = getClient();
-    if (!client) {
-      throw new Error('Failed to create indexes: MongoDB client not initialized');
-    }
-
-    // Build temporary Store instances from merged metadata so each collection
-    // is reconciled exactly once with the full union of indexes.
-    const tempStores = mergedStores.map((merged) => {
-      const store = new Store(merged.name, {
-        schema: merged.schema as ModelSchema,
-        indexes: merged.indexes,
-        searchIndexes: merged.searchIndexes,
-        indexCreationMode: merged.indexCreationMode,
-      });
-      store.init(client);
-      return store;
-    });
-
-    const blockingStores = tempStores.filter(
+    const blockingStores = effectiveStores.filter(
       (store) => store.getIndexCreationMode() === 'blocking'
     );
-    const backgroundStores = tempStores.filter(
+    const backgroundStores = effectiveStores.filter(
       (store) => store.getIndexCreationMode() === 'background'
     );
 

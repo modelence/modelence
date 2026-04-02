@@ -6,7 +6,7 @@ import { Store } from '../data/store';
 import { serializeModelSchema } from '../data/schemaSerializer';
 import { AppConfig } from '../config/types';
 import { ModelSchema } from '../data/types';
-import { MergedStoreMetadata } from '../data/mergeStores';
+import { EffectiveStoreMetadata } from '../data/resolveStores';
 
 type CloudBackendConnectOkResponse = {
   status: 'ok';
@@ -40,7 +40,7 @@ export async function connectCloudBackend({
   cronJobsMetadata?: CronJobMetadata[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   stores: Store<any, any>[];
-  effectiveStores?: MergedStoreMetadata[];
+  effectiveStores?: EffectiveStoreMetadata[];
   roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;

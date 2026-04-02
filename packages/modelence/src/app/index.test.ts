@@ -4,7 +4,7 @@ import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
 import type { Store } from '../data/store';
 import type { RateLimitRule } from '../rate-limit/types';
-import type { MergedStoreMetadata } from '../data/mergeStores';
+import type { EffectiveStoreMetadata } from '../data/resolveStores';
 import { ServerChannel } from '@/websocket/serverChannel';
 import type { WebsocketServerProvider } from '@/websocket/types';
 
@@ -59,20 +59,9 @@ const expectedIndexesLockOptions = {
   heartbeat: true,
 };
 
-// Tracks temp Store instances created inside createIndexesWithLock.
-// Keyed by collection name. Per-test overrides via mockCreateIndexesFns.
-const mockConstructedStores = new Map<
-  string,
-  {
-    init: jest.Mock;
-    getName: () => string;
-    getIndexCreationMode: () => string;
-    createIndexes: jest.Mock;
-  }
->();
-const mockCreateIndexesFns = new Map<string, jest.Mock>();
-
-const mockMergeStoresByName = jest.fn<(stores: unknown[]) => MergedStoreMetadata[]>();
+const mockResolveStores =
+  jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
+const mockToEffectiveStoreMetadata = jest.fn<(stores: unknown[]) => EffectiveStoreMetadata[]>();
 
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
@@ -245,30 +234,9 @@ jest.unstable_mockModule('../viteServer', () => ({
   viteServer: { listen: jest.fn() },
 }));
 
-// Mock mergeStoresByName so we control the metadata without needing
-// full Store accessors (getSchema, getIndexes, etc.) on mock stores.
-jest.unstable_mockModule('../data/mergeStores', () => ({
-  mergeStoresByName: mockMergeStoresByName,
-}));
-
-// Mock the Store class so createIndexesWithLock can construct temp
-// instances whose createIndexes we can track and control.
-jest.unstable_mockModule('../data/store', () => ({
-  Store: jest.fn((...args: unknown[]) => {
-    const name = args[0] as string;
-    const opts = args[1] as { indexCreationMode?: string } | undefined;
-    const createIndexesFn =
-      mockCreateIndexesFns.get(name) ??
-      (jest.fn() as jest.Mock).mockResolvedValue(undefined as never);
-    const instance = {
-      init: jest.fn(),
-      getName: () => name,
-      getIndexCreationMode: () => opts?.indexCreationMode ?? 'background',
-      createIndexes: createIndexesFn,
-    };
-    mockConstructedStores.set(name, instance);
-    return instance;
-  }),
+jest.unstable_mockModule('../data/resolveStores', () => ({
+  resolveStores: mockResolveStores,
+  toEffectiveStoreMetadata: mockToEffectiveStoreMetadata,
 }));
 
 const { startApp } = await import('./index');
@@ -307,8 +275,6 @@ const createStoreMock = (
 describe('app/index', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockConstructedStores.clear();
-    mockCreateIndexesFns.clear();
     mockAcquireLock.mockResolvedValue(true);
     mockReleaseLock.mockResolvedValue(true);
     mockGetMongodbUri.mockReturnValue('');
@@ -320,26 +286,12 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
-    // Default mergeStoresByName: one MergedStoreMetadata per unique name
-    mockMergeStoresByName.mockImplementation((stores: unknown[]) => {
-      const byName = new Map<string, MergedStoreMetadata>();
-      for (const s of stores as MinimalStore[]) {
-        const n = s.getName();
-        const existing = byName.get(n);
-        if (!existing) {
-          byName.set(n, {
-            name: n,
-            schema: {},
-            indexes: [],
-            searchIndexes: [],
-            indexCreationMode: s.getIndexCreationMode(),
-          });
-        } else if (s.getIndexCreationMode() === 'blocking') {
-          existing.indexCreationMode = 'blocking';
-        }
-      }
-      return [...byName.values()];
+    // Default resolveStores: each store is its own effective store
+    mockResolveStores.mockImplementation((stores: unknown[]) => {
+      const unique = [...new Set(stores)] as MinimalStore[];
+      return { storesToInit: unique, effectiveStores: unique };
     });
+    mockToEffectiveStoreMetadata.mockReturnValue([]);
     process.env.MODELENCE_TRACKING_ENABLED = 'false';
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MONGODB_URI;
@@ -428,7 +380,7 @@ describe('app/index', () => {
       expect.objectContaining({ db: expect.any(Function) })
     );
     expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(mockConstructedStores.get('testStore')?.createIndexes).toHaveBeenCalled();
+    expect(mockStore.createIndexes).toHaveBeenCalled();
     expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
   });
 
@@ -448,8 +400,8 @@ describe('app/index', () => {
     });
 
     expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    // No temp stores constructed when lock is not acquired
-    expect(mockConstructedStores.size).toBe(0);
+    // createIndexes not called when lock is not acquired
+    expect(mockStore.createIndexes).not.toHaveBeenCalled();
     expect(mockReleaseLock).not.toHaveBeenCalled();
   });
 
@@ -668,15 +620,16 @@ describe('app/index', () => {
     const lockIndexesPromise = new Promise<void>((resolve) => {
       resolveLockIndexes = resolve;
     });
-    // Pre-configure createIndexes for the temp store that will be built
-    // from the '_modelenceLocks' merged metadata.
-    mockCreateIndexesFns.set(
-      '_modelenceLocks',
-      jest.fn(async () => lockIndexesPromise) as jest.Mock
-    );
 
     const lockStore = createStoreMock('_modelenceLocks', 'blocking');
+    (lockStore.createIndexes as jest.Mock).mockImplementation(async () => lockIndexesPromise);
     const otherStore = createStoreMock('testCollection');
+
+    // resolveStores: lockStore is blocking effective, otherStore is background effective
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
 
     const migrations: MigrationScript[] = [
       { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
@@ -699,8 +652,8 @@ describe('app/index', () => {
 
     expect(mockAcquireLock).toHaveBeenCalledTimes(1);
     expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(mockConstructedStores.get('_modelenceLocks')?.createIndexes).toHaveBeenCalledTimes(1);
-    expect(mockConstructedStores.get('testCollection')?.createIndexes).not.toHaveBeenCalled();
+    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(otherStore.createIndexes).not.toHaveBeenCalled();
     expect(mockStartMigrations).not.toHaveBeenCalled();
     expect(mockStartCronJobs).not.toHaveBeenCalled();
 
@@ -710,10 +663,9 @@ describe('app/index', () => {
 
     expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
     expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
-      (mockConstructedStores.get('_modelenceLocks')?.createIndexes as jest.Mock).mock
-        .invocationCallOrder[0]
+      (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
     );
-    expect(mockConstructedStores.get('testCollection')?.createIndexes).toHaveBeenCalledTimes(1);
+    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(mockReleaseLock).toHaveBeenCalledTimes(1);
     expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
@@ -724,13 +676,15 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const indexCreationError = new Error('index creation failed');
-    mockCreateIndexesFns.set(
-      '_modelenceLocks',
-      jest.fn(async () => Promise.reject(indexCreationError)) as jest.Mock
-    );
-
     const lockStore = createStoreMock('_modelenceLocks', 'blocking');
+    (lockStore.createIndexes as jest.Mock).mockRejectedValue(indexCreationError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
+
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const migrations: MigrationScript[] = [
@@ -751,7 +705,7 @@ describe('app/index', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(mockConstructedStores.get('_modelenceLocks')?.createIndexes).toHaveBeenCalledTimes(1);
+    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       indexCreationError
@@ -767,13 +721,14 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const criticalError = new Error('critical index failed');
-    mockCreateIndexesFns.set(
-      '_modelenceLocks',
-      jest.fn(async () => Promise.reject(criticalError)) as jest.Mock
-    );
-
     const criticalStore = createStoreMock('_modelenceLocks', 'blocking');
+    (criticalStore.createIndexes as jest.Mock).mockRejectedValue(criticalError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [criticalStore, otherStore],
+      effectiveStores: [criticalStore, otherStore],
+    });
 
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -809,28 +764,26 @@ describe('app/index', () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
-    // Make mergeStoresByName return metadata with a name that causes the
-    // mocked Store constructor to throw during temp store construction.
     const unexpectedError = new Error('unexpected index path error');
-    mockMergeStoresByName.mockReturnValue([
-      {
-        name: '__throw__',
-        schema: {},
-        indexes: [],
-        searchIndexes: [],
-        indexCreationMode: 'blocking' as const,
-      },
-    ]);
-
-    // Override the Store constructor mock for this test to throw on '__throw__'
-    const { Store: MockedStore } = await import('../data/store');
-    (MockedStore as unknown as jest.Mock).mockImplementationOnce(() => {
+    const brokenStore = createStoreMock('brokenStore', 'blocking');
+    // Make getIndexCreationMode throw to simulate an unexpected error
+    // inside createIndexesWithLock's filter logic.
+    (brokenStore.getIndexCreationMode as jest.Mock).mockImplementation(() => {
       throw unexpectedError;
+    });
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [brokenStore],
+      effectiveStores: [brokenStore],
     });
 
     await expect(
       startApp({
-        modules: [createTestModule()],
+        modules: [
+          createTestModule({
+            stores: [brokenStore as unknown as Store<ModelSchema, Record<string, never>>],
+          }),
+        ],
       })
     ).rejects.toThrow('unexpected index path error');
 
