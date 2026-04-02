@@ -15,31 +15,31 @@ Pass a `migrations` array to `startApp()`. Each migration has:
 - `description` - Human-readable summary
 - `handler` - Async function that performs the task
 
-Define each migration in its own file under a `migrations/` directory, then
-re-export them from an index file:
+Define each migration handler in its own file under a `migrations/` directory,
+then wire up versions and descriptions in the index file:
 
-```typescript title="src/server/migrations/v1-backfill-todo-status.ts"
+```typescript title="src/server/migrations/backfill-todo-status.ts"
 import { dbTodos } from '../todo/db';
 
-export default {
-  version: 1,
-  description: 'Backfill status field on existing todos',
-  async handler() {
-    await dbTodos.updateMany(
-      { status: { $exists: false } },
-      { $set: { status: 'open' } }
-    );
+export async function backfillTodoStatus() {
+  await dbTodos.updateMany(
+    { status: { $exists: false } },
+    { $set: { status: 'open' } }
+  );
 
-    return 'Backfilled todos without status';
-  },
-};
+  return 'Backfilled todos without status';
+}
 ```
 
 ```typescript title="src/server/migrations/index.ts"
-import v1BackfillTodoStatus from './v1-backfill-todo-status';
+import { backfillTodoStatus } from './backfill-todo-status';
 
 export const migrations = [
-  v1BackfillTodoStatus,
+  {
+    version: 1,
+    description: 'Backfill status field on existing todos',
+    handler: backfillTodoStatus,
+  },
 ];
 ```
 
