@@ -27,8 +27,12 @@ export function sendOAuthError(res: Response, statusCode: number, errorMessage: 
   const authConfig = getAuthConfig();
   const response = res.status(statusCode);
   if (authConfig.errorComponent) {
-    const html = authConfig.errorComponent({ error: errorMessage, statusCode });
-    if (html) return response.send(html);
+    try {
+      const html = authConfig.errorComponent({ error: errorMessage, statusCode });
+      if (html) return response.send(html);
+    } catch (err) {
+      console.error('Unhandled error in authConfig.errorComponent:', err);
+    }
   }
   return response.json({ error: errorMessage });
 }

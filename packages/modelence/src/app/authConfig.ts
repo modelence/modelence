@@ -87,7 +87,7 @@ export type AuthConfig = {
    *   if the provider email is verified.
    */
   oauthAccountLinking?: 'auto' | 'manual';
-  errorComponent?: (props: OAuthErrorInfo) => string;
+  errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
 };
 
 let authConfig: AuthConfig = Object.freeze({});

@@ -1000,5 +1000,22 @@ describe('auth/providers/oauth-common', () => {
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({ error: 'Forbidden' });
     });
+    test('falls back to JSON when errorComponent throws', () => {
+      const mockErrorComponent = jest.fn().mockImplementation(() => {
+        throw new Error('render failed');
+      });
+
+      mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
+
+      moduleExports.sendOAuthError(res, 500, 'Server error');
+
+      expect(mockErrorComponent).toHaveBeenCalledWith({
+        error: 'Server error',
+        statusCode: 500,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Server error' });
+    });
   });
 });
