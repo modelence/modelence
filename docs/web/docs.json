@@ -52,6 +52,7 @@
               "email",
               "files",
               "stores",
+              "live-queries",
               "configuration",
               "websockets",
               "telemetry",
