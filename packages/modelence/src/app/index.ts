@@ -157,7 +157,8 @@ export async function startApp({
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    initStores(storesToInit);
+    const allStoresToInit = [...new Set([...storesToInit, ...effectiveStores])];
+    initStores(allStoresToInit);
     await createIndexesAndMigrationsWithLock(effectiveStores, migrations);
   } else {
     startMigrations(migrations);
