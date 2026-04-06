@@ -505,14 +505,7 @@ export class Store<
    */
   extend<
     TExtendedSchema extends ModelSchema,
-    TExtendedMethods extends Record<
-      string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (
-        this: WithId<InferDocumentType<TSchema & TExtendedSchema & Record<string, unknown>>> & any,
-        ...args: any[]
-      ) => any
-    > = Record<string, never>,
+    TExtendedMethods extends Record<string, Function> = Record<string, never>,
   >(config: {
     schema?: TExtendedSchema;
     indexes?: IndexDescription[];
