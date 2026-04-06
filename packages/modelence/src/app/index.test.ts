@@ -4,7 +4,6 @@ import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
 import type { Store } from '../data/store';
 import type { RateLimitRule } from '../rate-limit/types';
-import type { EffectiveStoreMetadata } from '../data/resolveStores';
 import { ServerChannel } from '@/websocket/serverChannel';
 import type { WebsocketServerProvider } from '@/websocket/types';
 
@@ -62,7 +61,6 @@ const expectedMigrationsLockOptions = {
 
 const mockResolveStores =
   jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
-const mockToEffectiveStoreMetadata = jest.fn<(stores: unknown[]) => EffectiveStoreMetadata[]>();
 
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
@@ -238,7 +236,6 @@ jest.unstable_mockModule('../viteServer', () => ({
 
 jest.unstable_mockModule('../data/resolveStores', () => ({
   resolveStores: mockResolveStores,
-  toEffectiveStoreMetadata: mockToEffectiveStoreMetadata,
 }));
 
 const { startApp } = await import('./index');
@@ -294,7 +291,6 @@ describe('app/index', () => {
       const unique = [...new Set(stores)] as MinimalStore[];
       return { storesToInit: unique, effectiveStores: unique };
     });
-    mockToEffectiveStoreMetadata.mockReturnValue([]);
     process.env.MODELENCE_TRACKING_ENABLED = 'false';
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MONGODB_URI;
@@ -534,7 +530,6 @@ describe('app/index', () => {
       configSchema: expect.any(Object),
       cronJobsMetadata: undefined,
       stores: expect.any(Array),
-      effectiveStores: expect.any(Array),
       roles: {},
     });
     expect(mockLoadRemoteConfigs).toHaveBeenCalledWith([

@@ -106,8 +106,8 @@ describe('app/backendApi', () => {
         cronJobsMetadata,
         roles,
         dataModels: [
-          { name: 'users', schema: { name: 'users' }, collections: ['users'], version: 2 },
-          { name: 'sessions', schema: { name: 'sessions' }, collections: ['sessions'], version: 2 },
+          { name: 'users', schema: {}, collections: ['users'], version: 2 },
+          { name: 'sessions', schema: {}, collections: ['sessions'], version: 2 },
         ],
       });
       expect(hostnameSpy).toHaveBeenCalled();

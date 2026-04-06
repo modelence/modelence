@@ -3,7 +3,7 @@ import { IndexDescription, SearchIndexDescription } from 'mongodb';
 
 import { Store } from './store';
 import type { ModelSchema } from './types';
-import { resolveStores, toEffectiveStoreMetadata } from './resolveStores';
+import { resolveStores } from './resolveStores';
 
 const baseSchema = {
   name: {},
@@ -111,25 +111,5 @@ describe('data/resolveStores', () => {
     expect(storesToInit).toHaveLength(1);
     expect(effectiveStores).toHaveLength(1);
     expect(effectiveStores[0]).toBe(store);
-  });
-});
-
-describe('toEffectiveStoreMetadata', () => {
-  test('converts stores to metadata format', () => {
-    const store = createStore('users', {
-      schema: { name: {} } as ModelSchema,
-      indexes: [{ key: { name: 1 } }],
-      searchIndexes: [{ name: 'searchIdx', definition: {} } as SearchIndexDescription],
-      indexCreationMode: 'blocking',
-    });
-
-    const metadata = toEffectiveStoreMetadata([store]);
-
-    expect(metadata).toHaveLength(1);
-    expect(metadata[0].name).toBe('users');
-    expect(metadata[0].schema).toMatchObject({ name: expect.anything() });
-    expect(metadata[0].indexes).toHaveLength(1);
-    expect(metadata[0].searchIndexes).toHaveLength(1);
-    expect(metadata[0].indexCreationMode).toBe('blocking');
   });
 });
