@@ -3,7 +3,6 @@ import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
-import { serializeModelSchema } from '../data/schemaSerializer';
 import { AppConfig } from '../config/types';
 import { ModelSchema } from '../data/types';
 
@@ -47,7 +46,7 @@ export async function connectCloudBackend({
   try {
     const dataStores = (stores ?? []).map((store) => ({
       name: store.getName(),
-      schema: serializeModelSchema(store.getSerializedSchema() as ModelSchema),
+      schema: store.getSerializedSchema(),
       collections: [store.getName()],
       version: 2,
       indexes: store.getIndexes(),
