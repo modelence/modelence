@@ -150,8 +150,7 @@ const isDocumentRecord = (value: unknown): value is Document =>
 
 const hasModelencePrefix = (name: string): boolean => name.startsWith('_modelence_');
 
-/** @internal */
-export const getComparableIndexOptions = (index: ExistingIndex | IndexDescription): Document => {
+const getComparableIndexOptions = (index: ExistingIndex | IndexDescription): Document => {
   const options: Document = {};
 
   for (const field of COMPARABLE_INDEX_OPTION_FIELDS) {
@@ -185,11 +184,7 @@ const isSameIndexKey = (left: unknown, right: unknown): boolean => {
   });
 };
 
-/** @internal */
-export const isSameIndexDefinition = (
-  existing: ExistingIndex,
-  desired: IndexDescription
-): boolean => {
+const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
   if (!isSameIndexKey(existing.key, desired.key)) {
     return false;
   }
@@ -513,7 +508,10 @@ export class Store<
     TExtendedMethods extends Record<
       string,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this: WithId<InferDocumentType<TSchema & TExtendedSchema>> & any, ...args: any[]) => any
+      (
+        this: WithId<InferDocumentType<TSchema & TExtendedSchema & Record<string, unknown>>> & any,
+        ...args: any[]
+      ) => any
     > = Record<string, never>,
   >(config: {
     schema?: TExtendedSchema;
@@ -523,8 +521,12 @@ export class Store<
     /** Whether index creation should block startup or run in background */
     indexCreationMode?: IndexCreationMode;
   }): Store<
-    TSchema & TExtendedSchema,
-    PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
+    TSchema & TExtendedSchema & Record<string, unknown>,
+    PreserveMethodsForExtendedSchema<
+      TMethods,
+      TSchema & TExtendedSchema & Record<string, unknown>
+    > &
+      TExtendedMethods
   > {
     // Follow chain to the tail – extending always appends to the end
     const tail: AnyStore = this.getChainTail();
@@ -538,12 +540,15 @@ export class Store<
     const extendedSchema = {
       ...tail.schema,
       ...(config.schema || {}),
-    } as TSchema & TExtendedSchema;
+    } as TSchema & TExtendedSchema & Record<string, unknown>;
 
     const extendedIndexes = [...tail.indexes, ...(config.indexes || [])];
     const extendedSearchIndexes = [...tail.searchIndexes, ...(config.searchIndexes || [])];
 
-    type CombinedMethods = PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> &
+    type CombinedMethods = PreserveMethodsForExtendedSchema<
+      TMethods,
+      TSchema & TExtendedSchema & Record<string, unknown>
+    > &
       TExtendedMethods;
 
     const combinedMethods = {
@@ -551,7 +556,10 @@ export class Store<
       ...(config.methods || {}),
     } as CombinedMethods | undefined;
 
-    const extendedStore = new Store<TSchema & TExtendedSchema, CombinedMethods>(this.name, {
+    const extendedStore = new Store<
+      TSchema & TExtendedSchema & Record<string, unknown>,
+      CombinedMethods
+    >(this.name, {
       schema: extendedSchema,
       methods: combinedMethods as unknown as CombinedMethods | undefined,
       indexes: extendedIndexes,
