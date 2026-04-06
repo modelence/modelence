@@ -49,30 +49,20 @@ export async function connectCloudBackend({
   }
 
   try {
-    const mergedModels = effectiveStores ?? [];
-
-    const dataModels =
-      mergedModels.length > 0
-        ? mergedModels.map((merged) => ({
-            name: merged.name,
-            schema: serializeModelSchema(merged.schema as ModelSchema),
-            collections: [merged.name],
-            version: 2,
-            indexes: merged.indexes,
-            searchIndexes: merged.searchIndexes,
-            indexCreationMode: merged.indexCreationMode,
-          }))
-        : Object.values(stores).map((store) => ({
-            name: store.getName(),
-            schema: store.getSerializedSchema(),
-            collections: [store.getName()],
-            version: 2,
-          }));
+    const dataStores = (effectiveStores ?? []).map((store) => ({
+      name: store.name,
+      schema: serializeModelSchema(store.schema as ModelSchema),
+      collections: [store.name],
+      version: 2,
+      indexes: store.indexes,
+      searchIndexes: store.searchIndexes,
+      indexCreationMode: store.indexCreationMode,
+    }));
 
     const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
       containerId,
-      dataModels,
+      dataModels: dataStores,
       configSchema,
       cronJobsMetadata,
       roles,

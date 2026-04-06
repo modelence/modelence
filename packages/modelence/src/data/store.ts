@@ -475,11 +475,6 @@ export class Store<
     return current;
   }
 
-  /** @internal */
-  isInSameChain(other: AnyStore): boolean {
-    return this.getChainRoot() === other.getChainRoot();
-  }
-
   /**
    * Extends the store with additional schema fields, indexes, methods, and search indexes.
    * Returns a new Store instance with the extended schema and updated types.

@@ -407,8 +407,6 @@ describe('data/store', () => {
     expect(base.getChainTail()).toBe(top);
     expect(top.getChainRoot()).toBe(base);
     expect(mid.getChainTail()).toBe(top);
-    expect(base.isInSameChain(top)).toBe(true);
-    expect(mid.isInSameChain(base)).toBe(true);
   });
 
   test('extend-after-init guard checks tail', () => {
@@ -434,16 +432,6 @@ describe('data/store', () => {
     const store = createStore();
     expect(store.getChainTail()).toBe(store);
     expect(store.getChainRoot()).toBe(store);
-  });
-
-  test('isInSameChain returns false for unrelated stores', () => {
-    const storeA = createStore();
-    const storeB = new Store<ModelSchema, Record<string, never>>('otherCollection', {
-      schema: { foo: {} } as ModelSchema,
-      indexes: [],
-      methods: undefined,
-    });
-    expect(storeA.isInSameChain(storeB)).toBe(false);
   });
 
   test('supports per-store index creation mode', () => {
