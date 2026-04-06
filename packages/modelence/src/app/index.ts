@@ -15,7 +15,7 @@ import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { type IndexReconcileMode, Store } from '../data/store';
-import { resolveStores, toEffectiveStoreMetadata } from '../data/resolveStores';
+import { resolveStores } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import {
@@ -129,15 +129,13 @@ export async function startApp({
     storesToInit: Store<ModelSchema, never>[];
     effectiveStores: Store<ModelSchema, never>[];
   };
-  const effectiveStoreMetadata = toEffectiveStoreMetadata(effectiveStores);
 
   if (hasRemoteBackend) {
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
-        stores: rawStores,
-        effectiveStores: effectiveStoreMetadata,
+        stores: effectiveStores,
         roles,
       });
     loadRemoteConfigs(configs);

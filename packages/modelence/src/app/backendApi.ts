@@ -6,7 +6,6 @@ import { Store } from '../data/store';
 import { serializeModelSchema } from '../data/schemaSerializer';
 import { AppConfig } from '../config/types';
 import { ModelSchema } from '../data/types';
-import { EffectiveStoreMetadata } from '../data/resolveStores';
 
 type CloudBackendConnectOkResponse = {
   status: 'ok';
@@ -33,14 +32,11 @@ export async function connectCloudBackend({
   configSchema,
   cronJobsMetadata,
   stores,
-  effectiveStores,
   roles,
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  stores: Store<any, any>[];
-  effectiveStores?: EffectiveStoreMetadata[];
+  stores?: Store<ModelSchema, never>[];
   roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
@@ -49,14 +45,14 @@ export async function connectCloudBackend({
   }
 
   try {
-    const dataStores = (effectiveStores ?? []).map((store) => ({
-      name: store.name,
-      schema: serializeModelSchema(store.schema as ModelSchema),
-      collections: [store.name],
+    const dataStores = (stores ?? []).map((store) => ({
+      name: store.getName(),
+      schema: serializeModelSchema(store.getSerializedSchema() as ModelSchema),
+      collections: [store.getName()],
       version: 2,
-      indexes: store.indexes,
-      searchIndexes: store.searchIndexes,
-      indexCreationMode: store.indexCreationMode,
+      indexes: store.getIndexes(),
+      searchIndexes: store.getSearchIndexes(),
+      indexCreationMode: store.getIndexCreationMode(),
     }));
 
     const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
