@@ -15,6 +15,7 @@ import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
 import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { type IndexReconcileMode, Store } from '../data/store';
+import { resolveStores } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
 import { _createSystemMutation, _createSystemQuery, createMutation, createQuery } from '../methods';
 import {
@@ -116,7 +117,7 @@ export async function startApp({
 
   const configSchema = getConfigSchema(combinedModules);
   setSchema(configSchema);
-  const stores = getStores(combinedModules) as Store<ModelSchema, never>[];
+  const rawStores = getStores(combinedModules) as Store<ModelSchema, never>[];
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
@@ -124,12 +125,17 @@ export async function startApp({
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
 
+  const { storesToInit, effectiveStores } = resolveStores(rawStores) as {
+    storesToInit: Store<ModelSchema, never>[];
+    effectiveStores: Store<ModelSchema, never>[];
+  };
+
   if (hasRemoteBackend) {
     const { configs, environmentId, appAlias, environmentAlias, telemetry } =
       await connectCloudBackend({
         configSchema,
         cronJobsMetadata: getCronJobsMetadata(),
-        stores,
+        stores: effectiveStores,
         roles,
       });
     loadRemoteConfigs(configs);
@@ -149,8 +155,9 @@ export async function startApp({
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
     await connect();
-    initStores(stores);
-    await createIndexesAndMigrationsWithLock(stores, migrations);
+    const allStoresToInit = [...new Set([...storesToInit, ...effectiveStores])];
+    initStores(allStoresToInit);
+    await createIndexesAndMigrationsWithLock(effectiveStores, migrations);
   } else {
     startMigrations(migrations);
   }
@@ -206,7 +213,7 @@ function warnIndexCreationFailure(storeName: string, error: unknown) {
 const MIGRATIONS_LOCK_RESOURCE = 'migrations';
 
 async function createIndexesAndMigrationsWithLock(
-  stores: Store<ModelSchema, never>[],
+  effectiveStores: Store<ModelSchema, never>[],
   migrations: MigrationScript[]
 ) {
   const hasLock = await acquireLock(MIGRATIONS_LOCK_RESOURCE, {
@@ -217,10 +224,15 @@ async function createIndexesAndMigrationsWithLock(
     return;
   }
 
-  const blockingStores = stores.filter((store) => store.getIndexCreationMode() === 'blocking');
-  const backgroundStores = stores.filter((store) => store.getIndexCreationMode() === 'background');
+  let blockingStores: Store<ModelSchema, never>[];
+  let backgroundStores: Store<ModelSchema, never>[];
 
   try {
+    blockingStores = effectiveStores.filter((store) => store.getIndexCreationMode() === 'blocking');
+    backgroundStores = effectiveStores.filter(
+      (store) => store.getIndexCreationMode() === 'background'
+    );
+
     for (const store of blockingStores) {
       await createStoreIndexes(store, 'full');
     }

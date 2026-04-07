@@ -59,6 +59,9 @@ const expectedMigrationsLockOptions = {
   heartbeat: true,
 };
 
+const mockResolveStores =
+  jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
+
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
 }));
@@ -231,6 +234,10 @@ jest.unstable_mockModule('../viteServer', () => ({
   viteServer: { listen: jest.fn() },
 }));
 
+jest.unstable_mockModule('../data/resolveStores', () => ({
+  resolveStores: mockResolveStores,
+}));
+
 const { startApp } = await import('./index');
 
 // Helper to create a test module
@@ -279,6 +286,11 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
+    // Default resolveStores: each store is its own effective store
+    mockResolveStores.mockImplementation((stores: unknown[]) => {
+      const unique = [...new Set(stores)] as MinimalStore[];
+      return { storesToInit: unique, effectiveStores: unique };
+    });
     process.env.MODELENCE_TRACKING_ENABLED = 'false';
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MONGODB_URI;
@@ -637,6 +649,12 @@ describe('app/index', () => {
       getIndexCreationMode: jest.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
     };
 
+    // resolveStores: lockStore is blocking effective, otherStore is background effective
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
+
     const migrations: MigrationScript[] = [
       { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
     ];
@@ -695,15 +713,15 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const indexCreationError = new Error('index creation failed');
-    const lockStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () =>
-        Promise.reject(indexCreationError)
-      ) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const lockStore = createStoreMock('_modelenceLocks', 'blocking');
+    (lockStore.createIndexes as jest.Mock).mockRejectedValue(indexCreationError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
+
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const migrations: MigrationScript[] = [
@@ -740,15 +758,14 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const criticalError = new Error('critical index failed');
-    const criticalStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () =>
-        Promise.reject(criticalError)
-      ) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const criticalStore = createStoreMock('_modelenceLocks', 'blocking');
+    (criticalStore.createIndexes as jest.Mock).mockRejectedValue(criticalError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [criticalStore, otherStore],
+      effectiveStores: [criticalStore, otherStore],
+    });
 
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -780,19 +797,22 @@ describe('app/index', () => {
     warnSpy.mockRestore();
   });
 
-  test('releases index lock when blocking index path throws unexpectedly', async () => {
+  test('releases index lock when createIndexesWithLock throws unexpectedly', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const unexpectedError = new Error('unexpected index path error');
-    const brokenStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn() as MinimalStore['createIndexes'],
-      getName: jest.fn(() => {
-        throw unexpectedError;
-      }) as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const brokenStore = createStoreMock('brokenStore', 'blocking');
+    // Make getIndexCreationMode throw to simulate an unexpected error
+    // inside createIndexesWithLock's filter logic.
+    (brokenStore.getIndexCreationMode as jest.Mock).mockImplementation(() => {
+      throw unexpectedError;
+    });
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [brokenStore],
+      effectiveStores: [brokenStore],
+    });
 
     await expect(
       startApp({

@@ -21,7 +21,7 @@ jest.unstable_mockModule('../db', () => ({
 
 jest.unstable_mockModule('../session', () => ({
   createSession: mockCreateSession,
-  setAuthTokenCookie: jest.fn((res: any, authToken: string) => {
+  setAuthTokenCookie: jest.fn((res: Response, authToken: string) => {
     res.cookie('authToken', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

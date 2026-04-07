@@ -372,6 +372,68 @@ describe('data/store', () => {
     expect(indexes4[0].name).toBe('_modelence_userId_1_createdAt_-1');
   });
 
+  test('extend from historical node appends to chain tail instead of branching', () => {
+    const base = createStore({
+      indexes: [{ key: { name: 1 }, name: 'nameIdx' }],
+    });
+
+    const mid = base.extend({
+      schema: { age: {} } as ModelSchema,
+      indexes: [{ key: { age: 1 }, name: 'ageIdx' }],
+    });
+
+    // Calling extend on the base should extend from the tail (mid), not from base
+    const top = base.extend({
+      schema: { email: {} } as ModelSchema,
+      indexes: [{ key: { email: 1 }, name: 'emailIdx' }],
+    });
+
+    // top should contain all accumulated fields: name + age + email
+    expect(top.getSchema()).toMatchObject({
+      name: expect.anything(),
+      age: expect.anything(),
+      email: expect.anything(),
+    });
+
+    const topIndexes = (top as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(topIndexes.length).toBe(3);
+    expect(topIndexes.map((i) => i.name)).toEqual([
+      '_modelence_nameIdx',
+      '_modelence_ageIdx',
+      '_modelence_emailIdx',
+    ]);
+
+    // Chain links are correct
+    expect(base.getChainTail()).toBe(top);
+    expect(top.getChainRoot()).toBe(base);
+    expect(mid.getChainTail()).toBe(top);
+  });
+
+  test('extend-after-init guard checks tail', () => {
+    const base = createStore();
+    const extended = base.extend({ schema: { age: {} } as ModelSchema });
+
+    const mockClient = {
+      db: () => ({
+        collection: () => ({}),
+      }),
+    } as unknown as Parameters<Store<ModelSchema, Record<string, never>>['init']>[0];
+
+    // Init the tail
+    extended.init(mockClient);
+
+    // Extending from base should throw because the tail is init'd
+    expect(() => base.extend({})).toThrow(
+      "Store.extend() must be called before startApp(). Store 'testCollection' has already been initialized and cannot be extended."
+    );
+  });
+
+  test('getChainTail and getChainRoot on a single store return itself', () => {
+    const store = createStore();
+    expect(store.getChainTail()).toBe(store);
+    expect(store.getChainRoot()).toBe(store);
+  });
+
   test('supports per-store index creation mode', () => {
     const backgroundStore = createStore();
     const blockingStore = createStore({ indexCreationMode: 'blocking' });

@@ -1,22 +1,19 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 import os from 'os';
-import type { Store } from '../data/store';
-import type { ModelSchema } from '../data/types';
 import type { CronJobMetadata } from '../cron/types';
 import type { ConfigSchema } from '../config/types';
 import type { RoleDefinition } from '../auth/types';
+import { Store } from '../data/store';
+import type { ModelSchema } from '../data/types';
 import { connectCloudBackend, fetchConfigs, syncStatus } from './backendApi';
 
-type BaseStore = Store<ModelSchema, Record<string, never>>;
-type MockStore = Pick<BaseStore, 'getName' | 'getSerializedSchema'>;
-
-const createStore = (name: string, schema: object = { fields: name }): MockStore =>
-  ({
-    getName: () => name,
-    getSerializedSchema: () => schema,
-  }) as MockStore;
-
-const asStoreArray = (stores: MockStore[]): BaseStore[] => stores as unknown as BaseStore[];
+function createStore(name: string, options?: { schema?: ModelSchema }) {
+  return new Store<ModelSchema, Record<string, never>>(name, {
+    schema: options?.schema ?? ({} as ModelSchema),
+    indexes: [],
+    methods: undefined,
+  });
+}
 
 describe('app/backendApi', () => {
   const originalEnv = process.env;
@@ -39,11 +36,9 @@ describe('app/backendApi', () => {
     test('throws when MODELENCE_CONTAINER_ID is missing', async () => {
       delete process.env.MODELENCE_CONTAINER_ID;
 
-      await expect(
-        connectCloudBackend({
-          stores: [],
-        })
-      ).rejects.toThrow('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
+      await expect(connectCloudBackend({})).rejects.toThrow(
+        'Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set'
+      );
     });
 
     test('posts store metadata and returns cloud configuration', async () => {
@@ -78,11 +73,6 @@ describe('app/backendApi', () => {
         { alias: 'daily-job', description: 'runs daily', interval: 3600, timeout: 60 },
       ];
 
-      const storeMocks = [
-        createStore('users', { name: 'users' }),
-        createStore('sessions', { name: 'sessions' }),
-      ];
-
       const roles: Record<string, RoleDefinition> = {
         admin: { description: 'Full access', permissions: ['manage_users', 'manage_content'] },
         editor: { permissions: ['manage_content'] },
@@ -91,7 +81,7 @@ describe('app/backendApi', () => {
       const result = await connectCloudBackend({
         configSchema,
         cronJobsMetadata,
-        stores: asStoreArray(storeMocks),
+        stores: [createStore('users'), createStore('sessions')],
         roles,
       });
 
@@ -116,8 +106,8 @@ describe('app/backendApi', () => {
         cronJobsMetadata,
         roles,
         dataModels: [
-          { name: 'users', schema: { name: 'users' }, collections: ['users'], version: 2 },
-          { name: 'sessions', schema: { name: 'sessions' }, collections: ['sessions'], version: 2 },
+          { name: 'users', schema: {}, collections: ['users'], version: 2 },
+          { name: 'sessions', schema: {}, collections: ['sessions'], version: 2 },
         ],
       });
       expect(hostnameSpy).toHaveBeenCalled();
@@ -136,7 +126,7 @@ describe('app/backendApi', () => {
 
       await expect(
         connectCloudBackend({
-          stores: asStoreArray([createStore('users')]),
+          stores: [createStore('users')],
         })
       ).rejects.toThrow('invalid container');
 
@@ -150,11 +140,7 @@ describe('app/backendApi', () => {
       process.env.MODELENCE_CONTAINER_ID = 'container-123';
       delete process.env.MODELENCE_SERVICE_ENDPOINT;
 
-      await expect(
-        connectCloudBackend({
-          stores: [],
-        })
-      ).rejects.toThrow(
+      await expect(connectCloudBackend({})).rejects.toThrow(
         'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
       );
     });

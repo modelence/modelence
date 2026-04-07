@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import type { Response } from 'express';
 import { ObjectId } from 'mongodb';
 
 const mockUsersFindOne = jest.fn();
@@ -77,7 +78,7 @@ jest.unstable_mockModule('@/config/server', () => ({
 const mockCreateSession = jest.fn();
 jest.unstable_mockModule('./session', () => ({
   createSession: mockCreateSession,
-  setAuthTokenCookie: jest.fn((res: any, authToken: string) => {
+  setAuthTokenCookie: jest.fn((res: Response, authToken: string) => {
     res.cookie('authToken', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

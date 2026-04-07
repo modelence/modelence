@@ -4,6 +4,7 @@ import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
 import { AppConfig } from '../config/types';
+import { ModelSchema } from '../data/types';
 
 type CloudBackendConnectOkResponse = {
   status: 'ok';
@@ -34,8 +35,7 @@ export async function connectCloudBackend({
 }: {
   configSchema?: ConfigSchema;
   cronJobsMetadata?: CronJobMetadata[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  stores: Store<any, any>[];
+  stores?: Store<ModelSchema, Record<string, never>>[];
   roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
   const containerId = process.env.MODELENCE_CONTAINER_ID;
@@ -44,19 +44,20 @@ export async function connectCloudBackend({
   }
 
   try {
-    const dataModels = Object.values(stores).map((store) => {
-      return {
-        name: store.getName(),
-        schema: store.getSerializedSchema(),
-        collections: [store.getName()],
-        version: 2,
-      };
-    });
+    const dataStores = (stores ?? []).map((store) => ({
+      name: store.getName(),
+      schema: store.getSerializedSchema(),
+      collections: [store.getName()],
+      version: 2,
+      indexes: store.getIndexes(),
+      searchIndexes: store.getSearchIndexes(),
+      indexCreationMode: store.getIndexCreationMode(),
+    }));
 
     const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
       containerId,
-      dataModels,
+      dataModels: dataStores,
       configSchema,
       cronJobsMetadata,
       roles,
