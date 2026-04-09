@@ -32,7 +32,7 @@ import filesModule from '../files';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
-import { getAutoLoadedModules } from './autoLoad';
+import { getAutoLoadedMigrations, getAutoLoadedModules } from './autoLoad';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
@@ -110,6 +110,8 @@ export async function startApp({
   const autoLoadedModules = getAutoLoadedModules();
   const combinedModules = [...systemModules, ...autoLoadedModules, ...modules];
 
+  const allMigrations = mergeMigrations(getAutoLoadedMigrations(), migrations);
+
   markAppStarted();
 
   const userModules = [...autoLoadedModules, ...modules];
@@ -161,9 +163,9 @@ export async function startApp({
     await connect();
     const allStoresToInit = [...new Set([...storesToInit, ...effectiveStores])];
     initStores(allStoresToInit);
-    await createIndexesAndMigrationsWithLock(effectiveStores, migrations);
+    await createIndexesAndMigrationsWithLock(effectiveStores, allMigrations);
   } else {
-    startMigrations(migrations);
+    startMigrations(allMigrations);
   }
 
   if (hasRemoteBackend) {
@@ -358,4 +360,24 @@ async function getAppDetails() {
       name: 'unknown',
     };
   }
+}
+
+function mergeMigrations(
+  autoLoaded: MigrationScript[],
+  explicit: MigrationScript[]
+): MigrationScript[] {
+  const all = [...autoLoaded, ...explicit];
+  if (all.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<number>();
+  for (const migration of all) {
+    if (seen.has(migration.version)) {
+      throw new Error(`Duplicate migration version: ${migration.version}`);
+    }
+    seen.add(migration.version);
+  }
+
+  return all.sort((a, b) => a.version - b.version);
 }

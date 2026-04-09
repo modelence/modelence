@@ -2,7 +2,7 @@ export { startApp, type AppOptions } from './app';
 export type { AuthConfig, AuthOption } from './app/authConfig';
 export type { SecurityConfig } from './app/securityConfig';
 export { Module } from './app/module';
-export { setAutoLoadedModules } from './app/autoLoad';
+export { setAutoLoadedModules, setAutoLoadedMigrations } from './app/autoLoad';
 export {
   RouteHandler,
   RouteParams,
@@ -22,6 +22,9 @@ export { deleteUser, disableUser } from './auth/deleteUser';
 // Database
 export { schema } from './data/types';
 export { Store } from './data/store';
+
+// Migrations
+export type { MigrationScript } from './migration';
 
 // Cron jobs
 export { CronJobInputParams } from './cron/types';
