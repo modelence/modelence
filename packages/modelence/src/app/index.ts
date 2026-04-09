@@ -32,6 +32,7 @@ import filesModule from '../files';
 import { viteServer } from '../viteServer';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
+import { getAutoLoadedModules } from './autoLoad';
 import { Module } from './module';
 import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
@@ -106,12 +107,15 @@ export async function startApp({
     lockModule,
     filesModule,
   ];
-  const combinedModules = [...systemModules, ...modules];
+  const autoLoadedModules = getAutoLoadedModules();
+  const combinedModules = [...systemModules, ...autoLoadedModules, ...modules];
 
   markAppStarted();
 
+  const userModules = [...autoLoadedModules, ...modules];
+
   initSystemMethods(systemModules);
-  initCustomMethods(modules);
+  initCustomMethods(userModules);
 
   initRoles(roles, defaultRoles);
 

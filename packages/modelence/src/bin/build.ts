@@ -1,9 +1,16 @@
 import fs from 'fs/promises';
-import { getBuildPath, getModelencePath, getPostBuildCommand, getServerPath } from './config';
+import {
+  getBuildPath,
+  getConfig,
+  getModelencePath,
+  getPostBuildCommand,
+  getServerPath,
+} from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
 import { execSync } from 'child_process';
+import { generateAutoLoadFiles } from './scan';
 
 async function buildClient() {
   const postBuildCommand = getPostBuildCommand();
@@ -36,9 +43,17 @@ async function buildVite() {
 
 async function buildServer() {
   console.log('Building server with tsup...');
+
+  const { serverDir, serverEntry } = getConfig();
+  await generateAutoLoadFiles(serverDir, serverEntry);
+
+  const entryPath = path.resolve('.modelence/generated/entry.ts');
+  const serverPath = getServerPath();
+  const outputName = path.basename(serverPath, path.extname(serverPath));
+
   return new Promise((resolve) => {
     tsupBuild({
-      entry: [getServerPath()],
+      entry: { [outputName]: entryPath },
       format: 'esm',
       sourcemap: true,
       minify: process.env.NODE_ENV === 'production',

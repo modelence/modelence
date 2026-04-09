@@ -1,8 +1,8 @@
 import { createWriteStream, promises as fs } from 'fs';
-import { join } from 'path';
+import { basename, extname, join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getProjectPath, getStudioUrl } from './config';
+import { getProjectPath, getServerPath, getStudioUrl } from './config';
 import { build } from './build';
 
 export async function deploy(options: { app: string; env: string; host?: string }) {
@@ -22,11 +22,14 @@ export async function deploy(options: { app: string; env: string; host?: string 
 
   await fs.unlink(bundlePath);
 
+  const serverPath = getServerPath();
+  const serverFilename = basename(serverPath, extname(serverPath));
+
   await triggerDeployment(
     options.app,
     options.env,
     bundleName,
-    join('.modelence', 'build', 'app.mjs'),
+    join('.modelence', 'build', `${serverFilename}.mjs`),
     token,
     host
   );

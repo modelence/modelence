@@ -2,6 +2,7 @@ export { startApp, type AppOptions } from './app';
 export type { AuthConfig, AuthOption } from './app/authConfig';
 export type { SecurityConfig } from './app/securityConfig';
 export { Module } from './app/module';
+export { setAutoLoadedModules } from './app/autoLoad';
 export {
   RouteHandler,
   RouteParams,
