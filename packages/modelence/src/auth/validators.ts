@@ -61,8 +61,12 @@ export function validateProfileFields(
 export function validatePassword(value: string) {
   return z
     .string()
-    .min(MIN_PASSWORD_LENGTH, { message: `Password must contain at least ${MIN_PASSWORD_LENGTH} characters` })
-    .max(MAX_PASSWORD_LENGTH, { message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters` })
+    .min(MIN_PASSWORD_LENGTH, {
+      message: `Password must contain at least ${MIN_PASSWORD_LENGTH} characters`,
+    })
+    .max(MAX_PASSWORD_LENGTH, {
+      message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
+    })
     .parse(value);
 }
 
