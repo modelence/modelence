@@ -1,23 +1,35 @@
 import fs from 'fs';
 import path from 'path';
 
-const MODULE_FILES = ['stores', 'queries', 'mutations', 'crons', 'routes'] as const;
+const MODULE_FOLDERS = ['stores', 'queries', 'mutations', 'crons', 'routes'] as const;
 const MODULE_INDEX = 'index';
+const TS_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
 
 const VALID_MODULE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-type ModuleFileType = (typeof MODULE_FILES)[number];
+type ModuleFolderName = (typeof MODULE_FOLDERS)[number];
+
+interface ScannedFile {
+  name: string;
+  filePath: string;
+}
 
 interface ScannedModule {
   name: string;
   identifier: string;
-  files: Partial<Record<ModuleFileType, string>>;
+  folders: Partial<Record<ModuleFolderName, ScannedFile[]>>;
   indexPath: string | null;
+}
+
+interface ScannedMigration {
+  filePath: string;
+  identifier: string;
 }
 
 /**
  * Scans the modules directory for auto-loadable module definitions.
- * Each subdirectory becomes a module, with optional stores.ts, queries.ts, etc.
+ * Each subdirectory becomes a module. Each sub-folder (stores, queries, etc.)
+ * contains one default export per file.
  */
 export function scanModulesDir(modulesDir: string): ScannedModule[] {
   if (!fs.existsSync(modulesDir)) {
@@ -33,7 +45,7 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
     }
 
     const dirName = entry.name;
-    const identifier = dirName.replace(/-/g, '_');
+    const identifier = toIdentifier(dirName);
 
     if (!VALID_MODULE_NAME.test(identifier)) {
       throw new Error(
@@ -47,21 +59,24 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
     const scanned: ScannedModule = {
       name: dirName,
       identifier,
-      files: {},
+      folders: {},
       indexPath: null,
     };
 
-    for (const fileType of MODULE_FILES) {
-      const filePath = findModuleFile(moduleDirPath, fileType);
-      if (filePath) {
-        scanned.files[fileType] = filePath;
+    for (const folderName of MODULE_FOLDERS) {
+      const folderPath = path.join(moduleDirPath, folderName);
+      if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+        const files = scanFolder(folderPath);
+        if (files.length > 0) {
+          scanned.folders[folderName] = files;
+        }
       }
     }
 
-    scanned.indexPath = findModuleFile(moduleDirPath, MODULE_INDEX);
+    scanned.indexPath = findFile(moduleDirPath, MODULE_INDEX);
 
-    const hasAnyFiles = Object.keys(scanned.files).length > 0 || scanned.indexPath !== null;
-    if (hasAnyFiles) {
+    const hasAnyContent = Object.keys(scanned.folders).length > 0 || scanned.indexPath !== null;
+    if (hasAnyContent) {
       modules.push(scanned);
     }
   }
@@ -69,9 +84,46 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
   return modules.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function findModuleFile(dirPath: string, baseName: string): string | null {
-  const extensions = ['.ts', '.js', '.mts', '.mjs'];
-  for (const ext of extensions) {
+/** Scans a folder for .ts/.js files, returns sorted entries. */
+function scanFolder(dirPath: string): ScannedFile[] {
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const result: ScannedFile[] = [];
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      continue;
+    }
+
+    const ext = path.extname(entry.name);
+    if (!TS_EXTENSIONS.includes(ext)) {
+      continue;
+    }
+
+    const baseName = path.basename(entry.name, ext);
+    if (baseName === 'index') {
+      continue;
+    }
+
+    const identifier = toIdentifier(baseName);
+    if (!VALID_MODULE_NAME.test(identifier)) {
+      throw new Error(
+        `Invalid file name: "${entry.name}" in ${dirPath}. ` +
+          'File names must be valid JS identifiers (letters, digits, underscores; cannot start with a digit). ' +
+          'Hyphens are allowed and converted to underscores for internal use.'
+      );
+    }
+
+    result.push({
+      name: baseName,
+      filePath: path.join(dirPath, entry.name),
+    });
+  }
+
+  return result.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function findFile(dirPath: string, baseName: string): string | null {
+  for (const ext of TS_EXTENSIONS) {
     const filePath = path.join(dirPath, baseName + ext);
     if (fs.existsSync(filePath)) {
       return filePath;
@@ -80,11 +132,8 @@ function findModuleFile(dirPath: string, baseName: string): string | null {
   return null;
 }
 
-const MIGRATION_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
-
-interface ScannedMigration {
-  filePath: string;
-  identifier: string;
+function toIdentifier(name: string): string {
+  return name.replace(/-/g, '_');
 }
 
 /**
@@ -105,7 +154,7 @@ export function scanMigrationsDir(migrationsDir: string): ScannedMigration[] {
     }
 
     const ext = path.extname(entry.name);
-    if (!MIGRATION_EXTENSIONS.includes(ext)) {
+    if (!TS_EXTENSIONS.includes(ext)) {
       continue;
     }
 
@@ -121,37 +170,41 @@ export function scanMigrationsDir(migrationsDir: string): ScannedMigration[] {
   return migrations.sort((a, b) => a.filePath.localeCompare(b.filePath));
 }
 
+// --- Code generation ---
+
+/** Folders where values are collected into an array (stores, routes). */
+const ARRAY_FOLDERS: ReadonlySet<string> = new Set(['stores', 'routes']);
+
+/** Module constructor property name for each folder. */
+const FOLDER_TO_PROP: Record<ModuleFolderName, string> = {
+  stores: 'stores',
+  queries: 'queries',
+  mutations: 'mutations',
+  crons: 'cronJobs',
+  routes: 'routes',
+};
+
 /**
  * Generates the content for the auto-modules registration file.
- * This file imports all discovered module files and calls setAutoLoadedModules.
  */
 export function generateAutoModulesContent(
   modules: ScannedModule[],
   migrations: ScannedMigration[]
 ): string {
-  const imports: string[] = ['Module', 'setAutoLoadedModules'];
+  const frameworkImports: string[] = ['Module', 'setAutoLoadedModules'];
   if (migrations.length > 0) {
-    imports.push('setAutoLoadedMigrations');
+    frameworkImports.push('setAutoLoadedMigrations');
   }
 
   const lines: string[] = [
     '// Auto-generated by Modelence. Do not edit.',
-    `import { ${imports.join(', ')} } from 'modelence/server';`,
+    `import { ${frameworkImports.join(', ')} } from 'modelence/server';`,
     '',
   ];
 
   // Generate module imports
   for (const mod of modules) {
-    const id = mod.identifier;
-    for (const [fileType, filePath] of Object.entries(mod.files)) {
-      if (!filePath) continue;
-      const importPath = toRelativeImport(filePath);
-      lines.push(`import * as ${id}_${fileType} from '${importPath}';`);
-    }
-    if (mod.indexPath) {
-      const importPath = toRelativeImport(mod.indexPath);
-      lines.push(`import * as ${id}_config from '${importPath}';`);
-    }
+    generateModuleImports(lines, mod);
   }
 
   // Generate migration imports
@@ -165,33 +218,7 @@ export function generateAutoModulesContent(
   lines.push('setAutoLoadedModules([');
 
   for (const mod of modules) {
-    const id = mod.identifier;
-    const props: string[] = [];
-
-    if (mod.files.stores) {
-      props.push(`    stores: Object.values(${id}_stores) as any[],`);
-    }
-    if (mod.files.queries) {
-      props.push(`    queries: ${id}_queries,`);
-    }
-    if (mod.files.mutations) {
-      props.push(`    mutations: ${id}_mutations,`);
-    }
-    if (mod.files.crons) {
-      props.push(`    cronJobs: ${id}_crons,`);
-    }
-    if (mod.files.routes) {
-      props.push(`    routes: Object.values(${id}_routes) as any[],`);
-    }
-    if (mod.indexPath) {
-      props.push(`    configSchema: ${id}_config.configSchema ?? {},`);
-      props.push(`    rateLimits: ${id}_config.rateLimits ?? [],`);
-      props.push(`    channels: ${id}_config.channels ?? [],`);
-    }
-
-    lines.push(`  new Module(${JSON.stringify(mod.name)}, {`);
-    lines.push(...props);
-    lines.push('  }),');
+    generateModuleConstructor(lines, mod);
   }
 
   lines.push(']);');
@@ -211,9 +238,61 @@ export function generateAutoModulesContent(
   return lines.join('\n');
 }
 
+function generateModuleImports(lines: string[], mod: ScannedModule): void {
+  const id = mod.identifier;
+
+  for (const [folderName, files] of Object.entries(mod.folders) as [
+    ModuleFolderName,
+    ScannedFile[],
+  ][]) {
+    for (const entry of files) {
+      const entryId = toIdentifier(entry.name);
+      const importPath = toRelativeImport(entry.filePath);
+      lines.push(`import ${id}_${folderName}_${entryId} from '${importPath}';`);
+    }
+  }
+
+  if (mod.indexPath) {
+    const importPath = toRelativeImport(mod.indexPath);
+    lines.push(`import * as ${id}_config from '${importPath}';`);
+  }
+}
+
+function generateModuleConstructor(lines: string[], mod: ScannedModule): void {
+  const id = mod.identifier;
+  const props: string[] = [];
+
+  for (const [folderName, files] of Object.entries(mod.folders) as [
+    ModuleFolderName,
+    ScannedFile[],
+  ][]) {
+    const propName = FOLDER_TO_PROP[folderName];
+    const isArray = ARRAY_FOLDERS.has(folderName);
+    const refs = files.map((e) => `${id}_${folderName}_${toIdentifier(e.name)}`);
+
+    if (isArray) {
+      props.push(`    ${propName}: [${refs.join(', ')}] as any[],`);
+    } else {
+      const pairs = files.map(
+        (e) => `${JSON.stringify(e.name)}: ${id}_${folderName}_${toIdentifier(e.name)}`
+      );
+      props.push(`    ${propName}: { ${pairs.join(', ')} },`);
+    }
+  }
+
+  if (mod.indexPath) {
+    props.push(`    configSchema: ${id}_config.configSchema ?? {},`);
+    props.push(`    rateLimits: ${id}_config.rateLimits ?? [],`);
+    props.push(`    channels: ${id}_config.channels ?? [],`);
+  }
+
+  lines.push(`  new Module(${JSON.stringify(mod.name)}, {`);
+  lines.push(...props);
+  lines.push('  }),');
+}
+
 /**
  * Generates the wrapper entry file content.
- * This imports the auto-modules file first, then the user's entry.
  */
 export function generateEntryContent(serverDir: string, serverEntry: string): string {
   const userEntryPath = path.join(serverDir, serverEntry);
@@ -228,18 +307,14 @@ export function generateEntryContent(serverDir: string, serverEntry: string): st
 }
 
 /**
- * Converts an absolute or relative file path to a relative import path
- * from the .modelence/generated/ directory.
+ * Converts a file path to a relative import path from .modelence/generated/.
  */
 function toRelativeImport(filePath: string): string {
   const generatedDir = path.resolve('.modelence/generated');
   const absolutePath = path.resolve(filePath);
   let rel = path.relative(generatedDir, absolutePath);
-  // Ensure forward slashes
   rel = rel.replace(/\\/g, '/');
-  // Remove extension for import
   rel = rel.replace(/\.(ts|js|mts|mjs)$/, '');
-  // Ensure starts with ./
   if (!rel.startsWith('.')) {
     rel = './' + rel;
   }
