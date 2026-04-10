@@ -236,7 +236,10 @@ export function generateAutoModulesContent(
   modules: ScannedModule[],
   migrations: ScannedMigration[]
 ): string {
-  const frameworkImports: string[] = ['Module', 'setAutoLoadedModules'];
+  const frameworkImports: string[] = ['setAutoLoadedModules'];
+  if (modules.length > 0) {
+    frameworkImports.push('Module');
+  }
   if (migrations.length > 0) {
     frameworkImports.push('setAutoLoadedMigrations');
   }
