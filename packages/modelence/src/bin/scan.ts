@@ -81,6 +81,18 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
     }
   }
 
+  const seenIdentifiers = new Map<string, string>();
+  for (const mod of modules) {
+    const prev = seenIdentifiers.get(mod.identifier);
+    if (prev) {
+      throw new Error(
+        `Module identifier collision: directories "${prev}" and "${mod.name}" both resolve to identifier "${mod.identifier}". ` +
+          'Rename one of the directories to avoid the conflict.'
+      );
+    }
+    seenIdentifiers.set(mod.identifier, mod.name);
+  }
+
   return modules.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -88,6 +100,7 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
 function scanFolder(dirPath: string): ScannedFile[] {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   const seen = new Map<string, string>();
+  const seenIdentifiers = new Map<string, string>();
 
   for (const ext of TS_EXTENSIONS) {
     for (const entry of entries) {
@@ -112,6 +125,18 @@ function scanFolder(dirPath: string): ScannedFile[] {
             'Hyphens are allowed and converted to underscores for internal use.'
         );
       }
+
+      if (seenIdentifiers.has(identifier)) {
+        const prevName = seenIdentifiers.get(identifier)!;
+        if (prevName !== baseName) {
+          throw new Error(
+            `File identifier collision in ${dirPath}: "${prevName}" and "${baseName}" both resolve to identifier "${identifier}". ` +
+              'Rename one of the files to avoid the conflict.'
+          );
+        }
+        continue;
+      }
+      seenIdentifiers.set(identifier, baseName);
 
       seen.set(baseName, path.join(dirPath, entry.name));
     }
@@ -149,25 +174,42 @@ export function scanMigrationsDir(migrationsDir: string): ScannedMigration[] {
   }
 
   const entries = fs.readdirSync(migrationsDir, { withFileTypes: true });
+  const seenBaseNames = new Map<string, string>();
+  const seenIdentifiers = new Map<string, string>();
   const migrations: ScannedMigration[] = [];
 
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      continue;
+  for (const ext of TS_EXTENSIONS) {
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        continue;
+      }
+
+      if (path.extname(entry.name) !== ext) {
+        continue;
+      }
+
+      const baseName = path.basename(entry.name, ext);
+      if (seenBaseNames.has(baseName)) {
+        continue;
+      }
+      seenBaseNames.set(baseName, entry.name);
+
+      const identifier = `migration_${baseName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      const prevFile = seenIdentifiers.get(identifier);
+      if (prevFile) {
+        throw new Error(
+          `Migration identifier collision: "${prevFile}" and "${entry.name}" both resolve to identifier "${identifier}". ` +
+            'Rename one of the files to avoid the conflict.'
+        );
+      }
+      seenIdentifiers.set(identifier, entry.name);
+
+      migrations.push({
+        filePath: path.join(migrationsDir, entry.name),
+        identifier,
+      });
     }
-
-    const ext = path.extname(entry.name);
-    if (!TS_EXTENSIONS.includes(ext)) {
-      continue;
-    }
-
-    const baseName = path.basename(entry.name, ext);
-    const identifier = baseName.replace(/[^a-zA-Z0-9_]/g, '_');
-
-    migrations.push({
-      filePath: path.join(migrationsDir, entry.name),
-      identifier: `migration_${identifier}`,
-    });
   }
 
   return migrations.sort((a, b) => a.filePath.localeCompare(b.filePath));
