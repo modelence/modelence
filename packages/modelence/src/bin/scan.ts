@@ -84,39 +84,42 @@ export function scanModulesDir(modulesDir: string): ScannedModule[] {
   return modules.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Scans a folder for .ts/.js files, returns sorted entries. */
+/** Scans a folder for .ts/.js files, returns sorted entries. Deduplicates by base name (.ts takes priority). */
 function scanFolder(dirPath: string): ScannedFile[] {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const seen = new Map<string, string>();
+
+  for (const ext of TS_EXTENSIONS) {
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        continue;
+      }
+
+      if (path.extname(entry.name) !== ext) {
+        continue;
+      }
+
+      const baseName = path.basename(entry.name, ext);
+      if (baseName === 'index' || seen.has(baseName)) {
+        continue;
+      }
+
+      const identifier = toIdentifier(baseName);
+      if (!VALID_MODULE_NAME.test(identifier)) {
+        throw new Error(
+          `Invalid file name: "${entry.name}" in ${dirPath}. ` +
+            'File names must be valid JS identifiers (letters, digits, underscores; cannot start with a digit). ' +
+            'Hyphens are allowed and converted to underscores for internal use.'
+        );
+      }
+
+      seen.set(baseName, path.join(dirPath, entry.name));
+    }
+  }
+
   const result: ScannedFile[] = [];
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      continue;
-    }
-
-    const ext = path.extname(entry.name);
-    if (!TS_EXTENSIONS.includes(ext)) {
-      continue;
-    }
-
-    const baseName = path.basename(entry.name, ext);
-    if (baseName === 'index') {
-      continue;
-    }
-
-    const identifier = toIdentifier(baseName);
-    if (!VALID_MODULE_NAME.test(identifier)) {
-      throw new Error(
-        `Invalid file name: "${entry.name}" in ${dirPath}. ` +
-          'File names must be valid JS identifiers (letters, digits, underscores; cannot start with a digit). ' +
-          'Hyphens are allowed and converted to underscores for internal use.'
-      );
-    }
-
-    result.push({
-      name: baseName,
-      filePath: path.join(dirPath, entry.name),
-    });
+  for (const [name, filePath] of seen) {
+    result.push({ name, filePath });
   }
 
   return result.sort((a, b) => a.name.localeCompare(b.name));

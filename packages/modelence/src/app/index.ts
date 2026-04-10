@@ -108,13 +108,13 @@ export async function startApp({
     filesModule,
   ];
   const autoLoadedModules = getAutoLoadedModules();
-  const combinedModules = [...systemModules, ...autoLoadedModules, ...modules];
+  const userModules = [...autoLoadedModules, ...modules];
+  checkDuplicateModuleNames(userModules);
+  const combinedModules = [...systemModules, ...userModules];
 
   const allMigrations = mergeMigrations(getAutoLoadedMigrations(), migrations);
 
   markAppStarted();
-
-  const userModules = [...autoLoadedModules, ...modules];
 
   initSystemMethods(systemModules);
   initCustomMethods(userModules);
@@ -380,4 +380,14 @@ function mergeMigrations(
   }
 
   return all.sort((a, b) => a.version - b.version);
+}
+
+function checkDuplicateModuleNames(modules: Module[]) {
+  const seen = new Set<string>();
+  for (const module of modules) {
+    if (seen.has(module.name)) {
+      throw new Error(`Duplicate module name: "${module.name}"`);
+    }
+    seen.add(module.name);
+  }
 }
