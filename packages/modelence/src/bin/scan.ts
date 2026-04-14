@@ -237,8 +237,13 @@ export function generateClientModulesContent(modules: ScannedModule[]): string {
     '',
   ];
 
-  // Generate type-only imports for each query/mutation file
+  // Generate type-only imports for each query/mutation file and module index
   for (const mod of modulesWithMethods) {
+    if (mod.indexPath) {
+      const importPath = toRelativeImport(mod.indexPath);
+      lines.push(`import type ${mod.identifier}_index from '${importPath}';`);
+    }
+
     for (const folderName of ['queries', 'mutations'] as const) {
       const files = mod.folders[folderName];
       if (!files) continue;
@@ -259,7 +264,11 @@ export function generateClientModulesContent(modules: ScannedModule[]): string {
 
     lines.push(`export const ${id} = createClientModule<{`);
     lines.push(`  name: ${JSON.stringify(mod.name)};`);
-    lines.push(`  configSchema: Record<string, never>;`);
+    lines.push(
+      mod.indexPath
+        ? `  configSchema: (typeof ${id}_index)['configSchema'];`
+        : `  configSchema: Record<string, never>;`
+    );
 
     // queries
     const queryFiles = mod.folders.queries ?? [];
@@ -373,7 +382,7 @@ function generateModuleImports(lines: string[], mod: ScannedModule): void {
 
   if (mod.indexPath) {
     const importPath = toRelativeImport(mod.indexPath);
-    lines.push(`import * as ${id}_config from '${importPath}';`);
+    lines.push(`import ${id}_index from '${importPath}';`);
   }
 }
 
@@ -381,28 +390,32 @@ function generateModuleConstructor(lines: string[], mod: ScannedModule): void {
   const id = mod.identifier;
   const props: string[] = [];
 
-  for (const [folderName, files] of Object.entries(mod.folders) as [
-    ModuleFolderName,
-    ScannedFile[],
-  ][]) {
+  for (const folderName of MODULE_FOLDERS) {
     const propName = FOLDER_TO_PROP[folderName];
     const isArray = ARRAY_FOLDERS.has(folderName);
-    const refs = files.map((e) => `${id}_${folderName}_${toIdentifier(e.name)}`);
+    const files = mod.folders[folderName];
+    const refs = (files ?? []).map((e) => `${id}_${folderName}_${toIdentifier(e.name)}`);
+
+    if (!mod.indexPath && !files) {
+      continue;
+    }
 
     if (isArray) {
-      props.push(`    ${propName}: [${refs.join(', ')}] as any[],`);
+      const indexSpread = mod.indexPath ? `...${id}_index.${propName}, ` : '';
+      props.push(`    ${propName}: [${indexSpread}${refs.join(', ')}] as any[],`);
     } else {
-      const pairs = files.map(
+      const pairs = (files ?? []).map(
         (e) => `${JSON.stringify(e.name)}: ${id}_${folderName}_${toIdentifier(e.name)}`
       );
-      props.push(`    ${propName}: { ${pairs.join(', ')} },`);
+      const indexSpread = mod.indexPath ? `...${id}_index.${propName}, ` : '';
+      props.push(`    ${propName}: { ${indexSpread}${pairs.join(', ')} },`);
     }
   }
 
   if (mod.indexPath) {
-    props.push(`    configSchema: ${id}_config.configSchema ?? {},`);
-    props.push(`    rateLimits: ${id}_config.rateLimits ?? [],`);
-    props.push(`    channels: ${id}_config.channels ?? [],`);
+    props.push(`    configSchema: ${id}_index.configSchema,`);
+    props.push(`    rateLimits: ${id}_index.rateLimits,`);
+    props.push(`    channels: ${id}_index.channels,`);
   }
 
   lines.push(`  new Module(${JSON.stringify(mod.name)}, {`);

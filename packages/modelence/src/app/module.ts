@@ -42,7 +42,7 @@ type Mutations = Record<string, AnyMethodShape>;
  */
 export class Module<
   TName extends string = string,
-  TSchema extends Record<string, ConfigParams> = ConfigSchema,
+  const TSchema extends Record<string, ConfigParams> = ConfigSchema,
   TQueries extends Queries = Queries,
   TMutations extends Mutations = Mutations,
 > {
