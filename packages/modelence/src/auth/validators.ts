@@ -7,6 +7,8 @@ export const MAX_HANDLE_LENGTH = 50;
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
 
+export const MAX_EMAIL_LENGTH = 254;
+
 // Reusable string validators
 const trimmedNonEmptyString = (opts: { min?: number; max: number }) =>
   z
@@ -71,7 +73,14 @@ export function validatePassword(value: string) {
 }
 
 export function validateEmail(value: string) {
-  return z.string().email({ message: 'Invalid email address' }).parse(value).toLowerCase();
+  return z
+    .string()
+    .max(MAX_EMAIL_LENGTH, {
+      message: `Email must be at most ${MAX_EMAIL_LENGTH} characters`,
+    })
+    .email({ message: 'Invalid email address' })
+    .parse(value)
+    .toLowerCase();
 }
 
 export function validateHandle(value: string) {
