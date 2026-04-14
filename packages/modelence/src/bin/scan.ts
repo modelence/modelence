@@ -401,7 +401,7 @@ function generateModuleConstructor(lines: string[], mod: ScannedModule): void {
     }
 
     if (isArray) {
-      const indexSpread = mod.indexPath ? `...${id}_index.${propName}, ` : '';
+      const indexSpread = mod.indexPath ? `...(${id}_index.${propName} ?? []), ` : '';
       props.push(`    ${propName}: [${indexSpread}${refs.join(', ')}] as any[],`);
     } else {
       const pairs = (files ?? []).map(
