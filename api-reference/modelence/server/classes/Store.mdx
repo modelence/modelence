@@ -5,7 +5,7 @@ title: Store
 
 [API Reference](/api-reference/modelence/server/classes/../../../index) / [modelence](/api-reference/modelence/server/classes/../../index) / [server](/api-reference/modelence/server/classes/../index) / Store
 
-Defined in: [packages/modelence/src/data/store.ts:367](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L367)
+Defined in: [packages/modelence/src/data/store.ts:367](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L367)
 
 The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
 
@@ -40,7 +40,7 @@ const dbTodos = new Store('todos', {
 
 > **new Store**\<`TSchema`, `TMethods`\>(`name`, `options`): `Store`\<`TSchema`, `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:403](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L403)
+Defined in: [packages/modelence/src/data/store.ts:403](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L403)
 
 Creates a new Store instance
 
@@ -64,7 +64,7 @@ Creates a new Store instance
 
 | Property | Modifier | Type | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="doc"></a> `Doc` | `readonly` | `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods` | [packages/modelence/src/data/store.ts:382](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L382) |
+| <a id="doc"></a> `Doc` | `readonly` | `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods` | [packages/modelence/src/data/store.ts:382](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L382) |
 
 ## Methods
 
@@ -72,7 +72,7 @@ Creates a new Store instance
 
 > **aggregate**(`pipeline`, `options?`): `AggregationCursor`\<`Document`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1155](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1155)
+Defined in: [packages/modelence/src/data/store.ts:1155](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1155)
 
 Aggregates documents using MongoDB's aggregation framework
 
@@ -95,7 +95,7 @@ The aggregation cursor
 
 > **bulkWrite**(`operations`): `Promise`\<`BulkWriteResult`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1165](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1165)
+Defined in: [packages/modelence/src/data/store.ts:1165](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1165)
 
 Performs a bulk write operation on the collection
 
@@ -117,7 +117,7 @@ The result of the bulk write operation
 
 > **countDocuments**(`query`): `Promise`\<`number`\>
 
-Defined in: [packages/modelence/src/data/store.ts:877](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L877)
+Defined in: [packages/modelence/src/data/store.ts:877](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L877)
 
 Counts the number of documents that match a query
 
@@ -139,7 +139,7 @@ The number of documents that match the query
 
 > **deleteMany**(`selector`, `options?`): `Promise`\<`DeleteResult`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1030](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1030)
+Defined in: [packages/modelence/src/data/store.ts:1030](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1030)
 
 Deletes multiple documents
 
@@ -163,7 +163,7 @@ The result of the delete operation
 
 > **deleteOne**(`selector`, `options?`): `Promise`\<`DeleteResult`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1017](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1017)
+Defined in: [packages/modelence/src/data/store.ts:1017](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1017)
 
 Deletes a single document
 
@@ -187,7 +187,7 @@ The result of the delete operation
 
 > **distinct**\<`K`\>(`key`, `filter?`, `options?`): `Promise`\<`Flatten`\<`WithId`\<`InferDocumentType`\<`TSchema`\>\>\[`K`\]\>[]\>
 
-Defined in: [packages/modelence/src/data/store.ts:1126](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1126)
+Defined in: [packages/modelence/src/data/store.ts:1126](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1126)
 
 Returns an array of distinct values for a field across the collection
 
@@ -217,7 +217,7 @@ An array of distinct values
 
 > **extend**\<`TExtendedSchema`, `TExtendedMethods`\>(`config`): `Store`\<`TSchema` & `TExtendedSchema` & `Record`\<`string`, `unknown`\>, `PreserveMethodsForExtendedSchema`\<`TMethods`, `TSchema` & `TExtendedSchema` & `Record`\<`string`, `unknown`\>\> & `TExtendedMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:506](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L506)
+Defined in: [packages/modelence/src/data/store.ts:506](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L506)
 
 Extends the store with additional schema fields, indexes, methods, and search indexes.
 Returns a new Store instance with the extended schema and updated types.
@@ -279,7 +279,7 @@ A new Store instance with the extended schema
 
 > **fetch**(`query`, `options?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`[]\>
 
-Defined in: [packages/modelence/src/data/store.ts:907](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L907)
+Defined in: [packages/modelence/src/data/store.ts:907](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L907)
 
 Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
 
@@ -318,7 +318,7 @@ The documents
 
 > **findById**(`id`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:849](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L849)
+Defined in: [packages/modelence/src/data/store.ts:849](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L849)
 
 Fetches a single document by its ID
 
@@ -340,7 +340,7 @@ The document, or null if not found
 
 > **findOne**(`query`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:806](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L806)
+Defined in: [packages/modelence/src/data/store.ts:806](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L806)
 
 Finds a single document matching the query
 
@@ -378,7 +378,7 @@ The document, or null if not found
 
 > **findOneAndDelete**(`selector`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1065](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1065)
+Defined in: [packages/modelence/src/data/store.ts:1065](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1065)
 
 Atomically finds a document and deletes it, returning the deleted document
 
@@ -401,7 +401,7 @@ The deleted document, or null if not found
 
 > **findOneAndReplace**(`selector`, `replacement`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1084](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1084)
+Defined in: [packages/modelence/src/data/store.ts:1084](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1084)
 
 Atomically finds a document and replaces it, returning the document
 
@@ -425,7 +425,7 @@ The document (before or after replacement, depending on options), or null if not
 
 > **findOneAndUpdate**(`selector`, `update`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1045](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1045)
+Defined in: [packages/modelence/src/data/store.ts:1045](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1045)
 
 Atomically finds a document and updates it, returning the document
 
@@ -449,7 +449,7 @@ The document (before or after update, depending on options), or null if not foun
 
 > **getDatabase**(): `Db`
 
-Defined in: [packages/modelence/src/data/store.ts:1174](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1174)
+Defined in: [packages/modelence/src/data/store.ts:1174](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1174)
 
 Returns the raw MongoDB database instance for advanced operations
 
@@ -469,7 +469,7 @@ Error if the store is not provisioned
 
 > **getIndexCreationMode**(): `IndexCreationMode`
 
-Defined in: [packages/modelence/src/data/store.ts:431](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L431)
+Defined in: [packages/modelence/src/data/store.ts:431](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L431)
 
 #### Returns
 
@@ -481,7 +481,7 @@ Defined in: [packages/modelence/src/data/store.ts:431](https://github.com/modele
 
 > **getName**(): `string`
 
-Defined in: [packages/modelence/src/data/store.ts:427](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L427)
+Defined in: [packages/modelence/src/data/store.ts:427](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L427)
 
 #### Returns
 
@@ -493,7 +493,7 @@ Defined in: [packages/modelence/src/data/store.ts:427](https://github.com/modele
 
 > **insertMany**(`documents`, `options?`): `Promise`\<`InsertManyResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:934](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L934)
+Defined in: [packages/modelence/src/data/store.ts:934](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L934)
 
 Inserts multiple documents
 
@@ -517,7 +517,7 @@ The result of the insert operation
 
 > **insertOne**(`document`, `options?`): `Promise`\<`InsertOneResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:921](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L921)
+Defined in: [packages/modelence/src/data/store.ts:921](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L921)
 
 Inserts a single document
 
@@ -541,7 +541,7 @@ The result of the insert operation
 
 > **rawCollection**(): `Collection`\<`InferDocumentType`\<`TSchema`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:1183](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1183)
+Defined in: [packages/modelence/src/data/store.ts:1183](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1183)
 
 Returns the raw MongoDB collection instance for advanced operations
 
@@ -561,7 +561,7 @@ Error if the store is not provisioned
 
 > **renameFrom**(`oldName`, `options?`): `Promise`\<`void`\>
 
-Defined in: [packages/modelence/src/data/store.ts:1192](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1192)
+Defined in: [packages/modelence/src/data/store.ts:1192](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1192)
 
 Renames an existing collection to this store's name, used for migrations
 
@@ -587,7 +587,7 @@ Error if the old collection doesn't exist or if this store's collection already 
 
 > **replaceOne**(`selector`, `replacement`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:1105](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1105)
+Defined in: [packages/modelence/src/data/store.ts:1105](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1105)
 
 Replaces a single document
 
@@ -611,7 +611,7 @@ The result of the replace operation
 
 > **requireById**(`id`, `errorHandler?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:861](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L861)
+Defined in: [packages/modelence/src/data/store.ts:861](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L861)
 
 Fetches a single document by its ID, or throws an error if not found
 
@@ -634,7 +634,7 @@ The document
 
 > **requireOne**(`query`, `options?`, `errorHandler?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
 
-Defined in: [packages/modelence/src/data/store.ts:814](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L814)
+Defined in: [packages/modelence/src/data/store.ts:814](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L814)
 
 #### Parameters
 
@@ -654,7 +654,7 @@ Defined in: [packages/modelence/src/data/store.ts:814](https://github.com/modele
 
 > **updateMany**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:981](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L981)
+Defined in: [packages/modelence/src/data/store.ts:981](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L981)
 
 Updates multiple documents
 
@@ -679,7 +679,7 @@ The result of the update operation
 
 > **updateOne**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:948](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L948)
+Defined in: [packages/modelence/src/data/store.ts:948](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L948)
 
 Updates a single document
 
@@ -704,7 +704,7 @@ The result of the update operation
 
 > **upsertMany**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:1000](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1000)
+Defined in: [packages/modelence/src/data/store.ts:1000](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1000)
 
 Updates multiple documents, or inserts them if they don't exist
 
@@ -729,7 +729,7 @@ The result of the update operation
 
 > **upsertOne**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:963](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L963)
+Defined in: [packages/modelence/src/data/store.ts:963](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L963)
 
 Updates a single document, or inserts it if it doesn't exist
 
@@ -754,7 +754,7 @@ The result of the update operation
 
 > **vectorSearch**(`params`): `Promise`\<`AggregationCursor`\<`Document`\>\>
 
-Defined in: [packages/modelence/src/data/store.ts:1237](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1237)
+Defined in: [packages/modelence/src/data/store.ts:1237](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1237)
 
 Performs a vector similarity search using MongoDB Atlas Vector Search
 
@@ -794,7 +794,7 @@ An aggregation cursor with search results and scores
 
 > **watch**(`pipeline?`, `options?`): `ChangeStream`
 
-Defined in: [packages/modelence/src/data/store.ts:1144](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1144)
+Defined in: [packages/modelence/src/data/store.ts:1144](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1144)
 
 Opens a change stream on the collection to watch for real-time changes
 
@@ -817,7 +817,7 @@ A ChangeStream instance
 
 > `static` **vectorIndex**(`params`): `object`
 
-Defined in: [packages/modelence/src/data/store.ts:1300](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1300)
+Defined in: [packages/modelence/src/data/store.ts:1300](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1300)
 
 Creates a MongoDB Atlas Vector Search index definition
 
@@ -858,7 +858,7 @@ A search index description object
 
 | Name | Type | Default value | Defined in |
 | ------ | ------ | ------ | ------ |
-| `definition` | `object` | - | [packages/modelence/src/data/store.ts:1314](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1314) |
-| `definition.fields` | `object`[] | - | [packages/modelence/src/data/store.ts:1315](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1315) |
-| `name` | `string` | - | [packages/modelence/src/data/store.ts:1313](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1313) |
-| `type` | `string` | `'vectorSearch'` | [packages/modelence/src/data/store.ts:1312](https://github.com/modelence/modelence/blob/973cc89ef2746e47a7c3848264f67078ff1fbbcb/packages/modelence/src/data/store.ts#L1312) |
+| `definition` | `object` | - | [packages/modelence/src/data/store.ts:1314](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1314) |
+| `definition.fields` | `object`[] | - | [packages/modelence/src/data/store.ts:1315](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1315) |
+| `name` | `string` | - | [packages/modelence/src/data/store.ts:1313](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1313) |
+| `type` | `string` | `'vectorSearch'` | [packages/modelence/src/data/store.ts:1312](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/data/store.ts#L1312) |
