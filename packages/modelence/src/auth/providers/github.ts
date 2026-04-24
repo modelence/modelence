@@ -16,6 +16,7 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
+  sendOAuthError,
 } from './oauth-common';
 
 interface GitHubTokenResponse {
@@ -112,7 +113,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
   if (!code) {
-    res.status(400).json({ error: 'Missing authorization code' });
+    sendOAuthError(res, 400, 'Missing authorization code');
     return;
   }
 
@@ -143,10 +144,11 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
         clearOAuthLinkCookie(res);
       }
 
-      res.status(400).json({
-        error:
-          'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
-      });
+      sendOAuthError(
+        res,
+        400,
+        'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.'
+      );
       return;
     }
 
@@ -174,7 +176,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
-    res.status(500).json({ error: 'Authentication failed' });
+    sendOAuthError(res, 500, 'Authentication failed');
   }
 }
 
@@ -188,7 +190,7 @@ function getRouter(): ExpressRouter {
     const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
 
     if (!githubEnabled || !githubClientId || !githubClientSecret) {
-      res.status(503).json({ error: 'GitHub authentication is not configured' });
+      sendOAuthError(res, 503, 'GitHub authentication is not configured');
       return;
     }
 

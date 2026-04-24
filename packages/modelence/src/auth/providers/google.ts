@@ -16,6 +16,7 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
+  sendOAuthError,
 } from './oauth-common';
 
 interface GoogleTokenResponse {
@@ -81,7 +82,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
   if (!code) {
-    res.status(400).json({ error: 'Missing authorization code' });
+    sendOAuthError(res, 400, 'Missing authorization code');
     return;
   }
 
@@ -123,7 +124,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
-    res.status(500).json({ error: 'Authentication failed' });
+    sendOAuthError(res, 500, 'Authentication failed');
   }
 }
 
@@ -137,7 +138,7 @@ function getRouter(): ExpressRouter {
     const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
 
     if (!googleEnabled || !googleClientId || !googleClientSecret) {
-      res.status(503).json({ error: 'Google authentication is not configured' });
+      sendOAuthError(res, 503, 'Google authentication is not configured');
       return;
     }
 
