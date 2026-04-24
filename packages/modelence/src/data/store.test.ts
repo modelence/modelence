@@ -50,6 +50,57 @@ function assertFetchOptionTypeSafety() {
 }
 void assertFetchOptionTypeSafety;
 
+function assertExtendedStoreDotNotationTypeSafety() {
+  const baseStore = new Store('baseStore', {
+    schema: {
+      name: schema.string(),
+      meta: schema
+        .object({
+          active: schema.boolean(),
+        })
+        .optional(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  const extendedStore = baseStore.extend({
+    schema: {
+      integrations: schema
+        .object({
+          resend: schema
+            .object({
+              id: schema.string().optional(),
+              syncStatus: schema.enum(['success', 'error']),
+              syncedAt: schema.date(),
+            })
+            .optional(),
+        })
+        .optional(),
+    },
+  });
+
+  // Dot-notation paths must be accepted in filter queries on extended stores
+  extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
+  extendedStore.fetch({
+    'integrations.resend.syncStatus': 'error',
+    $or: [
+      { 'integrations.resend.id': { $exists: false } },
+      { 'integrations.resend.syncedAt': { $lte: new Date() } },
+    ],
+  });
+
+  // Dot-notation paths must be accepted in $set updates on extended stores
+  extendedStore.updateOne('someId', {
+    $set: {
+      'integrations.resend.id': 'abc',
+      'integrations.resend.syncStatus': 'success',
+      'integrations.resend.syncedAt': new Date(),
+    },
+  });
+}
+void assertExtendedStoreDotNotationTypeSafety;
+
 describe('data/store', () => {
   beforeEach(() => {
     jest.clearAllMocks();

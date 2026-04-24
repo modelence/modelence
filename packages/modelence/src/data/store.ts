@@ -514,12 +514,8 @@ export class Store<
     /** Whether index creation should block startup or run in background */
     indexCreationMode?: IndexCreationMode;
   }): Store<
-    TSchema & TExtendedSchema & Record<string, unknown>,
-    PreserveMethodsForExtendedSchema<
-      TMethods,
-      TSchema & TExtendedSchema & Record<string, unknown>
-    > &
-      TExtendedMethods
+    TSchema & TExtendedSchema,
+    PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
   > {
     // Follow chain to the tail – extending always appends to the end
     const tail: AnyStore = this.getChainTail();
@@ -530,18 +526,17 @@ export class Store<
       );
     }
 
+    type ExtendedSchema = TSchema & TExtendedSchema;
+
     const extendedSchema = {
       ...tail.schema,
       ...(config.schema || {}),
-    } as TSchema & TExtendedSchema & Record<string, unknown>;
+    } as ExtendedSchema;
 
     const extendedIndexes = [...tail.indexes, ...(config.indexes || [])];
     const extendedSearchIndexes = [...tail.searchIndexes, ...(config.searchIndexes || [])];
 
-    type CombinedMethods = PreserveMethodsForExtendedSchema<
-      TMethods,
-      TSchema & TExtendedSchema & Record<string, unknown>
-    > &
+    type CombinedMethods = PreserveMethodsForExtendedSchema<TMethods, ExtendedSchema> &
       TExtendedMethods;
 
     const combinedMethods = {
@@ -549,10 +544,7 @@ export class Store<
       ...(config.methods || {}),
     } as CombinedMethods | undefined;
 
-    const extendedStore = new Store<
-      TSchema & TExtendedSchema & Record<string, unknown>,
-      CombinedMethods
-    >(this.name, {
+    const extendedStore = new Store<ExtendedSchema, CombinedMethods>(this.name, {
       schema: extendedSchema,
       methods: combinedMethods as unknown as CombinedMethods | undefined,
       indexes: extendedIndexes,
