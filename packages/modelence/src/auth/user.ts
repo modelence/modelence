@@ -1,6 +1,8 @@
 import { randomBytes } from 'crypto';
 
+import type { AuthRateLimitsConfig } from '../app/authConfig';
 import { Module } from '../app/module';
+import { RateLimitRule } from '../rate-limit/types';
 import { time } from '../time';
 import {
   dbDisposableEmailDomains,
@@ -15,6 +17,90 @@ import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
+
+/**
+ * Builds the rate limit rules for all authentication endpoints, merging any
+ * caller-supplied overrides with the built-in defaults.
+ *
+ * Exposed so that `startApp` can pass user-configured limits at startup rather
+ * than relying on static values baked into the Module constructor.
+ */
+export function buildAuthRateLimits(config: AuthRateLimitsConfig = {}): RateLimitRule[] {
+  return [
+    {
+      bucket: 'signup',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: config.signup?.perIp15Minutes ?? 20,
+    },
+    {
+      bucket: 'signup',
+      type: 'ip',
+      window: time.days(1),
+      limit: config.signup?.perIpPerDay ?? 200,
+    },
+    {
+      bucket: 'signupAttempt',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: config.signupAttempt?.perIp15Minutes ?? 50,
+    },
+    {
+      bucket: 'signupAttempt',
+      type: 'ip',
+      window: time.days(1),
+      limit: config.signupAttempt?.perIpPerDay ?? 500,
+    },
+    {
+      bucket: 'signin',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: config.signin?.perIp15Minutes ?? 50,
+    },
+    {
+      bucket: 'signin',
+      type: 'ip',
+      window: time.days(1),
+      limit: config.signin?.perIpPerDay ?? 500,
+    },
+    {
+      bucket: 'verification',
+      type: 'user',
+      window: time.seconds(60),
+      limit: config.verification?.perUserPerMinute ?? 1,
+    },
+    {
+      bucket: 'verification',
+      type: 'user',
+      window: time.days(1),
+      limit: config.verification?.perUserPerDay ?? 10,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.minutes(15),
+      limit: config.passwordReset?.perIp15Minutes ?? 10,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'ip',
+      window: time.days(1),
+      limit: config.passwordReset?.perIpPerDay ?? 100,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
+      window: time.hours(1),
+      limit: config.passwordReset?.perEmailPerHour ?? 5,
+    },
+    {
+      bucket: 'passwordReset',
+      type: 'email',
+      window: time.days(1),
+      limit: config.passwordReset?.perEmailPerDay ?? 10,
+    },
+  ];
+}
 
 export async function createGuestUser() {
   // TODO: add rate-limiting and captcha handling
@@ -59,80 +145,6 @@ export default new Module('_system.user', {
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron,
   },
-  rateLimits: [
-    {
-      bucket: 'signup',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: 20,
-    },
-    {
-      bucket: 'signup',
-      type: 'ip',
-      window: time.days(1),
-      limit: 200,
-    },
-    {
-      bucket: 'signupAttempt',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: 50,
-    },
-    {
-      bucket: 'signupAttempt',
-      type: 'ip',
-      window: time.days(1),
-      limit: 500,
-    },
-    {
-      bucket: 'signin',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: 50,
-    },
-    {
-      bucket: 'signin',
-      type: 'ip',
-      window: time.days(1),
-      limit: 500,
-    },
-    {
-      bucket: 'verification',
-      type: 'user',
-      window: time.seconds(60),
-      limit: 1,
-    },
-    {
-      bucket: 'verification',
-      type: 'user',
-      window: time.days(1),
-      limit: 10,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: 10,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'ip',
-      window: time.days(1),
-      limit: 100,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'email',
-      window: time.hours(1),
-      limit: 5,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'email',
-      window: time.days(1),
-      limit: 10,
-    },
-  ],
   configSchema: {
     'auth.email.enabled': {
       type: 'boolean',

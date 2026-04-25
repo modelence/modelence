@@ -40,6 +40,7 @@ import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
+import { buildAuthRateLimits } from '../auth/user';
 
 export type AppOptions = {
   modules?: Module[];
@@ -122,7 +123,7 @@ export async function startApp({
 
   defineCronJobs(combinedModules);
 
-  const rateLimits = getRateLimits(combinedModules);
+  const rateLimits = [...getRateLimits(combinedModules), ...buildAuthRateLimits(auth.rateLimits)];
   initRateLimits(rateLimits);
 
   const { storesToInit, effectiveStores } = resolveStores(rawStores) as {
