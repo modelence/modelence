@@ -7,7 +7,7 @@ title: createClientModule
 
 > **createClientModule**\<`TModule`\>(`moduleName`): `object`
 
-Defined in: [packages/modelence/src/client/module.ts:88](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/client/module.ts#L88)
+Defined in: [packages/modelence/src/client/module.ts:88](https://github.com/modelence/modelence/blob/f7ddf68d63d69e8d536320a2428ed78fe8f78062/packages/modelence/src/client/module.ts#L88)
 
 Creates a typed client accessor for a module's public configs, queries, and mutations.
 
@@ -57,7 +57,7 @@ charge({ amount: 100 }); // args typed from handler signature
 
 | Name | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| `getConfig()` | (`key`) => `undefined` \| `PublicKeyOf`\<`TModule`\[`"configSchema"`\]\>\[`K`\] | - | [packages/modelence/src/client/module.ts:90](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/client/module.ts#L90) |
-| `infiniteQuery()` | (`name`, `getArgs`) => `object` | Returns options for `useInfiniteQuery`. The `getArgs` callback receives the current `pageParam` and returns the args to pass to the query handler. Spread the result into `useInfiniteQuery` alongside `getNextPageParam`. Annotate the `pageParam` type in the callback so TypeScript can infer the page param type — no manual generic needed on `useInfiniteQuery`. | [packages/modelence/src/client/module.ts:134](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/client/module.ts#L134) |
-| `mutation()` | (`name`) => `object` | - | [packages/modelence/src/client/module.ts:114](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/client/module.ts#L114) |
-| `query()` | (`name`, ...`rest`) => `object` | - | [packages/modelence/src/client/module.ts:97](https://github.com/modelence/modelence/blob/2696235e8e13294cee0e6f75f32149fd5d23f762/packages/modelence/src/client/module.ts#L97) |
+| `getConfig()` | (`key`) => `undefined` \| `PublicKeyOf`\<`TModule`\[`"configSchema"`\]\>\[`K`\] | - | [packages/modelence/src/client/module.ts:90](https://github.com/modelence/modelence/blob/f7ddf68d63d69e8d536320a2428ed78fe8f78062/packages/modelence/src/client/module.ts#L90) |
+| `infiniteQuery()` | (`name`, `getArgs`) => `object` | Returns options for `useInfiniteQuery`. The `getArgs` callback receives the current `pageParam` and returns the args to pass to the query handler. Spread the result into `useInfiniteQuery` alongside `getNextPageParam`. Annotate the `pageParam` type in the callback so TypeScript can infer the page param type — no manual generic needed on `useInfiniteQuery`. | [packages/modelence/src/client/module.ts:134](https://github.com/modelence/modelence/blob/f7ddf68d63d69e8d536320a2428ed78fe8f78062/packages/modelence/src/client/module.ts#L134) |
+| `mutation()` | (`name`) => `object` | - | [packages/modelence/src/client/module.ts:114](https://github.com/modelence/modelence/blob/f7ddf68d63d69e8d536320a2428ed78fe8f78062/packages/modelence/src/client/module.ts#L114) |
+| `query()` | (`name`, ...`rest`) => `object` | - | [packages/modelence/src/client/module.ts:97](https://github.com/modelence/modelence/blob/f7ddf68d63d69e8d536320a2428ed78fe8f78062/packages/modelence/src/client/module.ts#L97) |
