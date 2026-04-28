@@ -65,17 +65,27 @@ console.log(
 
 section('1. Primitive array (1 000 numbers) — no ObjectId');
 bench('sanitizeResult', () => sanitizeResult(primitiveArray));
+bench('JSON.stringify', () => JSON.stringify(primitiveArray));
+bench('sanitizeResult + JSON.stringify', () => JSON.stringify(sanitizeResult(primitiveArray)));
 
 section('2. Array of 500 plain objects — no ObjectId');
 bench('sanitizeResult', () => sanitizeResult(plainObjectArray));
+bench('JSON.stringify', () => JSON.stringify(plainObjectArray));
+bench('sanitizeResult + JSON.stringify', () => JSON.stringify(sanitizeResult(plainObjectArray)));
 
 section('3. Array of 500 docs with ObjectId _id — must convert');
 bench('sanitizeResult', () => sanitizeResult(docArray));
+bench('JSON.stringify (relies on toJSON)', () => JSON.stringify(docArray));
+bench('sanitizeResult + JSON.stringify', () => JSON.stringify(sanitizeResult(docArray)));
 
 section('4. Deeply nested object (depth 10) — no ObjectId');
 bench('sanitizeResult', () => sanitizeResult(deepObject));
+bench('JSON.stringify', () => JSON.stringify(deepObject));
+bench('sanitizeResult + JSON.stringify', () => JSON.stringify(sanitizeResult(deepObject)));
 
 section('5. Realistic mixed document (ObjectIds + primitives)');
 bench('sanitizeResult', () => sanitizeResult(realisticDoc));
+bench('JSON.stringify (relies on toJSON)', () => JSON.stringify(realisticDoc));
+bench('sanitizeResult + JSON.stringify', () => JSON.stringify(sanitizeResult(realisticDoc)));
 
 console.log();
