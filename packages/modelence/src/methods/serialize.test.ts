@@ -51,6 +51,57 @@ describe('serialize', () => {
       expect(sanitizeResult(null)).toBeNull();
       expect(sanitizeResult(undefined)).toBeUndefined();
     });
+
+    test('should return the same array reference when no ObjectId is present', () => {
+      const arr = [1, 'two', true, null];
+      expect(sanitizeResult(arr)).toBe(arr);
+    });
+
+    test('should return the same object reference when no ObjectId is present', () => {
+      const obj = { name: 'Alice', count: 3 };
+      expect(sanitizeResult(obj)).toBe(obj);
+    });
+
+    test('should return the same nested object reference when no ObjectId is present', () => {
+      const inner = { x: 1 };
+      const outer = { inner, label: 'test' };
+      const result = sanitizeResult(outer) as typeof outer;
+      expect(result).toBe(outer);
+      expect(result.inner).toBe(inner);
+    });
+
+    test('should return the same array reference for array of plain objects with no ObjectId', () => {
+      const arr = [{ a: 1 }, { b: 'two' }];
+      expect(sanitizeResult(arr)).toBe(arr);
+    });
+
+    test('should only replace the element containing the ObjectId (copy-on-write)', () => {
+      const id = new ObjectId('507f1f77bcf86cd799439011');
+      const unchanged = { name: 'Bob' };
+      const arr = [unchanged, { _id: id }];
+      const result = sanitizeResult(arr) as unknown[];
+      expect(result).not.toBe(arr);
+      expect(result[0]).toBe(unchanged);
+      expect((result[1] as Record<string, unknown>)._id).toBe('507f1f77bcf86cd799439011');
+    });
+
+    test('should only replace the changed key on an object (copy-on-write)', () => {
+      const id = new ObjectId('507f1f77bcf86cd799439011');
+      const nested = { ref: id };
+      const obj = { a: 1, nested };
+      const result = sanitizeResult(obj) as typeof obj;
+      expect(result).not.toBe(obj);
+      expect((result as Record<string, unknown>).a).toBe(1);
+      expect((result.nested as Record<string, unknown>).ref).toBe('507f1f77bcf86cd799439011');
+    });
+
+    test('should return the same Date reference inside an object with no ObjectId', () => {
+      const date = new Date('2024-06-01');
+      const obj = { createdAt: date };
+      const result = sanitizeResult(obj) as typeof obj;
+      expect(result).toBe(obj);
+      expect(result.createdAt).toBe(date);
+    });
   });
 
   describe('getResponseTypeMap', () => {

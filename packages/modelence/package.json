@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -31,6 +31,7 @@
     "lint": "eslint src --ext .ts,.tsx --fix",
     "lint:check": "eslint src --ext .ts,.tsx",
     "prepublishOnly": "npm run build",
+    "bench": "tsx src/bench/index.ts",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
