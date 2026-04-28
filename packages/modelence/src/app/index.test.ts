@@ -164,6 +164,7 @@ jest.unstable_mockModule('@/websocket/socketio/server', () => ({
 }));
 
 jest.unstable_mockModule('../auth/user', () => ({
+  buildAuthRateLimits: jest.fn(() => []),
   default: {
     name: '_system.user',
     queries: {},

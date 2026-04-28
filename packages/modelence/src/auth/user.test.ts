@@ -85,7 +85,7 @@ jest.unstable_mockModule('../app/module', () => ({
   Module: ModuleMock,
 }));
 
-const { createGuestUser, default: userModule } = await import('./user');
+const { createGuestUser, buildAuthRateLimits, default: userModule } = await import('./user');
 
 describe('auth/user', () => {
   beforeEach(() => {
@@ -149,9 +149,109 @@ describe('auth/user', () => {
         ],
       })
     );
+  });
 
-    expect(mockTime.minutes).toHaveBeenCalledWith(15);
-    expect(mockTime.hours).toHaveBeenCalledWith(1);
-    expect(mockTime.days).toHaveBeenCalledWith(1);
+  describe('buildAuthRateLimits', () => {
+    beforeEach(() => {
+      mockTime.seconds.mockClear();
+      mockTime.minutes.mockClear();
+      mockTime.hours.mockClear();
+      mockTime.days.mockClear();
+    });
+
+    test('returns default limits when called with no config', () => {
+      const rules = buildAuthRateLimits();
+
+      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
+      const signupDay = rules.find(
+        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signup15m?.limit).toBe(20);
+      expect(signupDay?.limit).toBe(200);
+
+      const attempt15m = rules.find(
+        (r) => r.bucket === 'signupAttempt' && r.window === 15 * 60 * 1000
+      );
+      const attemptDay = rules.find(
+        (r) => r.bucket === 'signupAttempt' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(attempt15m?.limit).toBe(50);
+      expect(attemptDay?.limit).toBe(500);
+
+      expect(mockTime.seconds).toHaveBeenCalledWith(60);
+      expect(mockTime.minutes).toHaveBeenCalledWith(15);
+      expect(mockTime.hours).toHaveBeenCalledWith(1);
+      expect(mockTime.days).toHaveBeenCalledWith(1);
+    });
+
+    test('applies signup limit overrides', () => {
+      const rules = buildAuthRateLimits({
+        signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+      });
+
+      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
+      const signupDay = rules.find(
+        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signup15m?.limit).toBe(5);
+      expect(signupDay?.limit).toBe(50);
+
+      // Unrelated buckets keep their defaults
+      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
+      expect(signin15m?.limit).toBe(50);
+    });
+
+    test('applies partial overrides — unspecified fields keep defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: { perIp15Minutes: 3 },
+      });
+
+      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
+      const signupDay = rules.find(
+        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signup15m?.limit).toBe(3);
+      expect(signupDay?.limit).toBe(200); // default preserved
+    });
+
+    test('applies overrides across multiple buckets', () => {
+      const rules = buildAuthRateLimits({
+        signup: { perIpPerDay: 10 },
+        signin: { perIp15Minutes: 5, perIpPerDay: 20 },
+        passwordReset: { perEmailPerHour: 2, perEmailPerDay: 3 },
+      });
+
+      const signupDay = rules.find(
+        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signupDay?.limit).toBe(10);
+
+      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
+      const signinDay = rules.find(
+        (r) => r.bucket === 'signin' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signin15m?.limit).toBe(5);
+      expect(signinDay?.limit).toBe(20);
+
+      const pwResetEmailHour = rules.find(
+        (r) => r.bucket === 'passwordReset' && r.type === 'email' && r.window === 60 * 60 * 1000
+      );
+      const pwResetEmailDay = rules.find(
+        (r) =>
+          r.bucket === 'passwordReset' && r.type === 'email' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(pwResetEmailHour?.limit).toBe(2);
+      expect(pwResetEmailDay?.limit).toBe(3);
+    });
+
+    test('produces exactly 12 rules covering all auth buckets', () => {
+      const rules = buildAuthRateLimits();
+      expect(rules).toHaveLength(12);
+
+      const buckets = new Set(rules.map((r) => r.bucket));
+      expect(buckets).toEqual(
+        new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset'])
+      );
+    });
   });
 });
