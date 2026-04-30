@@ -123,7 +123,12 @@ export async function startApp({
 
   defineCronJobs(combinedModules);
 
-  const rateLimits = [...getRateLimits(combinedModules), ...buildAuthRateLimits(auth.rateLimits)];
+  // Apply user-provided auth rate limit overrides directly onto the user
+  // module so its `rateLimits` array reflects the effective configuration
+  // (the Modelence Cloud reads these from modules for display).
+  userModule.rateLimits = buildAuthRateLimits(auth.rateLimits);
+
+  const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
 
   const { storesToInit, effectiveStores } = resolveStores(rawStores) as {

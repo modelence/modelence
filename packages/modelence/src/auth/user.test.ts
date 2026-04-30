@@ -139,6 +139,13 @@ describe('auth/user', () => {
         cronJobs: {
           updateDisposableEmailList: mockUpdateDisposableEmailListCron,
         },
+        rateLimits: expect.arrayContaining([
+          expect.objectContaining({ bucket: 'signup', limit: 20 }),
+          expect.objectContaining({ bucket: 'signupAttempt', limit: 50 }),
+          expect.objectContaining({ bucket: 'signin', limit: 50 }),
+          expect.objectContaining({ bucket: 'verification', limit: 1 }),
+          expect.objectContaining({ bucket: 'passwordReset', limit: 10 }),
+        ]),
         routes: [
           {
             path: '/api/_internal/auth/verify-email',

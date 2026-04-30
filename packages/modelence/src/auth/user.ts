@@ -145,6 +145,10 @@ export default new Module('_system.user', {
   cronJobs: {
     updateDisposableEmailList: updateDisposableEmailListCron,
   },
+  // Default auth rate limits — replaced at startApp time with any user
+  // overrides from `auth.rateLimits`. Keeping the rules on the module makes
+  // them discoverable for module-level introspection (e.g. Modelence Cloud).
+  rateLimits: buildAuthRateLimits(),
   configSchema: {
     'auth.email.enabled': {
       type: 'boolean',

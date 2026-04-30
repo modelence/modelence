@@ -68,7 +68,7 @@ export class Module<
   public readonly configSchema: TSchema;
 
   /** @internal */
-  public readonly rateLimits: RateLimitRule[];
+  public rateLimits: RateLimitRule[];
 
   /** @internal */
   public readonly channels: ServerChannel[];
