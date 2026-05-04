@@ -51,6 +51,7 @@
   },
   "homepage": "https://modelence.com",
   "devDependencies": {
+    "@tanstack/react-query": "^5.100.7",
     "@types/archiver": "^6.0.3",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.9",
@@ -100,6 +101,7 @@
     "zustand": "^5.0.2"
   },
   "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   }

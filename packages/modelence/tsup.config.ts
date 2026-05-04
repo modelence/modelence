@@ -29,6 +29,7 @@ export default defineConfig((options) => ({
   external: [
     'react',
     'react-dom',
+    '@tanstack/react-query',
     'node:async_hooks',
     'async_hooks'
   ]

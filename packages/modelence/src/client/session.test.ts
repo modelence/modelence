@@ -24,8 +24,15 @@ jest.unstable_mockModule('../time', () => ({
   },
 }));
 
-const { initSession, setCurrentUser, useSessionStore, getHeartbeatTimer, stopHeartbeatTimer } =
-  await import('./session');
+const {
+  initSession,
+  setCurrentUser,
+  useSessionStore,
+  getHeartbeatTimer,
+  stopHeartbeatTimer,
+  hydrateSession,
+  isSessionInitialized,
+} = await import('./session');
 
 describe('client/session', () => {
   const originalSetTimeout = global.setTimeout;
@@ -109,5 +116,45 @@ describe('client/session', () => {
   test('setCurrentUser handles null', () => {
     setCurrentUser(null);
     expect(useSessionStore.getState().user).toBeNull();
+  });
+
+  test('hydrateSession populates store synchronously without calling the network', async () => {
+    const fresh = await import('./session');
+    const payload = {
+      configs: [{ key: 'site.url', value: 'https://example.com' }],
+      session: { authToken: 'abc' },
+      user: { id: '42', handle: 'ssr-user', roles: ['admin'] },
+    };
+
+    fresh.hydrateSession(payload as unknown as Parameters<typeof hydrateSession>[0]);
+
+    expect(mockCallMethod).not.toHaveBeenCalled();
+    expect(mockSetConfig).toHaveBeenCalledWith(payload.configs);
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith(payload.session);
+    expect(fresh.useSessionStore.getState().user?.id).toBe('42');
+    expect(fresh.isSessionInitialized()).toBe(true);
+  });
+
+  test('hydrateSession is a no-op when session was already initialized', async () => {
+    const fresh = await import('./session');
+    const payload = {
+      configs: [],
+      session: {},
+      user: null,
+    };
+    // First call initializes
+    fresh.hydrateSession(payload as unknown as Parameters<typeof hydrateSession>[0]);
+    mockSetConfig.mockClear();
+    mockSetLocalStorageSession.mockClear();
+
+    // Second call should be ignored
+    fresh.hydrateSession({
+      configs: [{ key: 'changed', value: 'value' }],
+      session: { authToken: 'replacement' },
+      user: { id: 'new', handle: 'new', roles: [] },
+    } as unknown as Parameters<typeof hydrateSession>[0]);
+
+    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
   });
 });

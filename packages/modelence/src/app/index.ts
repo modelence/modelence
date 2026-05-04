@@ -68,6 +68,16 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
+  /**
+   * Enable server-side rendering. When `true`, the framework's catch-all
+   * route renders the user's React tree to HTML (preloading session/config
+   * and any `useSuspenseQuery` data) instead of serving a static
+   * `index.html` shell.
+   *
+   * The user's `src/client/index.tsx` must call `renderApp({ ssr: true })`
+   * (and pass a `router` wrapper) from `'modelence/client'`.
+   */
+  ssr?: boolean;
 };
 
 export async function startApp({
@@ -80,7 +90,11 @@ export async function startApp({
   auth = {},
   security = {},
   websocket = {},
+  ssr = false,
 }: AppOptions) {
+  if (ssr && server === viteServer) {
+    viteServer.enableSsr();
+  }
   dotenv.config();
 
   dotenv.config({ path: '.modelence.env' });

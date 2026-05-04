@@ -143,7 +143,7 @@ export async function startServer(
     app.use(server.middlewares());
   }
 
-  app.all('*', (req: Request, res: Response) => {
+  app.all('*', async (req: Request, res: Response) => {
     return server.handler(req, res);
   });
 

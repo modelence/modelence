@@ -1,5 +1,11 @@
 import fs from 'fs/promises';
-import { getBuildPath, getModelencePath, getPostBuildCommand, getServerPath } from './config';
+import {
+  getBuildPath,
+  getConfig,
+  getModelencePath,
+  getPostBuildCommand,
+  getServerPath,
+} from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
@@ -14,6 +20,10 @@ async function buildClient() {
   }
 
   await buildVite();
+
+  if (getConfig().ssr) {
+    await buildViteSsr();
+  }
 }
 
 async function buildVite() {
@@ -28,6 +38,32 @@ async function buildVite() {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
       emptyOutDir: true,
+    },
+  };
+
+  await viteBuild(mergeConfig(userConfig?.config || {}, modelenceConfig, true));
+}
+
+async function buildViteSsr() {
+  console.log('Building SSR bundle with Vite...');
+
+  const userConfig = await loadConfigFromFile({
+    command: 'build',
+    mode: process.env.NODE_ENV || 'production',
+  });
+
+  const ssrEntry = path.resolve(process.cwd(), 'src/client/index.tsx').replace(/\\/g, '/');
+  const modelenceConfig = {
+    build: {
+      ssr: ssrEntry,
+      outDir: path.resolve(process.cwd(), '.modelence/build/ssr').replace(/\\/g, '/'),
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          format: 'esm' as const,
+          entryFileNames: 'index.mjs',
+        },
+      },
     },
   };
 

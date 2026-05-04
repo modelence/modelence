@@ -14,15 +14,34 @@ import fs from 'fs';
 import express from 'express';
 import type { AppServer, AppServerInitOptions, ExpressMiddleware } from './types';
 
+const CLIENT_BUILD_DIR = './.modelence/build/client'.replace(/\\/g, '/');
+const SSR_BUILD_DIR = './.modelence/build/ssr'.replace(/\\/g, '/');
+// Resolved relative to Vite's `root` (./src/client) — see getConfig() below.
+const SSR_ENTRY_VIRTUAL_PATH = '/index.tsx';
+
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
   private config?: UserConfig;
+  private ssrEnabled = false;
+  private ssrTransportInstalled = false;
+
+  enableSsr() {
+    this.ssrEnabled = true;
+  }
 
   async init({ httpServer }: AppServerInitOptions) {
-    this.config = await getConfig(this.isDev() ? httpServer : undefined);
+    this.config = await getConfig(this.isDev() ? httpServer : undefined, { ssr: this.ssrEnabled });
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
       this.viteServer = await createServer(this.config);
+    }
+
+    if (this.ssrEnabled && !this.ssrTransportInstalled) {
+      // Swap callMethod's transport so server-side useQuery/useSuspenseQuery
+      // calls hit runMethod in-process instead of fetch().
+      const { installSsrCallMethodTransport } = await import('./ssr/transport');
+      installSsrCallMethodTransport();
+      this.ssrTransportInstalled = true;
     }
   }
 
@@ -31,14 +50,114 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
 
-    const staticFolders = [express.static('./.modelence/build/client'.replace(/\\/g, '/'))];
+    const staticFolders = [express.static(CLIENT_BUILD_DIR)];
     if (this.config?.publicDir) {
       staticFolders.push(express.static(this.config.publicDir));
     }
     return staticFolders;
   }
 
-  handler(req: express.Request, res: express.Response) {
+  async handler(req: express.Request, res: express.Response) {
+    if (this.ssrEnabled && isDocumentRequest(req)) {
+      try {
+        await this.handleSsr(req, res);
+      } catch (error) {
+        if (this.isDev() && this.viteServer && error instanceof Error) {
+          this.viteServer.ssrFixStacktrace(error);
+        }
+        console.error('SSR render error:', error);
+        // Fall back to static shell rather than 500 — the client can still
+        // boot and recover via CSR.
+        this.serveStaticShell(res);
+      }
+      return;
+    }
+
+    if (this.ssrEnabled) {
+      // Non-document request that fell through Vite middleware and module
+      // routes (e.g. /favicon.ico, /.well-known/*). Don't try to SSR it.
+      res.status(404).end();
+      return;
+    }
+
+    this.serveStaticShell(res);
+  }
+
+  private async handleSsr(req: express.Request, res: express.Response) {
+    const template = await this.getTemplate(req.originalUrl);
+    await this.evaluateUserSsrEntry();
+
+    // Lazy imports keep `react-dom/server` and the rest of the SSR runtime
+    // out of the boot path for apps that never SSR a request (server starts
+    // up but `ssrEnabled` is false, or the request was a non-document GET).
+    const [{ renderSsrTree }, { _getSsrSnapshot }, { getCallContext }] = await Promise.all([
+      import('./ssr/render'),
+      import('./client/renderApp'),
+      import('./app/server'),
+    ]);
+
+    const callContext = await getCallContext(req);
+    const snapshot = _getSsrSnapshot();
+    if (!snapshot) {
+      throw new Error(
+        'Modelence SSR is enabled but no SSR snapshot was captured. ' +
+          "Make sure 'src/client/index.tsx' calls renderApp(...) from 'modelence/client'."
+      );
+    }
+
+    const { html, sessionState, queryState } = await renderSsrTree({
+      callContext,
+      loadingElement: snapshot.loadingElement,
+      routesElement: snapshot.routesElement,
+      router: snapshot.router,
+      location: req.originalUrl,
+    });
+
+    const stateScripts =
+      `<script id="__MODELENCE_STATE__" type="application/json">${escapeJsonForScript(sessionState)}</script>` +
+      `<script id="__MODELENCE_QUERY_STATE__" type="application/json">${escapeJsonForScript(queryState)}</script>`;
+
+    const finalHtml = template.replace(
+      /<div id="root">.*?<\/div>/s,
+      `<div id="root">${html}</div>${stateScripts}`
+    );
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).end(finalHtml);
+  }
+
+  private async getTemplate(url: string): Promise<string> {
+    if (this.isDev()) {
+      const templatePath = path.resolve(process.cwd(), 'src/client/index.html');
+      let template = fs.readFileSync(templatePath, 'utf-8');
+      if (this.viteServer) {
+        template = await this.viteServer.transformIndexHtml(url, template);
+      }
+      return template;
+    }
+
+    const templatePath = path.resolve(process.cwd(), CLIENT_BUILD_DIR, 'index.html');
+    return fs.readFileSync(templatePath, 'utf-8');
+  }
+
+  private async evaluateUserSsrEntry() {
+    // Importing the user's client entry has the side effect of executing its
+    // top-level `renderApp(...)` call which (on the server branch) writes to
+    // the SSR snapshot. We re-evaluate per request so HMR edits in dev take
+    // effect immediately.
+    if (this.isDev()) {
+      if (!this.viteServer) {
+        throw new Error('Vite dev server not initialized');
+      }
+      await this.viteServer.ssrLoadModule(SSR_ENTRY_VIRTUAL_PATH);
+      return;
+    }
+
+    await import(path.resolve(process.cwd(), SSR_BUILD_DIR, 'index.mjs'));
+  }
+
+  private serveStaticShell(res: express.Response) {
     if (this.isDev()) {
       try {
         // Prevent browser from caching the HTML entrypoint in dev mode.
@@ -54,13 +173,52 @@ class ViteServer implements AppServer {
         res.status(500).send('Internal Server Error');
       }
     } else {
-      res.sendFile('index.html', { root: './.modelence/build/client'.replace(/\\/g, '/') });
+      res.sendFile('index.html', { root: CLIENT_BUILD_DIR });
     }
   }
 
   private isDev() {
     return process.env.NODE_ENV !== 'production';
   }
+}
+
+function isDocumentRequest(req: express.Request): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return false;
+  }
+
+  const accept = req.get('accept') ?? '';
+  if (!accept.includes('text/html')) {
+    return false;
+  }
+
+  // Skip URLs that look like static assets (have a file extension other
+  // than nothing, .htm, or .html) — these are typically dev-tools probes
+  // (/.well-known/appspecific/...), favicons, sourcemaps, etc. that fell
+  // through Vite middleware.
+  const pathname = (req.path ?? req.url ?? '').split('?')[0];
+  const lastSegment = pathname.split('/').pop() ?? '';
+  const dotIndex = lastSegment.lastIndexOf('.');
+  if (dotIndex > 0) {
+    const ext = lastSegment.slice(dotIndex).toLowerCase();
+    if (ext !== '.html' && ext !== '.htm') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function escapeJsonForScript(json: string): string {
+  // Prevent the closing </script> sequence and HTML-escape sensitive bytes.
+  // Also escape U+2028 / U+2029 (valid in JSON but illegal in JS source) in
+  // case the script body is later parsed as JS.
+  return json
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 async function loadUserViteConfig() {
@@ -105,7 +263,7 @@ function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
   return mergedConfig;
 }
 
-async function getConfig(httpServer?: import('http').Server) {
+async function getConfig(httpServer?: import('http').Server, options: { ssr?: boolean } = {}) {
   const appDir = process.cwd();
   const userConfig = await loadUserViteConfig();
 
@@ -135,13 +293,14 @@ async function getConfig(httpServer?: import('http').Server) {
   const baseConfig = defineConfig({
     plugins,
     build: {
-      outDir: '.modelence/build/client'.replace(/\\/g, '/'),
+      outDir: CLIENT_BUILD_DIR,
       emptyOutDir: true,
     },
     server: {
       middlewareMode: true,
       hmr: httpServer ? { server: httpServer } : undefined,
     },
+    appType: options.ssr ? 'custom' : 'spa',
     root: './src/client',
     resolve: {
       alias: {

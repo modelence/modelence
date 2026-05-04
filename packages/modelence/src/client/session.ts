@@ -68,6 +68,31 @@ function parseUser(user: unknown): User | null {
   });
 }
 
+export type SessionInitPayload = {
+  configs: Configs;
+  session: object;
+  user: object;
+};
+
+/**
+ * Hydrate the session synchronously from a server-rendered payload.
+ *
+ * When SSR is enabled, the framework inlines the result of `_system.session.init`
+ * into the document. Calling this on the client before render lets `AppProvider`
+ * skip the loading state and the network round-trip on first paint.
+ */
+export function hydrateSession(payload: SessionInitPayload) {
+  if (isInitialized) {
+    return;
+  }
+
+  isInitialized = true;
+
+  _setConfig(payload.configs);
+  setLocalStorageSession(payload.session);
+  useSessionStore.getState().setUser(parseUser(payload.user));
+}
+
 export async function initSession() {
   if (isInitialized) {
     return;
@@ -75,11 +100,7 @@ export async function initSession() {
 
   isInitialized = true;
 
-  const { configs, session, user } = await callMethod<{
-    configs: Configs;
-    session: object;
-    user: object;
-  }>('_system.session.init');
+  const { configs, session, user } = await callMethod<SessionInitPayload>('_system.session.init');
   _setConfig(configs);
   setLocalStorageSession(session);
 
@@ -88,7 +109,25 @@ export async function initSession() {
   await loopSessionHeartbeat();
 }
 
+/**
+ * Start the session heartbeat loop. Idempotent and client-only.
+ *
+ * Called automatically from `initSession`; SSR-hydrated apps must call this
+ * explicitly after hydration since `hydrateSession` is synchronous and skips
+ * the network path.
+ */
+export async function startSessionHeartbeat() {
+  if (typeof window === 'undefined' || heartbeatTimer !== null) {
+    return;
+  }
+  await loopSessionHeartbeat();
+}
+
 async function loopSessionHeartbeat() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   try {
     await callMethod('_system.session.heartbeat', {}, { errorHandler: () => {} });
   } catch {
@@ -101,6 +140,10 @@ export function setCurrentUser(user: unknown) {
   const enrichedUser = parseUser(user);
   useSessionStore.getState().setUser(enrichedUser);
   return enrichedUser;
+}
+
+export function isSessionInitialized() {
+  return isInitialized;
 }
 
 export function getHeartbeatTimer() {

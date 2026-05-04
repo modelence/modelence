@@ -222,6 +222,17 @@ export function getAuthToken(): string | undefined {
 }
 
 export function getClientInfo(): ClientInfo {
+  if (typeof window === 'undefined') {
+    return {
+      screenWidth: 0,
+      screenHeight: 0,
+      windowWidth: 0,
+      windowHeight: 0,
+      pixelRatio: 1,
+      orientation: null,
+    };
+  }
+
   return {
     screenWidth: window.screen.width,
     screenHeight: window.screen.height,

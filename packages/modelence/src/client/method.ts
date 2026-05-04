@@ -27,13 +27,37 @@ export type CallMethodOptions = {
   errorHandler?: (error: Error, methodName: string) => void;
 };
 
+/**
+ * A transport for `callMethod`. The default uses `fetch` to hit the method
+ * endpoint over HTTP. During SSR the framework swaps this for an in-process
+ * transport that calls `runMethod` directly with the per-request context —
+ * see `src/ssr/setup.ts`.
+ */
+export type CallMethodTransport = <T = unknown>(methodName: string, args: MethodArgs) => Promise<T>;
+
+let transport: CallMethodTransport = async <T>(methodName: string, args: MethodArgs) =>
+  call<T>(`/api/_internal/method/${methodName}`, args);
+
+/**
+ * Replace the transport used by `callMethod`. Returns a disposer that restores
+ * the previous transport. Used by the SSR runtime to route method calls
+ * through `runMethod` instead of `fetch`.
+ */
+export function _setCallMethodTransport(next: CallMethodTransport): () => void {
+  const previous = transport;
+  transport = next;
+  return () => {
+    transport = previous;
+  };
+}
+
 export async function callMethod<T = unknown>(
   methodName: string,
   args: MethodArgs = {},
   options: CallMethodOptions = {}
 ): Promise<T> {
   try {
-    return await call<T>(`/api/_internal/method/${methodName}`, args);
+    return await transport<T>(methodName, args);
   } catch (error) {
     const handler = options.errorHandler ?? handleError;
     handler(error as Error, methodName);

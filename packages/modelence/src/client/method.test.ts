@@ -21,7 +21,7 @@ const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
 const originalFetch = global.fetch;
 const originalWindow = globalThis.window;
 
-const { callMethod, MethodError } = await import('./method');
+const { callMethod, MethodError, _setCallMethodTransport } = await import('./method');
 
 describe('client/method', () => {
   beforeEach(() => {
@@ -93,5 +93,24 @@ describe('client/method', () => {
     } as unknown as Response);
 
     await expect(callMethod('test.method')).rejects.toThrow('Invalid response from server');
+  });
+
+  test('_setCallMethodTransport routes calls through the swapped transport and disposes back to fetch', async () => {
+    const swapped = jest.fn(async (name: string, args: Record<string, unknown>) => ({
+      methodName: name,
+      forwardedArgs: args,
+    }));
+
+    const dispose = _setCallMethodTransport(swapped as never);
+
+    const result = await callMethod('routed.method', { id: 1 });
+    expect(swapped).toHaveBeenCalledWith('routed.method', { id: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ methodName: 'routed.method', forwardedArgs: { id: 1 } });
+
+    dispose();
+
+    await callMethod('after.dispose', {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

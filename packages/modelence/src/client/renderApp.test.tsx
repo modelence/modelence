@@ -5,6 +5,7 @@ const mockSetErrorHandler = jest.fn();
 
 jest.unstable_mockModule('./errorHandler', () => ({
   setErrorHandler: mockSetErrorHandler,
+  handleError: jest.fn(),
 }));
 
 const mockCreateRoot = jest.fn(() => ({

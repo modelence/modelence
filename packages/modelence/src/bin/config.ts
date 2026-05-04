@@ -81,6 +81,7 @@ export async function loadEnv() {
         serverDir: z.string(),
         serverEntry: z.string(),
         postBuildCommand: z.string().optional(),
+        ssr: z.boolean().optional(),
       })
       .parse(configModule);
   } catch (error) {
