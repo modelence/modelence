@@ -42,6 +42,8 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
     defaultOptions: {
       queries: {
         retry: false,
+        // Per-request client; release cache + timers immediately after dehydrate.
+        gcTime: 0,
       },
     },
   });
@@ -57,6 +59,7 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
   const html = await runWithSsrContext({ callContext, queryClient }, () => renderToString(tree));
 
   const dehydratedState: DehydratedState = dehydrate(queryClient);
+  queryClient.clear();
 
   return {
     html,

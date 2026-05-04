@@ -16,7 +16,3 @@ export function runWithSsrContext<T>(ctx: SsrRequestContext, fn: () => T): T {
 export function getSsrContext(): SsrRequestContext | undefined {
   return storage.getStore();
 }
-
-export function isSsr(): boolean {
-  return typeof window === 'undefined';
-}
