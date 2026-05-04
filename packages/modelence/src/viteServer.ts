@@ -110,9 +110,10 @@ class ViteServer implements AppServer {
       `<script id="__MODELENCE_STATE__" type="application/json">${escapeJsonForScript(sessionState)}</script>` +
       `<script id="__MODELENCE_QUERY_STATE__" type="application/json">${escapeJsonForScript(queryState)}</script>`;
 
+    // Function replacement avoids $&/$'/`$\``/$$ being interpreted by String.replace.
     const finalHtml = template.replace(
       /<div id="root">.*?<\/div>/s,
-      `<div id="root">${html}</div>${stateScripts}`
+      () => `<div id="root">${html}</div>${stateScripts}`
     );
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
