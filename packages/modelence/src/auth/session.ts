@@ -103,11 +103,27 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
   });
 }
 
+export function clearAuthTokenCookie(res: Response) {
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
+}
+
 export default new Module('_system.session', {
   stores: [sessionsCollection],
   mutations: {
-    init: async function (args, { session, user }) {
-      // TODO: mark or track app load somewhere
+    init: async function (args, { session, user, res }) {
+      // Refresh the authToken cookie on every init so logged-in sessions
+      // established before cookie-based auth was introduced get a cookie
+      // they can carry on subsequent SSR requests. No-op when called from
+      // a context without a response (background jobs, SSR with no cookie
+      // mutation desired).
+      if (res && session) {
+        setAuthTokenCookie(res, session.authToken);
+      }
 
       return {
         session,

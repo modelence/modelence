@@ -122,7 +122,7 @@ export async function startServer(
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const { methodName } = req.params;
-    const context = await getCallContext(req);
+    const context = await getCallContext(req, res);
 
     try {
       const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
@@ -176,7 +176,7 @@ export async function startServer(
   });
 }
 
-export async function getCallContext(req: Request) {
+export async function getCallContext(req: Request, res: Response | null = null) {
   const path = (req.path ?? req.url ?? '').split('?')[0];
 
   const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
@@ -227,6 +227,7 @@ export async function getCallContext(req: Request) {
       session,
       user,
       roles,
+      res,
     };
   }
 
@@ -236,6 +237,7 @@ export async function getCallContext(req: Request) {
     session: null,
     user: null,
     roles: getUnauthenticatedRoles(),
+    res,
   };
 }
 

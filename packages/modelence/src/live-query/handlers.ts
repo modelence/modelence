@@ -90,6 +90,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
         ip: socket.handshake.address,
         userAgent: socket.handshake.headers['user-agent'],
       },
+      res: null,
     };
 
     const liveData = await runLiveMethod(method, args, context);

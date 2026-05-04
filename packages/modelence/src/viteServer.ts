@@ -89,7 +89,7 @@ class ViteServer implements AppServer {
       import('./app/server'),
     ]);
 
-    const callContext = await getCallContext(req);
+    const callContext = await getCallContext(req, res);
     const snapshot = _getSsrSnapshot();
     if (!snapshot) {
       throw new Error(

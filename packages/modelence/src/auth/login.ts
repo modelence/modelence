@@ -4,7 +4,12 @@ import { z } from 'zod';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { serializeUserForClient } from './utils';
-import { clearSessionUser, setSessionUser } from './session';
+import {
+  clearAuthTokenCookie,
+  clearSessionUser,
+  setAuthTokenCookie,
+  setSessionUser,
+} from './session';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
@@ -12,7 +17,7 @@ import { getAuthConfig } from '@/app/authConfig';
 
 export async function handleLoginWithPassword(
   args: Args,
-  { user, session, connectionInfo }: Context
+  { user, session, connectionInfo, res }: Context
 ) {
   try {
     if (!session) {
@@ -63,6 +68,10 @@ export async function handleLoginWithPassword(
 
     await setSessionUser(session.authToken, userDoc._id);
 
+    if (res) {
+      setAuthTokenCookie(res, session.authToken);
+    }
+
     getAuthConfig().onAfterLogin?.({
       provider: 'email',
       user: userDoc,
@@ -88,12 +97,16 @@ export async function handleLoginWithPassword(
   }
 }
 
-export async function handleLogout(args: Args, { session }: Context) {
+export async function handleLogout(args: Args, { session, res }: Context) {
   if (!session) {
     throw new Error('Session is not initialized');
   }
 
   await clearSessionUser(session.authToken);
+
+  if (res) {
+    clearAuthTokenCookie(res);
+  }
 }
 
 /*

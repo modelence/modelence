@@ -1,3 +1,4 @@
+import type { Response } from 'express';
 import { Session, UserInfo, Permission } from '../auth/types';
 
 export type ClientInfo = {
@@ -23,6 +24,13 @@ export type Context = {
   roles: string[];
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
+  /**
+   * The Express response. Used by auth handlers to set/clear cookies so
+   * server-rendered requests can read the auth token from the cookie jar.
+   * `null` for in-process invocations that don't have an active response
+   * (e.g. background jobs).
+   */
+  res: Response | null;
 };
 
 export type Args = Record<string, unknown>;
