@@ -5,11 +5,7 @@ export interface ModelenceConfig {
   serverDir: string;
   serverEntry: string;
   postBuildCommand?: string;
-  /**
-   * When `true`, build outputs an SSR bundle of the user's client entry into
-   * `.modelence/build/ssr/` so the framework can render the app server-side.
-   * Must match the `ssr` flag passed to `startApp()` at runtime.
-   */
+  /** Must match the `ssr` flag passed to `startApp()`. */
   ssr?: boolean;
 }
 

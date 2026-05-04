@@ -18,16 +18,9 @@ interface AppProviderProps {
 let isInitialized = false;
 
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
-  // On the server, never render the loading state. The framework prefetches
-  // session/config in `renderSsrTree` before invoking us, and serializes them
-  // for the client to hydrate from. Rendering the loading element on the
-  // server would defeat SSR (empty markup) and cause a hydration mismatch
-  // since the client immediately resolves to children.
+  // Skip loading on the server (would defeat SSR) and when session is already
+  // hydrated client-side (would cause a hydration mismatch).
   const isServer = typeof window === 'undefined';
-
-  // When the session was already initialized synchronously (SSR hydration
-  // path), we skip the loading state to avoid a hydration mismatch and to
-  // render the same tree the server produced.
   const [isLoading, setIsLoading] = useState(() => !isServer && !isSessionInitialized());
 
   useEffect(() => {
@@ -39,7 +32,6 @@ export function AppProvider({ children, loadingElement }: AppProviderProps) {
       isInitialized = true;
 
       if (isSessionInitialized()) {
-        // Session was hydrated from SSR state — nothing to fetch.
         return;
       }
 

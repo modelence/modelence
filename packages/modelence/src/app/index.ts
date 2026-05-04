@@ -68,15 +68,7 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
-  /**
-   * Enable server-side rendering. When `true`, the framework's catch-all
-   * route renders the user's React tree to HTML (preloading session/config
-   * and any `useSuspenseQuery` data) instead of serving a static
-   * `index.html` shell.
-   *
-   * The user's `src/client/index.tsx` must call `renderApp({ ssr: true })`
-   * (and pass a `router` wrapper) from `'modelence/client'`.
-   */
+  /** Enable server-side rendering of the user's React tree. */
   ssr?: boolean;
 };
 

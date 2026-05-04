@@ -23,34 +23,16 @@ export type SsrRenderOptions = {
   callContext: Context;
   loadingElement: React.ReactNode;
   routesElement: React.ReactNode;
-  /**
-   * Router wrapper from the user's `renderApp(...)` snapshot. Receives
-   * the inbound request URL as `location` and is expected to wrap `children`
-   * in a `<StaticRouter>` (or equivalent) so React Router only renders the
-   * matched page during SSR.
-   */
   router?: SsrRouter;
-  /**
-   * Inbound request URL (path + search) for routing. Required when `router`
-   * is provided.
-   */
   location?: string;
 };
 
-/**
- * Render the user's React tree to an HTML string, prefetching session/config
- * and any data declared via `useSuspenseQuery`. Returns the markup plus two
- * JSON state strings the caller must inline as script tags so the client
- * can hydrate without a flash of loading state and without re-fetching.
- */
 export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRenderResult> {
   const { callContext, loadingElement, routesElement, router, location } = options;
 
-  // Preload session/config in-process — same code path the client hits.
   const sessionRaw = await runMethod('_system.session.init', {}, callContext);
   const sessionSanitized = sanitizeResult(sessionRaw) as object;
   const sessionTypeMap = getResponseTypeMap(sessionSanitized);
-  // Revive on the server so the structure we render with matches the client.
   const sessionPayload = reviveResponseTypes(
     sessionSanitized,
     sessionTypeMap ?? undefined
@@ -59,7 +41,6 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        // dehydrate() only includes successful queries by default; that's fine.
         retry: false,
       },
     },
@@ -104,9 +85,6 @@ function renderToString(tree: React.ReactElement): Promise<string> {
         reject(error);
       },
       onError(error) {
-        // Errors inside Suspense boundaries are reported here too. We don't
-        // reject — onAllReady or onShellError covers terminal cases — but
-        // we surface the error so the user sees it in dev.
         console.error('SSR render error:', error);
       },
     });

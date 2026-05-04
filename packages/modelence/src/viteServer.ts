@@ -37,8 +37,6 @@ class ViteServer implements AppServer {
     }
 
     if (this.ssrEnabled && !this.ssrTransportInstalled) {
-      // Swap callMethod's transport so server-side useQuery/useSuspenseQuery
-      // calls hit runMethod in-process instead of fetch().
       const { installSsrCallMethodTransport } = await import('./ssr/transport');
       installSsrCallMethodTransport();
       this.ssrTransportInstalled = true;
@@ -66,16 +64,13 @@ class ViteServer implements AppServer {
           this.viteServer.ssrFixStacktrace(error);
         }
         console.error('SSR render error:', error);
-        // Fall back to static shell rather than 500 — the client can still
-        // boot and recover via CSR.
+        // Fall back to CSR shell so the client can still recover.
         this.serveStaticShell(res);
       }
       return;
     }
 
     if (this.ssrEnabled) {
-      // Non-document request that fell through Vite middleware and module
-      // routes (e.g. /favicon.ico, /.well-known/*). Don't try to SSR it.
       res.status(404).end();
       return;
     }
@@ -87,9 +82,7 @@ class ViteServer implements AppServer {
     const template = await this.getTemplate(req.originalUrl);
     await this.evaluateUserSsrEntry();
 
-    // Lazy imports keep `react-dom/server` and the rest of the SSR runtime
-    // out of the boot path for apps that never SSR a request (server starts
-    // up but `ssrEnabled` is false, or the request was a non-document GET).
+    // Lazy imports keep react-dom/server out of the boot path for non-SSR requests.
     const [{ renderSsrTree }, { _getSsrSnapshot }, { getCallContext }] = await Promise.all([
       import('./ssr/render'),
       import('./client/renderApp'),
@@ -142,10 +135,8 @@ class ViteServer implements AppServer {
   }
 
   private async evaluateUserSsrEntry() {
-    // Importing the user's client entry has the side effect of executing its
-    // top-level `renderApp(...)` call which (on the server branch) writes to
-    // the SSR snapshot. We re-evaluate per request so HMR edits in dev take
-    // effect immediately.
+    // Re-evaluating the user's entry runs its top-level renderApp(...) which
+    // populates the SSR snapshot. Done per request so dev-mode HMR edits apply.
     if (this.isDev()) {
       if (!this.viteServer) {
         throw new Error('Vite dev server not initialized');
@@ -192,10 +183,7 @@ function isDocumentRequest(req: express.Request): boolean {
     return false;
   }
 
-  // Skip URLs that look like static assets (have a file extension other
-  // than nothing, .htm, or .html) — these are typically dev-tools probes
-  // (/.well-known/appspecific/...), favicons, sourcemaps, etc. that fell
-  // through Vite middleware.
+  // Skip URLs with non-HTML extensions (dev-tools probes, favicons, sourcemaps).
   const pathname = (req.path ?? req.url ?? '').split('?')[0];
   const lastSegment = pathname.split('/').pop() ?? '';
   const dotIndex = lastSegment.lastIndexOf('.');
@@ -210,9 +198,7 @@ function isDocumentRequest(req: express.Request): boolean {
 }
 
 function escapeJsonForScript(json: string): string {
-  // Prevent the closing </script> sequence and HTML-escape sensitive bytes.
-  // Also escape U+2028 / U+2029 (valid in JSON but illegal in JS source) in
-  // case the script body is later parsed as JS.
+  // Escape </script>, HTML chars, and U+2028/U+2029 (illegal in JS source).
   return json
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')

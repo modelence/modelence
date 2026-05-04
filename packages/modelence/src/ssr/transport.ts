@@ -3,14 +3,7 @@ import { sanitizeResult, getResponseTypeMap, reviveResponseTypes } from '../meth
 import { _setCallMethodTransport, type MethodArgs } from '../client/method';
 import { getSsrContext } from './context';
 
-/**
- * Install an in-process transport for `callMethod` that runs server methods
- * directly via `runMethod`, using the active SSR request context for auth.
- *
- * Returns a disposer to restore the previous transport. The framework calls
- * this once at SSR runtime startup; per-request context is supplied via
- * `runWithSsrContext` in `context.ts`.
- */
+/** Routes `callMethod` through `runMethod` in-process during SSR. */
 export function installSsrCallMethodTransport(): () => void {
   return _setCallMethodTransport(async <T>(methodName: string, args: MethodArgs) => {
     const ssrCtx = getSsrContext();
@@ -22,9 +15,7 @@ export function installSsrCallMethodTransport(): () => void {
     }
 
     const raw = await runMethod(methodName, args, ssrCtx.callContext);
-    // Match the wire-format the HTTP transport produces so that revivers
-    // (Date, ObjectId-as-string, etc.) behave identically on first paint and
-    // subsequent client-side calls.
+    // Match the HTTP wire format so type revivers behave identically client-side.
     const sanitized = sanitizeResult(raw);
     const typeMap = getResponseTypeMap(sanitized);
     return reviveResponseTypes(sanitized, typeMap ?? undefined) as T;

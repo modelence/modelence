@@ -19,20 +19,9 @@ let cacheUnsubscribe: (() => void) | null = null;
 const subscriptions = new Map<string, Subscription>();
 
 /**
- * Connect a TanStack Query `QueryClient` to Modelence's live-query layer.
- *
- * Wires the query cache to the websocket subscription manager so that
- * `modelenceLiveQuery(...)` can deliver real-time updates and so that cache
- * eviction tears down the underlying subscription.
- *
- * Idempotent for a given `QueryClient`. If a different `QueryClient` is
- * already connected (e.g. StrictMode's double-invoked `useState` initializer
- * created two clients before mount, or the user remounted the provider), the
- * old binding is torn down and the new client takes over.
- *
- * The framework calls this automatically from `<ModelenceQueryProvider>`,
- * so most apps never need to call it directly. Use the manual API only if
- * you are mounting your own `<QueryClientProvider>`.
+ * Connects a `QueryClient` to Modelence's live-query layer. Auto-called by
+ * `<ModelenceQueryProvider>`; only call manually if you mount your own
+ * `<QueryClientProvider>`.
  */
 export function connectModelenceQueryClient(queryClient: QueryClient) {
   if (queryClientRef === queryClient) {
@@ -52,7 +41,6 @@ export function connectModelenceQueryClient(queryClient: QueryClient) {
       const subscriptionKey = hashKey(event.query.queryKey);
       const sub = subscriptions.get(subscriptionKey);
       if (sub) {
-        // Reject any pending resolvers since the query was removed
         if (sub.resolvers.size > 0) {
           const cancelError = new Error('Query was removed from cache');
           sub.resolvers.forEach((r) => r.reject(cancelError));
@@ -65,10 +53,6 @@ export function connectModelenceQueryClient(queryClient: QueryClient) {
   });
 }
 
-/**
- * Disconnect the currently-connected `QueryClient` and tear down all live
- * subscriptions. Useful in tests and when remounting a fresh provider.
- */
 export function disconnectModelenceQueryClient() {
   if (cacheUnsubscribe) {
     cacheUnsubscribe();
@@ -79,12 +63,7 @@ export function disconnectModelenceQueryClient() {
   queryClientRef = null;
 }
 
-/**
- * Class-form connector kept for backwards compatibility with
- * `@modelence/react-query`. Prefer `connectModelenceQueryClient()` directly.
- *
- * @deprecated Use `connectModelenceQueryClient(queryClient)` instead.
- */
+/** @deprecated Use `connectModelenceQueryClient(queryClient)` instead. */
 export class ModelenceQueryClient {
   connect(queryClient: QueryClient) {
     connectModelenceQueryClient(queryClient);
@@ -92,22 +71,10 @@ export class ModelenceQueryClient {
 }
 
 /**
- * Creates query options for use with TanStack Query's `useQuery` hook.
- *
  * @example
  * ```tsx
- * import { useQuery } from '@tanstack/react-query';
- * import { modelenceQuery } from 'modelence/client';
- *
- * function MyComponent() {
- *   const { data } = useQuery(modelenceQuery('todo.getAll'));
- *   return <div>{data?.length}</div>;
- * }
+ * const { data } = useQuery(modelenceQuery('todo.getAll'));
  * ```
- *
- * @typeParam T - The expected return type of the query.
- * @param methodName - The Modelence method name to invoke.
- * @param args - Optional arguments passed to the method handler.
  */
 export function modelenceQuery<T = unknown>(methodName: string, args: Args = {}) {
   return {
@@ -117,16 +84,9 @@ export function modelenceQuery<T = unknown>(methodName: string, args: Args = {})
 }
 
 /**
- * Creates query options for live queries with TanStack Query's `useQuery`
- * hook. Data updates in real time when the underlying collection changes.
- *
- * Requires a `QueryClient` to be connected — `<ModelenceQueryProvider>` does
- * this automatically. If you mount your own provider, call
- * `connectModelenceQueryClient(queryClient)` once.
- *
- * @typeParam T - The expected return type of the query.
- * @param methodName - The Modelence live-query method name.
- * @param args - Optional arguments passed to the method handler.
+ * Live query — data updates in real time as the underlying collection changes.
+ * Requires a `QueryClient` connected via `<ModelenceQueryProvider>` or
+ * `connectModelenceQueryClient(...)`.
  */
 export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args = {}) {
   const queryKey = ['live', methodName, args] as const;
@@ -193,14 +153,6 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
   };
 }
 
-/**
- * Creates mutation options for use with TanStack Query's `useMutation` hook.
- *
- * @typeParam T - The expected return type of the mutation.
- * @param methodName - The Modelence mutation method name.
- * @param defaultArgs - Optional default args merged with the variables passed
- *  to `mutate(...)`.
- */
 export function modelenceMutation<T = unknown>(methodName: string, defaultArgs: Args = {}) {
   return {
     mutationFn: (variables: Args = {}) =>
@@ -208,22 +160,9 @@ export function modelenceMutation<T = unknown>(methodName: string, defaultArgs: 
   };
 }
 
-/**
- * Strongly-typed query key for use with manual cache operations
- * (`queryClient.invalidateQueries`, `getQueryData`, etc.).
- */
 export type ModelenceQueryKey<T extends string, U extends Args = Args> = readonly [T, U];
 
-/**
- * Build a typed query key matching what `modelenceQuery(...)` produces.
- *
- * @example
- * ```tsx
- * queryClient.invalidateQueries({
- *   queryKey: createQueryKey('todo.getAll', { limit: 10 }),
- * });
- * ```
- */
+/** Builds a query key matching `modelenceQuery(...)` for cache operations. */
 export function createQueryKey<T extends string, U extends Args = Args>(
   methodName: T,
   args: U = {} as U

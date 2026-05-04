@@ -74,13 +74,7 @@ export type SessionInitPayload = {
   user: object;
 };
 
-/**
- * Hydrate the session synchronously from a server-rendered payload.
- *
- * When SSR is enabled, the framework inlines the result of `_system.session.init`
- * into the document. Calling this on the client before render lets `AppProvider`
- * skip the loading state and the network round-trip on first paint.
- */
+/** Hydrate session state from the SSR payload, skipping the network round-trip. */
 export function hydrateSession(payload: SessionInitPayload) {
   if (isInitialized) {
     return;
@@ -109,13 +103,7 @@ export async function initSession() {
   await loopSessionHeartbeat();
 }
 
-/**
- * Start the session heartbeat loop. Idempotent and client-only.
- *
- * Called automatically from `initSession`; SSR-hydrated apps must call this
- * explicitly after hydration since `hydrateSession` is synchronous and skips
- * the network path.
- */
+/** Idempotent, client-only. Auto-started by `initSession`; call explicitly after `hydrateSession`. */
 export async function startSessionHeartbeat() {
   if (typeof window === 'undefined' || heartbeatTimer !== null) {
     return;
