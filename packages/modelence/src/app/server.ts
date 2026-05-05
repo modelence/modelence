@@ -181,6 +181,8 @@ export async function getCallContext(req: Request, res: Response | null = null) 
 
   const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
 
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
   const authToken = z
     .string()
     .nullish()
@@ -188,7 +190,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
     .parse(
       req.cookies.authToken ||
         (isOAuthCallback ? req.cookies.oauthLinkToken : null) ||
-        req.body.authToken
+        body.authToken
     );
 
   const clientInfo = z
@@ -201,7 +203,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
       orientation: z.string().nullable(),
     })
     .nullish()
-    .parse(req.body.clientInfo) ?? {
+    .parse(body.clientInfo) ?? {
     screenWidth: 0,
     screenHeight: 0,
     windowWidth: 0,
