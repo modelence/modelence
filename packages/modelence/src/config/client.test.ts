@@ -1,4 +1,4 @@
-import { getConfig, _setConfig } from './client';
+import { getConfig, _setConfig, _setSsrConfigResolver } from './client';
 import type { Configs } from './types';
 
 describe('config/client', () => {
@@ -33,6 +33,24 @@ describe('config/client', () => {
       expect(getConfig('stringKey')).toBe('string');
       expect(getConfig('numberKey')).toBe(123);
       expect(getConfig('booleanKey')).toBe(true);
+    });
+  });
+
+  describe('SSR resolver', () => {
+    it('reads from injected resolver when window is undefined', () => {
+      const originalWindow = (globalThis as { window?: unknown }).window;
+      delete (globalThis as { window?: unknown }).window;
+      _setConfig({});
+      _setSsrConfigResolver((key) => (key === 'ssrKey' ? 'ssrValue' : undefined));
+      try {
+        expect(getConfig('ssrKey')).toBe('ssrValue');
+        expect(getConfig('missing')).toBeUndefined();
+      } finally {
+        _setSsrConfigResolver(null);
+        if (originalWindow !== undefined) {
+          (globalThis as { window?: unknown }).window = originalWindow;
+        }
+      }
     });
   });
 

@@ -145,6 +145,23 @@ export function stopHeartbeatTimer() {
   }
 }
 
+type SsrSessionResolver = () => User | null;
+let ssrSessionResolver: SsrSessionResolver | null = null;
+
+/**
+ * @internal
+ * Installed once by the SSR runtime. The resolver reads per-request state
+ * from AsyncLocalStorage, so this single global is safe under concurrency.
+ */
+export function _setSsrSessionResolver(resolver: SsrSessionResolver | null) {
+  ssrSessionResolver = resolver;
+}
+
+/** @internal Used by the SSR runtime to enrich a raw user payload. */
+export function _parseSessionUser(user: unknown): User | null {
+  return parseUser(user);
+}
+
 /**
  * `useSession` is a hook that returns the current user, and in the future will also return other details about the current session.
  *
@@ -159,6 +176,9 @@ export function stopHeartbeatTimer() {
  * ```
  */
 export function useSession() {
+  if (typeof window === 'undefined' && ssrSessionResolver) {
+    return { user: ssrSessionResolver() };
+  }
   const user = useSessionStore((state) => state.user);
   return { user };
 }

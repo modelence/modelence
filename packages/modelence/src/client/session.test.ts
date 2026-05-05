@@ -130,6 +130,23 @@ describe('client/session', () => {
     expect(fresh.isSessionInitialized()).toBe(true);
   });
 
+  test('useSession reads from injected SSR resolver when window is undefined', async () => {
+    const fresh = await import('./session');
+    const originalWindow = (globalThis as { window?: unknown }).window;
+    delete (globalThis as { window?: unknown }).window;
+    try {
+      fresh._setSsrSessionResolver(() =>
+        fresh._parseSessionUser({ id: 'ssr', handle: 'ssr-user', roles: ['admin'] })
+      );
+      expect(fresh.useSession().user?.id).toBe('ssr');
+    } finally {
+      fresh._setSsrSessionResolver(null);
+      if (originalWindow !== undefined) {
+        (globalThis as { window?: unknown }).window = originalWindow;
+      }
+    }
+  });
+
   test('hydrateSession is a no-op when session was already initialized', async () => {
     const fresh = await import('./session');
     const payload = {

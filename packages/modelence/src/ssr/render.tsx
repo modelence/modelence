@@ -4,12 +4,42 @@ import { Writable } from 'node:stream';
 import { QueryClient, dehydrate, type DehydratedState } from '@tanstack/react-query';
 import { AppProvider } from '../client/AppProvider';
 import { ModelenceQueryProvider } from '../client/queryProvider';
-import { runWithSsrContext } from './context';
+import { getSsrContext, runWithSsrContext } from './context';
 import { runMethod } from '../methods';
 import { sanitizeResult, getResponseTypeMap, reviveResponseTypes } from '../methods/serialize';
 import type { Context } from '../methods/types';
-import type { SessionInitPayload } from '../client/session';
+import {
+  _parseSessionUser,
+  _setSsrSessionResolver,
+  type SessionInitPayload,
+} from '../client/session';
+import { _setSsrConfigResolver } from '../config/client';
+import type { ConfigKey, Configs } from '../config/types';
 import type { SsrRouter } from '../client/renderApp';
+
+let resolversInstalled = false;
+function ensureSsrResolversInstalled() {
+  if (resolversInstalled) {
+    return;
+  }
+  resolversInstalled = true;
+
+  _setSsrSessionResolver(() => {
+    const ctx = getSsrContext();
+    if (!ctx) {
+      return null;
+    }
+    return _parseSessionUser(ctx.session.user);
+  });
+
+  _setSsrConfigResolver((key: ConfigKey) => {
+    const ctx = getSsrContext();
+    if (!ctx) {
+      return undefined;
+    }
+    return ctx.session.configs[key]?.value;
+  });
+}
 
 export type SsrRenderResult = {
   html: string;
@@ -29,6 +59,8 @@ export type SsrRenderOptions = {
 
 export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRenderResult> {
   const { callContext, loadingElement, routesElement, router, location } = options;
+
+  ensureSsrResolversInstalled();
 
   const sessionRaw = await runMethod('_system.session.init', {}, callContext);
   const sessionSanitized = sanitizeResult(sessionRaw) as object;
@@ -56,7 +88,17 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
     </AppProvider>
   );
 
-  const html = await runWithSsrContext({ callContext, queryClient }, () => renderToString(tree));
+  const html = await runWithSsrContext(
+    {
+      callContext,
+      queryClient,
+      session: {
+        user: sessionPayload.user,
+        configs: (sessionPayload.configs as Configs) ?? {},
+      },
+    },
+    () => renderToString(tree)
+  );
 
   const dehydratedState: DehydratedState = dehydrate(queryClient);
   queryClient.clear();

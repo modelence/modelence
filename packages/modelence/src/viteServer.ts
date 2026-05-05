@@ -24,6 +24,7 @@ class ViteServer implements AppServer {
   private config?: UserConfig;
   private ssrEnabled = false;
   private ssrTransportInstalled = false;
+  private prodEntryLoaded = false;
 
   enableSsr() {
     this.ssrEnabled = true;
@@ -136,9 +137,10 @@ class ViteServer implements AppServer {
   }
 
   private async evaluateUserSsrEntry() {
-    // Re-evaluating the user's entry runs its top-level renderApp(...) which
-    // populates the SSR snapshot. Done per request so dev-mode HMR edits apply.
+    // Evaluating the user's entry runs its top-level renderApp(...) which
+    // populates the SSR snapshot.
     if (this.isDev()) {
+      // Re-evaluate every request so dev-mode HMR edits apply.
       if (!this.viteServer) {
         throw new Error('Vite dev server not initialized');
       }
@@ -146,7 +148,13 @@ class ViteServer implements AppServer {
       return;
     }
 
+    // In production, Node caches the dynamic import. Evaluate exactly once
+    // so the snapshot is populated on first request and reused thereafter.
+    if (this.prodEntryLoaded) {
+      return;
+    }
     await import(path.resolve(process.cwd(), SSR_BUILD_DIR, 'index.mjs'));
+    this.prodEntryLoaded = true;
   }
 
   private serveStaticShell(res: express.Response) {
