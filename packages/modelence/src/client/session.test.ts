@@ -24,15 +24,10 @@ jest.unstable_mockModule('../time', () => ({
   },
 }));
 
-const {
-  initSession,
-  setCurrentUser,
-  useSessionStore,
-  getHeartbeatTimer,
-  stopHeartbeatTimer,
-  hydrateSession,
-  isSessionInitialized,
-} = await import('./session');
+const { initSession, setCurrentUser, useSessionStore, getHeartbeatTimer, stopHeartbeatTimer } =
+  await import('./session');
+type SessionModule = typeof import('./session');
+type HydrateSessionFn = SessionModule['hydrateSession'];
 
 describe('client/session', () => {
   const originalSetTimeout = global.setTimeout;
@@ -126,7 +121,7 @@ describe('client/session', () => {
       user: { id: '42', handle: 'ssr-user', roles: ['admin'] },
     };
 
-    fresh.hydrateSession(payload as unknown as Parameters<typeof hydrateSession>[0]);
+    fresh.hydrateSession(payload as unknown as Parameters<HydrateSessionFn>[0]);
 
     expect(mockCallMethod).not.toHaveBeenCalled();
     expect(mockSetConfig).toHaveBeenCalledWith(payload.configs);
@@ -143,7 +138,7 @@ describe('client/session', () => {
       user: null,
     };
     // First call initializes
-    fresh.hydrateSession(payload as unknown as Parameters<typeof hydrateSession>[0]);
+    fresh.hydrateSession(payload as unknown as Parameters<HydrateSessionFn>[0]);
     mockSetConfig.mockClear();
     mockSetLocalStorageSession.mockClear();
 
@@ -152,7 +147,7 @@ describe('client/session', () => {
       configs: [{ key: 'changed', value: 'value' }],
       session: { authToken: 'replacement' },
       user: { id: 'new', handle: 'new', roles: [] },
-    } as unknown as Parameters<typeof hydrateSession>[0]);
+    } as unknown as Parameters<HydrateSessionFn>[0]);
 
     expect(mockSetConfig).not.toHaveBeenCalled();
     expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
