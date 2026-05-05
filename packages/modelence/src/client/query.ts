@@ -140,6 +140,8 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
           subscriptions.set(subscriptionKey, sub);
         }
 
+        // Cast required: the shared `subscriptions` map stores resolvers from
+        // calls with different `T` instantiations, so the union must be erased.
         sub.resolvers.add({
           resolve: resolve as (data: unknown) => void,
           reject,

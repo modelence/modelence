@@ -29,6 +29,8 @@ export default defineConfig((options) => ({
   external: [
     'react',
     'react-dom',
+    'react-dom/server',
+    'react-dom/client',
     '@tanstack/react-query',
     'node:async_hooks',
     'async_hooks'

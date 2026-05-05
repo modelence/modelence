@@ -18,6 +18,10 @@ const CLIENT_BUILD_DIR = './.modelence/build/client'.replace(/\\/g, '/');
 const SSR_BUILD_DIR = './.modelence/build/ssr'.replace(/\\/g, '/');
 // Resolved relative to Vite's `root` (./src/client) — see getConfig() below.
 const SSR_ENTRY_VIRTUAL_PATH = '/index.tsx';
+// Matches the empty `<div id="root"></div>` placeholder shipped in the Vite
+// HTML template. Allowing whitespace inside keeps it tolerant of formatting
+// without becoming greedy across unrelated `</div>` tags.
+const ROOT_PLACEHOLDER_REGEX = /<div id="root">\s*<\/div>/;
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
@@ -64,7 +68,12 @@ class ViteServer implements AppServer {
         if (this.isDev() && this.viteServer && error instanceof Error) {
           this.viteServer.ssrFixStacktrace(error);
         }
-        console.error('SSR render error:', error);
+        console.error('SSR render error:', {
+          url: req.originalUrl,
+          method: req.method,
+          userAgent: req.get('user-agent'),
+          error,
+        });
         // Fall back to CSR shell so the client can still recover.
         this.serveStaticShell(res);
       }
@@ -111,9 +120,15 @@ class ViteServer implements AppServer {
       `<script id="__MODELENCE_STATE__" type="application/json">${escapeJsonForScript(sessionState)}</script>` +
       `<script id="__MODELENCE_QUERY_STATE__" type="application/json">${escapeJsonForScript(queryState)}</script>`;
 
-    // Function replacement avoids $&/$'/`$\``/$$ being interpreted by String.replace.
+    // The Vite template ships an empty `<div id="root"></div>` placeholder.
+    // Match it explicitly to avoid the greedy/non-greedy pitfalls of `.*?`
+    // when the template evolves. Function replacement avoids $&/$'/$$ being
+    // interpreted by String.replace.
+    if (!ROOT_PLACEHOLDER_REGEX.test(template)) {
+      throw new Error('SSR template is missing the expected `<div id="root"></div>` placeholder.');
+    }
     const finalHtml = template.replace(
-      /<div id="root">.*?<\/div>/s,
+      ROOT_PLACEHOLDER_REGEX,
       () => `<div id="root">${html}</div>${stateScripts}`
     );
 
@@ -192,8 +207,15 @@ function isDocumentRequest(req: express.Request): boolean {
     return false;
   }
 
-  // Skip URLs with non-HTML extensions (dev-tools probes, favicons, sourcemaps).
   const pathname = (req.path ?? req.url ?? '').split('?')[0];
+
+  // API endpoints never produce HTML, even when a curious client sends an
+  // Accept header that includes text/html.
+  if (pathname.startsWith('/api/')) {
+    return false;
+  }
+
+  // Skip URLs with non-HTML extensions (dev-tools probes, favicons, sourcemaps).
   const lastSegment = pathname.split('/').pop() ?? '';
   const dotIndex = lastSegment.lastIndexOf('.');
   if (dotIndex > 0) {
@@ -206,14 +228,13 @@ function isDocumentRequest(req: express.Request): boolean {
   return true;
 }
 
-function escapeJsonForScript(json: string): string {
+export function escapeJsonForScript(json: string): string {
   // Escape </script>, HTML chars, and U+2028/U+2029 (illegal in JS source).
-  return json
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+  // Single-pass replace avoids order-dependent double-escape pitfalls.
+  return json.replace(
+    /[<>&\u2028\u2029]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
 }
 
 async function loadUserViteConfig() {

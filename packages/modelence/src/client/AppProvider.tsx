@@ -20,6 +20,9 @@ let isInitialized = false;
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
   // Skip loading on the server (would defeat SSR) and when session is already
   // hydrated client-side (would cause a hydration mismatch).
+  // INVARIANT: when SSR is enabled, `hydrateSession()` MUST run before
+  // `hydrateRoot()` so `isSessionInitialized()` is true on the first render
+  // and matches the server's `isLoading=false`. See renderApp.tsx.
   const isServer = typeof window === 'undefined';
   const [isLoading, setIsLoading] = useState(() => !isServer && !isSessionInitialized());
 

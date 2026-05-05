@@ -5,8 +5,7 @@ import { QueryClient, dehydrate, type DehydratedState } from '@tanstack/react-qu
 import { AppProvider } from '../client/AppProvider';
 import { ModelenceQueryProvider } from '../client/queryProvider';
 import { getSsrContext, runWithSsrContext } from './context';
-import { runMethod } from '../methods';
-import { sanitizeResult, getResponseTypeMap, reviveResponseTypes } from '../methods/serialize';
+import { callInProcessMethod } from './callInProcess';
 import type { Context } from '../methods/types';
 import {
   _parseSessionUser,
@@ -17,28 +16,27 @@ import { _setSsrConfigResolver } from '../config/client';
 import type { ConfigKey, Configs } from '../config/types';
 import type { SsrRouter } from '../client/renderApp';
 
-let resolversInstalled = false;
-function ensureSsrResolversInstalled() {
-  if (resolversInstalled) {
-    return;
+const sessionResolver = () => {
+  const ctx = getSsrContext();
+  if (!ctx) {
+    return null;
   }
-  resolversInstalled = true;
+  return _parseSessionUser(ctx.session.user);
+};
 
-  _setSsrSessionResolver(() => {
-    const ctx = getSsrContext();
-    if (!ctx) {
-      return null;
-    }
-    return _parseSessionUser(ctx.session.user);
-  });
+const configResolver = (key: ConfigKey) => {
+  const ctx = getSsrContext();
+  if (!ctx) {
+    return undefined;
+  }
+  return ctx.session.configs[key]?.value;
+};
 
-  _setSsrConfigResolver((key: ConfigKey) => {
-    const ctx = getSsrContext();
-    if (!ctx) {
-      return undefined;
-    }
-    return ctx.session.configs[key]?.value;
-  });
+function ensureSsrResolversInstalled() {
+  // Idempotent — safe to call repeatedly. Re-installs the framework's own
+  // resolvers if they were swapped out (tests, future reload code).
+  _setSsrSessionResolver(sessionResolver);
+  _setSsrConfigResolver(configResolver);
 }
 
 export type SsrRenderResult = {
@@ -62,13 +60,11 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
 
   ensureSsrResolversInstalled();
 
-  const sessionRaw = await runMethod('_system.session.init', {}, callContext);
-  const sessionSanitized = sanitizeResult(sessionRaw) as object;
-  const sessionTypeMap = getResponseTypeMap(sessionSanitized);
-  const sessionPayload = reviveResponseTypes(
-    sessionSanitized,
-    sessionTypeMap ?? undefined
-  ) as SessionInitPayload;
+  const sessionPayload = await callInProcessMethod<SessionInitPayload>(
+    '_system.session.init',
+    {},
+    callContext
+  );
 
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -97,9 +93,12 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
         configs: (sessionPayload.configs as Configs) ?? {},
       },
     },
-    () => renderToString(tree)
+    () => renderToString(tree, location)
   );
 
+  // Safe to dehydrate + clear here: `onAllReady` waits for every Suspense
+  // boundary to settle before resolving, so all in-flight queries have
+  // populated the cache by this point.
   const dehydratedState: DehydratedState = dehydrate(queryClient);
   queryClient.clear();
 
@@ -110,7 +109,7 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
   };
 }
 
-function renderToString(tree: React.ReactElement): Promise<string> {
+function renderToString(tree: React.ReactElement, location: string | undefined): Promise<string> {
   return new Promise((resolve, reject) => {
     let buffer = '';
     const writable = new Writable({
@@ -130,7 +129,10 @@ function renderToString(tree: React.ReactElement): Promise<string> {
         reject(error);
       },
       onError(error) {
-        console.error('SSR render error:', error);
+        // Non-fatal recoverable errors (Suspense fallbacks, etc.). React still
+        // ships HTML, but repeated occurrences can mask real bugs — log with
+        // request URL for telemetry follow-up.
+        console.error('SSR onError (non-fatal):', { location, error });
       },
     });
   });

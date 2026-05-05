@@ -1,6 +1,5 @@
-import { runMethod } from '../methods';
-import { sanitizeResult, getResponseTypeMap, reviveResponseTypes } from '../methods/serialize';
 import { _setCallMethodTransport, type MethodArgs } from '../client/method';
+import { callInProcessMethod } from './callInProcess';
 import { getSsrContext } from './context';
 
 /** Routes `callMethod` through `runMethod` in-process during SSR. */
@@ -14,10 +13,6 @@ export function installSsrCallMethodTransport(): () => void {
       );
     }
 
-    const raw = await runMethod(methodName, args, ssrCtx.callContext);
-    // Match the HTTP wire format so type revivers behave identically client-side.
-    const sanitized = sanitizeResult(raw);
-    const typeMap = getResponseTypeMap(sanitized);
-    return reviveResponseTypes(sanitized, typeMap ?? undefined) as T;
+    return callInProcessMethod<T>(methodName, args, ssrCtx.callContext);
   });
 }

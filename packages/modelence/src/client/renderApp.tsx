@@ -31,7 +31,7 @@ function readSsrState(): SsrState | null {
 
 export type SsrRouter = (props: {
   children: React.ReactNode;
-  location: string | undefined;
+  location?: string;
 }) => React.ReactElement;
 
 export interface RenderAppOptions {
@@ -75,6 +75,9 @@ export function renderApp(options: RenderAppOptions) {
     // Empty 'unload' handler prevents bfcache in most browsers.
   });
 
+  // ORDER MATTERS: hydrate session BEFORE building the React tree / calling
+  // hydrateRoot, so `isSessionInitialized()` is true on the first render and
+  // AppProvider's initial `isLoading` matches the server-rendered output.
   const ssrState = readSsrState();
   const isHydrating = ssrState !== null;
   if (ssrState?.session) {
@@ -83,9 +86,7 @@ export function renderApp(options: RenderAppOptions) {
   }
 
   const container = document.getElementById('root')!;
-  const routedTree = router
-    ? router({ children: routesElement, location: undefined })
-    : routesElement;
+  const routedTree = router ? router({ children: routesElement }) : routesElement;
   const tree = (
     <React.StrictMode>
       <AppProvider loadingElement={loadingElement}>
