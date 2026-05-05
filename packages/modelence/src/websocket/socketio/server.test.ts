@@ -5,8 +5,10 @@ import type { Session, User } from '@/auth/types';
 import { ServerChannel as ServerChannelClass } from '../serverChannel';
 
 const mockCreateIndex = jest.fn();
+const mockDropIndex = jest.fn();
 const mockCollection = {
   createIndex: mockCreateIndex,
+  dropIndex: mockDropIndex,
 };
 const mockCollectionFn = jest.fn(() => mockCollection);
 const mockDb = {
@@ -29,6 +31,11 @@ jest.unstable_mockModule('@socket.io/mongo-adapter', () => ({
 const mockAuthenticate = jest.fn();
 jest.unstable_mockModule('@/auth', () => ({
   authenticate: mockAuthenticate,
+}));
+
+const mockGetConfig = jest.fn();
+jest.unstable_mockModule('@/config/server', () => ({
+  getConfig: mockGetConfig,
 }));
 
 const eventHandlers: Record<string, ((...args: unknown[]) => void) | undefined> = {};
@@ -62,6 +69,7 @@ describe('websocket/socketio/server', () => {
     jest.clearAllMocks();
     Object.keys(eventHandlers).forEach((key) => delete eventHandlers[key]);
     socketMiddlewares.length = 0;
+    mockGetConfig.mockReturnValue(false);
     mockGetClient.mockReturnValue(mockMongoClient);
     mockCreateIndex.mockResolvedValue(undefined as never);
     mockAuthenticate.mockResolvedValue({ user: { id: '1' } } as never);
@@ -89,6 +97,7 @@ describe('websocket/socketio/server', () => {
   }
 
   test('init configures socket server, middleware, and channel handlers', async () => {
+    mockGetConfig.mockReturnValue(true);
     const accessSpy = jest.fn(
       async (_props: { user: User | null; session: Session | null; roles: string[] }) => true
     );
@@ -100,7 +109,7 @@ describe('websocket/socketio/server', () => {
     expect((mockCollectionFn as jest.Mock).mock.calls[0]?.[0]).toBe('_modelenceSocketio');
     expect(mockCreateIndex).toHaveBeenCalledWith(
       { createdAt: 1 },
-      { expireAfterSeconds: 3600, background: true }
+      { expireAfterSeconds: 60, background: true }
     );
     expect((mockCreateAdapter as jest.Mock).mock.calls[0]?.[0]).toBe(mockCollection);
 
@@ -132,6 +141,33 @@ describe('websocket/socketio/server', () => {
     leaveHandler?.('chat:room1');
     expect(socket.leave).toHaveBeenCalledWith('chat:room1');
     expect(socket.emit).toHaveBeenCalledWith('leftChannel', 'chat:room1');
+  });
+
+  test('init skips mongo adapter when multiInstance is disabled', async () => {
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [],
+    });
+
+    expect(mockCollectionFn).not.toHaveBeenCalled();
+    expect(mockCreateIndex).not.toHaveBeenCalled();
+    expect(mockCreateAdapter).not.toHaveBeenCalled();
+  });
+
+  test('init drops and recreates index on IndexOptionsConflict error', async () => {
+    mockGetConfig.mockReturnValue(true);
+    const conflictError = Object.assign(new Error('IndexOptionsConflict'), { code: 85 });
+    mockCreateIndex.mockRejectedValueOnce(conflictError as never);
+    mockDropIndex.mockResolvedValue(undefined as never);
+    mockCreateIndex.mockResolvedValueOnce(undefined as never);
+
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [],
+    });
+
+    expect(mockDropIndex).toHaveBeenCalledWith('createdAt_1');
+    expect(mockCreateIndex).toHaveBeenCalledTimes(2);
   });
 
   test('broadcast emits messages to connected sockets when initialized', async () => {

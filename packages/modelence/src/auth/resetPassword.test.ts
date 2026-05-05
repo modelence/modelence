@@ -24,6 +24,11 @@ const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => 
 const mockTime = { hours: jest.fn() };
 const mockConsumeRateLimit = jest.fn();
 const mockGetConfig = jest.fn();
+const mockInvalidateAllUserSessions = jest.fn();
+
+jest.unstable_mockModule('./session', () => ({
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
+}));
 
 jest.unstable_mockModule('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
@@ -31,6 +36,7 @@ jest.unstable_mockModule('@/server', () => ({
 
 jest.unstable_mockModule('@/config/server', () => ({
   getConfig: mockGetConfig,
+  getPublicConfigs: jest.fn().mockReturnValue({}),
 }));
 
 jest.unstable_mockModule('./db', () => ({
@@ -119,6 +125,7 @@ const createMockResetToken = (
   overrides: Partial<{
     _id: ObjectId;
     userId: ObjectId;
+    email: string;
     token: string;
     expiresAt: Date;
     createdAt: Date;
@@ -127,6 +134,7 @@ const createMockResetToken = (
   ({
     _id: overrides._id ?? new ObjectId(),
     userId: overrides.userId ?? new ObjectId(),
+    email: overrides.email ?? 'user@example.com',
     token: overrides.token ?? 'token123',
     expiresAt: overrides.expiresAt ?? new Date(Date.now() + 1000000),
     createdAt: overrides.createdAt ?? new Date(),
@@ -215,6 +223,7 @@ describe('auth/resetPassword', () => {
       );
       expect(mockResetTokensInsertOne).toHaveBeenCalledWith({
         userId,
+        email,
         token: resetToken,
         createdAt: expect.any(Date),
         expiresAt: expect.any(Date),
@@ -516,11 +525,13 @@ describe('auth/resetPassword', () => {
       const password = 'NewP@ssw0rd!';
       const hashedPassword = 'hashedNewPassword';
       const userId = new ObjectId();
+      const email = 'user@example.com';
 
       mockValidatePassword.mockReturnValue(password);
       mockResetTokensFindOne.mockResolvedValue(
         createMockResetToken({
           userId,
+          email,
           token,
           expiresAt: new Date(Date.now() + 1000000), // Not expired
           createdAt: new Date(),
@@ -529,7 +540,7 @@ describe('auth/resetPassword', () => {
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
           _id: userId,
-          emails: [{ address: 'user@example.com', verified: true }],
+          emails: [{ address: email, verified: false }],
           authMethods: { password: { hash: 'oldHash' } },
         })
       );
@@ -541,19 +552,51 @@ describe('auth/resetPassword', () => {
       expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+      expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
+        1,
         { _id: userId },
-        {
-          $set: {
-            'authMethods.password.hash': hashedPassword,
-          },
-        }
+        { $set: { 'authMethods.password.hash': hashedPassword } }
       );
+      expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
+        2,
+        { _id: userId, 'emails.address': email },
+        { $set: { 'emails.$.verified': true } }
+      );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
       expect(result).toEqual({
         success: true,
         message: 'Password has been reset successfully',
       });
+    });
+
+    test('skips email verification for legacy tokens without email field', async () => {
+      const token = 'legacytoken';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      mockResetTokensFindOne.mockResolvedValue({
+        _id: new ObjectId(),
+        userId,
+        token,
+        expiresAt: new Date(Date.now() + 1000000),
+        createdAt: new Date(),
+        // no email field — simulates a legacy token
+      } as never);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ _id: userId, authMethods: { password: { hash: 'oldHash' } } })
+      );
+      mockBcryptHash.mockResolvedValue('hashedPassword');
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledTimes(1);
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: userId },
+        { $set: { 'authMethods.password.hash': 'hashedPassword' } }
+      );
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     });
 
     test('throws error if reset token not found', async () => {

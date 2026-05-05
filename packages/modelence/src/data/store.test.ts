@@ -50,6 +50,57 @@ function assertFetchOptionTypeSafety() {
 }
 void assertFetchOptionTypeSafety;
 
+function assertExtendedStoreDotNotationTypeSafety() {
+  const baseStore = new Store('baseStore', {
+    schema: {
+      name: schema.string(),
+      meta: schema
+        .object({
+          active: schema.boolean(),
+        })
+        .optional(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  const extendedStore = baseStore.extend({
+    schema: {
+      integrations: schema
+        .object({
+          resend: schema
+            .object({
+              id: schema.string().optional(),
+              syncStatus: schema.enum(['success', 'error']),
+              syncedAt: schema.date(),
+            })
+            .optional(),
+        })
+        .optional(),
+    },
+  });
+
+  // Dot-notation paths must be accepted in filter queries on extended stores
+  extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
+  extendedStore.fetch({
+    'integrations.resend.syncStatus': 'error',
+    $or: [
+      { 'integrations.resend.id': { $exists: false } },
+      { 'integrations.resend.syncedAt': { $lte: new Date() } },
+    ],
+  });
+
+  // Dot-notation paths must be accepted in $set updates on extended stores
+  extendedStore.updateOne('someId', {
+    $set: {
+      'integrations.resend.id': 'abc',
+      'integrations.resend.syncStatus': 'success',
+      'integrations.resend.syncedAt': new Date(),
+    },
+  });
+}
+void assertExtendedStoreDotNotationTypeSafety;
+
 describe('data/store', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -204,6 +255,90 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
+  test('createIndexes drop-only mode drops orphaned indexes without creating new ones', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          { name: '_modelence_oldField_1', key: { oldField: 1 } },
+        ] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('drop-only');
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_oldField_1');
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+    expect(collectionMock.createSearchIndexes).not.toHaveBeenCalled();
+    expect(collectionMock.dropSearchIndex).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes create-only mode creates missing indexes without dropping any', async () => {
+    const store = createStore({
+      indexes: [{ key: { name: 1 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('create-only');
+
+    expect(collectionMock.createIndexes).toHaveBeenCalledWith([
+      { key: { name: 1 }, name: '_modelence_name_1' },
+    ]);
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.dropSearchIndex).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes create-only mode drops and recreates search indexes on conflict', async () => {
+    const store = createStore({
+      searchIndexes: [{ name: 'searchIdx', definition: {} } as SearchIndexDescription],
+    });
+
+    const searchError = new MongoError('duplicate search') as MongoError & { code: number };
+    searchError.code = 68;
+
+    const collectionMock = {
+      listIndexes: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: jest.fn().mockResolvedValue(undefined as never),
+      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: jest
+        .fn()
+        .mockRejectedValueOnce(searchError as never)
+        .mockResolvedValueOnce(undefined as never),
+      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes('create-only');
+
+    expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
+    expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+  });
+
   test('createIndexes handles non-existent collection (code 26)', async () => {
     const store = createStore({
       indexes: [{ key: { name: 1 } }],
@@ -286,6 +421,68 @@ describe('data/store', () => {
     });
     const indexes4 = (store4 as unknown as { indexes: IndexDescription[] }).indexes;
     expect(indexes4[0].name).toBe('_modelence_userId_1_createdAt_-1');
+  });
+
+  test('extend from historical node appends to chain tail instead of branching', () => {
+    const base = createStore({
+      indexes: [{ key: { name: 1 }, name: 'nameIdx' }],
+    });
+
+    const mid = base.extend({
+      schema: { age: {} } as ModelSchema,
+      indexes: [{ key: { age: 1 }, name: 'ageIdx' }],
+    });
+
+    // Calling extend on the base should extend from the tail (mid), not from base
+    const top = base.extend({
+      schema: { email: {} } as ModelSchema,
+      indexes: [{ key: { email: 1 }, name: 'emailIdx' }],
+    });
+
+    // top should contain all accumulated fields: name + age + email
+    expect(top.getSchema()).toMatchObject({
+      name: expect.anything(),
+      age: expect.anything(),
+      email: expect.anything(),
+    });
+
+    const topIndexes = (top as unknown as { indexes: IndexDescription[] }).indexes;
+    expect(topIndexes.length).toBe(3);
+    expect(topIndexes.map((i) => i.name)).toEqual([
+      '_modelence_nameIdx',
+      '_modelence_ageIdx',
+      '_modelence_emailIdx',
+    ]);
+
+    // Chain links are correct
+    expect(base.getChainTail()).toBe(top);
+    expect(top.getChainRoot()).toBe(base);
+    expect(mid.getChainTail()).toBe(top);
+  });
+
+  test('extend-after-init guard checks tail', () => {
+    const base = createStore();
+    const extended = base.extend({ schema: { age: {} } as ModelSchema });
+
+    const mockClient = {
+      db: () => ({
+        collection: () => ({}),
+      }),
+    } as unknown as Parameters<Store<ModelSchema, Record<string, never>>['init']>[0];
+
+    // Init the tail
+    extended.init(mockClient);
+
+    // Extending from base should throw because the tail is init'd
+    expect(() => base.extend({})).toThrow(
+      "Store.extend() must be called before startApp(). Store 'testCollection' has already been initialized and cannot be extended."
+    );
+  });
+
+  test('getChainTail and getChainRoot on a single store return itself', () => {
+    const store = createStore();
+    expect(store.getChainTail()).toBe(store);
+    expect(store.getChainRoot()).toBe(store);
   });
 
   test('supports per-store index creation mode', () => {

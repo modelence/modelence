@@ -1,0 +1,239 @@
+---
+title: 'Indexes'
+description: 'Configure MongoDB and Atlas Search indexes for your stores'
+icon: 'database'
+---
+
+Modelence lets you configure indexes directly on each `Store`. Use:
+
+- `indexes` for regular MongoDB indexes (performance and constraints)
+- `searchIndexes` for MongoDB Atlas Search
+- `indexCreationMode` to control startup behavior
+
+## MongoDB Indexes
+
+Configure indexes to improve query performance:
+
+```typescript
+export const dbPosts = new Store('posts', {
+  schema: {
+    title: schema.string(),
+    authorId: schema.userId(),
+    publishedAt: schema.date(),
+    status: schema.string(),
+  },
+
+  indexes: [
+    // Single field index
+    { key: { authorId: 1 } },
+
+    // Compound index
+    { key: { status: 1, publishedAt: -1 } },
+
+    // Named index
+    {
+      key: { title: 'text' },
+      name: 'title_text_index'
+    },
+
+    // Unique index
+    {
+      key: { slug: 1 },
+      unique: true
+    }
+  ]
+});
+```
+
+Modelence automatically creates these indexes when the application starts.
+
+<Note>
+Starting from `modelence@0.12.0`, Modelence manages framework-created indexes
+using this strategy.
+
+Modelence manages framework-created indexes with a `_modelence_` name prefix.
+If you provide `name`, Modelence still prefixes it automatically.
+During startup reconciliation, Modelence will create missing managed indexes,
+drop outdated managed indexes, and recreate changed ones.
+</Note>
+
+Manual indexes that do not use the `_modelence_` prefix are preserved unless
+they conflict with code-defined index keys.
+
+### Common Index Options
+
+`indexes` accepts MongoDB index options like `unique`, `sparse`,
+`expireAfterSeconds`, and `partialFilterExpression`:
+
+```typescript
+indexes: [
+  { key: { email: 1 }, unique: true },
+  { key: { deletedAt: 1 }, sparse: true },
+  { key: { expiresAt: 1 }, expireAfterSeconds: 0 }, // TTL
+  { key: { status: 1 }, partialFilterExpression: { status: { $exists: true } } },
+]
+```
+
+## Index Creation Mode
+
+By default, store indexes are created in the background during startup.  
+Set `indexCreationMode: 'blocking'` for indexes that must be created before startup continues.
+
+```typescript
+export const locksCollection = new Store('_modelenceLocks', {
+  schema: {
+    resource: schema.string(),
+    instanceId: schema.string(),
+    acquiredAt: schema.date(),
+  },
+
+  indexes: [
+    { key: { resource: 1 }, unique: true },
+    { key: { resource: 1, acquiredAt: 1 } },
+  ],
+
+  indexCreationMode: 'blocking',
+});
+```
+
+Startup ordering:
+
+1. `blocking` indexes are awaited before migrations begin.
+2. Migrations are then started.
+3. `background` indexes may continue running in parallel with migrations.
+
+In multi-instance deployments, index creation is coordinated through a
+distributed `indexes` lock so only one instance performs reconciliation at a
+time.
+
+If index creation fails for a store, startup continues and a warning is logged.
+
+<Tip>
+See [Migrations](/core-concepts/migrations) for startup and race-condition guidance with cron jobs.
+</Tip>
+
+## MongoDB Atlas Search Indexes
+
+For advanced full-text search capabilities using MongoDB Atlas Search, configure search indexes:
+
+```typescript
+export const dbArticles = new Store('articles', {
+  schema: {
+    title: schema.string(),
+    content: schema.string(),
+    tags: schema.array(schema.string()),
+    category: schema.string(),
+    authorId: schema.userId(),
+  },
+
+  indexes: [
+    { key: { authorId: 1 } },
+  ],
+
+  searchIndexes: [
+    {
+      name: 'article_search',
+      definition: {
+        mappings: {
+          dynamic: false,
+          fields: {
+            title: {
+              type: 'string',
+              analyzer: 'lucene.standard'
+            },
+            content: {
+              type: 'string',
+              analyzer: 'lucene.standard'
+            },
+            tags: {
+              type: 'string',
+              analyzer: 'lucene.keyword'
+            },
+            category: {
+              type: 'string',
+              analyzer: 'lucene.keyword'
+            }
+          }
+        }
+      }
+    }
+  ]
+});
+```
+
+### Using Search Indexes
+
+Once configured, use the search indexes with MongoDB's aggregation pipeline:
+
+```typescript
+// Full-text search across title and content
+const results = await dbArticles.aggregate([
+  {
+    $search: {
+      index: 'article_search',
+      text: {
+        query: 'machine learning',
+        path: ['title', 'content']
+      }
+    }
+  },
+  {
+    $limit: 10
+  }
+]).toArray();
+
+// Search with filters
+const filteredResults = await dbArticles.aggregate([
+  {
+    $search: {
+      index: 'article_search',
+      compound: {
+        must: [
+          {
+            text: {
+              query: 'tutorial',
+              path: 'title'
+            }
+          }
+        ],
+        filter: [
+          {
+            text: {
+              query: 'javascript',
+              path: 'category'
+            }
+          }
+        ]
+      }
+    }
+  }
+]).toArray();
+```
+
+<Note>
+Search indexes require MongoDB Atlas. They are automatically created when your
+application starts, similar to regular indexes.
+</Note>
+
+## Vector Search Indexes
+
+For Atlas Vector Search, you can define a vector index in `searchIndexes`:
+
+```typescript
+export const dbDocuments = new Store('documents', {
+  schema: {
+    title: schema.string(),
+    embedding: schema.array(schema.number()),
+  },
+  indexes: [],
+  searchIndexes: [
+    Store.vectorIndex({
+      field: 'embedding',
+      dimensions: 1536,
+      similarity: 'cosine',
+    }),
+  ],
+});
+```
+
+See [Voyage AI Tutorial](/voyage-ai) for an end-to-end vector search example.

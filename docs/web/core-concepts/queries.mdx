@@ -1,0 +1,116 @@
+---
+title: 'Queries'
+description: 'Define query methods and call them from the client with callMethod, modelenceQuery, or createClientModule. Typed client modules are available since modelence@0.15.0.'
+icon: 'magnifying-glass'
+---
+
+Queries are read operations that retrieve data without modifying state.
+They are similar to `GET` endpoints in REST.
+
+## Version Requirements
+
+Typed client modules for queries require:
+
+- `createClientModule(...).query()` - available since `modelence@0.15.0`
+
+## Defining Queries
+
+Define queries inside a module's `queries` object:
+
+```typescript
+import { Module } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  queries: {
+    // Get a single todo by ID
+    async getOne({ id }) {
+      return await dbTodos.findById(id);
+    },
+
+    // Get all todos for the current user
+    async getAll({}, { user }) {
+      return await dbTodos.fetch({ userId: user.id });
+    },
+
+    // Get todos with filtering
+    async getCompleted({}, { user }) {
+      return await dbTodos.fetch({
+        userId: user.id,
+        isCompleted: true,
+      });
+    },
+  },
+});
+```
+
+## Query Parameters
+
+Queries receive two arguments:
+
+1. **Input parameters** - data passed from the client.
+2. **Context** - server-side context including:
+   - `user` - current authenticated user (if logged in)
+   - `req` - Express request object
+   - `res` - Express response object
+
+## Calling Queries from the Client
+
+### `callMethod`
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+const todos = await callMethod('todo.getAll');
+const todo = await callMethod('todo.getOne', { id: '123' });
+```
+
+### `modelenceQuery` (TanStack Query)
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { modelenceQuery } from '@modelence/react-query';
+
+function TodoList() {
+  const { data: todos } = useQuery(modelenceQuery('todo.getAll'));
+  return <div>{/* render todos */}</div>;
+}
+```
+
+### `createClientModule(...).query()` (typed client modules)
+
+`createClientModule(...).query()` is available since `modelence@0.15.0`.
+
+```typescript title="src/server/admin/index.ts"
+import { Module } from 'modelence/server';
+
+export default new Module('admin', {
+  queries: {
+    async getUsers({ page }: { page: number }) {
+      // returns User[]
+    },
+  },
+});
+```
+
+```typescript title="src/client/admin.ts"
+import type adminModule from '../server/admin';
+import { createClientModule } from 'modelence/client';
+
+export const admin = createClientModule<typeof adminModule>('admin');
+```
+
+```typescript title="src/components/AdminPanel.tsx"
+import { useQuery } from '@tanstack/react-query';
+import { admin } from '../client/admin';
+
+function AdminPanel() {
+  const { data: users } = useQuery(admin.query('getUsers', { page: 1 }));
+  return <div>{/* render users */}</div>;
+}
+```
+
+## Related
+
+- [Mutations](/core-concepts/mutations)
+- [Modules](/core-concepts/modules)

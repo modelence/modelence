@@ -3,6 +3,7 @@ import {
   validatePassword,
   validateHandle,
   validateProfileFields,
+  MAX_EMAIL_LENGTH,
 } from './validators';
 
 describe('auth/validators', () => {
@@ -45,6 +46,28 @@ describe('auth/validators', () => {
 
     test('should handle edge cases', () => {
       expect(validateEmail('a@b.co')).toBe('a@b.co');
+    });
+
+    test('should accept email at exactly max length', () => {
+      // Build an email that is exactly MAX_EMAIL_LENGTH (254) characters
+      // Format: <local>@<domain>.com — domain part needs to be valid
+      const domain = 'example.com';
+      const atAndDomain = `@${domain}`;
+      const localPart = 'a'.repeat(MAX_EMAIL_LENGTH - atAndDomain.length);
+      const email = `${localPart}${atAndDomain}`;
+      expect(email.length).toBe(MAX_EMAIL_LENGTH);
+      expect(validateEmail(email)).toBe(email);
+    });
+
+    test('should throw error for email exceeding max length', () => {
+      const domain = 'example.com';
+      const atAndDomain = `@${domain}`;
+      const localPart = 'a'.repeat(MAX_EMAIL_LENGTH - atAndDomain.length + 1);
+      const email = `${localPart}${atAndDomain}`;
+      expect(email.length).toBe(MAX_EMAIL_LENGTH + 1);
+      expect(() => validateEmail(email)).toThrow(
+        `Email must be at most ${MAX_EMAIL_LENGTH} characters`
+      );
     });
   });
 

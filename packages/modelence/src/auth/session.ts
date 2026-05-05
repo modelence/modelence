@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
 import { getPublicConfigs } from '../config/server';
@@ -14,8 +15,11 @@ export const sessionsCollection = new Store('_modelenceSessions', {
     expiresAt: schema.date(),
     userId: schema.userId().nullable(),
   },
-  indexes: [{ key: { authToken: 1 }, unique: true }, { key: { expiresAt: 1 } }],
-  // TODO: add TTL index on expiresAt
+  indexes: [
+    { key: { authToken: 1 }, unique: true },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+    { key: { userId: 1 } },
+  ],
 });
 
 export async function obtainSession(authToken: string | null): Promise<Session> {
@@ -48,6 +52,10 @@ export async function clearSessionUser(authToken: string) {
       $set: { userId: null },
     }
   );
+}
+
+export async function invalidateAllUserSessions(userId: ObjectId) {
+  await sessionsCollection.deleteMany({ userId });
 }
 
 export async function createSession(userId: ObjectId | null = null): Promise<Session> {
@@ -84,6 +92,15 @@ async function processSessionHeartbeat(session: Session) {
       },
     }
   );
+}
+
+export function setAuthTokenCookie(res: Response, authToken: string) {
+  res.cookie('authToken', authToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+  });
 }
 
 export default new Module('_system.session', {

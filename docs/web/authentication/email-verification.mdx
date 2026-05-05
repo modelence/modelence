@@ -80,6 +80,12 @@ async function handleVerification(token: string) {
 }
 ```
 
+## Automatic Verification via Password Reset
+
+If a user resets their password and their email was not yet verified, the email is automatically marked as verified upon a successful password reset. Since the user must receive the reset email to complete the flow, this proves ownership of the address.
+
+See [Password Reset](/authentication/password-reset) for setup details.
+
 ## Resending Verification Email
 
 If the user did not receive the original verification email, you can resend it. The email is only sent when the address is registered and not yet verified — a generic response is always returned regardless, to avoid leaking account information.

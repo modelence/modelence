@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { authenticate } from '../auth';
 import { runLiveMethod } from '../methods';
-import { getResponseTypeMap } from '../methods/serialize';
+import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
 
@@ -95,7 +95,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     const liveData = await runLiveMethod(method, args, context);
 
     const fetchAndEmit = async () => {
-      const data = await liveData.fetch();
+      const data = sanitizeResult(await liveData.fetch());
       if (subscription.aborted) {
         return;
       }

@@ -88,6 +88,16 @@ describe('migration/index', () => {
     expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
+  test('supports lockMode skip without lock acquire/release', async () => {
+    const handler = jest.fn(async () => 'ran');
+
+    await runMigrations([{ version: 4, description: 'skip-lock', handler }], { lockMode: 'skip' });
+
+    expect(mockAcquireLock).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).not.toHaveBeenCalled();
+  });
+
   test('records failed migration attempts', async () => {
     const handler = jest.fn(async () => {
       throw new Error('boom');

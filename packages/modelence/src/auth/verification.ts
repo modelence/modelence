@@ -13,6 +13,63 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
+import { createSession, setAuthTokenCookie } from './session';
+
+async function verifyEmailToken(token: string) {
+  const tokenDoc = await emailVerificationTokensCollection.findOne({
+    token,
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (!tokenDoc) {
+    throw new Error('Invalid or expired verification token');
+  }
+
+  const userDoc = await usersCollection.findOne({
+    _id: tokenDoc.userId,
+    status: { $nin: ['deleted', 'disabled'] },
+  });
+
+  if (!userDoc) {
+    throw new Error('User not found');
+  }
+
+  const email = tokenDoc.email;
+
+  if (!email) {
+    throw new Error('Email not found in token');
+  }
+
+  // Mark the specific email as verified atomically, returning the updated doc
+  const updatedUserDoc = await usersCollection.findOneAndUpdate(
+    {
+      _id: tokenDoc.userId,
+      status: { $nin: ['deleted', 'disabled'] },
+      'emails.address': email,
+      'emails.verified': { $ne: true },
+    },
+    { $set: { 'emails.$.verified': true } },
+    { returnDocument: 'after' }
+  );
+
+  if (!updatedUserDoc) {
+    const existingUser = await usersCollection.findOne({
+      _id: tokenDoc.userId,
+      'emails.address': email,
+    });
+
+    if (existingUser) {
+      throw new Error('Email is already verified');
+    } else {
+      throw new Error('Email address not found for this user');
+    }
+  }
+
+  // Delete the used token
+  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+
+  return { userDoc: updatedUserDoc, email };
+}
 
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = getConfig('_system.site.url') as string | undefined;
@@ -23,60 +80,12 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     '/';
   try {
     const token = z.string().parse(params.query.token);
-    // Find token in database
-    const tokenDoc = await emailVerificationTokensCollection.findOne({
-      token,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!tokenDoc) {
-      throw new Error('Invalid or expired verification token');
-    }
-
-    // Find user by token's userId
-    const userDoc = await usersCollection.findOne({ _id: tokenDoc.userId });
-
-    if (!userDoc) {
-      throw new Error('User not found');
-    }
-
-    const email = tokenDoc.email;
-
-    if (!email) {
-      throw new Error('Email not found in token');
-    }
-
-    // Mark the specific email as verified atomically
-    const updateResult = await usersCollection.updateOne(
-      {
-        _id: tokenDoc.userId,
-        'emails.address': email,
-        'emails.verified': { $ne: true },
-      },
-      { $set: { 'emails.$.verified': true } }
-    );
-
-    if (updateResult.matchedCount === 0) {
-      // Check if email exists but is already verified
-      const existingUser = await usersCollection.findOne({
-        _id: tokenDoc.userId,
-        'emails.address': email,
-      });
-
-      if (existingUser) {
-        throw new Error('Email is already verified');
-      } else {
-        throw new Error('Email address not found for this user');
-      }
-    }
-
-    // Delete the used token
-    await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+    const { userDoc } = await verifyEmailToken(token);
 
     const authConfig = getAuthConfig();
     authConfig.onAfterEmailVerification?.({
       provider: 'email',
-      user: (await usersCollection.findOne({ 'emails.address': tokenDoc?.email })) as User,
+      user: userDoc as User,
       session: null,
       connectionInfo: {
         baseUrl,
@@ -86,7 +95,17 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
         referrer: params.headers['referer'],
       },
     });
+
+    const { authToken } = await createSession(userDoc._id);
+
+    setAuthTokenCookie(params.res, authToken);
+
+    return {
+      status: 301,
+      redirect: `${emailVerifiedRedirectUrl}?status=verified`,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
       authConfig.onEmailVerificationError?.({
@@ -102,18 +121,13 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
         },
       });
       console.error('Error verifying email:', error);
-
-      return {
-        status: 301,
-        redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(error.message)}`,
-      };
     }
-  }
 
-  return {
-    status: 301,
-    redirect: `${emailVerifiedRedirectUrl}?status=verified`,
-  };
+    return {
+      status: 301,
+      redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(message)}`,
+    };
+  }
 }
 
 export async function sendVerificationEmail({

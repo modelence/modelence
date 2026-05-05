@@ -110,6 +110,7 @@ export const emailVerificationTokensCollection = new Store('_modelenceEmailVerif
 export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordTokens', {
   schema: {
     userId: schema.objectId(),
+    email: schema.string().optional(),
     token: schema.string(),
     createdAt: schema.date(),
     expiresAt: schema.date(),

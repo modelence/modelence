@@ -1,0 +1,116 @@
+---
+title: 'Migrations'
+icon: 'arrows-rotate'
+---
+
+Migrations let you run one-time tasks safely on application startup — such as
+evolving database schemas, backfilling data, or initializing external services
+like Stripe plans.
+
+## Defining Migrations
+
+Pass a `migrations` array to `startApp()`. Each migration has:
+
+- `version` - Unique numeric version
+- `description` - Human-readable summary
+- `handler` - Async function that performs the task
+
+Define each migration handler in its own file under a `migrations/` directory,
+then wire up versions and descriptions in the index file:
+
+```typescript title="src/server/migrations/backfill-todo-status.ts"
+import { dbTodos } from '../todo/db';
+
+export async function backfillTodoStatus() {
+  await dbTodos.updateMany(
+    { status: { $exists: false } },
+    { $set: { status: 'open' } }
+  );
+
+  return 'Backfilled todos without status';
+}
+```
+
+```typescript title="src/server/migrations/index.ts"
+import { backfillTodoStatus } from './backfill-todo-status';
+
+export const migrations = [
+  {
+    version: 1,
+    description: 'Backfill status field on existing todos',
+    handler: backfillTodoStatus,
+  },
+];
+```
+
+```typescript title="src/server/app.ts"
+import { startApp } from 'modelence/server';
+import todoModule from './todo';
+import { migrations } from './migrations';
+
+startApp({
+  modules: [todoModule],
+  migrations,
+});
+```
+
+## How Migrations Run
+
+On application startup, Modelence will:
+
+1. Acquire a distributed `migrations` lock. If another instance already owns it, this instance skips running migrations.
+2. Read existing migration versions from the `_modelenceMigrations` collection.
+3. Run only pending migration versions from your `migrations` array.
+4. Write a record to `_modelenceMigrations` with:
+   - `version`
+   - `status` (`completed` or `failed`)
+   - `description`
+   - `output` (handler result or error message)
+   - `appliedAt`
+5. Release the lock.
+
+<Note>
+Migrations run in the order they appear in your `migrations` array, so keep
+that array intentionally ordered and use unique versions.
+</Note>
+
+<Note>
+Store indexes run before migrations with this startup behavior:
+- Stores using `indexCreationMode: 'blocking'` are awaited before migrations begin. Use this for small collections with critical index dependencies (e.g. unique indexes that a migration relies on).
+- Stores using `indexCreationMode: 'background'` may still be creating indexes while migrations run. Prefer this for large collections to avoid blocking app startup.
+
+See [Indexes: Index Creation Mode](/indexes#index-creation-mode) for configuration details.
+</Note>
+
+## Migrations and Cron Jobs
+
+<Warning>
+Migration execution is scheduled asynchronously at startup, and cron jobs are
+started right after. This means migration handlers and cron handlers can run in
+parallel, so design both to be safe under race conditions.
+</Warning>
+
+Recommended approach:
+
+- Make migration handlers idempotent (safe to run once or be retried manually).
+- Use conditional updates (for example, update only documents missing the new field).
+- Keep cron handlers compatible with both pre-migration and post-migration data during rollout windows.
+- If a cron job strictly depends on a migration, add an explicit readiness guard in the cron handler.
+
+Example of a race-safe migration pattern:
+
+```typescript
+await dbTodos.updateMany(
+  { status: { $exists: false } },
+  { $set: { status: 'open' } }
+);
+```
+
+## Failure Behavior
+
+Failed migrations are recorded with `status: 'failed'`. Since version tracking
+is version-based, a failed version is still considered already seen on future
+starts.
+
+If you need to rerun logic, create a new migration version (recommended) or
+manually clean up the migration record before restarting.

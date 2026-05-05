@@ -1,16 +1,23 @@
 ---
 title: 'Configuration'
-description: 'Define typed configuration schemas for your modules'
+description: 'Define typed configuration schemas and access them with Module.getConfig and createClientModule(...).getConfig. Available since modelence@0.15.0.'
 icon: 'sliders'
 ---
 
 Modelence modules support a `configSchema` that lets you define typed, named
 configuration values. These values can be managed through Modelence Cloud and
-accessed at runtime via `getConfig`.
+accessed at runtime via typed accessors.
 
 This is the recommended way to store settings like API keys, feature toggles,
 default values, and any other configuration your module needs — without
 hardcoding them or relying solely on environment variables.
+
+## Version Requirements
+
+Configuration accessors in this guide require:
+
+- `Module.getConfig()` - available since `modelence@0.15.0`
+- `createClientModule(...).getConfig()` - available since `modelence@0.15.0`
 
 ## Defining a Config Schema
 
@@ -70,30 +77,62 @@ will throw an error at startup if this rule is violated.
 
 ### Server-side
 
-Use `getConfig` from `modelence/server` to read values in queries, mutations,
-cron jobs, or any server code:
+Call `getConfig` directly on the module instance. The return type is inferred
+automatically from the schema — no casts needed:
 
-```typescript
-import { getConfig } from 'modelence/server';
+`Module.getConfig()` is available since `modelence@0.15.0`.
 
-const apiKey = getConfig('payments.apiKey') as string;
-const maxRetries = getConfig('payments.maxRetries') as number;
+```typescript title="src/server/payments/index.ts"
+import { Module } from 'modelence/server';
+
+const paymentsModule = new Module('payments', {
+  configSchema: {
+    apiKey: { type: 'secret', default: '', isPublic: false },
+    maxRetries: { type: 'number', default: 3, isPublic: false },
+  },
+  mutations: {
+    async charge({ amount }) {
+      const apiKey = paymentsModule.getConfig('apiKey');     // string
+      const retries = paymentsModule.getConfig('maxRetries'); // number
+      // ...
+    },
+  },
+});
+
+export default paymentsModule;
 ```
-
-The key is always `moduleName.configKey`.
 
 ### Client-side
 
-Values marked `isPublic: true` are also available on the client:
+Use `createClientModule` to create a typed accessor for a module's public config values.
+Pass the module type via `import type` — no server code is bundled on the client.
 
-```typescript
-import { getConfig } from 'modelence/client';
+`createClientModule(...).getConfig()` is available since `modelence@0.15.0`.
 
-const currency = getConfig('payments.currency');
+```typescript title="src/client/payments.ts"
+import type paymentsModule from '../server/payments';
+import { createClientModule } from 'modelence/client';
+
+export const payments = createClientModule<typeof paymentsModule>('payments');
 ```
 
-Non-public values (including all `secret` values) are **not** sent to the
-client and will return `undefined`.
+```typescript title="src/components/Checkout.tsx"
+import { payments } from '../client/payments';
+
+function Checkout() {
+  const currency = payments.getConfig('currency'); // string | undefined
+
+  return <div>Currency: {currency}</div>;
+}
+```
+
+Only values marked `isPublic: true` are available on the client. Private and
+`secret` values are **not** sent to the client and will not appear as valid keys.
+
+For typed query and mutation wrappers, see:
+
+- [Queries](/core-concepts/queries)
+- [Mutations](/core-concepts/mutations)
 
 ## Managing Values in Modelence Cloud
 
@@ -117,10 +156,10 @@ your code. Environment variables take precedence over both.
 
 ### Storing a third-party API key
 
-```typescript
-import { Module, getConfig } from 'modelence/server';
+```typescript title="src/server/ai/index.ts"
+import { Module } from 'modelence/server';
 
-export default new Module('ai', {
+const aiModule = new Module('ai', {
   configSchema: {
     apiKey: {
       type: 'secret',
@@ -135,9 +174,9 @@ export default new Module('ai', {
   },
 
   mutations: {
-    async generateResponse({ prompt }) {
-      const apiKey = getConfig('ai.apiKey') as string;
-      const model = getConfig('ai.model') as string;
+    async generateResponse({ prompt }: { prompt: string }) {
+      const apiKey = aiModule.getConfig('apiKey'); // string
+      const model = aiModule.getConfig('model');   // string
 
       if (!apiKey) {
         throw new Error('AI API key not configured');
@@ -159,14 +198,16 @@ export default new Module('ai', {
     },
   },
 });
+
+export default aiModule;
 ```
 
 ### Feature toggle with a boolean config
 
-```typescript
-import { Module, getConfig } from 'modelence/server';
+```typescript title="src/server/notifications/index.ts"
+import { Module } from 'modelence/server';
 
-export default new Module('notifications', {
+const notificationsModule = new Module('notifications', {
   configSchema: {
     emailEnabled: {
       type: 'boolean',
@@ -181,23 +222,27 @@ export default new Module('notifications', {
   },
 
   mutations: {
-    async sendNotification({ userId, message }) {
-      const emailEnabled = getConfig('notifications.emailEnabled') as boolean;
+    async sendNotification({ userId, message }: { userId: string; message: string }) {
+      const emailEnabled = notificationsModule.getConfig('emailEnabled'); // boolean
 
       if (!emailEnabled) {
         return { skipped: true };
       }
 
-      const footer = getConfig('notifications.footer') as string;
+      const footer = notificationsModule.getConfig('footer'); // string
       // Send email with message + footer...
     },
   },
 });
+
+export default notificationsModule;
 ```
 
 ### Exposing config to the client
 
-```typescript title="Server module"
+```typescript title="src/server/app/index.ts"
+import { Module } from 'modelence/server';
+
 export default new Module('app', {
   configSchema: {
     appName: {
@@ -214,12 +259,19 @@ export default new Module('app', {
 });
 ```
 
-```typescript title="Client component"
-import { getConfig } from 'modelence/client';
+```typescript title="src/client/app.ts"
+import type appModule from '../server/app';
+import { createClientModule } from 'modelence/client';
+
+export const app = createClientModule<typeof appModule>('app');
+```
+
+```typescript title="src/components/Header.tsx"
+import { app } from '../client/app';
 
 function Header() {
-  const appName = getConfig('app.appName');
-  const maintenance = getConfig('app.maintenanceMode');
+  const appName = app.getConfig('appName');         // string | undefined
+  const maintenance = app.getConfig('maintenanceMode'); // boolean | undefined
 
   if (maintenance) {
     return <div>We are currently undergoing maintenance. Please check back soon.</div>;
@@ -235,5 +287,5 @@ See the full API reference for config types:
 
 - [`ConfigSchema`](/api-reference/modelence/server/type-aliases/ConfigSchema) — The schema object passed to a module
 - [`ConfigType`](/api-reference/modelence/server/type-aliases/ConfigType) — The union of allowed type values
-- [`getConfig` (server)](/api-reference/modelence/server/functions/getConfig) — Read config on the server
-- [`getConfig` (client)](/api-reference/modelence/client/functions/getConfig) — Read public config on the client
+- [`getConfig` (server)](/api-reference/modelence/server/functions/getConfig) — Read config on the server (untyped, for dynamic keys)
+- [`getConfig` (client)](/api-reference/modelence/client/functions/getConfig) — Read config on the client (untyped, for dynamic keys)

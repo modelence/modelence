@@ -3,8 +3,8 @@ import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
+import { serializeUserForClient } from './utils';
 import { clearSessionUser, setSessionUser } from './session';
-import { sendVerificationEmail } from './verification';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
@@ -51,27 +51,8 @@ export async function handleLoginWithPassword(
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
     if (!emailDoc?.verified && getEmailConfig()?.provider) {
-      if (ip) {
-        try {
-          await consumeRateLimit({
-            bucket: 'verification',
-            type: 'user',
-            value: userDoc._id.toString(),
-          });
-        } catch {
-          throw new Error(
-            "Your email address hasn't been verified yet. Please use the verification email we've send earlier to your inbox."
-          );
-        }
-      }
-
-      await sendVerificationEmail({
-        userId: userDoc?._id,
-        email,
-        baseUrl: connectionInfo?.baseUrl,
-      });
       throw new Error(
-        "Your email address hasn't been verified yet. We've sent a new verification email to your inbox."
+        "Your email address hasn't been verified yet. Please check your inbox for the verification email."
       );
     }
 
@@ -91,14 +72,7 @@ export async function handleLoginWithPassword(
     getAuthConfig().login?.onSuccess?.(userDoc);
 
     return {
-      user: {
-        id: userDoc._id,
-        handle: userDoc.handle,
-        roles: userDoc.roles || [],
-        firstName: userDoc.firstName ?? undefined,
-        lastName: userDoc.lastName ?? undefined,
-        avatarUrl: userDoc.avatarUrl ?? undefined,
-      },
+      user: serializeUserForClient(userDoc),
     };
   } catch (error) {
     if (error instanceof Error) {

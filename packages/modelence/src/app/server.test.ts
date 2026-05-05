@@ -87,6 +87,7 @@ jest.unstable_mockModule('@/methods', () => ({
 
 jest.unstable_mockModule('@/methods/serialize', () => ({
   getResponseTypeMap: mockGetResponseTypeMap,
+  sanitizeResult: (result: unknown) => result,
 }));
 
 jest.unstable_mockModule('@/routes/handler', () => ({

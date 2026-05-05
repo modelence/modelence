@@ -12,14 +12,14 @@ import reactPlugin from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
 import express from 'express';
-import type { AppServer, ExpressMiddleware } from './types';
+import type { AppServer, AppServerInitOptions, ExpressMiddleware } from './types';
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
   private config?: UserConfig;
 
-  async init() {
-    this.config = await getConfig();
+  async init({ httpServer }: AppServerInitOptions) {
+    this.config = await getConfig(this.isDev() ? httpServer : undefined);
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
       this.viteServer = await createServer(this.config);
@@ -105,7 +105,7 @@ function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
   return mergedConfig;
 }
 
-async function getConfig() {
+async function getConfig(httpServer?: import('http').Server) {
   const appDir = process.cwd();
   const userConfig = await loadUserViteConfig();
 
@@ -140,6 +140,7 @@ async function getConfig() {
     },
     server: {
       middlewareMode: true,
+      hmr: httpServer ? { server: httpServer } : undefined,
     },
     root: './src/client',
     resolve: {

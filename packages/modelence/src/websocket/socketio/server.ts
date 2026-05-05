@@ -2,6 +2,7 @@ import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
 import { authenticate } from '@/auth';
+import { getConfig } from '@/config/server';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
 import { ServerChannel } from '../serverChannel';
@@ -15,6 +16,7 @@ import type { Collection, Document } from 'mongodb';
 let socketServer: SocketServer | null = null;
 
 const COLLECTION = '_modelenceSocketio';
+const ADAPTER_TTL_SECONDS = 60;
 
 export async function init({
   httpServer,
@@ -24,21 +26,37 @@ export async function init({
   channels: ServerChannel[];
 }) {
   const mongodbClient = getClient();
+  const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
 
   console.log('Initializing Socket.IO server...');
 
   let mongoCollection: Collection<Document> | null = null;
 
-  if (mongodbClient) {
+  if (isMultiInstance && mongodbClient) {
     mongoCollection = mongodbClient.db().collection(COLLECTION);
 
     try {
       await mongoCollection.createIndex(
         { createdAt: 1 },
-        { expireAfterSeconds: 3600, background: true }
+        { expireAfterSeconds: ADAPTER_TTL_SECONDS, background: true }
       );
-    } catch (error) {
-      console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+    } catch (error: unknown) {
+      if (error instanceof Error && 'code' in error && (error as { code: number }).code === 85) {
+        try {
+          await mongoCollection.dropIndex('createdAt_1');
+          await mongoCollection.createIndex(
+            { createdAt: 1 },
+            { expireAfterSeconds: ADAPTER_TTL_SECONDS, background: true }
+          );
+        } catch (retryError: unknown) {
+          console.error(
+            'Failed to recreate index on MongoDB collection for Socket.IO:',
+            retryError
+          );
+        }
+      } else {
+        console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+      }
     }
   }
 

@@ -4,6 +4,11 @@ import { UpdateProfileProps } from '../methods/types';
 export const MIN_HANDLE_LENGTH = 3;
 export const MAX_HANDLE_LENGTH = 50;
 
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
+
+export const MAX_EMAIL_LENGTH = 254;
+
 // Reusable string validators
 const trimmedNonEmptyString = (opts: { min?: number; max: number }) =>
   z
@@ -56,11 +61,26 @@ export function validateProfileFields(
 }
 
 export function validatePassword(value: string) {
-  return z.string().min(8, { message: 'Password must contain at least 8 characters' }).parse(value);
+  return z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, {
+      message: `Password must contain at least ${MIN_PASSWORD_LENGTH} characters`,
+    })
+    .max(MAX_PASSWORD_LENGTH, {
+      message: `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
+    })
+    .parse(value);
 }
 
 export function validateEmail(value: string) {
-  return z.string().email({ message: 'Invalid email address' }).parse(value).toLowerCase();
+  return z
+    .string()
+    .max(MAX_EMAIL_LENGTH, {
+      message: `Email must be at most ${MAX_EMAIL_LENGTH} characters`,
+    })
+    .email({ message: 'Invalid email address' })
+    .parse(value)
+    .toLowerCase();
 }
 
 export function validateHandle(value: string) {

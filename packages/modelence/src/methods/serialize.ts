@@ -1,3 +1,70 @@
+function isObjectId(value: unknown): value is { toHexString(): string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'toHexString' in value &&
+    typeof (value as Record<string, unknown>).toHexString === 'function'
+  );
+}
+
+/**
+ * Recursively converts all MongoDB ObjectId instances to hex strings.
+ * Uses duck typing (checks for toHexString method) to avoid importing mongodb on the client.
+ * Returns the original input reference unchanged when no ObjectId is present (no allocation).
+ */
+export function sanitizeResult(result: unknown): unknown {
+  if (result == null || typeof result !== 'object') {
+    return result;
+  }
+
+  if (isObjectId(result)) {
+    return result.toHexString();
+  }
+
+  if (result instanceof Date) {
+    return result;
+  }
+
+  if (Array.isArray(result)) {
+    let out: unknown[] | null = null;
+    for (let i = 0; i < result.length; i++) {
+      const item = result[i];
+      // Primitives and null can never contain an ObjectId — skip recursion.
+      if (item === null || typeof item !== 'object') {
+        if (out !== null) out.push(item);
+        continue;
+      }
+      const sanitized = sanitizeResult(item);
+      if (sanitized !== item) {
+        if (out === null) {
+          // Copy-on-first-write: preserve all preceding elements.
+          out = result.slice(0, i);
+        }
+        out.push(sanitized);
+      } else if (out !== null) {
+        out.push(item);
+      }
+    }
+    return out !== null ? out : result;
+  }
+
+  let out: Record<string, unknown> | null = null;
+  for (const [key, value] of Object.entries(result as Record<string, unknown>)) {
+    if (value === null || typeof value !== 'object') {
+      if (out !== null) out[key] = value;
+      continue;
+    }
+    const sanitized = sanitizeResult(value);
+    if (sanitized !== value) {
+      if (out === null) {
+        out = { ...(result as Record<string, unknown>) };
+      }
+      out[key] = sanitized;
+    }
+  }
+  return out !== null ? out : result;
+}
+
 export function getResponseTypeMap(result: unknown) {
   if (result instanceof Date) {
     return { type: 'date' };

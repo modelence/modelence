@@ -1,0 +1,127 @@
+---
+title: 'Mutations'
+description: 'Define mutation methods and call them from the client with callMethod, modelenceMutation, or createClientModule. Typed client modules are available since modelence@0.15.0.'
+icon: 'pen-to-square'
+---
+
+Mutations are write operations that create, update, or delete data.
+They are similar to `POST`, `PUT`, and `DELETE` endpoints in REST.
+
+## Version Requirements
+
+Typed client modules for mutations require:
+
+- `createClientModule(...).mutation()` - available since `modelence@0.15.0`
+
+## Defining Mutations
+
+Define mutations inside a module's `mutations` object:
+
+```typescript
+import { Module } from 'modelence/server';
+import { dbTodos } from './db';
+
+export default new Module('todo', {
+  mutations: {
+    // Create a new todo
+    async create({ title, dueDate }, { user }) {
+      const { insertedId } = await dbTodos.insertOne({
+        title,
+        dueDate,
+        userId: user.id,
+        isCompleted: false,
+        createdAt: new Date(),
+      });
+      return insertedId;
+    },
+
+    // Update a todo
+    async update({ id, title, isCompleted }) {
+      return await dbTodos.updateOne(
+        { id },
+        { $set: { title, isCompleted } }
+      );
+    },
+
+    // Delete a todo
+    async delete({ id }) {
+      return await dbTodos.deleteOne({ id });
+    },
+  },
+});
+```
+
+## Calling Mutations from the Client
+
+### `callMethod`
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+const todoId = await callMethod('todo.create', {
+  title: 'Buy groceries',
+  dueDate: new Date('2024-12-31'),
+});
+```
+
+### `modelenceMutation` (TanStack Query)
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { modelenceMutation } from '@modelence/react-query';
+
+function CreateTodo() {
+  const queryClient = useQueryClient();
+
+  const { mutate: createTodo } = useMutation({
+    ...modelenceMutation('todo.create'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+    },
+  });
+
+  const handleSubmit = () => {
+    createTodo({ title: 'New todo', dueDate: new Date() });
+  };
+
+  return <button onClick={handleSubmit}>Create Todo</button>;
+}
+```
+
+### `createClientModule(...).mutation()` (typed client modules)
+
+`createClientModule(...).mutation()` is available since `modelence@0.15.0`.
+
+```typescript title="src/server/admin/index.ts"
+import { Module } from 'modelence/server';
+
+export default new Module('admin', {
+  mutations: {
+    async inviteUser({ email }: { email: string }) {
+      // returns { success: boolean }
+    },
+  },
+});
+```
+
+```typescript title="src/client/admin.ts"
+import type adminModule from '../server/admin';
+import { createClientModule } from 'modelence/client';
+
+export const admin = createClientModule<typeof adminModule>('admin');
+```
+
+```typescript title="src/components/AdminPanel.tsx"
+import { useMutation } from '@tanstack/react-query';
+import { admin } from '../client/admin';
+
+function AdminPanel() {
+  const { mutate: invite } = useMutation(admin.mutation('inviteUser'));
+  return <button onClick={() => invite({ email: 'test@acme.com' })}>Invite</button>;
+}
+```
+
+## Related
+
+- [Queries](/core-concepts/queries)
+- [Modules](/core-concepts/modules)

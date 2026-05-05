@@ -9,18 +9,27 @@ export type MigrationScript = {
   handler: () => Promise<string | void>;
 };
 
-export async function runMigrations(migrations: MigrationScript[]) {
+type MigrationRunOptions = {
+  lockMode?: 'acquire' | 'skip';
+};
+
+export async function runMigrations(
+  migrations: MigrationScript[],
+  { lockMode = 'acquire' }: MigrationRunOptions = {}
+) {
   if (migrations.length === 0) {
     return;
   }
 
-  const hasLock = await acquireLock('migrations');
+  if (lockMode === 'acquire') {
+    const hasLock = await acquireLock('migrations');
 
-  if (!hasLock) {
-    logInfo('Another instance is running migrations. Skipping migration run.', {
-      source: 'migrations',
-    });
-    return;
+    if (!hasLock) {
+      logInfo('Another instance is running migrations. Skipping migration run.', {
+        source: 'migrations',
+      });
+      return;
+    }
   }
 
   try {
@@ -91,7 +100,9 @@ export async function runMigrations(migrations: MigrationScript[]) {
       }
     }
   } finally {
-    await releaseLock('migrations');
+    if (lockMode === 'acquire') {
+      await releaseLock('migrations');
+    }
   }
 }
 

@@ -4,6 +4,7 @@ import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
 import type { Store } from '../data/store';
 import type { RateLimitRule } from '../rate-limit/types';
+import type { AuthRateLimitsConfig } from './authConfig';
 import { ServerChannel } from '@/websocket/serverChannel';
 import type { WebsocketServerProvider } from '@/websocket/types';
 
@@ -34,6 +35,7 @@ const mockConnectCloudBackend = jest.fn<
 const mockInitMetrics = jest.fn();
 const mockStartConfigSync = jest.fn();
 const mockLoadRemoteConfigs = jest.fn();
+const mockRunMigrations = jest.fn();
 const mockStartMigrations = jest.fn();
 const mockStartCronJobs = jest.fn<() => Promise<void>>();
 const mockDefineCronJob = jest.fn();
@@ -53,9 +55,26 @@ const mockAcquireLock = jest.fn<
 >();
 const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
 const mockSocketioServer = { listen: jest.fn() };
-const expectedIndexesLockOptions = {
+const expectedMigrationsLockOptions = {
   lockDuration: 30_000,
   heartbeat: true,
+};
+
+const mockResolveStores =
+  jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
+
+const mockBuildAuthRateLimits = jest.fn<(config?: AuthRateLimitsConfig) => RateLimitRule[]>(
+  () => []
+);
+const mockUserModule = {
+  name: '_system.user',
+  queries: {},
+  mutations: {},
+  stores: [],
+  channels: [],
+  rateLimits: [] as RateLimitRule[],
+  cronJobs: {},
+  configSchema: {},
 };
 
 jest.unstable_mockModule('dotenv', () => ({
@@ -128,6 +147,7 @@ jest.unstable_mockModule('../migration', () => ({
     cronJobs: {},
     configSchema: {},
   },
+  runMigrations: mockRunMigrations,
   startMigrations: mockStartMigrations,
 }));
 
@@ -159,16 +179,8 @@ jest.unstable_mockModule('@/websocket/socketio/server', () => ({
 }));
 
 jest.unstable_mockModule('../auth/user', () => ({
-  default: {
-    name: '_system.user',
-    queries: {},
-    mutations: {},
-    stores: [],
-    channels: [],
-    rateLimits: [],
-    cronJobs: {},
-    configSchema: {},
-  },
+  buildAuthRateLimits: mockBuildAuthRateLimits,
+  default: mockUserModule,
 }));
 
 jest.unstable_mockModule('../auth/session', () => ({
@@ -229,6 +241,10 @@ jest.unstable_mockModule('../viteServer', () => ({
   viteServer: { listen: jest.fn() },
 }));
 
+jest.unstable_mockModule('../data/resolveStores', () => ({
+  resolveStores: mockResolveStores,
+}));
+
 const { startApp } = await import('./index');
 
 // Helper to create a test module
@@ -267,6 +283,7 @@ describe('app/index', () => {
     jest.clearAllMocks();
     mockAcquireLock.mockResolvedValue(true);
     mockReleaseLock.mockResolvedValue(true);
+    mockRunMigrations.mockResolvedValue(undefined as never);
     mockGetMongodbUri.mockReturnValue('');
     mockConnectCloudBackend.mockResolvedValue({
       configs: [],
@@ -276,6 +293,11 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
+    // Default resolveStores: each store is its own effective store
+    mockResolveStores.mockImplementation((stores: unknown[]) => {
+      const unique = [...new Set(stores)] as MinimalStore[];
+      return { storesToInit: unique, effectiveStores: unique };
+    });
     process.env.MODELENCE_TRACKING_ENABLED = 'false';
     delete process.env.MODELENCE_SERVICE_ENDPOINT;
     delete process.env.MONGODB_URI;
@@ -363,9 +385,11 @@ describe('app/index', () => {
     expect(mockStore.init).toHaveBeenCalledWith(
       expect.objectContaining({ db: expect.any(Function) })
     );
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(mockStore.createIndexes).toHaveBeenCalled();
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
+    expect(mockStore.createIndexes).toHaveBeenCalledWith('full');
+    expect(mockRunMigrations).toHaveBeenCalledWith([], { lockMode: 'skip' });
+    await Promise.resolve();
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('skips index creation when index lock is not acquired', async () => {
@@ -383,8 +407,9 @@ describe('app/index', () => {
       ],
     });
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
     expect(mockStore.createIndexes).not.toHaveBeenCalled();
+    expect(mockRunMigrations).not.toHaveBeenCalled();
     expect(mockReleaseLock).not.toHaveBeenCalled();
   });
 
@@ -450,6 +475,28 @@ describe('app/index', () => {
     });
 
     expect(mockInitRateLimits).toHaveBeenCalledWith([rateLimit1, rateLimit2]);
+  });
+
+  test('writes auth rate limit overrides onto the user module before collection', async () => {
+    const authRules: RateLimitRule[] = [
+      { bucket: 'signup', type: 'ip', window: 900_000, limit: 5 },
+    ];
+    mockBuildAuthRateLimits.mockReturnValueOnce(authRules);
+
+    await startApp({
+      auth: {
+        rateLimits: { signup: { perIp15Minutes: 5 } },
+      },
+    });
+
+    // The builder receives the user-supplied overrides
+    expect(mockBuildAuthRateLimits).toHaveBeenCalledWith({ signup: { perIp15Minutes: 5 } });
+
+    // Effective limits land on the user module (so Modelence Cloud can read them)
+    expect(mockUserModule.rateLimits).toEqual(authRules);
+
+    // And feed into initRateLimits via getRateLimits()
+    expect(mockInitRateLimits).toHaveBeenCalledWith(expect.arrayContaining(authRules));
   });
 
   test('defines cron jobs from modules', async () => {
@@ -591,24 +638,51 @@ describe('app/index', () => {
 
     await startApp({ migrations });
 
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
   });
 
-  test('starts migrations after waiting for blocking index creation and before cron jobs', async () => {
+  test('starts migrations after blocking + drop-only index phases and before cron jobs', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
-    let resolveLockIndexes: () => void = () => undefined;
-    const lockIndexesPromise = new Promise<void>((resolve) => {
-      resolveLockIndexes = resolve;
+    let resolveBlockingIndexes: () => void = () => undefined;
+    const blockingIndexesPromise = new Promise<void>((resolve) => {
+      resolveBlockingIndexes = resolve;
+    });
+    let resolveDropOnlyIndexes: () => void = () => undefined;
+    const dropOnlyIndexesPromise = new Promise<void>((resolve) => {
+      resolveDropOnlyIndexes = resolve;
+    });
+    let resolveBackgroundCreateIndexes: () => void = () => undefined;
+    const backgroundCreateIndexesPromise = new Promise<void>((resolve) => {
+      resolveBackgroundCreateIndexes = resolve;
     });
     const lockStore: MinimalStore = {
       init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () => lockIndexesPromise) as MinimalStore['createIndexes'],
+      createIndexes: jest.fn(async () => blockingIndexesPromise) as MinimalStore['createIndexes'],
       getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
-    const otherStore = createStoreMock('testCollection');
+    const otherStore: MinimalStore = {
+      init: jest.fn() as MinimalStore['init'],
+      createIndexes: jest.fn(async (mode?: 'full' | 'drop-only' | 'create-only') => {
+        if (mode === 'drop-only') {
+          await dropOnlyIndexesPromise;
+        }
+
+        if (mode === 'create-only') {
+          await backgroundCreateIndexesPromise;
+        }
+      }) as MinimalStore['createIndexes'],
+      getName: jest.fn(() => 'testCollection') as MinimalStore['getName'],
+      getIndexCreationMode: jest.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
+    };
+
+    // resolveStores: lockStore is blocking effective, otherStore is background effective
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
 
     const migrations: MigrationScript[] = [
       { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
@@ -630,24 +704,37 @@ describe('app/index', () => {
     await Promise.resolve();
 
     expect(mockAcquireLock).toHaveBeenCalledTimes(1);
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
-    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
+    expect(lockStore.createIndexes).toHaveBeenCalledWith('full');
     expect(otherStore.createIndexes).not.toHaveBeenCalled();
-    expect(mockStartMigrations).not.toHaveBeenCalled();
+    expect(mockRunMigrations).not.toHaveBeenCalled();
     expect(mockStartCronJobs).not.toHaveBeenCalled();
 
-    resolveLockIndexes();
-    await startPromise;
+    resolveBlockingIndexes();
+    await Promise.resolve();
     await Promise.resolve();
 
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
-    expect(mockStartMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
-      (lockStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
+    resolveDropOnlyIndexes();
+    await startPromise;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(otherStore.createIndexes).toHaveBeenCalledWith('drop-only');
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
+    expect(mockRunMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
+      (otherStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
     );
-    expect(otherStore.createIndexes).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(otherStore.createIndexes).toHaveBeenCalledWith('create-only');
+    expect(mockReleaseLock).not.toHaveBeenCalled();
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+
+    resolveBackgroundCreateIndexes();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('warns and continues startup when blocking index creation fails', async () => {
@@ -655,15 +742,15 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const indexCreationError = new Error('index creation failed');
-    const lockStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () =>
-        Promise.reject(indexCreationError)
-      ) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const lockStore = createStoreMock('_modelenceLocks', 'blocking');
+    (lockStore.createIndexes as jest.Mock).mockRejectedValue(indexCreationError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [lockStore, otherStore],
+      effectiveStores: [lockStore, otherStore],
+    });
+
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const migrations: MigrationScript[] = [
@@ -684,12 +771,12 @@ describe('app/index', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(lockStore.createIndexes).toHaveBeenCalledTimes(1);
+    expect(lockStore.createIndexes).toHaveBeenCalledWith('full');
     expect(warnSpy).toHaveBeenCalledWith(
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       indexCreationError
     );
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 
     warnSpy.mockRestore();
@@ -700,15 +787,14 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const criticalError = new Error('critical index failed');
-    const criticalStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () =>
-        Promise.reject(criticalError)
-      ) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const criticalStore = createStoreMock('_modelenceLocks', 'blocking');
+    (criticalStore.createIndexes as jest.Mock).mockRejectedValue(criticalError as never);
     const otherStore = createStoreMock('testCollection');
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [criticalStore, otherStore],
+      effectiveStores: [criticalStore, otherStore],
+    });
 
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -734,25 +820,28 @@ describe('app/index', () => {
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       criticalError
     );
-    expect(mockStartMigrations).toHaveBeenCalledWith(migrations);
+    expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 
     warnSpy.mockRestore();
   });
 
-  test('releases index lock when blocking index path throws unexpectedly', async () => {
+  test('releases index lock when createIndexesWithLock throws unexpectedly', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: jest.fn() });
 
     const unexpectedError = new Error('unexpected index path error');
-    const brokenStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn() as MinimalStore['createIndexes'],
-      getName: jest.fn(() => {
-        throw unexpectedError;
-      }) as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
-    };
+    const brokenStore = createStoreMock('brokenStore', 'blocking');
+    // Make getIndexCreationMode throw to simulate an unexpected error
+    // inside createIndexesWithLock's filter logic.
+    (brokenStore.getIndexCreationMode as jest.Mock).mockImplementation(() => {
+      throw unexpectedError;
+    });
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [brokenStore],
+      effectiveStores: [brokenStore],
+    });
 
     await expect(
       startApp({
@@ -764,9 +853,9 @@ describe('app/index', () => {
       })
     ).rejects.toThrow('unexpected index path error');
 
-    expect(mockAcquireLock).toHaveBeenCalledWith('indexes', expectedIndexesLockOptions);
+    expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
     expect(mockReleaseLock).toHaveBeenCalledTimes(1);
-    expect(mockReleaseLock).toHaveBeenCalledWith('indexes');
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('starts server with combined modules and channels', async () => {

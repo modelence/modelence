@@ -122,6 +122,7 @@ type FetchOptions<T> = {
 };
 
 export type IndexCreationMode = 'blocking' | 'background';
+export type IndexReconcileMode = 'full' | 'drop-only' | 'create-only';
 
 const COMPARABLE_INDEX_OPTION_FIELDS = [
   'background',
@@ -331,6 +332,15 @@ type PreserveMethodsForExtendedSchema<
 };
 
 /**
+ * Type-erased Store reference for chain traversal.
+ * Chain members carry different TSchema/TMethods, so the generic
+ * parameters must be erased. This alias contains the `any` in one place.
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyStore = Store<any, any>;
+
+/**
  * The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
  *
  * @category Store
@@ -380,6 +390,10 @@ export class Store<
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
+  // Chain tracking for linear extension model
+  private _chainParent: AnyStore | null = null;
+  private _chainChild: AnyStore | null = null;
+
   /**
    * Creates a new Store instance
    *
@@ -428,6 +442,34 @@ export class Store<
     return serializeModelSchema(this.schema);
   }
 
+  /** @internal – normalized indexes (already have _modelence_ prefix) */
+  getIndexes(): IndexDescription[] {
+    return this.indexes;
+  }
+
+  /** @internal */
+  getSearchIndexes(): SearchIndexDescription[] {
+    return this.searchIndexes;
+  }
+
+  /** @internal – follows the chain to the latest extension */
+  getChainTail(): AnyStore {
+    let current: AnyStore = this;
+    while (current._chainChild) {
+      current = current._chainChild;
+    }
+    return current;
+  }
+
+  /** @internal – follows the chain back to the original store */
+  getChainRoot(): AnyStore {
+    let current: AnyStore = this;
+    while (current._chainParent) {
+      current = current._chainParent;
+    }
+    return current;
+  }
+
   /**
    * Extends the store with additional schema fields, indexes, methods, and search indexes.
    * Returns a new Store instance with the extended schema and updated types.
@@ -463,11 +505,7 @@ export class Store<
    */
   extend<
     TExtendedSchema extends ModelSchema,
-    TExtendedMethods extends Record<
-      string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this: WithId<InferDocumentType<TSchema & TExtendedSchema>> & any, ...args: any[]) => any
-    > = Record<string, never>,
+    TExtendedMethods extends Record<string, Function> = Record<string, never>,
   >(config: {
     schema?: TExtendedSchema;
     indexes?: IndexDescription[];
@@ -479,35 +517,44 @@ export class Store<
     TSchema & TExtendedSchema,
     PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> & TExtendedMethods
   > {
-    const extendedSchema = {
-      ...this.schema,
-      ...(config.schema || {}),
-    } as TSchema & TExtendedSchema;
+    // Follow chain to the tail – extending always appends to the end
+    const tail: AnyStore = this.getChainTail();
 
-    const extendedIndexes = [...this.indexes, ...(config.indexes || [])];
-    const extendedSearchIndexes = [...this.searchIndexes, ...(config.searchIndexes || [])];
-
-    type CombinedMethods = PreserveMethodsForExtendedSchema<TMethods, TSchema & TExtendedSchema> &
-      TExtendedMethods;
-
-    const combinedMethods = {
-      ...(this.methods || {}),
-      ...(config.methods || {}),
-    } as CombinedMethods | undefined;
-
-    const extendedStore = new Store<TSchema & TExtendedSchema, CombinedMethods>(this.name, {
-      schema: extendedSchema,
-      methods: combinedMethods as unknown as CombinedMethods | undefined,
-      indexes: extendedIndexes,
-      searchIndexes: extendedSearchIndexes,
-      indexCreationMode: config.indexCreationMode ?? this.indexCreationMode,
-    });
-
-    if (this.client) {
+    if (this.client || tail.client) {
       throw new Error(
         `Store.extend() must be called before startApp(). Store '${this.name}' has already been initialized and cannot be extended.`
       );
     }
+
+    type ExtendedSchema = TSchema & TExtendedSchema;
+
+    const extendedSchema = {
+      ...tail.schema,
+      ...(config.schema || {}),
+    } as ExtendedSchema;
+
+    const extendedIndexes = [...tail.indexes, ...(config.indexes || [])];
+    const extendedSearchIndexes = [...tail.searchIndexes, ...(config.searchIndexes || [])];
+
+    type CombinedMethods = PreserveMethodsForExtendedSchema<TMethods, ExtendedSchema> &
+      TExtendedMethods;
+
+    const combinedMethods = {
+      ...(tail.methods || {}),
+      ...(config.methods || {}),
+    } as CombinedMethods | undefined;
+
+    const extendedStore = new Store<ExtendedSchema, CombinedMethods>(this.name, {
+      schema: extendedSchema,
+      methods: combinedMethods as unknown as CombinedMethods | undefined,
+      indexes: extendedIndexes,
+      searchIndexes: extendedSearchIndexes,
+      indexCreationMode: config.indexCreationMode ?? tail.indexCreationMode,
+    });
+
+    // Link into the chain
+    tail._chainChild = extendedStore;
+    extendedStore._chainParent = tail;
 
     return extendedStore;
   }
@@ -523,8 +570,10 @@ export class Store<
   }
 
   /** @internal */
-  async createIndexes() {
+  async createIndexes(mode: IndexReconcileMode = 'full') {
     const collection = this.requireCollection();
+    const shouldDropIndexes = mode !== 'create-only';
+    const shouldCreateIndexes = mode !== 'drop-only';
 
     // Get all existing indexes in the collection (returns [] if collection doesn't exist)
     const existingIndexes = await listIndexes(collection);
@@ -597,18 +646,22 @@ export class Store<
       removeIndexFromLookup(indexName);
     };
 
-    // Find all _modelence_ prefixed indexes that are not in the current schema
-    const currentIndexNames = new Set(
-      this.indexes.map((idx) => idx.name).filter((name): name is string => typeof name === 'string')
-    );
-    const orphanedIndexes = [...indexByName.values()].filter(
-      (existingIdx) =>
-        hasModelencePrefix(existingIdx.name) && !currentIndexNames.has(existingIdx.name)
-    );
+    if (shouldDropIndexes) {
+      // Find all _modelence_ prefixed indexes that are not in the current schema
+      const currentIndexNames = new Set(
+        this.indexes
+          .map((idx) => idx.name)
+          .filter((name): name is string => typeof name === 'string')
+      );
+      const orphanedIndexes = [...indexByName.values()].filter(
+        (existingIdx) =>
+          hasModelencePrefix(existingIdx.name) && !currentIndexNames.has(existingIdx.name)
+      );
 
-    // Drop orphaned indexes
-    for (const orphanedIndex of orphanedIndexes) {
-      await dropIndexIfNeeded(orphanedIndex.name);
+      // Drop orphaned indexes
+      for (const orphanedIndex of orphanedIndexes) {
+        await dropIndexIfNeeded(orphanedIndex.name);
+      }
     }
 
     // Reconcile code-defined indexes against the current DB metadata.
@@ -619,9 +672,14 @@ export class Store<
           continue;
         }
 
+        let requiresDropBeforeCreate = false;
         const existingByName = indexByName.get(index.name);
         if (existingByName && !isSameIndexDefinition(existingByName, index)) {
-          await dropIndexIfNeeded(existingByName.name);
+          if (shouldDropIndexes) {
+            await dropIndexIfNeeded(existingByName.name);
+          } else {
+            requiresDropBeforeCreate = true;
+          }
         }
 
         const keySignature = getIndexKeySignature(index.key);
@@ -629,7 +687,11 @@ export class Store<
           const existingNamesForKey = [...(indexNamesByKey.get(keySignature) || [])];
           for (const existingName of existingNamesForKey) {
             if (existingName !== index.name) {
-              await dropIndexIfNeeded(existingName);
+              if (shouldDropIndexes) {
+                await dropIndexIfNeeded(existingName);
+              } else {
+                requiresDropBeforeCreate = true;
+              }
             }
           }
         }
@@ -637,7 +699,7 @@ export class Store<
         const alignedIndex = indexByName.get(index.name);
         const hasAlignedIndex = !!alignedIndex && isSameIndexDefinition(alignedIndex, index);
 
-        if (!hasAlignedIndex) {
+        if (!hasAlignedIndex && shouldCreateIndexes && !requiresDropBeforeCreate) {
           await collection.createIndexes([index]);
           addIndexToLookup({
             name: index.name,
@@ -647,7 +709,7 @@ export class Store<
         }
       }
     }
-    if (this.searchIndexes.length > 0) {
+    if (shouldCreateIndexes && this.searchIndexes.length > 0) {
       for (const searchIndex of this.searchIndexes) {
         try {
           await collection.createSearchIndexes([searchIndex]);
