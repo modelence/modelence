@@ -36,6 +36,7 @@ describe('auth/unlinkOAuthProvider', () => {
       orientation: null,
     },
     connectionInfo: { ip: '1.1.1.1' },
+    res: null,
   };
 
   beforeEach(() => {

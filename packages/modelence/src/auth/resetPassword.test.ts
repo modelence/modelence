@@ -96,6 +96,7 @@ const createContext = (overrides: Partial<Context> = {}): Context => ({
   connectionInfo: {
     ...(overrides.connectionInfo ?? {}),
   },
+  res: overrides.res ?? null,
 });
 
 const createMockUser = (

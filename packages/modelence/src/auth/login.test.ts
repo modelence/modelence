@@ -24,6 +24,8 @@ jest.unstable_mockModule('./db', () => ({
 jest.unstable_mockModule('./session', () => ({
   setSessionUser: mockSetSessionUser,
   clearSessionUser: mockClearSessionUser,
+  setAuthTokenCookie: jest.fn(),
+  clearAuthTokenCookie: jest.fn(),
 }));
 
 jest.unstable_mockModule('./verification', () => ({
@@ -60,6 +62,7 @@ describe('auth/login', () => {
     user: null,
     roles: [],
     connectionInfo: { ip: '203.0.113.1', baseUrl: 'https://app.example.com' },
+    res: null,
   };
 
   let authConfig: {
