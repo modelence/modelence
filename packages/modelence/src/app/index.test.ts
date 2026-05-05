@@ -4,6 +4,7 @@ import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
 import type { Store } from '../data/store';
 import type { RateLimitRule } from '../rate-limit/types';
+import type { AuthRateLimitsConfig } from './authConfig';
 import { ServerChannel } from '@/websocket/serverChannel';
 import type { WebsocketServerProvider } from '@/websocket/types';
 
@@ -61,6 +62,20 @@ const expectedMigrationsLockOptions = {
 
 const mockResolveStores =
   jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
+
+const mockBuildAuthRateLimits = jest.fn<(config?: AuthRateLimitsConfig) => RateLimitRule[]>(
+  () => []
+);
+const mockUserModule = {
+  name: '_system.user',
+  queries: {},
+  mutations: {},
+  stores: [],
+  channels: [],
+  rateLimits: [] as RateLimitRule[],
+  cronJobs: {},
+  configSchema: {},
+};
 
 jest.unstable_mockModule('dotenv', () => ({
   default: { config: mockDotenvConfig },
@@ -164,16 +179,8 @@ jest.unstable_mockModule('@/websocket/socketio/server', () => ({
 }));
 
 jest.unstable_mockModule('../auth/user', () => ({
-  default: {
-    name: '_system.user',
-    queries: {},
-    mutations: {},
-    stores: [],
-    channels: [],
-    rateLimits: [],
-    cronJobs: {},
-    configSchema: {},
-  },
+  buildAuthRateLimits: mockBuildAuthRateLimits,
+  default: mockUserModule,
 }));
 
 jest.unstable_mockModule('../auth/session', () => ({
@@ -468,6 +475,28 @@ describe('app/index', () => {
     });
 
     expect(mockInitRateLimits).toHaveBeenCalledWith([rateLimit1, rateLimit2]);
+  });
+
+  test('writes auth rate limit overrides onto the user module before collection', async () => {
+    const authRules: RateLimitRule[] = [
+      { bucket: 'signup', type: 'ip', window: 900_000, limit: 5 },
+    ];
+    mockBuildAuthRateLimits.mockReturnValueOnce(authRules);
+
+    await startApp({
+      auth: {
+        rateLimits: { signup: { perIp15Minutes: 5 } },
+      },
+    });
+
+    // The builder receives the user-supplied overrides
+    expect(mockBuildAuthRateLimits).toHaveBeenCalledWith({ signup: { perIp15Minutes: 5 } });
+
+    // Effective limits land on the user module (so Modelence Cloud can read them)
+    expect(mockUserModule.rateLimits).toEqual(authRules);
+
+    // And feed into initRateLimits via getRateLimits()
+    expect(mockInitRateLimits).toHaveBeenCalledWith(expect.arrayContaining(authRules));
   });
 
   test('defines cron jobs from modules', async () => {

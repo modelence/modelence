@@ -40,6 +40,7 @@ import { EmailConfig, setEmailConfig } from './emailConfig';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
+import { buildAuthRateLimits } from '../auth/user';
 
 export type AppOptions = {
   modules?: Module[];
@@ -121,6 +122,11 @@ export async function startApp({
   const channels = getChannels(combinedModules);
 
   defineCronJobs(combinedModules);
+
+  // Apply user-provided auth rate limit overrides directly onto the user
+  // module so its `rateLimits` array reflects the effective configuration
+  // (the Modelence Cloud reads these from modules for display).
+  userModule.rateLimits = buildAuthRateLimits(auth.rateLimits);
 
   const rateLimits = getRateLimits(combinedModules);
   initRateLimits(rateLimits);
