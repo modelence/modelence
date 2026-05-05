@@ -143,8 +143,8 @@ export async function startServer(
     app.use(server.middlewares());
   }
 
-  app.all('*', async (req: Request, res: Response) => {
-    return server.handler(req, res);
+  app.all('*', (req: Request, res: Response, next) => {
+    Promise.resolve(server.handler(req, res)).catch(next);
   });
 
   process.on('unhandledRejection', (reason, promise) => {
