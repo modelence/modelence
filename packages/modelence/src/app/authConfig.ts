@@ -1,4 +1,4 @@
-import { AuthErrorProps, AuthSuccessProps, User } from '@/auth/types';
+import { AuthErrorProps, AuthSuccessProps, OAuthErrorInfo, User } from '@/auth/types';
 import { UpdateProfileProps, SignupProps } from '@/methods/types';
 
 /**
@@ -144,7 +144,7 @@ export type AuthConfig = {
    *   if the provider email is verified.
    */
   oauthAccountLinking?: 'auto' | 'manual';
-
+  errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
   /**
    * Overrides the built-in rate limits for authentication endpoints.
    * Only the fields you specify are overridden; all others keep their defaults.
