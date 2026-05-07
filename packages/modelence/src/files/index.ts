@@ -20,42 +20,23 @@ export async function getUploadUrl({
   contentType: string;
   visibility: FileVisibility;
 }): Promise<GetUploadUrlResult> {
-  return await callCloudApi<GetUploadUrlResult>(
-    '/api/files/upload',
-    'POST',
-    JSON.stringify({ filePath, contentType, visibility }),
-    {
-      'Content-Type': 'application/json',
-    }
-  );
-}
-
-export async function deleteFile(filePath: string): Promise<void> {
-  await callCloudApi<void>('/api/files/delete', 'POST', JSON.stringify({ filePath }), {
-    'Content-Type': 'application/json',
+  return await callCloudApi<GetUploadUrlResult>('/api/files/upload', 'POST', {
+    filePath,
+    contentType,
+    visibility,
   });
 }
 
+export async function deleteFile(filePath: string): Promise<void> {
+  await callCloudApi<void>('/api/files/delete', 'POST', { filePath });
+}
+
 export async function downloadFile(filePath: string): Promise<DownloadFileResult> {
-  return await callCloudApi<DownloadFileResult>(
-    '/api/files/download',
-    'POST',
-    JSON.stringify({ filePath }),
-    {
-      'Content-Type': 'application/json',
-    }
-  );
+  return await callCloudApi<DownloadFileResult>('/api/files/download', 'POST', { filePath });
 }
 
 export async function getFileUrl(filePath: string): Promise<GetFileUrlResult> {
-  return await callCloudApi<GetFileUrlResult>(
-    '/api/files/url',
-    'POST',
-    JSON.stringify({ filePath }),
-    {
-      'Content-Type': 'application/json',
-    }
-  );
+  return await callCloudApi<GetFileUrlResult>('/api/files/url', 'POST', { filePath });
 }
 
 export default new Module('_system.files', {

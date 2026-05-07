@@ -37,6 +37,7 @@ import { startServer } from './server';
 import { markAppStarted, setMetadata } from './state';
 import { time } from '@/time';
 import { EmailConfig, setEmailConfig } from './emailConfig';
+import { managedEmailProvider } from './managedEmailProvider';
 import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
@@ -150,7 +151,16 @@ export async function startApp({
     loadConfigs(getLocalConfigs(configSchema));
   }
 
-  setEmailConfig(email);
+  // Default to Modelence's managed email provider when the app is connected
+  // to Modelence Cloud and no provider was configured. This relays through
+  // Studio's /api/email/send (which sends via SES on a Modelence-owned
+  // domain). Locally — without a service endpoint — keep the historical
+  // "no provider configured" behavior so misconfigurations still throw loudly.
+  if (hasRemoteBackend && !email.provider) {
+    setEmailConfig({ ...email, provider: managedEmailProvider });
+  } else {
+    setEmailConfig(email);
+  }
   setAuthConfig(auth);
   setSecurityConfig(security);
   setWebsocketConfig({
