@@ -110,3 +110,8 @@ export type AuthErrorProps = {
   session: Session | null;
   connectionInfo: ConnectionInfo;
 };
+
+export type OAuthErrorInfo = {
+  error: string;
+  statusCode: number;
+};

@@ -10,6 +10,7 @@ function isObjectId(value: unknown): value is { toHexString(): string } {
 /**
  * Recursively converts all MongoDB ObjectId instances to hex strings.
  * Uses duck typing (checks for toHexString method) to avoid importing mongodb on the client.
+ * Returns the original input reference unchanged when no ObjectId is present (no allocation).
  */
 export function sanitizeResult(result: unknown): unknown {
   if (result == null || typeof result !== 'object') {
@@ -25,12 +26,43 @@ export function sanitizeResult(result: unknown): unknown {
   }
 
   if (Array.isArray(result)) {
-    return result.map(sanitizeResult);
+    let out: unknown[] | null = null;
+    for (let i = 0; i < result.length; i++) {
+      const item = result[i];
+      // Primitives and null can never contain an ObjectId — skip recursion.
+      if (item === null || typeof item !== 'object') {
+        if (out !== null) out.push(item);
+        continue;
+      }
+      const sanitized = sanitizeResult(item);
+      if (sanitized !== item) {
+        if (out === null) {
+          // Copy-on-first-write: preserve all preceding elements.
+          out = result.slice(0, i);
+        }
+        out.push(sanitized);
+      } else if (out !== null) {
+        out.push(item);
+      }
+    }
+    return out !== null ? out : result;
   }
 
-  return Object.fromEntries(
-    Object.entries(result).map(([key, value]) => [key, sanitizeResult(value)])
-  );
+  let out: Record<string, unknown> | null = null;
+  for (const [key, value] of Object.entries(result as Record<string, unknown>)) {
+    if (value === null || typeof value !== 'object') {
+      if (out !== null) out[key] = value;
+      continue;
+    }
+    const sanitized = sanitizeResult(value);
+    if (sanitized !== value) {
+      if (out === null) {
+        out = { ...(result as Record<string, unknown>) };
+      }
+      out[key] = sanitized;
+    }
+  }
+  return out !== null ? out : result;
 }
 
 export function getResponseTypeMap(result: unknown) {
