@@ -221,20 +221,33 @@ export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<Ss
         return;
       }
 
-      destination.on('finish', () => {
-        // React has finished streaming; dehydrate now so every query that
-        // resolved during the stream is captured.
-        try {
-          const dehydratedState: DehydratedState = dehydrate(queryClient);
-          queryStateJson = JSON.stringify(dehydratedState);
-        } finally {
-          queryClient.clear();
-        }
-        resolve();
+      // react-dom calls `.end()` on the destination it pipes into. We need to
+      // keep writing AFTER React is done (epilogue + query state script), so
+      // we wrap the real destination in a pass-through Writable whose `end()`
+      // flushes pending data but does NOT close the underlying response.
+      const passthrough = new Writable({
+        write(chunk, _encoding, callback) {
+          destination.write(chunk, (err) => callback(err ?? undefined));
+        },
+        final(callback) {
+          // Triggered by react-dom's `destination.end()`. Resolve the pipe
+          // promise so the caller can write the epilogue, but leave the real
+          // response open.
+          try {
+            const dehydratedState: DehydratedState = dehydrate(queryClient);
+            queryStateJson = JSON.stringify(dehydratedState);
+          } finally {
+            queryClient.clear();
+          }
+          callback();
+          resolve();
+        },
       });
+
+      passthrough.on('error', reject);
       destination.on('error', reject);
 
-      streamRef.pipe(destination);
+      streamRef.pipe(passthrough);
     });
   };
 
