@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderToPipeableStream } from 'react-dom/server';
+import { renderToPipeableStream, type PipeableStream } from 'react-dom/server';
 import { Writable } from 'node:stream';
 import { QueryClient, dehydrate, type DehydratedState } from '@tanstack/react-query';
 import { AppProvider } from '../client/AppProvider';
@@ -55,6 +55,32 @@ export type SsrRenderOptions = {
   location?: string;
 };
 
+export type SsrStreamHandle = {
+  /** Session bootstrap payload — safe to inline before the React shell flushes. */
+  sessionState: string;
+  /**
+   * Pipe React's HTML stream into the response. Resolves once every Suspense
+   * boundary has settled and the stream has finished writing.
+   */
+  pipe: (destination: Writable) => Promise<void>;
+  /**
+   * Read the dehydrated query state. Only call AFTER `pipe()` resolves —
+   * queries that resolve mid-stream populate the cache during render.
+   */
+  getQueryState: () => string;
+};
+
+export type SsrStreamOptions = SsrRenderOptions & {
+  /**
+   * Called once React has flushed the shell (head + above-fallback content)
+   * and the stream is ready to pipe. The framework uses this hook to write
+   * the opening template + state scripts before piping React's HTML.
+   */
+  onShellReady?: () => void;
+  /** Non-fatal SSR errors (Suspense fallbacks, etc.). */
+  onError?: (error: unknown) => void;
+};
+
 export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRenderResult> {
   const { callContext, loadingElement, routesElement, router, location } = options;
 
@@ -106,6 +132,121 @@ export async function renderSsrTree(options: SsrRenderOptions): Promise<SsrRende
     html,
     sessionState: JSON.stringify({ session: sessionPayload }),
     queryState: JSON.stringify(dehydratedState),
+  };
+}
+
+/**
+ * Streaming variant of {@link renderSsrTree}. Returns a handle that lets the
+ * caller flush a template prelude (head + opening shell) as soon as the
+ * React shell is ready, pipe the React HTML stream into the response, then
+ * append the dehydrated query state once streaming completes.
+ *
+ * This is what enables fast First Contentful Paint: the browser receives the
+ * <head> (with CSS <link> tags) immediately, starts the stylesheet fetch in
+ * parallel with the HTML stream, and paints the streamed shell with styles
+ * applied — instead of the dev-mode FOUC caused by JS-injected CSS.
+ */
+export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<SsrStreamHandle> {
+  const { callContext, loadingElement, routesElement, router, location, onShellReady, onError } =
+    options;
+
+  ensureSsrResolversInstalled();
+
+  const sessionPayload = await callInProcessMethod<SessionInitPayload>(
+    '_system.session.init',
+    {},
+    callContext
+  );
+
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        gcTime: 0,
+      },
+    },
+  });
+
+  const routedTree = router ? router({ children: routesElement, location }) : routesElement;
+  const tree = (
+    <AppProvider loadingElement={loadingElement}>
+      <ModelenceQueryProvider client={queryClient}>{routedTree}</ModelenceQueryProvider>
+    </AppProvider>
+  );
+
+  let streamRef: PipeableStream | null = null;
+  // The shell-ready promise resolves with the PipeableStream as soon as React
+  // has rendered above-fallback content. Errors during the shell render
+  // reject it so the caller can fall back to a static response.
+  const shellReady = new Promise<PipeableStream>((resolve, reject) => {
+    // Run the render inside the SSR context so server-rendered components
+    // can resolve session/config/query state from the per-request scope.
+    runWithSsrContext(
+      {
+        callContext,
+        queryClient,
+        session: {
+          user: sessionPayload.user,
+          configs: (sessionPayload.configs as Configs) ?? {},
+        },
+      },
+      () => {
+        const stream = renderToPipeableStream(tree, {
+          onShellReady() {
+            streamRef = stream;
+            onShellReady?.();
+            resolve(stream);
+          },
+          onShellError(error) {
+            reject(error);
+          },
+          onError(error) {
+            onError?.(error);
+          },
+        });
+        return stream;
+      }
+    );
+  });
+
+  // Surface shell errors synchronously by awaiting before returning the handle.
+  await shellReady;
+
+  let queryStateJson: string | null = null;
+
+  const pipe = (destination: Writable): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!streamRef) {
+        reject(new Error('SSR stream was not initialized'));
+        return;
+      }
+
+      destination.on('finish', () => {
+        // React has finished streaming; dehydrate now so every query that
+        // resolved during the stream is captured.
+        try {
+          const dehydratedState: DehydratedState = dehydrate(queryClient);
+          queryStateJson = JSON.stringify(dehydratedState);
+        } finally {
+          queryClient.clear();
+        }
+        resolve();
+      });
+      destination.on('error', reject);
+
+      streamRef.pipe(destination);
+    });
+  };
+
+  return {
+    sessionState: JSON.stringify({ session: sessionPayload }),
+    pipe,
+    getQueryState: () => {
+      if (queryStateJson === null) {
+        throw new Error('getQueryState() called before stream finished');
+      }
+      return queryStateJson;
+    },
   };
 }
 

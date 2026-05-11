@@ -22,6 +22,7 @@ const SSR_ENTRY_VIRTUAL_PATH = '/index.tsx';
 // HTML template. Allowing whitespace inside keeps it tolerant of formatting
 // without becoming greedy across unrelated `</div>` tags.
 const ROOT_PLACEHOLDER_REGEX = /<div id="root">\s*<\/div>/;
+const HEAD_CLOSE_TAG = '</head>';
 
 class ViteServer implements AppServer {
   private viteServer?: ViteDevServer;
@@ -29,6 +30,10 @@ class ViteServer implements AppServer {
   private ssrEnabled = false;
   private ssrTransportInstalled = false;
   private prodEntryLoaded = false;
+  // Computed once at first SSR request in prod (the manifest is immutable
+  // after build). Dev mode recomputes per request because HMR can shift the
+  // module graph.
+  private prodCssAssetsCache?: import('./ssr/collectCss').CssAssets;
 
   enableSsr() {
     this.ssrEnabled = true;
@@ -74,6 +79,12 @@ class ViteServer implements AppServer {
           userAgent: req.get('user-agent'),
           error,
         });
+        // If we've already started streaming the response, we can't recover —
+        // just terminate so the client gets a truncated (but usable) page.
+        if (res.headersSent) {
+          res.end();
+          return;
+        }
         // Fall back to CSR shell so the client can still recover.
         this.serveStaticShell(res);
       }
@@ -92,12 +103,15 @@ class ViteServer implements AppServer {
     const template = await this.getTemplate(req.originalUrl);
     await this.evaluateUserSsrEntry();
 
-    // Lazy imports keep react-dom/server out of the boot path for non-SSR requests.
-    const [{ renderSsrTree }, { _getSsrSnapshot }, { getCallContext }] = await Promise.all([
-      import('./ssr/render'),
-      import('./client/renderApp'),
-      import('./app/server'),
-    ]);
+    // Lazy imports keep react-dom/server (and friends) out of the boot path
+    // for non-SSR requests.
+    const [{ renderSsrTreeStream }, { _getSsrSnapshot }, { getCallContext }, cssModule] =
+      await Promise.all([
+        import('./ssr/render'),
+        import('./client/renderApp'),
+        import('./app/server'),
+        import('./ssr/collectCss'),
+      ]);
 
     const callContext = await getCallContext(req, res);
     const snapshot = _getSsrSnapshot();
@@ -108,7 +122,14 @@ class ViteServer implements AppServer {
       );
     }
 
-    const { html, sessionState, queryState } = await renderSsrTree({
+    const cssAssets = this.collectCssAssets(cssModule);
+
+    // 103 Early Hints — tell the browser to start fetching the stylesheets
+    // before the SSR render has even begun. No-op if the platform doesn't
+    // support it (older Node, proxies that strip 1xx, etc.).
+    sendEarlyHints(res, cssModule.buildEarlyHintsLink(cssAssets));
+
+    const { sessionState, pipe, getQueryState } = await renderSsrTreeStream({
       callContext,
       loadingElement: snapshot.loadingElement,
       routesElement: snapshot.routesElement,
@@ -116,25 +137,60 @@ class ViteServer implements AppServer {
       location: req.originalUrl,
     });
 
-    const stateScripts =
-      `<script id="__MODELENCE_STATE__" type="application/json">${escapeJsonForScript(sessionState)}</script>` +
-      `<script id="__MODELENCE_QUERY_STATE__" type="application/json">${escapeJsonForScript(queryState)}</script>`;
-
-    // The Vite template ships an empty `<div id="root"></div>` placeholder.
-    // Match it explicitly to avoid the greedy/non-greedy pitfalls of `.*?`
-    // when the template evolves. Function replacement avoids $&/$'/$$ being
-    // interpreted by String.replace.
+    // Split the template at the `<div id="root">` placeholder. The head
+    // (plus opening body) flushes immediately with CSS links inlined; React
+    // then streams the shell into the placeholder; the closing template
+    // (plus dehydrated query state) flushes after the stream finishes.
     if (!ROOT_PLACEHOLDER_REGEX.test(template)) {
       throw new Error('SSR template is missing the expected `<div id="root"></div>` placeholder.');
     }
-    const finalHtml = template.replace(
-      ROOT_PLACEHOLDER_REGEX,
-      () => `<div id="root">${html}</div>${stateScripts}`
-    );
+    const [rawPrelude, rawEpilogue] = splitTemplateAtRoot(template);
+    const prelude = injectStylesheets(rawPrelude, cssModule.renderStylesheetLinks(cssAssets));
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    res.status(200).end(finalHtml);
+    res.status(200);
+
+    // Flush prelude (head with CSS + opening shell up to `<div id="root">`)
+    // and the session state script. Session state is fully resolved before
+    // the React render starts, so it's safe to inline up front.
+    res.write(prelude);
+    res.write(
+      `<script id="__MODELENCE_STATE__" type="application/json">${escapeJsonForScript(
+        sessionState
+      )}</script>`
+    );
+    res.write('<div id="root">');
+
+    await pipe(res as unknown as import('node:stream').Writable);
+
+    // Stream finished — close out the root container, emit the dehydrated
+    // query state, and write the rest of the template. The state script
+    // appears after </div> but before </body>; client hydration reads it
+    // via getElementById, so order doesn't matter for correctness.
+    res.write('</div>');
+    res.write(
+      `<script id="__MODELENCE_QUERY_STATE__" type="application/json">${escapeJsonForScript(
+        getQueryState()
+      )}</script>`
+    );
+    res.end(rawEpilogue);
+  }
+
+  private collectCssAssets(
+    cssModule: typeof import('./ssr/collectCss')
+  ): import('./ssr/collectCss').CssAssets {
+    if (this.isDev()) {
+      if (!this.viteServer) {
+        return { hrefs: [], source: 'dev' };
+      }
+      return cssModule.collectDevCssAssets(this.viteServer, SSR_ENTRY_VIRTUAL_PATH);
+    }
+
+    if (!this.prodCssAssetsCache) {
+      this.prodCssAssetsCache = cssModule.loadProdCssAssets(CLIENT_BUILD_DIR);
+    }
+    return this.prodCssAssetsCache;
   }
 
   private async getTemplate(url: string): Promise<string> {
@@ -235,6 +291,66 @@ export function escapeJsonForScript(json: string): string {
     /[<>&\u2028\u2029]/g,
     (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`
   );
+}
+
+/**
+ * Split the HTML template at the `<div id="root">` placeholder so the head
+ * can stream first and the React shell can pipe directly into the response.
+ */
+function splitTemplateAtRoot(template: string): [string, string] {
+  const match = template.match(ROOT_PLACEHOLDER_REGEX);
+  if (!match || match.index === undefined) {
+    throw new Error('SSR template is missing the expected `<div id="root"></div>` placeholder.');
+  }
+  const prelude = template.slice(0, match.index);
+  const epilogue = template.slice(match.index + match[0].length);
+  return [prelude, epilogue];
+}
+
+/**
+ * Inject CSS <link> tags just before `</head>` so styles arrive in the first
+ * flushed chunk. Falls back to prepending the prelude if no `</head>` is found
+ * (templates may legitimately omit it — the browser will still load the
+ * stylesheet, it just won't be in the head).
+ */
+function injectStylesheets(prelude: string, linksHtml: string): string {
+  if (!linksHtml) {
+    return prelude;
+  }
+  const headCloseIndex = prelude.lastIndexOf(HEAD_CLOSE_TAG);
+  if (headCloseIndex === -1) {
+    return linksHtml + prelude;
+  }
+  return prelude.slice(0, headCloseIndex) + linksHtml + prelude.slice(headCloseIndex);
+}
+
+type EarlyHintsCapable = {
+  writeEarlyHints?: (hints: { link?: string | string[] }) => void;
+};
+
+/**
+ * Emit HTTP 103 Early Hints with CSS preload Link headers when the runtime
+ * supports it (Node 18.11+). The browser will start fetching stylesheets
+ * before the SSR render begins. Safe to call unconditionally — older Node
+ * versions and proxies that strip 1xx simply ignore it.
+ */
+function sendEarlyHints(res: express.Response, links: string[]) {
+  if (links.length === 0) {
+    return;
+  }
+  const target = res as unknown as EarlyHintsCapable;
+  if (typeof target.writeEarlyHints !== 'function') {
+    return;
+  }
+  try {
+    target.writeEarlyHints({ link: links });
+  } catch (error) {
+    // Some proxy frontends (or future Node versions in error states) may
+    // reject 1xx after headers have been touched. Treat as best-effort.
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Modelence SSR: writeEarlyHints failed', error);
+    }
+  }
 }
 
 async function loadUserViteConfig() {

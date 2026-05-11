@@ -988,13 +988,14 @@ describe('auth/providers/oauth-common', () => {
     test('returns HTML when errorComponent is configured', () => {
       const mockErrorComponent = jest.fn().mockReturnValue('<html><body>Error</body></html>');
       mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
-      (res as any).send = jest.fn();
+      const sendMock = jest.fn();
+      (res as unknown as { send: jest.Mock }).send = sendMock;
 
       moduleExports.sendOAuthError(res, 500, 'Auth failed');
 
       expect(mockErrorComponent).toHaveBeenCalledWith({ error: 'Auth failed', statusCode: 500 });
       expect(res.status).toHaveBeenCalledWith(500);
-      expect((res as any).send).toHaveBeenCalledWith('<html><body>Error</body></html>');
+      expect(sendMock).toHaveBeenCalledWith('<html><body>Error</body></html>');
       expect(res.json).not.toHaveBeenCalled();
     });
 
