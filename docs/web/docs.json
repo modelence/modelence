@@ -176,6 +176,10 @@
   },
   "redirects": [
     {
+      "source": "/api-reference/intro",
+      "destination": "/sdk/modelence"
+    },
+    {
       "source": "/api-reference/:slug*",
       "destination": "/sdk/:slug*"
     },
