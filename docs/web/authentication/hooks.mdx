@@ -129,6 +129,38 @@ startApp({
 });
 ```
 
+## Error Rendering
+
+### `errorComponent`
+
+Use `errorComponent` to customize how OAuth authentication errors are rendered. 
+
+By default, OAuth errors are returned as JSON. Providing `errorComponent` allows you to return a custom HTML response instead. 
+
+This is useful when OAuth flows are triggered in a browser context.
+
+```typescript
+startApp({
+  auth: {
+    errorComponent: ({ error, statusCode }) => {
+      // Safely escape the error string to prevent XSS vulnerabilities
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+
+      return `
+        <html>
+          <body>
+            <h1>Error ${escapeHtml(statusCode)}</h1>
+            <p>${escapeHtml(error)}</p>
+          </body>
+        </html>
+      `;
+    },
+  },
+});
+```
+
 ## Full Example
 
 ```typescript
@@ -151,6 +183,12 @@ startApp({
         return `${firstName}-${lastName}`.toLowerCase();
       }
       return email.split('@')[0];
+    },
+    errorComponent: ({ error, statusCode }) => {
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+      return `<html><body><h1>Error ${escapeHtml(statusCode)}</h1><p>${escapeHtml(error)}</p></body></html>`;
     },
     onAfterSignup: ({ user }) => {
       console.log('Welcome!', user.handle);
