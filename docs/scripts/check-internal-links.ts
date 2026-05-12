@@ -1,24 +1,36 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+interface BrokenLink {
+  file: string;
+  line: number | null;
+  link: string;
+  route: string;
+}
+
+interface DocsJsonLink {
+  trail: string;
+  link: string;
+}
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const docsRoot = path.join(repoRoot, 'docs/web');
 const docsConfigPath = path.join(docsRoot, 'docs.json');
 const origin = 'https://docs.local';
 
-const contentExtensions = new Set(['.md', '.mdx']);
-const ignoredDirs = new Set(['node_modules']);
+const contentExtensions = new Set<string>(['.md', '.mdx']);
+const ignoredDirs = new Set<string>(['node_modules']);
 
-function toPosix(filePath) {
+function toPosix(filePath: string): string {
   return filePath.split(path.sep).join('/');
 }
 
-function walk(dir) {
+function walk(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  const files = [];
+  const files: string[] = [];
 
   for (const entry of entries) {
     if (ignoredDirs.has(entry.name)) {
@@ -36,7 +48,7 @@ function walk(dir) {
   return files;
 }
 
-function normalizeRoute(route) {
+function normalizeRoute(route: string): string {
   let normalized = decodeURI(route);
   normalized = normalized.replace(/\/+/g, '/');
 
@@ -51,7 +63,7 @@ function normalizeRoute(route) {
   return normalized;
 }
 
-function routeForContentFile(filePath) {
+function routeForContentFile(filePath: string): string {
   const relativePath = toPosix(path.relative(docsRoot, filePath));
   const withoutExtension = relativePath.replace(/\.(md|mdx)$/u, '');
   const route = normalizeRoute(`/${withoutExtension}`);
@@ -67,8 +79,8 @@ function routeForContentFile(filePath) {
   return route;
 }
 
-function buildValidRoutes(files) {
-  const routes = new Set(['/']);
+function buildValidRoutes(files: string[]): Set<string> {
+  const routes = new Set<string>(['/']);
 
   for (const filePath of files) {
     const relativePath = toPosix(path.relative(docsRoot, filePath));
@@ -87,15 +99,15 @@ function buildValidRoutes(files) {
   return routes;
 }
 
-function isExternalLink(value) {
+function isExternalLink(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/iu.test(value) || value.startsWith('//');
 }
 
-function stripUrlSuffix(value) {
+function stripUrlSuffix(value: string): string {
   return value.split('#')[0].split('?')[0];
 }
 
-function resolveInternalLink(rawValue, sourceRoute) {
+function resolveInternalLink(rawValue: string, sourceRoute: string): string | null {
   const value = rawValue.trim();
 
   if (
@@ -123,8 +135,8 @@ function resolveInternalLink(rawValue, sourceRoute) {
   return normalizeRoute(resolved.pathname);
 }
 
-function extractMarkdownLinks(line) {
-  const links = [];
+function extractMarkdownLinks(line: string): string[] {
+  const links: string[] = [];
   const markdownLinkPattern = /!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu;
 
   for (const match of line.matchAll(markdownLinkPattern)) {
@@ -132,28 +144,34 @@ function extractMarkdownLinks(line) {
       continue;
     }
 
-    links.push(match[1]);
+    const link = match[1];
+    if (link) {
+      links.push(link);
+    }
   }
 
   return links;
 }
 
-function extractHrefLinks(line) {
-  const links = [];
+function extractHrefLinks(line: string): string[] {
+  const links: string[] = [];
   const hrefPattern = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|\{["']([^"']+)["']\})/gu;
 
   for (const match of line.matchAll(hrefPattern)) {
-    links.push(match[1] ?? match[2] ?? match[3]);
+    const link = match[1] ?? match[2] ?? match[3];
+    if (link) {
+      links.push(link);
+    }
   }
 
   return links;
 }
 
-function checkContentFile(filePath, validRoutes) {
+function checkContentFile(filePath: string, validRoutes: Set<string>): BrokenLink[] {
   const sourceRoute = routeForContentFile(filePath);
   const relativePath = toPosix(path.relative(repoRoot, filePath));
   const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/u);
-  const failures = [];
+  const failures: BrokenLink[] = [];
   let inCodeFence = false;
 
   lines.forEach((line, index) => {
@@ -185,7 +203,7 @@ function checkContentFile(filePath, validRoutes) {
   return failures;
 }
 
-function collectDocsJsonLinks(value, trail = 'docs.json') {
+function collectDocsJsonLinks(value: unknown, trail = 'docs.json'): DocsJsonLink[] {
   if (Array.isArray(value)) {
     return value.flatMap((item, index) => collectDocsJsonLinks(item, `${trail}[${index}]`));
   }
@@ -194,7 +212,7 @@ function collectDocsJsonLinks(value, trail = 'docs.json') {
     return [];
   }
 
-  const links = [];
+  const links: DocsJsonLink[] = [];
 
   for (const [key, child] of Object.entries(value)) {
     const childTrail = `${trail}.${key}`;
@@ -223,10 +241,10 @@ function collectDocsJsonLinks(value, trail = 'docs.json') {
   return links;
 }
 
-function checkDocsJson(validRoutes) {
-  const config = JSON.parse(fs.readFileSync(docsConfigPath, 'utf8'));
+function checkDocsJson(validRoutes: Set<string>): BrokenLink[] {
+  const config = JSON.parse(fs.readFileSync(docsConfigPath, 'utf8')) as unknown;
   const links = collectDocsJsonLinks(config);
-  const failures = [];
+  const failures: BrokenLink[] = [];
 
   for (const { trail, link } of links) {
     const route = resolveInternalLink(link, '/');

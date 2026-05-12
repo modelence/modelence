@@ -47,7 +47,7 @@ jobs:
         run: npm run docs
 
       - name: Check internal documentation links
-        run: node docs/scripts/check-internal-links.mjs
+        run: ./packages/modelence/node_modules/.bin/tsx docs/scripts/check-internal-links.ts
 
       - name: Deploy to docs branch
         if: github.event_name == 'push'
