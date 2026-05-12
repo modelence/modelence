@@ -1,0 +1,16 @@
+---
+sidebar_position: 1
+title: ValueType
+---
+
+[API Reference](/api-reference/modelence/server/type-aliases/../../../index) / [modelence](/api-reference/modelence/server/type-aliases/../../index) / [server](/api-reference/modelence/server/type-aliases/../index) / ValueType
+
+> **ValueType**\<`T`\> = `T` *extends* `"number"` ? `number` : `T` *extends* `"string"` ? `string` : `T` *extends* `"text"` ? `string` : `T` *extends* `"boolean"` ? `boolean` : `T` *extends* `"secret"` ? `string` : `never`
+
+Defined in: [packages/modelence/src/config/types.ts:14](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/config/types.ts#L14)
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` *extends* [`ConfigType`](/api-reference/modelence/server/type-aliases/ConfigType) | [`ConfigType`](/api-reference/modelence/server/type-aliases/ConfigType) |

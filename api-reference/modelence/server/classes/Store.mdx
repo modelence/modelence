@@ -1,0 +1,864 @@
+---
+sidebar_position: 1
+title: Store
+---
+
+[API Reference](/api-reference/modelence/server/classes/../../../index) / [modelence](/api-reference/modelence/server/classes/../../index) / [server](/api-reference/modelence/server/classes/../index) / Store
+
+Defined in: [packages/modelence/src/data/store.ts:367](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L367)
+
+The Store class provides a type-safe interface for MongoDB collections with built-in schema validation and helper methods.
+
+## Example
+
+```ts
+const dbTodos = new Store('todos', {
+  schema: {
+    title: schema.string(),
+    completed: schema.boolean(),
+    dueDate: schema.date().optional(),
+    userId: schema.userId(),
+  },
+  methods: {
+    isOverdue() {
+      return this.dueDate < new Date();
+    }
+  }
+});
+```
+
+## Type Parameters
+
+| Type Parameter | Description |
+| ------ | ------ |
+| `TSchema` *extends* `ModelSchema` | The document schema type |
+| `TMethods` *extends* `Record`\<`string`, (`this`, ...`args`) => `any`\> | Custom methods that will be added to documents |
+
+## Constructors
+
+### Constructor
+
+> **new Store**\<`TSchema`, `TMethods`\>(`name`, `options`): `Store`\<`TSchema`, `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:403](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L403)
+
+Creates a new Store instance
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `name` | `string` | The collection name in MongoDB |
+| `options` | \{ `indexCreationMode?`: `IndexCreationMode`; `indexes`: `IndexDescription`[]; `methods?`: `TMethods`; `schema`: `TSchema`; `searchIndexes?`: `SearchIndexDescription`[]; \} | Store configuration (schema, indexes, methods, search indexes, and optional index creation mode) |
+| `options.indexCreationMode?` | `IndexCreationMode` | Whether index creation should block startup or run in background (default: 'background') |
+| `options.indexes` | `IndexDescription`[] | MongoDB indexes to create |
+| `options.methods?` | `TMethods` | Custom methods to add to documents |
+| `options.schema` | `TSchema` | Document schema using Modelence schema types |
+| `options.searchIndexes?` | `SearchIndexDescription`[] | MongoDB Atlas Search |
+
+#### Returns
+
+`Store`\<`TSchema`, `TMethods`\>
+
+## Properties
+
+| Property | Modifier | Type | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="doc"></a> `Doc` | `readonly` | `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods` | [packages/modelence/src/data/store.ts:382](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L382) |
+
+## Methods
+
+### aggregate()
+
+> **aggregate**(`pipeline`, `options?`): `AggregationCursor`\<`Document`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1147](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1147)
+
+Aggregates documents using MongoDB's aggregation framework
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `pipeline` | `Document`[] | The aggregation pipeline |
+| `options?` | `AggregateOptions` | Optional options |
+
+#### Returns
+
+`AggregationCursor`\<`Document`\>
+
+The aggregation cursor
+
+***
+
+### bulkWrite()
+
+> **bulkWrite**(`operations`): `Promise`\<`BulkWriteResult`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1157](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1157)
+
+Performs a bulk write operation on the collection
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `operations` | `AnyBulkWriteOperation`\<`InferDocumentType`\<`TSchema`\>\>[] | The operations to perform |
+
+#### Returns
+
+`Promise`\<`BulkWriteResult`\>
+
+The result of the bulk write operation
+
+***
+
+### countDocuments()
+
+> **countDocuments**(`query`): `Promise`\<`number`\>
+
+Defined in: [packages/modelence/src/data/store.ts:869](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L869)
+
+Counts the number of documents that match a query
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `query` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The query to filter documents |
+
+#### Returns
+
+`Promise`\<`number`\>
+
+The number of documents that match the query
+
+***
+
+### deleteMany()
+
+> **deleteMany**(`selector`, `options?`): `Promise`\<`DeleteResult`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1022](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1022)
+
+Deletes multiple documents
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the documents to delete |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`DeleteResult`\>
+
+The result of the delete operation
+
+***
+
+### deleteOne()
+
+> **deleteOne**(`selector`, `options?`): `Promise`\<`DeleteResult`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1009](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1009)
+
+Deletes a single document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document to delete |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`DeleteResult`\>
+
+The result of the delete operation
+
+***
+
+### distinct()
+
+> **distinct**\<`K`\>(`key`, `filter?`, `options?`): `Promise`\<`Flatten`\<`WithId`\<`InferDocumentType`\<`TSchema`\>\>\[`K`\]\>[]\>
+
+Defined in: [packages/modelence/src/data/store.ts:1118](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1118)
+
+Returns an array of distinct values for a field across the collection
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `K` *extends* `string` |
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `key` | `K` | The field name (supports dot notation for nested fields) |
+| `filter?` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | Optional filter to narrow the documents |
+| `options?` | `DistinctOptions` | Optional distinct options |
+
+#### Returns
+
+`Promise`\<`Flatten`\<`WithId`\<`InferDocumentType`\<`TSchema`\>\>\[`K`\]\>[]\>
+
+An array of distinct values
+
+***
+
+### extend()
+
+> **extend**\<`TExtendedSchema`, `TExtendedMethods`\>(`config`): `Store`\<`TSchema` & `TExtendedSchema`, `PreserveMethodsForExtendedSchema`\<`TMethods`, `TSchema` & `TExtendedSchema`\> & `TExtendedMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:506](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L506)
+
+Extends the store with additional schema fields, indexes, methods, and search indexes.
+Returns a new Store instance with the extended schema and updated types.
+Methods from the original store are preserved with updated type signatures.
+
+#### Example
+
+```ts
+// Extend the users collection
+export const dbUsers = baseUsersCollection.extend({
+  schema: {
+    firstName: schema.string(),
+    lastName: schema.string(),
+    companyId: schema.objectId().optional(),
+  },
+  indexes: [
+    { key: { companyId: 1 } },
+    { key: { lastName: 1, firstName: 1 } },
+  ],
+  methods: {
+    getFullName() {
+      return `${this.firstName} ${this.lastName}`;
+    }
+  }
+});
+
+// Now fully typed with new fields
+const user = await dbUsers.findOne({ firstName: 'John' });
+console.log(user?.getFullName());
+```
+
+#### Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `TExtendedSchema` *extends* `ModelSchema` | - |
+| `TExtendedMethods` *extends* `Record`\<`string`, `Function`\> | `Record`\<`string`, `never`\> |
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `config` | \{ `indexCreationMode?`: `IndexCreationMode`; `indexes?`: `IndexDescription`[]; `methods?`: `TExtendedMethods`; `schema?`: `TExtendedSchema`; `searchIndexes?`: `SearchIndexDescription`[]; \} | Additional schema fields, indexes, methods, search indexes, and optional index creation mode to add |
+| `config.indexCreationMode?` | `IndexCreationMode` | Whether index creation should block startup or run in background |
+| `config.indexes?` | `IndexDescription`[] | - |
+| `config.methods?` | `TExtendedMethods` | - |
+| `config.schema?` | `TExtendedSchema` | - |
+| `config.searchIndexes?` | `SearchIndexDescription`[] | - |
+
+#### Returns
+
+`Store`\<`TSchema` & `TExtendedSchema`, `PreserveMethodsForExtendedSchema`\<`TMethods`, `TSchema` & `TExtendedSchema`\> & `TExtendedMethods`\>
+
+A new Store instance with the extended schema
+
+***
+
+### fetch()
+
+> **fetch**(`query`, `options?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`[]\>
+
+Defined in: [packages/modelence/src/data/store.ts:899](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L899)
+
+Fetches multiple documents, equivalent to Node.js MongoDB driver's `find` and `toArray` methods combined.
+
+#### Example
+
+```ts
+// Include only selected fields
+const docs = await store.fetch(
+  { userId: user.id },
+  { projection: { framework: 1, title: 1 }, sort: { createdAt: -1 }, limit: 50 }
+);
+
+// Exclude large fields when not needed
+const chunks = await store.fetch(
+  { documentId },
+  { projection: { embedding: 0 } }
+);
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `query` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The query to filter documents |
+| `options?` | `FetchOptions`\<`InferDocumentType`\<`TSchema`\>\> | Optional fetch options |
+
+#### Returns
+
+`Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`[]\>
+
+The documents
+
+***
+
+### findById()
+
+> **findById**(`id`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:841](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L841)
+
+Fetches a single document by its ID
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` \| `ObjectId` | The ID of the document to find |
+
+#### Returns
+
+`Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The document, or null if not found
+
+***
+
+### findOne()
+
+> **findOne**(`query`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:798](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L798)
+
+Finds a single document matching the query
+
+#### Example
+
+```ts
+// ✅ Valid queries:
+await store.findOne({ name: 'John' })
+await store.findOne({ age: { $gt: 18 } })
+await store.findOne({ _id: new ObjectId('...') })
+await store.findOne({ tags: { $in: ['typescript', 'mongodb'] } })
+await store.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] })
+await store.findOne({ 'emails.address': 'test@example.com' }) // dot notation
+
+// ❌ TypeScript error - 'id' is not in schema:
+await store.findOne({ id: '123' })
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `query` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed. |
+| `options?` | `FindOptions`\<`Document`\> | Find options |
+
+#### Returns
+
+`Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The document, or null if not found
+
+***
+
+### findOneAndDelete()
+
+> **findOneAndDelete**(`selector`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1057](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1057)
+
+Atomically finds a document and deletes it, returning the deleted document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document |
+| `options?` | `Omit`\<`FindOneAndDeleteOptions`, `"includeResultMetadata"`\> | Options including `session`, `projection`, etc. |
+
+#### Returns
+
+`Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The deleted document, or null if not found
+
+***
+
+### findOneAndReplace()
+
+> **findOneAndReplace**(`selector`, `replacement`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1076](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1076)
+
+Atomically finds a document and replaces it, returning the document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document |
+| `replacement` | `WithoutId`\<`this`\[`"_type"`\]\> | The replacement document |
+| `options?` | `Omit`\<`FindOneAndReplaceOptions`, `"includeResultMetadata"`\> | Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc. |
+
+#### Returns
+
+`Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The document (before or after replacement, depending on options), or null if not found
+
+***
+
+### findOneAndUpdate()
+
+> **findOneAndUpdate**(`selector`, `update`, `options?`): `Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1037](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1037)
+
+Atomically finds a document and updates it, returning the document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document |
+| `update` | `UpdateFilter`\<`InferDocumentType`\<`TSchema`\>\> | The update to apply |
+| `options?` | `Omit`\<`FindOneAndUpdateOptions`, `"includeResultMetadata"`\> | Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc. |
+
+#### Returns
+
+`Promise`\<`null` \| `EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The document (before or after update, depending on options), or null if not found
+
+***
+
+### getDatabase()
+
+> **getDatabase**(): `Db`
+
+Defined in: [packages/modelence/src/data/store.ts:1166](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1166)
+
+Returns the raw MongoDB database instance for advanced operations
+
+#### Returns
+
+`Db`
+
+The MongoDB database instance
+
+#### Throws
+
+Error if the store is not provisioned
+
+***
+
+### getIndexCreationMode()
+
+> **getIndexCreationMode**(): `IndexCreationMode`
+
+Defined in: [packages/modelence/src/data/store.ts:431](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L431)
+
+#### Returns
+
+`IndexCreationMode`
+
+***
+
+### getName()
+
+> **getName**(): `string`
+
+Defined in: [packages/modelence/src/data/store.ts:427](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L427)
+
+#### Returns
+
+`string`
+
+***
+
+### insertMany()
+
+> **insertMany**(`documents`, `options?`): `Promise`\<`InsertManyResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:926](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L926)
+
+Inserts multiple documents
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `documents` | `OptionalUnlessRequiredId`\<`InferDocumentType`\<`TSchema`\>\>[] | The documents to insert |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`InsertManyResult`\<`Document`\>\>
+
+The result of the insert operation
+
+***
+
+### insertOne()
+
+> **insertOne**(`document`, `options?`): `Promise`\<`InsertOneResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:913](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L913)
+
+Inserts a single document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `document` | `OptionalUnlessRequiredId`\<`InferDocumentType`\<`TSchema`\>\> | The document to insert |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`InsertOneResult`\<`Document`\>\>
+
+The result of the insert operation
+
+***
+
+### rawCollection()
+
+> **rawCollection**(): `Collection`\<`InferDocumentType`\<`TSchema`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:1175](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1175)
+
+Returns the raw MongoDB collection instance for advanced operations
+
+#### Returns
+
+`Collection`\<`InferDocumentType`\<`TSchema`\>\>
+
+The MongoDB collection instance
+
+#### Throws
+
+Error if the store is not provisioned
+
+***
+
+### renameFrom()
+
+> **renameFrom**(`oldName`, `options?`): `Promise`\<`void`\>
+
+Defined in: [packages/modelence/src/data/store.ts:1184](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1184)
+
+Renames an existing collection to this store's name, used for migrations
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `oldName` | `string` | The previous name of the collection |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Throws
+
+Error if the old collection doesn't exist or if this store's collection already exists
+
+***
+
+### replaceOne()
+
+> **replaceOne**(`selector`, `replacement`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:1097](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1097)
+
+Replaces a single document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document to replace |
+| `replacement` | `WithoutId`\<`this`\[`"_type"`\]\> | The replacement document (must not contain update operators) |
+| `options?` | `ReplaceOptions` | Options including `upsert`, `session`, etc. |
+
+#### Returns
+
+`Promise`\<`UpdateResult`\<`Document`\>\>
+
+The result of the replace operation
+
+***
+
+### requireById()
+
+> **requireById**(`id`, `errorHandler?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:853](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L853)
+
+Fetches a single document by its ID, or throws an error if not found
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `id` | `string` \| `ObjectId` | The ID of the document to find |
+| `errorHandler?` | () => `Error` | Optional error handler to return a custom error if the document is not found |
+
+#### Returns
+
+`Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+The document
+
+***
+
+### requireOne()
+
+> **requireOne**(`query`, `options?`, `errorHandler?`): `Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+Defined in: [packages/modelence/src/data/store.ts:806](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L806)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `query` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> |
+| `options?` | `FindOptions`\<`Document`\> |
+| `errorHandler?` | () => `Error` |
+
+#### Returns
+
+`Promise`\<`EnhancedOmit`\<`InferDocumentType`\<`TSchema`\>, `"_id"`\> & `object` & `TMethods`\>
+
+***
+
+### updateMany()
+
+> **updateMany**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:973](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L973)
+
+Updates multiple documents
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the documents to update |
+| `update` | `UpdateFilter`\<`InferDocumentType`\<`TSchema`\>\> | The MongoDB modifier to apply to the documents |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`UpdateResult`\<`Document`\>\>
+
+The result of the update operation
+
+***
+
+### updateOne()
+
+> **updateOne**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:940](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L940)
+
+Updates a single document
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document to update |
+| `update` | `UpdateFilter`\<`InferDocumentType`\<`TSchema`\>\> | The update to apply to the document |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`UpdateResult`\<`Document`\>\>
+
+The result of the update operation
+
+***
+
+### upsertMany()
+
+> **upsertMany**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:992](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L992)
+
+Updates multiple documents, or inserts them if they don't exist
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the documents to update |
+| `update` | `UpdateFilter`\<`InferDocumentType`\<`TSchema`\>\> | The MongoDB modifier to apply to the documents |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`UpdateResult`\<`Document`\>\>
+
+The result of the update operation
+
+***
+
+### upsertOne()
+
+> **upsertOne**(`selector`, `update`, `options?`): `Promise`\<`UpdateResult`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:955](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L955)
+
+Updates a single document, or inserts it if it doesn't exist
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `selector` | `string` \| `ObjectId` \| `TypedFilter`\<`InferDocumentType`\<`TSchema`\>\> | The selector to find the document to update |
+| `update` | `UpdateFilter`\<`InferDocumentType`\<`TSchema`\>\> | The MongoDB modifier to apply to the document |
+| `options?` | \{ `session?`: `ClientSession`; \} | - |
+| `options.session?` | `ClientSession` | - |
+
+#### Returns
+
+`Promise`\<`UpdateResult`\<`Document`\>\>
+
+The result of the update operation
+
+***
+
+### vectorSearch()
+
+> **vectorSearch**(`params`): `Promise`\<`AggregationCursor`\<`Document`\>\>
+
+Defined in: [packages/modelence/src/data/store.ts:1229](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1229)
+
+Performs a vector similarity search using MongoDB Atlas Vector Search
+
+#### Example
+
+```ts
+const results = await store.vectorSearch({
+  field: 'embedding',
+  embedding: [0.1, 0.2, 0.3, ...],
+  numCandidates: 100,
+  limit: 10,
+  projection: { title: 1, description: 1 }
+});
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `params` | \{ `embedding`: `number`[]; `field`: `string`; `indexName?`: `string`; `limit?`: `number`; `numCandidates?`: `number`; `projection?`: `Document`; \} | Vector search parameters |
+| `params.embedding` | `number`[] | The query vector to search for |
+| `params.field` | `string` | The field name containing the vector embeddings |
+| `params.indexName?` | `string` | Name of index (default: field + VectorSearch) |
+| `params.limit?` | `number` | Maximum number of results to return (default: 10) |
+| `params.numCandidates?` | `number` | Number of nearest neighbors to consider (default: 100) |
+| `params.projection?` | `Document` | Additional fields to include in the results |
+
+#### Returns
+
+`Promise`\<`AggregationCursor`\<`Document`\>\>
+
+An aggregation cursor with search results and scores
+
+***
+
+### watch()
+
+> **watch**(`pipeline?`, `options?`): `ChangeStream`
+
+Defined in: [packages/modelence/src/data/store.ts:1136](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1136)
+
+Opens a change stream on the collection to watch for real-time changes
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `pipeline?` | `Document`[] | Optional aggregation pipeline to filter/transform change events |
+| `options?` | `ChangeStreamOptions` | Optional change stream options |
+
+#### Returns
+
+`ChangeStream`
+
+A ChangeStream instance
+
+***
+
+### vectorIndex()
+
+> `static` **vectorIndex**(`params`): `object`
+
+Defined in: [packages/modelence/src/data/store.ts:1292](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1292)
+
+Creates a MongoDB Atlas Vector Search index definition
+
+#### Example
+
+```ts
+const store = new Store('documents', {
+  schema: {
+    title: schema.string(),
+    embedding: schema.array(schema.number()),
+  },
+  indexes: [],
+  searchIndexes: [
+    Store.vectorIndex({
+      field: 'embedding',
+      dimensions: 1536,
+      similarity: 'cosine'
+    })
+  ]
+});
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `params` | \{ `dimensions`: `number`; `field`: `string`; `indexName?`: `string`; `similarity?`: `"cosine"` \| `"euclidean"` \| `"dotProduct"`; \} | Vector index parameters |
+| `params.dimensions` | `number` | The number of dimensions in the vector embeddings |
+| `params.field` | `string` | The field name to create the vector index on |
+| `params.indexName?` | `string` | Name of index (default: field + VectorSearch) |
+| `params.similarity?` | `"cosine"` \| `"euclidean"` \| `"dotProduct"` | The similarity metric to use (default: 'cosine') |
+
+#### Returns
+
+`object`
+
+A search index description object
+
+| Name | Type | Default value | Defined in |
+| ------ | ------ | ------ | ------ |
+| `definition` | `object` | - | [packages/modelence/src/data/store.ts:1306](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1306) |
+| `definition.fields` | `object`[] | - | [packages/modelence/src/data/store.ts:1307](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1307) |
+| `name` | `string` | - | [packages/modelence/src/data/store.ts:1305](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1305) |
+| `type` | `string` | `'vectorSearch'` | [packages/modelence/src/data/store.ts:1304](https://github.com/modelence/modelence/blob/f40d9063897ff569e8c8658fc409857fcee845f2/packages/modelence/src/data/store.ts#L1304) |
