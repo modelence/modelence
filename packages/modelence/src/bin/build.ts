@@ -19,14 +19,16 @@ async function buildClient() {
     return;
   }
 
-  await buildVite();
+  const ssrEnabled = Boolean(getConfig().ssr);
 
-  if (getConfig().ssr) {
+  await buildVite({ ssr: ssrEnabled });
+
+  if (ssrEnabled) {
     await buildViteSsr();
   }
 }
 
-async function buildVite() {
+async function buildVite({ ssr }: { ssr: boolean }) {
   console.log('Building client with Vite...');
 
   const userConfig = await loadConfigFromFile({
@@ -38,6 +40,9 @@ async function buildVite() {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
       emptyOutDir: true,
+      // Emit `.vite/ssr-manifest.json` so the SSR runtime can map rendered
+      // modules to their CSS assets (see ssr/collectCss.ts:loadProdCssAssets).
+      ssrManifest: ssr,
     },
   };
 

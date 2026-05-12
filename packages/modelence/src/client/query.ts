@@ -16,12 +16,17 @@ interface Subscription {
 
 let queryClientRef: QueryClient | null = null;
 let cacheUnsubscribe: (() => void) | null = null;
+let websocketsStarted = false;
 const subscriptions = new Map<string, Subscription>();
 
 /**
  * Connects a `QueryClient` to Modelence's live-query layer. Auto-called by
  * `<ModelenceQueryProvider>`; only call manually if you mount your own
  * `<QueryClientProvider>`.
+ *
+ * Note: WebSocket setup is deferred until the first `modelenceLiveQuery`
+ * call, so apps that only use `modelenceQuery`/`modelenceMutation` never
+ * open a socket.
  */
 export function connectModelenceQueryClient(queryClient: QueryClient) {
   if (queryClientRef === queryClient) {
@@ -31,8 +36,6 @@ export function connectModelenceQueryClient(queryClient: QueryClient) {
   if (queryClientRef) {
     disconnectModelenceQueryClient();
   }
-
-  startWebsockets();
 
   queryClientRef = queryClient;
 
@@ -61,6 +64,7 @@ export function disconnectModelenceQueryClient() {
   subscriptions.forEach((sub) => sub.unsubscribe());
   subscriptions.clear();
   queryClientRef = null;
+  websocketsStarted = false;
 }
 
 /** @deprecated Use `connectModelenceQueryClient(queryClient)` instead. */
@@ -103,6 +107,11 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
           console.error('[Modelence]', error.message);
           reject(error);
           return;
+        }
+
+        if (!websocketsStarted) {
+          startWebsockets();
+          websocketsStarted = true;
         }
 
         let sub = subscriptions.get(subscriptionKey);
