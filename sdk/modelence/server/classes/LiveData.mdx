@@ -1,0 +1,63 @@
+---
+sidebar_position: 1
+title: LiveData
+---
+
+[API Reference](/sdk/modelence/server/classes/../../../index) / [modelence](/sdk/modelence/server/classes/../../index) / [server](/sdk/modelence/server/classes/../index) / LiveData
+
+Defined in: [packages/modelence/src/live-query/context.ts:65](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/live-query/context.ts#L65)
+
+LiveData object returned by live query handlers.
+
+## Example
+
+```typescript
+import { LiveData } from 'modelence/server';
+
+...
+
+ getTodos({ userId }, context) {
+   return new LiveData({
+     fetch: async () => await dbTodos.fetch({ userId }),
+     watch: ({ publish }) => {
+       // Subscribe to changes and call publish when data changes
+       listener.onChange(publish);
+
+       return () => {
+         // Cleanup function to unsubscribe from changes
+       };
+     }
+   });
+ }
+```
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Constructors
+
+### Constructor
+
+> **new LiveData**\<`T`\>(`config`): `LiveData`\<`T`\>
+
+Defined in: [packages/modelence/src/live-query/context.ts:69](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/live-query/context.ts#L69)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `config` | [`LiveDataConfig`](/sdk/modelence/server/classes/../interfaces/LiveDataConfig)\<`T`\> |
+
+#### Returns
+
+`LiveData`\<`T`\>
+
+## Properties
+
+| Property | Modifier | Type | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="fetch"></a> `fetch` | `readonly` | () => `T` \| `Promise`\<`T`\> | [packages/modelence/src/live-query/context.ts:66](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/live-query/context.ts#L66) |
+| <a id="watch"></a> `watch` | `readonly` | [`LiveQueryWatch`](/sdk/modelence/server/classes/../type-aliases/LiveQueryWatch) | [packages/modelence/src/live-query/context.ts:67](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/live-query/context.ts#L67) |

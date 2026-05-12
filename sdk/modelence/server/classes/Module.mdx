@@ -1,0 +1,111 @@
+---
+sidebar_position: 1
+title: Module
+---
+
+[API Reference](/sdk/modelence/server/classes/../../../index) / [modelence](/sdk/modelence/server/classes/../../index) / [server](/sdk/modelence/server/classes/../index) / Module
+
+Defined in: [packages/modelence/src/app/module.ts:43](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/app/module.ts#L43)
+
+The Module class is a core building block of a Modelence application that encapsulates related functionality.
+Modules can contain stores, queries, mutations, routes, cron jobs and configurations.
+
+## Example
+
+```ts
+const todoModule = new Module('todo', {
+  stores: [dbTodos],
+  queries: {
+    async getAll() {
+      // Fetch and return all Todo items
+    }
+  },
+  mutations: {
+    async create({ title }, { user }) {
+      // Create a new Todo item
+    }
+  }
+});
+```
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `TName` *extends* `string` | `string` |
+| `TSchema` *extends* `Record`\<`string`, `ConfigParams`\> | [`ConfigSchema`](/sdk/modelence/server/classes/../../index/type-aliases/ConfigSchema) |
+| `TQueries` *extends* `Queries` | `Queries` |
+| `TMutations` *extends* `Mutations` | `Mutations` |
+
+## Constructors
+
+### Constructor
+
+> **new Module**\<`TName`, `TSchema`, `TQueries`, `TMutations`\>(`name`, `options`): `Module`\<`TName`, `TSchema`, `TQueries`, `TMutations`\>
+
+Defined in: [packages/modelence/src/app/module.ts:85](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/app/module.ts#L85)
+
+Creates a new Module instance
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `name` | `TName` | The unique name of the module. This name is used to namespace queries, mutations, cron jobs and configuration values with a prefix (e.g. "todo.create") |
+| `options` | \{ `channels?`: [`ServerChannel`](/sdk/modelence/server/classes/ServerChannel)\<`unknown`\>[]; `configSchema?`: `TSchema`; `cronJobs?`: `Record`\<`string`, [`CronJobInputParams`](/sdk/modelence/server/classes/../type-aliases/CronJobInputParams)\>; `mutations?`: `TMutations`; `queries?`: `TQueries`; `rateLimits?`: [`RateLimitRule`](/sdk/modelence/server/classes/../type-aliases/RateLimitRule)[]; `routes?`: [`RouteDefinition`](/sdk/modelence/server/classes/../type-aliases/RouteDefinition)[]; `stores?`: [`Store`](/sdk/modelence/server/classes/Store)\<`any`, `any`\>[]; \} | Module configuration options |
+| `options.channels?` | [`ServerChannel`](/sdk/modelence/server/classes/ServerChannel)\<`unknown`\>[] | - |
+| `options.configSchema?` | `TSchema` | - |
+| `options.cronJobs?` | `Record`\<`string`, [`CronJobInputParams`](/sdk/modelence/server/classes/../type-aliases/CronJobInputParams)\> | - |
+| `options.mutations?` | `TMutations` | - |
+| `options.queries?` | `TQueries` | - |
+| `options.rateLimits?` | [`RateLimitRule`](/sdk/modelence/server/classes/../type-aliases/RateLimitRule)[] | - |
+| `options.routes?` | [`RouteDefinition`](/sdk/modelence/server/classes/../type-aliases/RouteDefinition)[] | - |
+| `options.stores?` | [`Store`](/sdk/modelence/server/classes/Store)\<`any`, `any`\>[] | - |
+
+#### Returns
+
+`Module`\<`TName`, `TSchema`, `TQueries`, `TMutations`\>
+
+## Methods
+
+### getConfig()
+
+> **getConfig**\<`K`\>(`key`): [`ValueType`](/sdk/modelence/server/classes/../type-aliases/ValueType)\<`TSchema`\[`K`\]\[`"type"`\]\>
+
+Defined in: [packages/modelence/src/app/module.ts:139](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/app/module.ts#L139)
+
+Retrieves a typed configuration value for this module.
+The return type is inferred from the schema — no casts needed.
+
+#### Example
+
+```ts
+const myModule = new Module('payments', {
+  configSchema: {
+    apiKey:     { type: 'secret', default: '', isPublic: false },
+    maxRetries: { type: 'number', default: 3,  isPublic: false },
+  },
+  mutations: {
+    async charge({ amount }) {
+      const apiKey     = myModule.getConfig('apiKey');     // string
+      const maxRetries = myModule.getConfig('maxRetries'); // number
+    },
+  },
+});
+```
+
+#### Type Parameters
+
+| Type Parameter |
+| ------ |
+| `K` *extends* `string` |
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `key` | `K` |
+
+#### Returns
+
+[`ValueType`](/sdk/modelence/server/classes/../type-aliases/ValueType)\<`TSchema`\[`K`\]\[`"type"`\]\>

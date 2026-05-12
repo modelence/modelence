@@ -1,0 +1,44 @@
+---
+sidebar_position: 1
+title: generateText
+---
+
+[API Reference](/sdk/@modelence/ai/functions/../../../index) / [@modelence/ai](/sdk/@modelence/ai/functions/../index) / generateText
+
+> **generateText**(`options`): `Promise`\<`GenerateTextResult`\<`ToolSet`, `Output`\<`any`, `any`, `any`\>\>\>
+
+Defined in: [index.ts:77](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/ai/src/index.ts#L77)
+
+Generates text using AI models with built-in Modelence configuration and telemetry.
+
+This is a wrapper around the AI SDK's generateText function that automatically
+configures providers using Modelence's server-side configuration system.
+
+## Example
+
+```typescript
+import { generateText } from '@modelence/ai';
+
+const response = await generateText({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  messages: [
+    { role: 'user', content: 'Write a haiku about programming' }
+  ],
+  temperature: 0.7
+});
+
+console.log(response.text);
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | [`GenerateTextOptions`](/sdk/@modelence/ai/functions/../type-aliases/GenerateTextOptions) | Configuration options for text generation |
+
+## Returns
+
+`Promise`\<`GenerateTextResult`\<`ToolSet`, `Output`\<`any`, `any`, `any`\>\>\>
+
+A promise that resolves to the generated text result

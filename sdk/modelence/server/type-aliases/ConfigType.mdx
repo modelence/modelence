@@ -1,0 +1,18 @@
+---
+sidebar_position: 1
+title: ConfigType
+---
+
+[API Reference](/sdk/modelence/server/type-aliases/../../../index) / [modelence](/sdk/modelence/server/type-aliases/../../index) / [server](/sdk/modelence/server/type-aliases/../index) / ConfigType
+
+> **ConfigType** = `"text"` \| `"string"` \| `"number"` \| `"boolean"` \| `"secret"`
+
+Defined in: [packages/modelence/src/config/types.ts:10](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/config/types.ts#L10)
+
+The available types for module configuration values.
+
+- `'string'` — A short text value (single line)
+- `'text'` — A longer text value (multi-line)
+- `'number'` — A numeric value
+- `'boolean'` — A true/false toggle
+- `'secret'` — A sensitive string value (e.g. API keys, tokens). Masked in the Cloud dashboard and cannot be marked as `isPublic`.

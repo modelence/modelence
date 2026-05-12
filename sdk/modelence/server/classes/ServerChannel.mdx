@@ -1,0 +1,59 @@
+---
+sidebar_position: 1
+title: ServerChannel
+---
+
+[API Reference](/sdk/modelence/server/classes/../../../index) / [modelence](/sdk/modelence/server/classes/../../index) / [server](/sdk/modelence/server/classes/../index) / ServerChannel
+
+Defined in: [packages/modelence/src/websocket/serverChannel.ts:11](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/serverChannel.ts#L11)
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Constructors
+
+### Constructor
+
+> **new ServerChannel**\<`T`\>(`category`, `canAccessChannel?`): `ServerChannel`\<`T`\>
+
+Defined in: [packages/modelence/src/websocket/serverChannel.ts:15](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/serverChannel.ts#L15)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `category` | `string` |
+| `canAccessChannel?` | `canAccessChannel` |
+
+#### Returns
+
+`ServerChannel`\<`T`\>
+
+## Properties
+
+| Property | Modifier | Type | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="canaccesschannel"></a> `canAccessChannel` | `readonly` | `null` \| `canAccessChannel` | [packages/modelence/src/websocket/serverChannel.ts:13](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/serverChannel.ts#L13) |
+| <a id="category"></a> `category` | `readonly` | `string` | [packages/modelence/src/websocket/serverChannel.ts:12](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/serverChannel.ts#L12) |
+
+## Methods
+
+### broadcast()
+
+> **broadcast**(`id`, `data`): `void`
+
+Defined in: [packages/modelence/src/websocket/serverChannel.ts:20](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/serverChannel.ts#L20)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+| `data` | `T` |
+
+#### Returns
+
+`void`

@@ -1,0 +1,87 @@
+---
+sidebar_position: 1
+title: ClientChannel
+---
+
+[API Reference](/sdk/modelence/client/classes/../../../index) / [modelence](/sdk/modelence/client/classes/../../index) / [client](/sdk/modelence/client/classes/../index) / ClientChannel
+
+Defined in: [packages/modelence/src/websocket/clientChannel.ts:3](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L3)
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Constructors
+
+### Constructor
+
+> **new ClientChannel**\<`T`\>(`category`, `onMessage`): `ClientChannel`\<`T`\>
+
+Defined in: [packages/modelence/src/websocket/clientChannel.ts:7](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L7)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `category` | `string` |
+| `onMessage` | (`data`) => `void` |
+
+#### Returns
+
+`ClientChannel`\<`T`\>
+
+## Properties
+
+| Property | Modifier | Type | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="category"></a> `category` | `readonly` | `string` | [packages/modelence/src/websocket/clientChannel.ts:4](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L4) |
+
+## Methods
+
+### init()
+
+> **init**(): `void`
+
+Defined in: [packages/modelence/src/websocket/clientChannel.ts:12](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L12)
+
+#### Returns
+
+`void`
+
+***
+
+### joinChannel()
+
+> **joinChannel**(`id`): `void`
+
+Defined in: [packages/modelence/src/websocket/clientChannel.ts:19](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L19)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+
+#### Returns
+
+`void`
+
+***
+
+### leaveChannel()
+
+> **leaveChannel**(`id`): `void`
+
+Defined in: [packages/modelence/src/websocket/clientChannel.ts:26](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/websocket/clientChannel.ts#L26)
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `id` | `string` |
+
+#### Returns
+
+`void`

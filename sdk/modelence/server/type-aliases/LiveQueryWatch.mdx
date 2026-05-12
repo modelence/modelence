@@ -1,0 +1,24 @@
+---
+sidebar_position: 1
+title: LiveQueryWatch
+---
+
+[API Reference](/sdk/modelence/server/type-aliases/../../../index) / [modelence](/sdk/modelence/server/type-aliases/../../index) / [server](/sdk/modelence/server/type-aliases/../index) / LiveQueryWatch
+
+> **LiveQueryWatch** = (`context`) => [`LiveQueryCleanup`](/sdk/modelence/server/type-aliases/LiveQueryCleanup) \| `void`
+
+Defined in: [packages/modelence/src/live-query/context.ts:25](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/live-query/context.ts#L25)
+
+Watch function that sets up real-time monitoring.
+Receives a context with publish callback to trigger re-fetches.
+Returns a cleanup function.
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `context` | `WatchContext` |
+
+## Returns
+
+[`LiveQueryCleanup`](/sdk/modelence/server/type-aliases/LiveQueryCleanup) \| `void`

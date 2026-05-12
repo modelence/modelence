@@ -1,0 +1,27 @@
+---
+sidebar_position: 1
+title: RouteHandler
+---
+
+[API Reference](/sdk/modelence/server/type-aliases/../../../index) / [modelence](/sdk/modelence/server/type-aliases/../../index) / [server](/sdk/modelence/server/type-aliases/../index) / RouteHandler
+
+> **RouteHandler**\<`T`\> = (`params`, `context`) => `Promise`\<[`RouteResponse`](/sdk/modelence/server/type-aliases/RouteResponse)\<`T`\>\> \| [`RouteResponse`](/sdk/modelence/server/type-aliases/RouteResponse)\<`T`\>
+
+Defined in: [packages/modelence/src/routes/types.ts:36](https://github.com/modelence/modelence/blob/078a50d2d448db41490835192d95b78a570cbd20/packages/modelence/src/routes/types.ts#L36)
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `params` | [`RouteParams`](/sdk/modelence/server/type-aliases/RouteParams) |
+| `context` | `Pick`\<`Context`, `"session"` \| `"user"`\> |
+
+## Returns
+
+`Promise`\<[`RouteResponse`](/sdk/modelence/server/type-aliases/RouteResponse)\<`T`\>\> \| [`RouteResponse`](/sdk/modelence/server/type-aliases/RouteResponse)\<`T`\>
