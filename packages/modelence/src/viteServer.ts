@@ -34,6 +34,9 @@ class ViteServer implements AppServer {
   // after build). Dev mode recomputes per request because HMR can shift the
   // module graph.
   private prodCssAssetsCache?: import('./ssr/collectCss').CssAssets;
+  // Same rationale as `prodCssAssetsCache`: the built index.html is immutable
+  // after build, so cache it to avoid a sync fs read on every request.
+  private prodTemplateCache?: string;
 
   enableSsr() {
     this.ssrEnabled = true;
@@ -203,8 +206,11 @@ class ViteServer implements AppServer {
       return template;
     }
 
-    const templatePath = path.resolve(process.cwd(), CLIENT_BUILD_DIR, 'index.html');
-    return fs.readFileSync(templatePath, 'utf-8');
+    if (!this.prodTemplateCache) {
+      const templatePath = path.resolve(process.cwd(), CLIENT_BUILD_DIR, 'index.html');
+      this.prodTemplateCache = fs.readFileSync(templatePath, 'utf-8');
+    }
+    return this.prodTemplateCache;
   }
 
   private async evaluateUserSsrEntry() {
