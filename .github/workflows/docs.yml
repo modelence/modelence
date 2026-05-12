@@ -11,6 +11,7 @@ on:
       - '!**/node_modules/**'
       - '!docs/web/api-reference/**'
       - '!.git/**'
+  pull_request:
 
 jobs:
   deploy:
@@ -45,7 +46,11 @@ jobs:
         working-directory: ./docs/gen
         run: npm run docs
 
+      - name: Check internal documentation links
+        run: ./packages/modelence/node_modules/.bin/tsx docs/scripts/check-internal-links.ts
+
       - name: Deploy to docs branch
+        if: github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

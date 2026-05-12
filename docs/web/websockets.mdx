@@ -573,20 +573,20 @@ const clientChannel = new ClientChannel<ChatMessage>(
 
 ### Server Types
 
-- **WebsocketServerProvider** - Interface for WebSocket server providers ([types.ts:5](../../packages/modelence/src/websocket/types.ts#L5))
-- **ServerChannel** - Server-side channel class ([serverChannel.ts:11](../../packages/modelence/src/websocket/serverChannel.ts#L11))
+- **WebsocketServerProvider** - Interface for WebSocket server providers ([API Reference](/api-reference/modelence/index/interfaces/WebsocketServerProvider))
+- **ServerChannel** - Server-side channel class ([API Reference](/api-reference/modelence/server/classes/ServerChannel))
 
 ### Client Types
 
-- **WebsocketClientProvider** - Interface for WebSocket client providers ([types.ts:17](../../packages/modelence/src/websocket/types.ts#L17))
-- **ClientChannel** - Client-side channel class ([clientChannel.ts:3](../../packages/modelence/src/websocket/clientChannel.ts#L3))
+- **WebsocketClientProvider** - Interface for WebSocket client providers ([API Reference](/api-reference/modelence/index/interfaces/WebsocketClientProvider))
+- **ClientChannel** - Client-side channel class ([API Reference](/api-reference/modelence/client/classes/ClientChannel))
 
 ### Functions
 
-- **startWebsockets** - Initialize WebSocket connection ([client.ts:15](../../packages/modelence/src/websocket/client.ts#L15))
-- **broadcast** - Send message to all clients in a channel ([serverChannel.ts:23](../../packages/modelence/src/websocket/serverChannel.ts#L23))
-- **joinChannel** - Join a specific channel ([clientChannel.ts:22](../../packages/modelence/src/websocket/clientChannel.ts#L22))
-- **leaveChannel** - Leave a specific channel ([clientChannel.ts:29](../../packages/modelence/src/websocket/clientChannel.ts#L29))
+- **startWebsockets** - Initialize WebSocket connection ([API Reference](/api-reference/modelence/client/functions/startWebsockets))
+- **broadcast** - Send message to all clients in a channel ([ServerChannel API Reference](/api-reference/modelence/server/classes/ServerChannel))
+- **joinChannel** - Join a specific channel ([ClientChannel API Reference](/api-reference/modelence/client/classes/ClientChannel))
+- **leaveChannel** - Leave a specific channel ([ClientChannel API Reference](/api-reference/modelence/client/classes/ClientChannel))
 
 ## Common Use Cases
 

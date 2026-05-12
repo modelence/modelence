@@ -114,7 +114,7 @@
             "pages": [
               "api-reference/modelence/server/functions/getConfig",
               "api-reference/modelence/client/functions/getConfig",
-              "api-reference/modelence/server/type-aliases/ConfigSchema",
+              "api-reference/modelence/index/type-aliases/ConfigSchema",
               "api-reference/modelence/server/type-aliases/ConfigType"
             ]
           },
@@ -136,7 +136,7 @@
           {
             "group": "Files",
             "pages": [
-              "api-reference/modelence/server/functions/uploadFile",
+              "api-reference/modelence/client/functions/uploadFile",
               "api-reference/modelence/server/functions/getUploadUrl",
               "api-reference/modelence/server/functions/getFileUrl",
               "api-reference/modelence/server/functions/downloadFile",
