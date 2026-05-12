@@ -180,7 +180,7 @@ export async function rerank<T extends Record<string, any>>(
 Create an `index.ts` file to tie everything together:
 
 ```typescript title="src/server/voyage/index.ts"
-import { Module } from 'modelence/server';
+import { Module, ObjectId } from 'modelence/server';
 import { z } from 'zod';
 import { dbDocuments } from './db';
 import { generateEmbedding, rerank } from './voyage';
@@ -254,7 +254,7 @@ export default new Module('voyage', {
         id: z.string(),
       }).parse(args);
 
-      await dbDocuments.deleteOne({ id });
+      await dbDocuments.deleteOne({ _id: new ObjectId(id) });
       return { success: true };
     },
   },

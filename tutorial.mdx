@@ -90,7 +90,7 @@ Modules are the core building blocks of a Modelence application. They help you o
 Create a new file at `src/server/todo/index.ts`:
 
 ```typescript title="src/server/todo/index.ts"
-import { Module } from 'modelence/server';
+import { Module, ObjectId } from 'modelence/server';
 import { dbTodos } from './db';
 
 export default new Module('todo', {
@@ -125,7 +125,7 @@ export default new Module('todo', {
       return insertedId;
     },
     async update({ id, title, dueDate, isCompleted }) {
-      return await dbTodos.updateOne({ id }, {
+      return await dbTodos.updateOne(id, {
         $set: {
           title,
           dueDate,
@@ -134,7 +134,7 @@ export default new Module('todo', {
       });
     },
     async delete({ id }) {
-      return await dbTodos.deleteOne({ id });
+      return await dbTodos.deleteOne({ _id: new ObjectId(id) });
     }
   },
 });
