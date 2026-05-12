@@ -259,9 +259,9 @@ export default new Module('voyage', {
     },
   },
   configSchema: {
+    // 'secret' values are always server-only and masked in the Cloud dashboard; isPublic is not allowed.
     apiKey: {
-      type: 'string',
-      isPublic: false,
+      type: 'secret',
       default: '',
     },
   },
