@@ -100,6 +100,7 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
+    maxAge: time.days(7),
   });
 }
 

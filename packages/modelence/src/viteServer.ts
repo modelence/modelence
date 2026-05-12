@@ -104,26 +104,23 @@ class ViteServer implements AppServer {
 
   private async handleSsr(req: express.Request, res: express.Response) {
     const template = await this.getTemplate(req.originalUrl);
-    await this.evaluateUserSsrEntry();
-
-    // Lazy imports keep react-dom/server (and friends) out of the boot path
-    // for non-SSR requests.
-    const [{ renderSsrTreeStream }, { _getSsrSnapshot }, { getCallContext }, cssModule] =
-      await Promise.all([
-        import('./ssr/render'),
-        import('./client/renderApp'),
-        import('./app/server'),
-        import('./ssr/collectCss'),
-      ]);
-
-    const callContext = await getCallContext(req, res);
-    const snapshot = _getSsrSnapshot();
+    const snapshot = await this.captureSsrSnapshot();
     if (!snapshot) {
       throw new Error(
         'Modelence SSR is enabled but no SSR snapshot was captured. ' +
           "Make sure 'src/client/index.tsx' calls renderApp(...) from 'modelence/client'."
       );
     }
+
+    // Lazy imports keep react-dom/server (and friends) out of the boot path
+    // for non-SSR requests.
+    const [{ renderSsrTreeStream }, { getCallContext }, cssModule] = await Promise.all([
+      import('./ssr/render'),
+      import('./app/server'),
+      import('./ssr/collectCss'),
+    ]);
+
+    const callContext = await getCallContext(req, res);
 
     const cssAssets = this.collectCssAssets(cssModule);
 
@@ -213,25 +210,31 @@ class ViteServer implements AppServer {
     return this.prodTemplateCache;
   }
 
-  private async evaluateUserSsrEntry() {
+  private async captureSsrSnapshot(): Promise<
+    import('./client/renderApp').RenderAppOptions | null
+  > {
     // Evaluating the user's entry runs its top-level renderApp(...) which
-    // populates the SSR snapshot.
+    // populates the SSR snapshot. Read the snapshot synchronously right
+    // after evaluation so concurrent requests can't overwrite it on
+    // globalThis between the load and the read.
+    const { _getSsrSnapshot } = await import('./client/renderApp');
+
     if (this.isDev()) {
       // Re-evaluate every request so dev-mode HMR edits apply.
       if (!this.viteServer) {
         throw new Error('Vite dev server not initialized');
       }
       await this.viteServer.ssrLoadModule(SSR_ENTRY_VIRTUAL_PATH);
-      return;
+      return _getSsrSnapshot();
     }
 
     // In production, Node caches the dynamic import. Evaluate exactly once
     // so the snapshot is populated on first request and reused thereafter.
-    if (this.prodEntryLoaded) {
-      return;
+    if (!this.prodEntryLoaded) {
+      await import(path.resolve(process.cwd(), SSR_BUILD_DIR, 'index.mjs'));
+      this.prodEntryLoaded = true;
     }
-    await import(path.resolve(process.cwd(), SSR_BUILD_DIR, 'index.mjs'));
-    this.prodEntryLoaded = true;
+    return _getSsrSnapshot();
   }
 
   private serveStaticShell(res: express.Response) {
