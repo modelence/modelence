@@ -1007,10 +1007,10 @@ export class Store<
    * @returns The result of the delete operation
    */
   async deleteOne(
-    selector: TypedFilter<this['_type']>,
+    selector: TypedFilter<this['_type']> | string | ObjectId,
     options?: { session?: ClientSession }
   ): Promise<DeleteResult> {
-    return await this.requireCollection().deleteOne(selector as Filter<this['_type']>, options);
+    return await this.requireCollection().deleteOne(this.getSelector(selector), options);
   }
 
   /**
