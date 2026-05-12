@@ -72,75 +72,75 @@
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "SDK Reference",
         "groups": [
           {
             "group": "Overview",
             "pages": [
-              "api-reference/modelence/index",
-              "api-reference/@modelence/react-query/index",
-              "api-reference/@modelence/ai/index",
-              "api-reference/@modelence/next/index",
-              "api-reference/@modelence/auth-ui/index"
+              "sdk/modelence/index",
+              "sdk/@modelence/react-query/index",
+              "sdk/@modelence/ai/index",
+              "sdk/@modelence/next/index",
+              "sdk/@modelence/auth-ui/index"
             ]
           },
           {
             "group": "Core",
             "pages": [
-              "api-reference/modelence/server/functions/startApp",
-              "api-reference/modelence/server/classes/Module",
-              "api-reference/modelence/client/functions/callMethod"
+              "sdk/modelence/server/functions/startApp",
+              "sdk/modelence/server/classes/Module",
+              "sdk/modelence/client/functions/callMethod"
             ]
           },
           {
             "group": "Authentication",
             "pages": [
-              "api-reference/modelence/client/functions/signupWithPassword",
-              "api-reference/modelence/client/functions/loginWithPassword",
-              "api-reference/modelence/client/functions/logout",
-              "api-reference/modelence/client/functions/useSession",
-              "api-reference/modelence/server/variables/dbUsers"
+              "sdk/modelence/client/functions/signupWithPassword",
+              "sdk/modelence/client/functions/loginWithPassword",
+              "sdk/modelence/client/functions/logout",
+              "sdk/modelence/client/functions/useSession",
+              "sdk/modelence/server/variables/dbUsers"
             ]
           },
           {
             "group": "Database",
             "pages": [
-              "api-reference/modelence/server/classes/Store",
-              "api-reference/modelence/server/variables/schema"
+              "sdk/modelence/server/classes/Store",
+              "sdk/modelence/server/variables/schema"
             ]
           },
           {
             "group": "Config",
             "pages": [
-              "api-reference/modelence/server/functions/getConfig",
-              "api-reference/modelence/client/functions/getConfig",
-              "api-reference/modelence/server/type-aliases/ConfigSchema",
-              "api-reference/modelence/server/type-aliases/ConfigType"
+              "sdk/modelence/server/functions/getConfig",
+              "sdk/modelence/client/functions/getConfig",
+              "sdk/modelence/server/type-aliases/ConfigSchema",
+              "sdk/modelence/server/type-aliases/ConfigType"
             ]
           },
           {
             "group": "Rate Limits",
             "pages": [
-              "api-reference/modelence/server/type-aliases/RateLimitRule",
-              "api-reference/modelence/server/functions/consumeRateLimit"
+              "sdk/modelence/server/type-aliases/RateLimitRule",
+              "sdk/modelence/server/functions/consumeRateLimit"
             ]
           },
           {
             "group": "Email",
             "pages": [
-              "api-reference/@modelence/smtp/index",
-              "api-reference/@modelence/resend/index",
-              "api-reference/@modelence/aws-ses/index"
+              "sdk/@modelence/smtp/index",
+              "sdk/@modelence/resend/index",
+              "sdk/@modelence/aws-ses/index"
             ]
           },
           {
             "group": "Files",
             "pages": [
-              "api-reference/modelence/server/functions/uploadFile",
-              "api-reference/modelence/server/functions/getUploadUrl",
-              "api-reference/modelence/server/functions/getFileUrl",
-              "api-reference/modelence/server/functions/downloadFile",
-              "api-reference/modelence/server/functions/deleteFile"
+              "sdk/modelence/server/functions/uploadFile",
+              "sdk/modelence/server/functions/getUploadUrl",
+              "sdk/modelence/server/functions/getFileUrl",
+              "sdk/modelence/server/functions/downloadFile",
+              "sdk/modelence/server/functions/deleteFile"
             ]
           }
         ]
@@ -176,8 +176,8 @@
   },
   "redirects": [
     {
-      "source": "/api-reference/intro",
-      "destination": "/api-reference"
+      "source": "/api-reference/:slug*",
+      "destination": "/sdk/:slug*"
     },
     {
       "source": "/quick-start/intro",

@@ -11,7 +11,7 @@
     "../../packages/resend",
     "../../packages/aws-ses"
   ],
-  "out": "../web/api-reference",
+  "out": "../web/sdk",
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
   "excludePrivate": true,
   "excludeInternal": true,
