@@ -9,7 +9,7 @@ on:
       - '!dist/**'
       - '!.modelence/**'
       - '!**/node_modules/**'
-      - '!docs/web/api-reference/**'
+      - '!docs/web/sdk/**'
       - '!.git/**'
 
 jobs:
