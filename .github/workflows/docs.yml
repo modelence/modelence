@@ -42,9 +42,18 @@ jobs:
         working-directory: ./docs/gen
         run: npm ci
 
-      - name: Generate TypeDoc
+      - name: Generate TypeDoc and sync API Reference nav
         working-directory: ./docs/gen
         run: npm run docs
+
+      - name: Verify docs.json API Reference nav is in sync
+        run: |
+          if ! git diff --quiet -- docs/web/docs.json; then
+            echo "::error::docs/web/docs.json is out of sync with the generated API Reference tree."
+            echo "Run 'npm run docs' in docs/gen and commit the updated docs/web/docs.json."
+            git diff -- docs/web/docs.json
+            exit 1
+          fi
 
       - name: Check internal documentation links
         run: ./packages/modelence/node_modules/.bin/tsx docs/scripts/check-internal-links.ts

@@ -4,12 +4,14 @@
   "description": "",
   "main": " ",
   "scripts": {
-    "docs": "typedoc"
+    "docs": "typedoc && npm run sync-nav",
+    "sync-nav": "tsx ../scripts/sync-api-reference-nav.ts"
   },
   "author": "",
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "remark-mdx": "^3.1.0",
+    "tsx": "^4.19.3",
     "typedoc": "^0.28.1",
     "typedoc-plugin-frontmatter": "^1.3.0",
     "typedoc-plugin-markdown": "^4.6.0"
