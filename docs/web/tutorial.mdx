@@ -46,7 +46,9 @@ export const dbTodos = new Store('todos', {
     { key: { dueDate: 1 } },
   ],
 
-  // Add custom methods to documents
+  // Add custom methods to documents. These are available on instances
+  // returned by server-side Store methods (e.g. findById, fetch).
+  // They are stripped when data is serialized over the wire to the client.
   methods: {
     isOverdue() {
       return this.dueDate ? this.dueDate < new Date() : false;
@@ -90,7 +92,7 @@ Modules are the core building blocks of a Modelence application. They help you o
 Create a new file at `src/server/todo/index.ts`:
 
 ```typescript title="src/server/todo/index.ts"
-import { Module, ObjectId } from 'modelence/server';
+import { Module } from 'modelence/server';
 import { dbTodos } from './db';
 
 export default new Module('todo', {
@@ -134,7 +136,7 @@ export default new Module('todo', {
       });
     },
     async delete({ id }) {
-      return await dbTodos.deleteOne({ _id: new ObjectId(id) });
+      return await dbTodos.deleteOne(id);
     }
   },
 });
@@ -185,30 +187,71 @@ Create a new component at `src/client/TodosPage.tsx`:
 ```tsx title="src/client/TodosPage.tsx"
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { modelenceQuery, modelenceMutation } from '@modelence/react-query';
+import {
+  modelenceQuery,
+  modelenceMutation,
+  createQueryKey
+} from '@modelence/react-query';
+
+// Helper: Store `methods` only live on server-side document instances and
+// are stripped when results are serialized over the wire. Reimplement
+// `isOverdue` on the client against the plain JSON shape.
+function isOverdue(todo: { dueDate?: string | Date | null }): boolean {
+  if (!todo.dueDate) return false;
+  return new Date(todo.dueDate) < new Date();
+}
 
 export default function TodosPage() {
   const [newTodoTitle, setNewTodoTitle] = useState('');
   const queryClient = useQueryClient();
-  
+
   const { data: todos, isPending: isLoading, error } = useQuery(
     modelenceQuery('todo.getAll')
   );
 
-  const { mutate: updateTodo } = useMutation({
-    ...modelenceMutation('todo.update'),
+  // `modelenceQuery('todo.getAll')` uses queryKey `['todo.getAll', {}]`, so
+  // invalidation must match that exact shape. `createQueryKey` builds it
+  // for us — passing `['todo.getAll']` would silently no-op.
+  const invalidateTodos = () => {
+    queryClient.invalidateQueries({ queryKey: createQueryKey('todo.getAll') });
+  };
+
+  const { mutate: createTodo, isPending: isCreating } = useMutation({
+    ...modelenceMutation('todo.create'),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['todo.getAll'] });
+      setNewTodoTitle('');
+      invalidateTodos();
     },
   });
 
+  const { mutate: updateTodo } = useMutation({
+    ...modelenceMutation('todo.update'),
+    onSuccess: invalidateTodos,
+  });
+
+  const { mutate: deleteTodo } = useMutation({
+    ...modelenceMutation('todo.delete'),
+    onSuccess: invalidateTodos,
+  });
+
+  const handleCreateTodo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = newTodoTitle.trim();
+    if (!title) return;
+    createTodo({ title });
+  };
+
   const handleToggleComplete = (todo: any) => {
     updateTodo({
-      id: todo.id,
+      id: todo._id,
       title: todo.title,
       dueDate: todo.dueDate,
       isCompleted: !todo.isCompleted
     });
+  };
+
+  const handleDeleteTodo = (id: string) => {
+    deleteTodo({ id });
   };
 
   if (isLoading) {
@@ -258,7 +301,7 @@ export default function TodosPage() {
         ) : (
           todos?.map((todo) => (
             <div
-              key={todo.id}
+              key={todo._id}
               className="flex items-center gap-3 p-3 border border-gray-200 rounded-md"
             >
               <input
@@ -278,7 +321,7 @@ export default function TodosPage() {
               </span>
               {todo.dueDate && (
                 <span className={`text-sm px-2 py-1 rounded ${
-                  todo.isOverdue() 
+                  isOverdue(todo)
                     ? 'bg-red-100 text-red-700' 
                     : 'bg-gray-100 text-gray-600'
                 }`}>
@@ -286,7 +329,7 @@ export default function TodosPage() {
                 </span>
               )}
               <button
-                onClick={() => handleDeleteTodo(todo.id)}
+                onClick={() => handleDeleteTodo(todo._id)}
                 className="px-3 py-1 text-red-600 hover:bg-red-50 rounded"
               >
                 Delete
