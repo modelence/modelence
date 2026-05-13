@@ -14,7 +14,7 @@ export const AppProvider =
     : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
-export { callMethod, MethodError, type MethodArgs } from './client/method';
+export { callMethod, MethodError, type MethodArgs, type CallMethodOptions } from './client/method';
 export { useSession } from './client/session';
 export {
   signupWithPassword,

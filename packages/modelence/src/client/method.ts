@@ -27,11 +27,41 @@ export type CallMethodOptions = {
   errorHandler?: (error: Error, methodName: string) => void;
 };
 
+/**
+ * Calls a server-side method (query or mutation) defined on a Modelence module.
+ *
+ * Both `args` and `options` are optional. Use the type parameter `T` to type the return value.
+ *
+ * @example
+ * ```typescript
+ * import { callMethod } from 'modelence/client';
+ *
+ * // No arguments
+ * const todos = await callMethod<Todo[]>('todo.getAll');
+ *
+ * // With arguments
+ * const todo = await callMethod<Todo>('todo.getOne', { id: '123' });
+ *
+ * // With a custom error handler
+ * const created = await callMethod<Todo>(
+ *   'todo.create',
+ *   { title: 'Buy groceries' },
+ *   { errorHandler: (error, methodName) => console.error(methodName, error) }
+ * );
+ * ```
+ *
+ * @param methodName - Fully qualified method name, e.g. `'todo.getAll'`.
+ * @param args - Arguments passed to the server-side method. Defaults to `{}`.
+ * @param options - Call-site options such as a custom {@link CallMethodOptions.errorHandler}. Defaults to `{}`.
+ * @returns A promise that resolves to the method's return value.
+ */
 export async function callMethod<T = unknown>(
   methodName: string,
-  args: MethodArgs = {},
-  options: CallMethodOptions = {}
+  args?: MethodArgs,
+  options?: CallMethodOptions
 ): Promise<T> {
+  args = args ?? {};
+  options = options ?? {};
   try {
     return await call<T>(`/api/_internal/method/${methodName}`, args);
   } catch (error) {
