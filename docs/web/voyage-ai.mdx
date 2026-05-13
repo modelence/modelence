@@ -52,7 +52,7 @@ This creates a ready-to-use project with all the code from this tutorial pre-con
 
 5. **Add your Voyage AI API key**:
    - Get your API key from [voyageai.com](https://www.voyageai.com/)
-   - Add it as the value of `MODELENCE_VOYAGEAI_API_KEY` in your `.modelence.env` file
+   - In the [Modelence Cloud dashboard](https://cloud.modelence.com/), open your environment, click the **Configs** tab, and set `voyage.apiKey` to your API key. The value is stored encrypted and delivered to your app at runtime.
 
 6. **Run the project**:
    ```bash
@@ -122,9 +122,9 @@ let voyageClient: VoyageAIClient | null = null;
 
 export function getVoyageClient() {
   if (!voyageClient) {
-    const apiKey = getConfig('voyage.apiKey') as string || process.env.VOYAGE_API_KEY;
+    const apiKey = getConfig('voyage.apiKey') as string;
     if (!apiKey) {
-      throw new Error('VOYAGE_API_KEY environment variable is not set');
+      throw new Error('MODELENCE_VOYAGEAI_API_KEY is not set');
     }
     voyageClient = new VoyageAIClient({ apiKey });
   }
@@ -293,25 +293,18 @@ startApp({
 
 ## Step 6: Configure the API Key
 
-You can configure the Voyage AI API key in two ways:
+Set your Voyage AI API key from the [Modelence Cloud dashboard](https://cloud.modelence.com/):
 
-### Option 1: Environment Variable
+1. Open your environment
+2. Click the **Configs** tab
+3. Add (or edit) the `voyage.apiKey` config and paste your API key as the value
+4. Save — the new value takes effect on the next server boot
 
-Add to your `.env` file:
+This matches the `apiKey` entry declared in the module's `configSchema` in Step 4 (which the `voyage` module namespace prefixes to `voyage.apiKey`). Because it is declared as `type: 'secret'`, the value is stored encrypted, never sent to the client, and masked in the dashboard. At runtime, the `getConfig('voyage.apiKey')` call in `voyage.ts` reads it transparently.
 
-```bash
-VOYAGE_API_KEY=your_api_key_here
-```
-
-### Option 2: Module Config
-
-Store it securely in MongoDB using Modelence's config system:
-
-```typescript
-import { setConfig } from 'modelence/server';
-
-await setConfig('voyage.apiKey', 'your_api_key_here');
-```
+<Tip>
+Rotating the key later? Just update the same `voyage.apiKey` config in the dashboard — no code changes or redeploys needed.
+</Tip>
 
 ## Step 7: Build the Frontend
 
