@@ -268,7 +268,7 @@ describe('auth/user', () => {
       );
     });
 
-    test('array override fully replaces defaults for that bucket', () => {
+    test('array override merges into defaults by (bucket, type, window)', () => {
       const rules = buildAuthRateLimits({
         signup: [
           { type: 'ip', window: 15 * 60 * 1000, limit: 10 },
@@ -283,24 +283,38 @@ describe('auth/user', () => {
       ]);
     });
 
-    test('array override can add windows beyond the built-in two', () => {
+    test('array override of a single window preserves the other defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 5 }],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toHaveLength(2);
+      const signup15m = signupRules.find((r) => r.window === 15 * 60 * 1000);
+      const signupDay = signupRules.find((r) => r.window === 24 * 60 * 60 * 1000);
+      expect(signup15m?.limit).toBe(5);
+      expect(signupDay?.limit).toBe(200);
+    });
+
+    test('array override can add new windows alongside the defaults', () => {
       const rules = buildAuthRateLimits({
         signup: [
           { type: 'ip', window: 60 * 1000, limit: 2 },
-          { type: 'ip', window: 15 * 60 * 1000, limit: 10 },
           { type: 'ip', window: 60 * 60 * 1000, limit: 20 },
-          { type: 'ip', window: 24 * 60 * 60 * 1000, limit: 30 },
         ],
       });
 
       const signupRules = rules.filter((r) => r.bucket === 'signup');
+      // 2 defaults + 2 additions = 4
       expect(signupRules).toHaveLength(4);
+      const windows = signupRules.map((r) => r.window).sort((a, b) => a - b);
+      expect(windows).toEqual([60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000, 24 * 60 * 60 * 1000]);
     });
 
-    test('array override can drop the bucket to zero rules', () => {
+    test('empty array override leaves the bucket defaults intact', () => {
       const rules = buildAuthRateLimits({ signup: [] });
       const signupRules = rules.filter((r) => r.bucket === 'signup');
-      expect(signupRules).toHaveLength(0);
+      expect(signupRules).toHaveLength(2);
     });
 
     test('array override on one bucket leaves other buckets at defaults', () => {
@@ -333,9 +347,13 @@ describe('auth/user', () => {
         signin: { perIp15Minutes: 9 },
       });
 
+      // Array override merges with defaults — per-day default preserved
       const signup = rules.filter((r) => r.bucket === 'signup');
-      expect(signup).toHaveLength(1);
-      expect(signup[0].limit).toBe(7);
+      expect(signup).toHaveLength(2);
+      const signup15m = signup.find((r) => r.window === 15 * 60 * 1000);
+      const signupDay = signup.find((r) => r.window === 24 * 60 * 60 * 1000);
+      expect(signup15m?.limit).toBe(7);
+      expect(signupDay?.limit).toBe(200);
 
       const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
       expect(signin15m?.limit).toBe(9);

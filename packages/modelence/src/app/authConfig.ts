@@ -62,11 +62,18 @@ export type LegacyPasswordResetRateLimits = {
 /**
  * Per-action rate limit overrides for authentication endpoints.
  *
- * Each bucket accepts an array of rules; when provided, the array **fully
- * replaces** the built-in defaults for that bucket. Unspecified buckets keep
- * their defaults.
+ * Each bucket accepts an array of rules that are merged into the built-in
+ * defaults by `(type, window)` tuple:
+ *   - A rule whose `(type, window)` matches a default replaces that default's
+ *     `limit`.
+ *   - A rule whose `(type, window)` does not match any default is added as
+ *     an extra rule for the bucket.
+ *   - Defaults whose `(type, window)` is not overridden are kept.
  *
- * @example
+ * This means you can tighten a single window without accidentally dropping
+ * the other built-in protections for that bucket.
+ *
+ * @example Tighten the 15-minute signup cap; per-day default is preserved.
  * ```typescript
  * import { startApp, time } from 'modelence/server';
  *
@@ -74,8 +81,20 @@ export type LegacyPasswordResetRateLimits = {
  *   auth: {
  *     rateLimits: {
  *       signup: [
- *         { type: 'ip', window: time.minutes(15), limit: 10 },
- *         { type: 'ip', window: time.days(1), limit: 30 },
+ *         { type: 'ip', window: time.minutes(15), limit: 5 },
+ *       ],
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @example Add an extra window alongside the defaults.
+ * ```typescript
+ * startApp({
+ *   auth: {
+ *     rateLimits: {
+ *       signup: [
+ *         { type: 'ip', window: time.minutes(1), limit: 2 },
  *       ],
  *     },
  *   },
@@ -199,8 +218,11 @@ export type AuthConfig = {
   oauthAccountLinking?: 'auto' | 'manual';
   errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
   /**
-   * Overrides the built-in rate limits for authentication endpoints.
-   * Only the fields you specify are overridden; all others keep their defaults.
+   * Overrides the built-in rate limits for authentication endpoints. Each rule
+   * you provide is merged into the defaults by `(bucket, type, window)`:
+   * matching tuples replace the default `limit`, new tuples are added, and
+   * unspecified defaults are preserved. See {@link AuthRateLimitsConfig} for
+   * full semantics and examples.
    */
   rateLimits?: AuthRateLimitsConfig;
 };
