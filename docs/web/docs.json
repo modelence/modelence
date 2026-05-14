@@ -142,6 +142,18 @@
               "api-reference/modelence/server/functions/downloadFile",
               "api-reference/modelence/server/functions/deleteFile"
             ]
+          },
+          {
+            "group": "WebSockets",
+            "pages": [
+              "api-reference/modelence/server/classes/ServerChannel",
+              "api-reference/modelence/client/classes/ClientChannel",
+              "api-reference/modelence/client/functions/startWebsockets",
+              "api-reference/modelence/index/interfaces/WebsocketServerProvider",
+              "api-reference/modelence/index/interfaces/WebsocketClientProvider",
+              "api-reference/modelence/client/functions/setWebsocketClientProvider",
+              "api-reference/modelence/client/functions/getWebsocketClientProvider"
+            ]
           }
         ]
       }
