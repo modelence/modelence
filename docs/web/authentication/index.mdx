@@ -17,6 +17,15 @@ Modelence authentication includes:
 - **[Rate Limiting](/authentication/rate-limiting)** - Built-in protection against brute force attacks
 - **[Google Sign-In](/authentication/google-sign-in)** - OAuth authentication with Google accounts
 
+## Where to configure what
+
+Modelence splits authentication configuration across two top-level keys in `startApp`:
+
+- **`auth: { ... }`** — authentication *lifecycle*: validation hooks (`validateSignup`, `validateProfileUpdate`), event callbacks (`onAfterLogin`, `onAfterSignup`, `onAfterEmailVerification`, …), `generateHandle`, OAuth linking behavior, and `rateLimits`. See [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) and [Hooks](/authentication/hooks).
+- **`email: { ... }`** — email *delivery*: the email provider, sender address, and per-flow templates/subjects/redirect URLs for `verification` and `passwordReset`. See [Email Configuration](/email).
+
+The two are complementary: `email:` controls whether and how the verification/reset email is delivered; `auth:` controls what happens when the user clicks the link (and the rest of the auth lifecycle).
+
 ## How Authentication Works
 
 ### Session Management
