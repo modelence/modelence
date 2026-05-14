@@ -259,7 +259,7 @@ describe('app/server getCallContext', () => {
       roles: ['user'],
     } as never);
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token');
     expect(ctx.session?.authToken).toBe('session-token');
@@ -284,7 +284,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.session).toBeNull();
     expect(ctx.roles).toEqual(['guest']);
@@ -298,7 +298,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo.ip).toBe('192.168.0.10');
   });
@@ -315,7 +315,7 @@ describe('app/server getCallContext', () => {
       roles: ['user'],
     } as never);
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(mockAuthenticate).toHaveBeenCalledWith('body-token');
     expect(ctx.session?.authToken).toBe('body-token');
@@ -327,7 +327,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.session).toBeNull();
     expect(ctx.roles).toEqual(['guest']);
@@ -339,7 +339,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.clientInfo).toEqual({
       screenWidth: 0,
@@ -363,7 +363,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo).toEqual({
       ip: undefined,
@@ -383,7 +383,7 @@ describe('app/server getCallContext', () => {
     });
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
   });
@@ -395,7 +395,7 @@ describe('app/server getCallContext', () => {
     req.headers['x-forwarded-for'] = ['1.2.3.4', '5.6.7.8'];
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
   });
@@ -407,7 +407,7 @@ describe('app/server getCallContext', () => {
     req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
     mockGetMongodbUri.mockReturnValue('');
 
-    const ctx = await getCallContext(req);
+    const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo.ip).toBe('10.0.0.5');
   });

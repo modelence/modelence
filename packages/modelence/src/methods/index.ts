@@ -1,7 +1,7 @@
 import { requireServer } from '../utils';
 import { startTransaction } from '@/telemetry';
 import { requireAccess } from '../auth/role';
-import { Method, MethodDefinition, MethodType, Args, Context } from './types';
+import { Method, MethodDefinition, MethodType, Args, Context, HttpContext } from './types';
 import { LiveData } from '../live-query';
 
 const methods: Record<string, Method<unknown>> = {};
@@ -64,7 +64,7 @@ function _createMethodInternal<T = unknown>(
   methods[name] = { type, name, handler, permissions };
 }
 
-export async function runMethod(name: string, args: Args, context: Context) {
+export async function runMethod(name: string, args: Args, context: HttpContext) {
   requireServer();
 
   const method = methods[name];

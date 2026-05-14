@@ -302,7 +302,7 @@ export async function handleOAuthUserAuthentication(
     [`authMethods.${userData.providerName}.id`]: userData.id,
   });
 
-  const { session, connectionInfo } = await getCallContext(req);
+  const { session, connectionInfo } = await getCallContext(req, res);
 
   if (existingUser) {
     return handleExistingProviderLogin(res, userData, existingUser, session, connectionInfo);
@@ -396,7 +396,7 @@ export async function handleOAuthProviderLink(
   userData: OAuthUserData
 ): Promise<void> {
   const authConfig = getAuthConfig();
-  const { session, connectionInfo } = await getCallContext(req);
+  const { session, connectionInfo } = await getCallContext(req, res);
 
   if (!session?.userId) {
     clearOAuthLinkCookie(res);
