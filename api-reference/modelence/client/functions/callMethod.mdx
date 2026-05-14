@@ -5,9 +5,32 @@ title: callMethod
 
 [API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / callMethod
 
-> **callMethod**\<`T`\>(`methodName`, `args`, `options`): `Promise`\<`T`\>
+> **callMethod**\<`T`\>(`methodName`, `args?`, `options?`): `Promise`\<`T`\>
 
-Defined in: [packages/modelence/src/client/method.ts:30](https://github.com/modelence/modelence/blob/89afaa3ce4e5128eef3f82d5bfd415c46152bf99/packages/modelence/src/client/method.ts#L30)
+Defined in: [packages/modelence/src/client/method.ts:58](https://github.com/modelence/modelence/blob/9d4da98ed186cef49c1537617898d761a434daf6/packages/modelence/src/client/method.ts#L58)
+
+Calls a server-side method (query or mutation) defined on a Modelence module.
+
+Both `args` and `options` are optional. Use the type parameter `T` to type the return value.
+
+## Example
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+// No arguments
+const todos = await callMethod<Todo[]>('todo.getAll');
+
+// With arguments
+const todo = await callMethod<Todo>('todo.getOne', { id: '123' });
+
+// With a custom error handler
+const created = await callMethod<Todo>(
+  'todo.create',
+  { title: 'Buy groceries' },
+  { errorHandler: (error, methodName) => console.error(methodName, error) }
+);
+```
 
 ## Type Parameters
 
@@ -17,12 +40,14 @@ Defined in: [packages/modelence/src/client/method.ts:30](https://github.com/mode
 
 ## Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `methodName` | `string` |
-| `args` | [`MethodArgs`](/api-reference/modelence/client/functions/../type-aliases/MethodArgs) |
-| `options` | `CallMethodOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `methodName` | `string` | Fully qualified method name, e.g. `'todo.getAll'`. |
+| `args?` | [`MethodArgs`](/api-reference/modelence/client/functions/../type-aliases/MethodArgs) | Arguments passed to the server-side method. Defaults to `{}`. |
+| `options?` | [`CallMethodOptions`](/api-reference/modelence/client/functions/../type-aliases/CallMethodOptions) | Call-site options such as a custom [CallMethodOptions.errorHandler](../type-aliases/CallMethodOptions#errorhandler). Defaults to `{}`. |
 
 ## Returns
 
 `Promise`\<`T`\>
+
+A promise that resolves to the method's return value.
