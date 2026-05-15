@@ -186,27 +186,88 @@ export type AuthOption = {
  * ```
  */
 export type AuthConfig = {
-  // Optional pre-signup validation hook.
+  /**
+   * Pre-signup validation hook. Runs before a new user is created during
+   * email/password signup, after format checks but before duplicate detection.
+   * Throw to reject the signup — the thrown message is surfaced to the client.
+   *
+   * Receives the raw signup payload (`email`, `password`, and optional
+   * `firstName`, `lastName`, `avatarUrl`, `handle`). May be async.
+   */
   validateSignup?: (props: SignupProps) => void | Promise<void>;
+
+  /**
+   * Pre-update validation hook. Runs before a user's profile fields
+   * (`firstName`, `lastName`, `avatarUrl`, `handle`) are written.
+   * Throw to reject the update — the thrown message is surfaced to the client.
+   * May be async.
+   */
   validateProfileUpdate?: (props: UpdateProfileProps) => void | Promise<void>;
 
-  // After Authentication callbacks
+  /**
+   * Fires after a successful login (email/password or OAuth) once the session
+   * has been linked to the user. Receives `{ provider, user, session, connectionInfo }`.
+   * Use for analytics, audit logging, or post-login side effects.
+   */
   onAfterLogin?: (props: AuthSuccessProps) => void;
+
+  /**
+   * Fires when a login attempt fails. Receives `{ provider, error, session, connectionInfo }`.
+   * Use for failure analytics or alerting — does NOT change the response sent to the client.
+   */
   onLoginError?: (props: AuthErrorProps) => void;
+
+  /**
+   * Fires after a successful signup once the user record is created and the
+   * session is linked. Receives `{ provider, user, session, connectionInfo }`.
+   * Common uses: send welcome email, create default workspace, track activation.
+   */
   onAfterSignup?: (props: AuthSuccessProps) => void;
+
+  /**
+   * Fires when a signup attempt fails (validation, duplicate email, etc.).
+   * Receives `{ provider, error, session, connectionInfo }`.
+   * Use for failure analytics — does NOT change the response sent to the client.
+   */
   onSignupError?: (props: AuthErrorProps) => void;
+
+  /**
+   * Fires after a user's email is successfully verified (via the verification
+   * link or implicitly via password reset). Receives `{ provider, user, session, connectionInfo }`.
+   */
   onAfterEmailVerification?: (props: AuthSuccessProps) => void;
+
+  /**
+   * Fires when email verification fails (invalid or expired token).
+   * Receives `{ provider, error, session, connectionInfo }`.
+   */
   onEmailVerificationError?: (props: AuthErrorProps) => void;
-  // OAuth account linking callbacks
+
+  /**
+   * Fires after an OAuth provider is linked to an existing account
+   * (either automatically when `oauthAccountLinking: 'auto'` or via an
+   * explicit link flow). Receives `{ provider, user, session, connectionInfo }`.
+   */
   onAfterOAuthLink?: (props: AuthSuccessProps) => void;
+
+  /**
+   * Fires when OAuth account linking fails. Receives
+   * `{ provider, error, session, connectionInfo }`.
+   */
   onOAuthLinkError?: (props: AuthErrorProps) => void;
-  // Custom handle generator.
-  // If provided, this overrides the default handle generation logic.
+
+  /**
+   * Custom handle generator. If provided, overrides the default behavior
+   * (which derives the handle from the email local-part). Receives
+   * `{ email, firstName?, lastName? }` and returns the desired handle
+   * synchronously or as a `Promise<string>`. If the returned handle collides
+   * with an existing one, Modelence appends a numeric suffix automatically.
+   */
   generateHandle?: (props: GenerateHandleProps) => Promise<string> | string;
 
-  /** deprecated: use onAfterLogin and onLoginError */
+  /** @deprecated Use {@link AuthConfig.onAfterLogin} and {@link AuthConfig.onLoginError} instead. */
   login?: AuthOption;
-  /** deprecated: user onAfterSignup and onSignupError */
+  /** @deprecated Use {@link AuthConfig.onAfterSignup} and {@link AuthConfig.onSignupError} instead. */
   signup?: AuthOption;
 
   /**
@@ -216,7 +277,18 @@ export type AuthConfig = {
    *   if the provider email is verified.
    */
   oauthAccountLinking?: 'auto' | 'manual';
+
+  /**
+   * Customizes how OAuth authentication errors are rendered. By default,
+   * OAuth errors are returned as JSON; providing this returns a custom HTML
+   * response instead, which is useful when the OAuth flow runs in a browser
+   * context. Receives `{ error, statusCode }` and returns an HTML string
+   * (or `null`/`undefined` to fall back to the default JSON response).
+   *
+   * Always escape interpolated values to prevent XSS.
+   */
   errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
+
   /**
    * Overrides the built-in rate limits for authentication endpoints. Each rule
    * you provide is merged into the defaults by `(bucket, type, window)`:

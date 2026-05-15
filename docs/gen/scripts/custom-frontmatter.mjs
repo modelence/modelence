@@ -41,10 +41,19 @@ export function load(app) {
 
       const baseUrl = ['api-reference', ...page.url.split('/').slice(0, -1).filter(Boolean)].join('/');
 
+      const pageSlug = page.url.split('/').pop()?.replace(/\.mdx$/, '') ?? '';
+
       // Add a leading dot to internal links to avoid target="_blank"
-      page.contents = page.contents.replace(/\]\(([^/)][^)#]*[^/])\)/g, (match, linkPath) => {
+      page.contents = page.contents.replace(/\]\(([^/)#][^)#]*[^/])\)/g, (match, linkPath) => {
         return `](/${baseUrl}/${linkPath})`;
       });
+
+      // Resolve same-page anchor links to the full page route so the docs link checker can validate them
+      if (pageSlug) {
+        page.contents = page.contents.replace(/\]\((#[^)]+)\)/g, (match, anchor) => {
+          return `](/${baseUrl}/${pageSlug}${anchor})`;
+        });
+      }
     }
   });
 }
