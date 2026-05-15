@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 const mockRandomBytes = jest.fn();
 const mockInsertOne = jest.fn();
@@ -159,11 +159,18 @@ describe('auth/user', () => {
   });
 
   describe('buildAuthRateLimits', () => {
+    let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
+
     beforeEach(() => {
       mockTime.seconds.mockClear();
       mockTime.minutes.mockClear();
       mockTime.hours.mockClear();
       mockTime.days.mockClear();
+      consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      consoleWarnSpy.mockRestore();
     });
 
     test('returns default limits when called with no config', () => {
@@ -259,6 +266,102 @@ describe('auth/user', () => {
       expect(buckets).toEqual(
         new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset'])
       );
+    });
+
+    test('array override merges into defaults by (bucket, type, window)', () => {
+      const rules = buildAuthRateLimits({
+        signup: [
+          { type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+          { type: 'ip', window: 24 * 60 * 60 * 1000, limit: 30 },
+        ],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toEqual([
+        { bucket: 'signup', type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'signup', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 30 },
+      ]);
+    });
+
+    test('array override of a single window preserves the other defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 5 }],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toHaveLength(2);
+      const signup15m = signupRules.find((r) => r.window === 15 * 60 * 1000);
+      const signupDay = signupRules.find((r) => r.window === 24 * 60 * 60 * 1000);
+      expect(signup15m?.limit).toBe(5);
+      expect(signupDay?.limit).toBe(200);
+    });
+
+    test('array override can add new windows alongside the defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [
+          { type: 'ip', window: 60 * 1000, limit: 2 },
+          { type: 'ip', window: 60 * 60 * 1000, limit: 20 },
+        ],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      // 2 defaults + 2 additions = 4
+      expect(signupRules).toHaveLength(4);
+      const windows = signupRules.map((r) => r.window).sort((a, b) => a - b);
+      expect(windows).toEqual([60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000, 24 * 60 * 60 * 1000]);
+    });
+
+    test('empty array override leaves the bucket defaults intact', () => {
+      const rules = buildAuthRateLimits({ signup: [] });
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toHaveLength(2);
+    });
+
+    test('array override on one bucket leaves other buckets at defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 7 }],
+      });
+
+      const signinRules = rules.filter((r) => r.bucket === 'signin');
+      expect(signinRules).toHaveLength(2);
+      const signin15m = signinRules.find((r) => r.window === 15 * 60 * 1000);
+      expect(signin15m?.limit).toBe(50);
+    });
+
+    test('legacy object form still works (back-compat)', () => {
+      const rules = buildAuthRateLimits({
+        signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+      });
+
+      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
+      const signupDay = rules.find(
+        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signup15m?.limit).toBe(5);
+      expect(signupDay?.limit).toBe(50);
+    });
+
+    test('mixing array and legacy forms across buckets works', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 7 }],
+        signin: { perIp15Minutes: 9 },
+      });
+
+      // Array override merges with defaults — per-day default preserved
+      const signup = rules.filter((r) => r.bucket === 'signup');
+      expect(signup).toHaveLength(2);
+      const signup15m = signup.find((r) => r.window === 15 * 60 * 1000);
+      const signupDay = signup.find((r) => r.window === 24 * 60 * 60 * 1000);
+      expect(signup15m?.limit).toBe(7);
+      expect(signupDay?.limit).toBe(200);
+
+      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
+      expect(signin15m?.limit).toBe(9);
+      // Legacy partial override keeps unspecified default
+      const signinDay = rules.find(
+        (r) => r.bucket === 'signin' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(signinDay?.limit).toBe(500);
     });
   });
 });

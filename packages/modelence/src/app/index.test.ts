@@ -485,12 +485,16 @@ describe('app/index', () => {
 
     await startApp({
       auth: {
-        rateLimits: { signup: { perIp15Minutes: 5 } },
+        rateLimits: {
+          signup: [{ type: 'ip', window: 900_000, limit: 5 }],
+        },
       },
     });
 
     // The builder receives the user-supplied overrides
-    expect(mockBuildAuthRateLimits).toHaveBeenCalledWith({ signup: { perIp15Minutes: 5 } });
+    expect(mockBuildAuthRateLimits).toHaveBeenCalledWith({
+      signup: [{ type: 'ip', window: 900_000, limit: 5 }],
+    });
 
     // Effective limits land on the user module (so Modelence Cloud can read them)
     expect(mockUserModule.rateLimits).toEqual(authRules);

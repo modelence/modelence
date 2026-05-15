@@ -1,16 +1,101 @@
 import { AuthErrorProps, AuthSuccessProps, OAuthErrorInfo, User } from '@/auth/types';
 import { UpdateProfileProps, SignupProps } from '@/methods/types';
+import type { RateLimitType } from '@/rate-limit/types';
+
+/**
+ * A single rate-limit rule for an authentication bucket. The `bucket` is
+ * implied by which auth action you're configuring (e.g. `signup`), so callers
+ * only specify the actor type, window size, and limit.
+ *
+ * @example
+ * ```typescript
+ * import { time } from 'modelence/server';
+ *
+ * const rule: AuthRateLimitOverride = {
+ *   type: 'ip',
+ *   window: time.minutes(15),
+ *   limit: 10,
+ * };
+ * ```
+ */
+export type AuthRateLimitOverride = {
+  /** Identifier type of the actor this rule applies to. */
+  type: RateLimitType;
+  /** Time window size in milliseconds. Use `time.minutes(15)` etc. */
+  window: number;
+  /** Maximum allowed hits within the window. */
+  limit: number;
+};
+
+/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
+export type LegacySignupRateLimits = {
+  perIp15Minutes?: number;
+  perIpPerDay?: number;
+};
+
+/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
+export type LegacySignupAttemptRateLimits = {
+  perIp15Minutes?: number;
+  perIpPerDay?: number;
+};
+
+/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
+export type LegacySigninRateLimits = {
+  perIp15Minutes?: number;
+  perIpPerDay?: number;
+};
+
+/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
+export type LegacyVerificationRateLimits = {
+  perUserPerMinute?: number;
+  perUserPerDay?: number;
+};
+
+/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
+export type LegacyPasswordResetRateLimits = {
+  perIp15Minutes?: number;
+  perIpPerDay?: number;
+  perEmailPerHour?: number;
+  perEmailPerDay?: number;
+};
 
 /**
  * Per-action rate limit overrides for authentication endpoints.
- * Every field is optional — omitting it keeps the built-in default.
  *
- * @example
+ * Each bucket accepts an array of rules that are merged into the built-in
+ * defaults by `(type, window)` tuple:
+ *   - A rule whose `(type, window)` matches a default replaces that default's
+ *     `limit`.
+ *   - A rule whose `(type, window)` does not match any default is added as
+ *     an extra rule for the bucket.
+ *   - Defaults whose `(type, window)` is not overridden are kept.
+ *
+ * This means you can tighten a single window without accidentally dropping
+ * the other built-in protections for that bucket.
+ *
+ * @example Tighten the 15-minute signup cap; per-day default is preserved.
+ * ```typescript
+ * import { startApp, time } from 'modelence/server';
+ *
+ * startApp({
+ *   auth: {
+ *     rateLimits: {
+ *       signup: [
+ *         { type: 'ip', window: time.minutes(15), limit: 5 },
+ *       ],
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * @example Add an extra window alongside the defaults.
  * ```typescript
  * startApp({
  *   auth: {
  *     rateLimits: {
- *       signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+ *       signup: [
+ *         { type: 'ip', window: time.minutes(1), limit: 2 },
+ *       ],
  *     },
  *   },
  * });
@@ -18,44 +103,31 @@ import { UpdateProfileProps, SignupProps } from '@/methods/types';
  */
 export type AuthRateLimitsConfig = {
   /** Per-IP limits for the signup endpoint (successful signups only). */
-  signup?: {
-    /** Max signups per IP in a 15-minute window. @default 20 */
-    perIp15Minutes?: number;
-    /** Max signups per IP per day. @default 200 */
-    perIpPerDay?: number;
-  };
+  signup?: AuthRateLimitOverride[];
   /** Per-IP limits for signup attempts (checked before duplicate detection). */
-  signupAttempt?: {
-    /** Max signup attempts per IP in a 15-minute window. @default 50 */
-    perIp15Minutes?: number;
-    /** Max signup attempts per IP per day. @default 500 */
-    perIpPerDay?: number;
-  };
+  signupAttempt?: AuthRateLimitOverride[];
   /** Per-IP limits for login attempts. */
-  signin?: {
-    /** Max login attempts per IP in a 15-minute window. @default 50 */
-    perIp15Minutes?: number;
-    /** Max login attempts per IP per day. @default 500 */
-    perIpPerDay?: number;
-  };
+  signin?: AuthRateLimitOverride[];
   /** Per-user limits for email verification requests. */
-  verification?: {
-    /** Max verification emails per user per minute. @default 1 */
-    perUserPerMinute?: number;
-    /** Max verification emails per user per day. @default 10 */
-    perUserPerDay?: number;
-  };
+  verification?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
-  passwordReset?: {
-    /** Max password reset requests per IP in a 15-minute window. @default 10 */
-    perIp15Minutes?: number;
-    /** Max password reset requests per IP per day. @default 100 */
-    perIpPerDay?: number;
-    /** Max password reset requests per email address per hour. @default 5 */
-    perEmailPerHour?: number;
-    /** Max password reset requests per email address per day. @default 10 */
-    perEmailPerDay?: number;
-  };
+  passwordReset?: AuthRateLimitOverride[];
+};
+
+/**
+ * @internal Internal shape used by `buildAuthRateLimits` to accept both the
+ * public array form and the deprecated legacy object form for back-compat.
+ * Not part of the public API surface.
+ *
+ * Remove the legacy union arms in 1.0.0 — collapse this back to
+ * `AuthRateLimitsConfig` once the object shape is gone.
+ */
+export type InternalAuthRateLimitsConfig = {
+  signup?: AuthRateLimitOverride[] | LegacySignupRateLimits;
+  signupAttempt?: AuthRateLimitOverride[] | LegacySignupAttemptRateLimits;
+  signin?: AuthRateLimitOverride[] | LegacySigninRateLimits;
+  verification?: AuthRateLimitOverride[] | LegacyVerificationRateLimits;
+  passwordReset?: AuthRateLimitOverride[] | LegacyPasswordResetRateLimits;
 };
 
 type GenerateHandleProps = {
@@ -146,8 +218,11 @@ export type AuthConfig = {
   oauthAccountLinking?: 'auto' | 'manual';
   errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
   /**
-   * Overrides the built-in rate limits for authentication endpoints.
-   * Only the fields you specify are overridden; all others keep their defaults.
+   * Overrides the built-in rate limits for authentication endpoints. Each rule
+   * you provide is merged into the defaults by `(bucket, type, window)`:
+   * matching tuples replace the default `limit`, new tuples are added, and
+   * unspecified defaults are preserved. See {@link AuthRateLimitsConfig} for
+   * full semantics and examples.
    */
   rateLimits?: AuthRateLimitsConfig;
 };
