@@ -172,14 +172,14 @@ Do not load sample data into your newly created database if prompted - Modelence
 ### Configure Environment Variables
 
 Without the Modelence Cloud setup, you need to manually add your database configuration.
-Once you have your connection string, you'll need to add it to your Modelence environment variables. Create a `.env` file in your project root (if it doesn't exist already) and add:
+Once you have your connection string, you'll need to add it to your Modelence environment variables. Create a `.modelence.env` file in your project root (if it doesn't exist already) and add:
 
 ```env
 MONGODB_URI="<your_connection_string_here>"
 ```
 
 <Warning>
-Make sure that your `.env` file is added to your `.gitignore` to keep your credentials secure.
+Make sure that your `.modelence.env` file is added to your `.gitignore` to keep your credentials secure.
 </Warning>
 
 ## Next Steps
