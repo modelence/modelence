@@ -7,18 +7,44 @@ title: AuthRateLimitsConfig
 
 > **AuthRateLimitsConfig** = `object`
 
-Defined in: [packages/modelence/src/app/authConfig.ts:19](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L19)
+Defined in: [packages/modelence/src/app/authConfig.ts:104](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L104)
 
 Per-action rate limit overrides for authentication endpoints.
-Every field is optional — omitting it keeps the built-in default.
 
-## Example
+Each bucket accepts an array of rules that are merged into the built-in
+defaults by `(type, window)` tuple:
+  - A rule whose `(type, window)` matches a default replaces that default's
+    `limit`.
+  - A rule whose `(type, window)` does not match any default is added as
+    an extra rule for the bucket.
+  - Defaults whose `(type, window)` is not overridden are kept.
+
+This means you can tighten a single window without accidentally dropping
+the other built-in protections for that bucket.
+
+## Examples
+
+```typescript
+import { startApp, time } from 'modelence/server';
+
+startApp({
+  auth: {
+    rateLimits: {
+      signup: [
+        { type: 'ip', window: time.minutes(15), limit: 5 },
+      ],
+    },
+  },
+});
+```
 
 ```typescript
 startApp({
   auth: {
     rateLimits: {
-      signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+      signup: [
+        { type: 'ip', window: time.minutes(1), limit: 2 },
+      ],
     },
   },
 });
@@ -28,20 +54,8 @@ startApp({
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="passwordreset"></a> `passwordReset?` | `object` | Rate limits for password reset requests. | [packages/modelence/src/app/authConfig.ts:49](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L49) |
-| `passwordReset.perEmailPerDay?` | `number` | Max password reset requests per email address per day. **Default** `10` | [packages/modelence/src/app/authConfig.ts:57](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L57) |
-| `passwordReset.perEmailPerHour?` | `number` | Max password reset requests per email address per hour. **Default** `5` | [packages/modelence/src/app/authConfig.ts:55](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L55) |
-| `passwordReset.perIp15Minutes?` | `number` | Max password reset requests per IP in a 15-minute window. **Default** `10` | [packages/modelence/src/app/authConfig.ts:51](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L51) |
-| `passwordReset.perIpPerDay?` | `number` | Max password reset requests per IP per day. **Default** `100` | [packages/modelence/src/app/authConfig.ts:53](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L53) |
-| <a id="signin"></a> `signin?` | `object` | Per-IP limits for login attempts. | [packages/modelence/src/app/authConfig.ts:35](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L35) |
-| `signin.perIp15Minutes?` | `number` | Max login attempts per IP in a 15-minute window. **Default** `50` | [packages/modelence/src/app/authConfig.ts:37](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L37) |
-| `signin.perIpPerDay?` | `number` | Max login attempts per IP per day. **Default** `500` | [packages/modelence/src/app/authConfig.ts:39](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L39) |
-| <a id="signup"></a> `signup?` | `object` | Per-IP limits for the signup endpoint (successful signups only). | [packages/modelence/src/app/authConfig.ts:21](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L21) |
-| `signup.perIp15Minutes?` | `number` | Max signups per IP in a 15-minute window. **Default** `20` | [packages/modelence/src/app/authConfig.ts:23](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L23) |
-| `signup.perIpPerDay?` | `number` | Max signups per IP per day. **Default** `200` | [packages/modelence/src/app/authConfig.ts:25](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L25) |
-| <a id="signupattempt"></a> `signupAttempt?` | `object` | Per-IP limits for signup attempts (checked before duplicate detection). | [packages/modelence/src/app/authConfig.ts:28](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L28) |
-| `signupAttempt.perIp15Minutes?` | `number` | Max signup attempts per IP in a 15-minute window. **Default** `50` | [packages/modelence/src/app/authConfig.ts:30](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L30) |
-| `signupAttempt.perIpPerDay?` | `number` | Max signup attempts per IP per day. **Default** `500` | [packages/modelence/src/app/authConfig.ts:32](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L32) |
-| <a id="verification"></a> `verification?` | `object` | Per-user limits for email verification requests. | [packages/modelence/src/app/authConfig.ts:42](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L42) |
-| `verification.perUserPerDay?` | `number` | Max verification emails per user per day. **Default** `10` | [packages/modelence/src/app/authConfig.ts:46](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L46) |
-| `verification.perUserPerMinute?` | `number` | Max verification emails per user per minute. **Default** `1` | [packages/modelence/src/app/authConfig.ts:44](https://github.com/modelence/modelence/blob/edf0ff8282b22c5aa226ea03584e6a4ce7ca489e/packages/modelence/src/app/authConfig.ts#L44) |
+| <a id="passwordreset"></a> `passwordReset?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Rate limits for password reset requests. | [packages/modelence/src/app/authConfig.ts:114](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L114) |
+| <a id="signin"></a> `signin?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for login attempts. | [packages/modelence/src/app/authConfig.ts:110](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L110) |
+| <a id="signup"></a> `signup?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for the signup endpoint (successful signups only). | [packages/modelence/src/app/authConfig.ts:106](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L106) |
+| <a id="signupattempt"></a> `signupAttempt?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for signup attempts (checked before duplicate detection). | [packages/modelence/src/app/authConfig.ts:108](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L108) |
+| <a id="verification"></a> `verification?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-user limits for email verification requests. | [packages/modelence/src/app/authConfig.ts:112](https://github.com/modelence/modelence/blob/fdf8d280fd5b1f968b2e1226a6385da401af9330/packages/modelence/src/app/authConfig.ts#L112) |
