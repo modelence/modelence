@@ -4,6 +4,8 @@ title: 'Email Verification'
 
 Email verification adds an extra layer of security by ensuring users own the email address they register with.
 
+> The email delivery setup below (provider, sender, template, redirect URL) is configured under the **`email:`** key of `startApp`. To run code when verification succeeds or fails, register the `onAfterEmailVerification` / `onEmailVerificationError` callbacks under **`auth:`** — see [Auth Hooks](/authentication/hooks).
+
 ## Enabling Email Verification
 
 First, configure your email provider (see [Email Configuration](/email)):
