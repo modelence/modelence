@@ -91,7 +91,9 @@ The recommended approach is to organize server code into **modules** - self-cont
 
 ```
 src/server/
-├── migrations.ts     # (Optional) App migration scripts
+├── migrations/       # (Optional) App migration scripts
+│   ├── index.ts      # Exports the ordered migrations array
+│   └── ...           # One file per migration handler
 ├── todo/
 │   ├── index.ts      # Module definition
 │   ├── db.ts         # Database stores
@@ -107,8 +109,10 @@ Each module typically contains:
 - **Database stores** - MongoDB collection definitions
 - **Business logic** - Domain-specific utilities and helpers
 
-For data evolution over time, you can keep app-level migration scripts in
-`src/server/migrations.ts` and pass them to `startApp({ migrations })`.
+For data evolution over time, keep app-level migration scripts under
+`src/server/migrations/` — one file per handler, with `index.ts` exporting the
+ordered array passed to `startApp({ migrations })`. See
+[Migrations](/core-concepts/migrations) for the full layout.
 
 <Tip>
 Grouping code by modules (domains/features) rather than by type (controllers, models, etc.) makes your codebase more maintainable and easier to understand as it grows.
