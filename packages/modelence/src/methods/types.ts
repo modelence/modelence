@@ -45,6 +45,7 @@ export type SignupProps = UpdateProfileProps & {
   password: string;
 };
 
+// TODO: Query-mutation and live query share the same handler, but only runMethod provides HttpContext (req, res) and Live queries receive plain Context, so handlers typed with HttpContext may access undefined req-res and fail at runtime.
 export type Handler<T = unknown> = (args: Args, context: Context | HttpContext) => Promise<T> | T;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
