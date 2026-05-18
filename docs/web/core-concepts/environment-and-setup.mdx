@@ -106,13 +106,6 @@ Every `MODELENCE_*` variable (plus the few non-prefixed ones) that the framework
 | `MODELENCE_EMAIL_SMTP_USER` | string | — | `@modelence/smtp` |
 | `MODELENCE_EMAIL_SMTP_PASS` | string | — | `@modelence/smtp` |
 
-#### Integrations
-
-| Variable | Type | Default | Consumed by |
-|----------|------|---------|-------------|
-| `MODELENCE_VOYAGEAI_API_KEY` | string | — | `@modelence/voyage-ai` (embeddings) |
-| `DATA_API_KEY` | string | — | Data API (alternative to setting `dataApi.apiKey` from Modelence Cloud) |
-
 <Tip>
 Any variable not listed here is application-specific. Define it through your modules' `configSchema` so Modelence Cloud can manage it and `getConfig()` can read it type-safely.
 </Tip>
