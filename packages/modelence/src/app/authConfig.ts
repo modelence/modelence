@@ -1,5 +1,5 @@
 import { AuthErrorProps, AuthSuccessProps, OAuthErrorInfo, User } from '@/auth/types';
-import { UpdateProfileProps, SignupProps } from '@/methods/types';
+import { ConnectionInfo, UpdateProfileProps, SignupProps } from '@/methods/types';
 import type { RateLimitType } from '@/rate-limit/types';
 
 /**
@@ -137,6 +137,24 @@ type GenerateHandleProps = {
 };
 
 /**
+ * Props passed to {@link AuthConfig.onBeforeSignup}.
+ *
+ * The hook fires after validation and the built-in disposable-email check,
+ * but before the user document is inserted. Throwing aborts the signup —
+ * the thrown error is re-thrown to the caller and `onSignupError` fires.
+ */
+export type BeforeSignupProps = {
+  /** Lowercased, validated email address. */
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  handle?: string;
+  /** Provider that initiated the signup. Currently only `'email'`. */
+  provider: 'email';
+  connectionInfo?: ConnectionInfo;
+};
+
+/**
  * Callback options for authentication operations
  */
 export type AuthOption = {
@@ -218,6 +236,21 @@ export type AuthConfig = {
   onLoginError?: (props: AuthErrorProps) => void;
 
   /**
+   * Hook fired after validation and the built-in disposable-email check, but
+   * before the new user document is inserted. Throwing aborts the signup —
+   * the thrown error is re-thrown to the caller and `onSignupError` fires.
+   *
+   * Use this to plug in a custom domain-policy check (e.g. a tenant-specific
+   * email-domain verification service) without having to disable the built-in
+   * disposable-email check.
+   *
+   * Currently only invoked for `'email'` provider signups. OAuth signups are
+   * not gated because OAuth providers (Google, GitHub, etc.) do not issue
+   * disposable accounts.
+   */
+  onBeforeSignup?: (props: BeforeSignupProps) => void | Promise<void>;
+
+  /**
    * Fires after a successful signup once the user record is created and the
    * session is linked. Receives `{ provider, user, session, connectionInfo }`.
    * Common uses: send welcome email, create default workspace, track activation.
@@ -297,6 +330,19 @@ export type AuthConfig = {
    * full semantics and examples.
    */
   rateLimits?: AuthRateLimitsConfig;
+
+  /**
+   * When `true`, the built-in disposable-email check is skipped during signup.
+   * Defaults to `false` (built-in check enforced).
+   *
+   * Set this to `true` when you want to enforce your own domain-policy logic
+   * via {@link onBeforeSignup} — for example, a service that classifies
+   * domains as public/disposable/custom with its own data sources and cache.
+   *
+   * Skipping the built-in check without registering an `onBeforeSignup` hook
+   * means disposable emails will be allowed to sign up.
+   */
+  allowDisposableEmails?: boolean;
 };
 
 let authConfig: AuthConfig = Object.freeze({});
