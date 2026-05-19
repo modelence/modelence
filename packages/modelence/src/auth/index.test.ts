@@ -1,22 +1,22 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ObjectId } from 'mongodb';
 
-const mockObtainSession = jest.fn();
-const mockFindOne = jest.fn();
-const mockGetDefaultAuthenticatedRoles = jest.fn();
-const mockGetUnauthenticatedRoles = jest.fn();
+const mockObtainSession = vi.fn();
+const mockFindOne = vi.fn();
+const mockGetDefaultAuthenticatedRoles = vi.fn();
+const mockGetUnauthenticatedRoles = vi.fn();
 
-jest.unstable_mockModule('./session', () => ({
+vi.doMock('./session', () => ({
   obtainSession: mockObtainSession,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockFindOne,
   },
 }));
 
-jest.unstable_mockModule('./role', () => ({
+vi.doMock('./role', () => ({
   getDefaultAuthenticatedRoles: mockGetDefaultAuthenticatedRoles,
   getUnauthenticatedRoles: mockGetUnauthenticatedRoles,
 }));
@@ -25,7 +25,7 @@ const { authenticate } = await import('./index');
 
 describe('auth/index', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetDefaultAuthenticatedRoles.mockReturnValue([]);
     mockGetUnauthenticatedRoles.mockReturnValue([]);
   });

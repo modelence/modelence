@@ -1,4 +1,5 @@
-import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import type { Module } from './module';
 import type { MigrationScript } from '../migration';
 import type { ModelSchema } from '../data/types';
@@ -9,21 +10,21 @@ import { ServerChannel } from '@/websocket/serverChannel';
 import type { WebsocketServerProvider } from '@/websocket/types';
 
 // Mock external dependencies
-const mockDotenvConfig = jest.fn();
-const mockConnect = jest.fn();
-const mockGetMongodbUri = jest.fn<() => string>();
-const mockGetClient = jest.fn();
-const mockStartServer = jest.fn();
-const mockSetSchema = jest.fn();
-const mockLoadConfigs = jest.fn();
-const mockInitRoles = jest.fn();
-const mockInitRateLimits = jest.fn();
-const mockSetEmailConfig = jest.fn();
-const mockSetAuthConfig = jest.fn();
-const mockSetWebsocketConfig = jest.fn();
-const mockMarkAppStarted = jest.fn();
-const mockSetMetadata = jest.fn();
-const mockConnectCloudBackend = jest.fn<
+const mockDotenvConfig = vi.fn();
+const mockConnect = vi.fn();
+const mockGetMongodbUri = vi.fn<() => string>();
+const mockGetClient = vi.fn();
+const mockStartServer = vi.fn();
+const mockSetSchema = vi.fn();
+const mockLoadConfigs = vi.fn();
+const mockInitRoles = vi.fn();
+const mockInitRateLimits = vi.fn();
+const mockSetEmailConfig = vi.fn();
+const mockSetAuthConfig = vi.fn();
+const mockSetWebsocketConfig = vi.fn();
+const mockMarkAppStarted = vi.fn();
+const mockSetMetadata = vi.fn();
+const mockConnectCloudBackend = vi.fn<
   (params: unknown) => Promise<{
     configs: Array<{ key: string; type: string; value: unknown }>;
     environmentId: string;
@@ -32,19 +33,19 @@ const mockConnectCloudBackend = jest.fn<
     telemetry: Record<string, unknown>;
   }>
 >();
-const mockInitMetrics = jest.fn();
-const mockStartConfigSync = jest.fn();
-const mockLoadRemoteConfigs = jest.fn();
-const mockRunMigrations = jest.fn();
-const mockStartMigrations = jest.fn();
-const mockStartCronJobs = jest.fn<() => Promise<void>>();
-const mockDefineCronJob = jest.fn();
-const mockGetCronJobsMetadata = jest.fn();
-const mockCreateQuery = jest.fn();
-const mockCreateMutation = jest.fn();
-const mockCreateSystemQuery = jest.fn();
-const mockCreateSystemMutation = jest.fn();
-const mockAcquireLock = jest.fn<
+const mockInitMetrics = vi.fn();
+const mockStartConfigSync = vi.fn();
+const mockLoadRemoteConfigs = vi.fn();
+const mockRunMigrations = vi.fn();
+const mockStartMigrations = vi.fn();
+const mockStartCronJobs = vi.fn<() => Promise<void>>();
+const mockDefineCronJob = vi.fn();
+const mockGetCronJobsMetadata = vi.fn();
+const mockCreateQuery = vi.fn();
+const mockCreateMutation = vi.fn();
+const mockCreateSystemQuery = vi.fn();
+const mockCreateSystemMutation = vi.fn();
+const mockAcquireLock = vi.fn<
   (
     resource: string,
     options?: {
@@ -53,19 +54,17 @@ const mockAcquireLock = jest.fn<
     }
   ) => Promise<boolean>
 >();
-const mockReleaseLock = jest.fn<(resource: string) => Promise<boolean>>();
-const mockSocketioServer = { listen: jest.fn() };
+const mockReleaseLock = vi.fn<(resource: string) => Promise<boolean>>();
+const mockSocketioServer = { listen: vi.fn() };
 const expectedMigrationsLockOptions = {
   lockDuration: 30_000,
   heartbeat: true,
 };
 
 const mockResolveStores =
-  jest.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
+  vi.fn<(stores: unknown[]) => { storesToInit: unknown[]; effectiveStores: unknown[] }>();
 
-const mockBuildAuthRateLimits = jest.fn<(config?: AuthRateLimitsConfig) => RateLimitRule[]>(
-  () => []
-);
+const mockBuildAuthRateLimits = vi.fn<(config?: AuthRateLimitsConfig) => RateLimitRule[]>(() => []);
 const mockUserModule = {
   name: '_system.user',
   queries: {},
@@ -77,66 +76,66 @@ const mockUserModule = {
   configSchema: {},
 };
 
-jest.unstable_mockModule('dotenv', () => ({
+vi.doMock('dotenv', () => ({
   default: { config: mockDotenvConfig },
 }));
 
-jest.unstable_mockModule('../db/client', () => ({
+vi.doMock('../db/client', () => ({
   connect: mockConnect,
   getMongodbUri: mockGetMongodbUri,
   getClient: mockGetClient,
 }));
 
-jest.unstable_mockModule('./server', () => ({
+vi.doMock('./server', () => ({
   startServer: mockStartServer,
 }));
 
-jest.unstable_mockModule('../config/server', () => ({
+vi.doMock('../config/server', () => ({
   setSchema: mockSetSchema,
   loadConfigs: mockLoadConfigs,
-  getConfig: jest.fn(),
+  getConfig: vi.fn(),
 }));
 
-jest.unstable_mockModule('../auth/role', () => ({
+vi.doMock('../auth/role', () => ({
   initRoles: mockInitRoles,
 }));
 
-jest.unstable_mockModule('../rate-limit/rules', () => ({
+vi.doMock('../rate-limit/rules', () => ({
   initRateLimits: mockInitRateLimits,
 }));
 
-jest.unstable_mockModule('./emailConfig', () => ({
+vi.doMock('./emailConfig', () => ({
   setEmailConfig: mockSetEmailConfig,
 }));
 
-jest.unstable_mockModule('./authConfig', () => ({
+vi.doMock('./authConfig', () => ({
   setAuthConfig: mockSetAuthConfig,
 }));
 
-jest.unstable_mockModule('./websocketConfig', () => ({
+vi.doMock('./websocketConfig', () => ({
   setWebsocketConfig: mockSetWebsocketConfig,
 }));
 
-jest.unstable_mockModule('./state', () => ({
+vi.doMock('./state', () => ({
   markAppStarted: mockMarkAppStarted,
   setMetadata: mockSetMetadata,
 }));
 
-jest.unstable_mockModule('./backendApi', () => ({
+vi.doMock('./backendApi', () => ({
   connectCloudBackend: mockConnectCloudBackend,
-  callCloudApi: jest.fn(),
+  callCloudApi: vi.fn(),
 }));
 
-jest.unstable_mockModule('./metrics', () => ({
+vi.doMock('./metrics', () => ({
   initMetrics: mockInitMetrics,
 }));
 
-jest.unstable_mockModule('../config/sync', () => ({
+vi.doMock('../config/sync', () => ({
   startConfigSync: mockStartConfigSync,
   loadRemoteConfigs: mockLoadRemoteConfigs,
 }));
 
-jest.unstable_mockModule('../migration', () => ({
+vi.doMock('../migration', () => ({
   default: {
     name: '_system.migration',
     queries: {},
@@ -151,7 +150,7 @@ jest.unstable_mockModule('../migration', () => ({
   startMigrations: mockStartMigrations,
 }));
 
-jest.unstable_mockModule('../cron/jobs', () => ({
+vi.doMock('../cron/jobs', () => ({
   default: {
     name: '_system.cron',
     queries: {},
@@ -167,23 +166,23 @@ jest.unstable_mockModule('../cron/jobs', () => ({
   startCronJobs: mockStartCronJobs,
 }));
 
-jest.unstable_mockModule('../methods', () => ({
+vi.doMock('../methods', () => ({
   createQuery: mockCreateQuery,
   createMutation: mockCreateMutation,
   _createSystemQuery: mockCreateSystemQuery,
   _createSystemMutation: mockCreateSystemMutation,
 }));
 
-jest.unstable_mockModule('@/websocket/socketio/server', () => ({
+vi.doMock('@/websocket/socketio/server', () => ({
   default: mockSocketioServer,
 }));
 
-jest.unstable_mockModule('../auth/user', () => ({
+vi.doMock('../auth/user', () => ({
   buildAuthRateLimits: mockBuildAuthRateLimits,
   default: mockUserModule,
 }));
 
-jest.unstable_mockModule('../auth/session', () => ({
+vi.doMock('../auth/session', () => ({
   default: {
     name: '_system.session',
     queries: {},
@@ -196,7 +195,7 @@ jest.unstable_mockModule('../auth/session', () => ({
   },
 }));
 
-jest.unstable_mockModule('../rate-limit', () => ({
+vi.doMock('../rate-limit', () => ({
   default: {
     name: '_system.rateLimit',
     queries: {},
@@ -209,7 +208,7 @@ jest.unstable_mockModule('../rate-limit', () => ({
   },
 }));
 
-jest.unstable_mockModule('../system', () => ({
+vi.doMock('../system', () => ({
   default: {
     name: '_system.system',
     queries: {},
@@ -222,7 +221,7 @@ jest.unstable_mockModule('../system', () => ({
   },
 }));
 
-jest.unstable_mockModule('../lock', () => ({
+vi.doMock('../lock', () => ({
   default: {
     name: '_system.lock',
     queries: {},
@@ -237,11 +236,11 @@ jest.unstable_mockModule('../lock', () => ({
   releaseLock: mockReleaseLock,
 }));
 
-jest.unstable_mockModule('../viteServer', () => ({
-  viteServer: { listen: jest.fn() },
+vi.doMock('../viteServer', () => ({
+  viteServer: { listen: vi.fn() },
 }));
 
-jest.unstable_mockModule('../data/resolveStores', () => ({
+vi.doMock('../data/resolveStores', () => ({
   resolveStores: mockResolveStores,
 }));
 
@@ -272,15 +271,15 @@ const createStoreMock = (
   name = 'testStore',
   indexCreationMode: 'blocking' | 'background' = 'background'
 ): MinimalStore => ({
-  init: jest.fn() as MinimalStore['init'],
-  createIndexes: jest.fn() as MinimalStore['createIndexes'],
-  getName: jest.fn(() => name) as MinimalStore['getName'],
-  getIndexCreationMode: jest.fn(() => indexCreationMode) as MinimalStore['getIndexCreationMode'],
+  init: vi.fn() as MinimalStore['init'],
+  createIndexes: vi.fn() as MinimalStore['createIndexes'],
+  getName: vi.fn(() => name) as MinimalStore['getName'],
+  getIndexCreationMode: vi.fn(() => indexCreationMode) as MinimalStore['getIndexCreationMode'],
 });
 
 describe('app/index', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockAcquireLock.mockResolvedValue(true);
     mockReleaseLock.mockResolvedValue(true);
     mockRunMigrations.mockResolvedValue(undefined as never);
@@ -333,7 +332,7 @@ describe('app/index', () => {
 
   test('sets email, auth, and websocket configs', async () => {
     const email = { from: 'test@example.com' };
-    const auth = { onAfterLogin: jest.fn(async () => {}) };
+    const auth = { onAfterLogin: vi.fn(async () => {}) };
     const websocket = {};
 
     await startApp({ email, auth, websocket });
@@ -356,8 +355,8 @@ describe('app/index', () => {
 
   test('uses custom websocket provider when specified', async () => {
     const customProvider: WebsocketServerProvider = {
-      init: jest.fn(async () => {}),
-      broadcast: jest.fn(),
+      init: vi.fn(async () => {}),
+      broadcast: vi.fn(),
     };
     await startApp({ websocket: { provider: customProvider } });
 
@@ -368,7 +367,7 @@ describe('app/index', () => {
 
   test('connects to database when mongodb uri is provided', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    const mockClient = { db: jest.fn() };
+    const mockClient = { db: vi.fn() };
     mockGetClient.mockReturnValue(mockClient);
 
     const mockStore = createStoreMock('testStore', 'blocking');
@@ -394,7 +393,7 @@ describe('app/index', () => {
 
   test('skips index creation when index lock is not acquired', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
     mockAcquireLock.mockResolvedValue(false);
 
     const mockStore = createStoreMock('testStore', 'blocking');
@@ -422,8 +421,8 @@ describe('app/index', () => {
   });
 
   test('initializes custom module methods', async () => {
-    const queryHandler = jest.fn();
-    const mutationHandler = jest.fn();
+    const queryHandler = vi.fn();
+    const mutationHandler = vi.fn();
 
     await startApp({
       modules: [
@@ -444,7 +443,7 @@ describe('app/index', () => {
     const store2 = createStoreMock();
 
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
 
     await startApp({
       modules: [
@@ -509,7 +508,7 @@ describe('app/index', () => {
         createTestModule({
           name: 'cronModule',
           cronJobs: {
-            dailyTask: { interval: 86400000, handler: jest.fn(async () => {}) },
+            dailyTask: { interval: 86400000, handler: vi.fn(async () => {}) },
           },
         }),
       ],
@@ -637,7 +636,7 @@ describe('app/index', () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
 
     const migrations: MigrationScript[] = [
-      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+      { version: 1, description: 'Test migration', handler: vi.fn(async () => {}) },
     ];
 
     await startApp({ migrations });
@@ -647,7 +646,7 @@ describe('app/index', () => {
 
   test('starts migrations after blocking + drop-only index phases and before cron jobs', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
 
     let resolveBlockingIndexes: () => void = () => undefined;
     const blockingIndexesPromise = new Promise<void>((resolve) => {
@@ -662,14 +661,14 @@ describe('app/index', () => {
       resolveBackgroundCreateIndexes = resolve;
     });
     const lockStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async () => blockingIndexesPromise) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => '_modelenceLocks') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
+      init: vi.fn() as MinimalStore['init'],
+      createIndexes: vi.fn(async () => blockingIndexesPromise) as MinimalStore['createIndexes'],
+      getName: vi.fn(() => '_modelenceLocks') as MinimalStore['getName'],
+      getIndexCreationMode: vi.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
     };
     const otherStore: MinimalStore = {
-      init: jest.fn() as MinimalStore['init'],
-      createIndexes: jest.fn(async (mode?: 'full' | 'drop-only' | 'create-only') => {
+      init: vi.fn() as MinimalStore['init'],
+      createIndexes: vi.fn(async (mode?: 'full' | 'drop-only' | 'create-only') => {
         if (mode === 'drop-only') {
           await dropOnlyIndexesPromise;
         }
@@ -678,8 +677,8 @@ describe('app/index', () => {
           await backgroundCreateIndexesPromise;
         }
       }) as MinimalStore['createIndexes'],
-      getName: jest.fn(() => 'testCollection') as MinimalStore['getName'],
-      getIndexCreationMode: jest.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
+      getName: vi.fn(() => 'testCollection') as MinimalStore['getName'],
+      getIndexCreationMode: vi.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
     };
 
     // resolveStores: lockStore is blocking effective, otherStore is background effective
@@ -689,7 +688,7 @@ describe('app/index', () => {
     });
 
     const migrations: MigrationScript[] = [
-      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+      { version: 1, description: 'Test migration', handler: vi.fn(async () => {}) },
     ];
 
     const startPromise = startApp({
@@ -726,7 +725,7 @@ describe('app/index', () => {
     expect(otherStore.createIndexes).toHaveBeenCalledWith('drop-only');
     expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockRunMigrations.mock.invocationCallOrder[0]).toBeGreaterThan(
-      (otherStore.createIndexes as jest.Mock).mock.invocationCallOrder[0]
+      (otherStore.createIndexes as Mock).mock.invocationCallOrder[0]
     );
     expect(otherStore.createIndexes).toHaveBeenCalledWith('create-only');
     expect(mockReleaseLock).not.toHaveBeenCalled();
@@ -743,11 +742,11 @@ describe('app/index', () => {
 
   test('warns and continues startup when blocking index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
 
     const indexCreationError = new Error('index creation failed');
     const lockStore = createStoreMock('_modelenceLocks', 'blocking');
-    (lockStore.createIndexes as jest.Mock).mockRejectedValue(indexCreationError as never);
+    (lockStore.createIndexes as Mock).mockRejectedValue(indexCreationError as never);
     const otherStore = createStoreMock('testCollection');
 
     mockResolveStores.mockReturnValue({
@@ -755,10 +754,10 @@ describe('app/index', () => {
       effectiveStores: [lockStore, otherStore],
     });
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const migrations: MigrationScript[] = [
-      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+      { version: 1, description: 'Test migration', handler: vi.fn(async () => {}) },
     ];
 
     await expect(
@@ -788,11 +787,11 @@ describe('app/index', () => {
 
   test('warns and continues startup when critical index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
 
     const criticalError = new Error('critical index failed');
     const criticalStore = createStoreMock('_modelenceLocks', 'blocking');
-    (criticalStore.createIndexes as jest.Mock).mockRejectedValue(criticalError as never);
+    (criticalStore.createIndexes as Mock).mockRejectedValue(criticalError as never);
     const otherStore = createStoreMock('testCollection');
 
     mockResolveStores.mockReturnValue({
@@ -800,10 +799,10 @@ describe('app/index', () => {
       effectiveStores: [criticalStore, otherStore],
     });
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const migrations: MigrationScript[] = [
-      { version: 1, description: 'Test migration', handler: jest.fn(async () => {}) },
+      { version: 1, description: 'Test migration', handler: vi.fn(async () => {}) },
     ];
 
     await expect(
@@ -832,13 +831,13 @@ describe('app/index', () => {
 
   test('releases index lock when createIndexesWithLock throws unexpectedly', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: jest.fn() });
+    mockGetClient.mockReturnValue({ db: vi.fn() });
 
     const unexpectedError = new Error('unexpected index path error');
     const brokenStore = createStoreMock('brokenStore', 'blocking');
     // Make getIndexCreationMode throw to simulate an unexpected error
     // inside createIndexesWithLock's filter logic.
-    (brokenStore.getIndexCreationMode as jest.Mock).mockImplementation(() => {
+    (brokenStore.getIndexCreationMode as Mock).mockImplementation(() => {
       throw unexpectedError;
     });
 

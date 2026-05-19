@@ -1,24 +1,25 @@
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
-const mockSetErrorHandler = jest.fn();
+const mockSetErrorHandler = vi.fn();
 
-jest.unstable_mockModule('./errorHandler', () => ({
+vi.doMock('./errorHandler', () => ({
   setErrorHandler: mockSetErrorHandler,
 }));
 
-const mockCreateRoot = jest.fn(() => ({
-  render: jest.fn(),
+const mockCreateRoot = vi.fn(() => ({
+  render: vi.fn(),
 }));
 
-jest.unstable_mockModule('react-dom/client', () => ({
+vi.doMock('react-dom/client', () => ({
   createRoot: mockCreateRoot,
   default: {
     createRoot: mockCreateRoot,
   },
 }));
 
-jest.unstable_mockModule('../client', () => ({
+vi.doMock('../client', () => ({
   AppProvider: ({
     children,
     loadingElement,
@@ -38,14 +39,14 @@ const { renderApp } = await import('./renderApp');
 describe('client/renderApp', () => {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
-  let addEventListenerMock: jest.Mock;
+  let addEventListenerMock: Mock;
   let linkElement: { rel: string; href: string } | null;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     linkElement = null;
     const rootElement = {};
-    addEventListenerMock = jest.fn();
+    addEventListenerMock = vi.fn();
     const head = {
       appendChild: (el: { rel: string; href: string }) => {
         linkElement = el;
@@ -80,13 +81,13 @@ describe('client/renderApp', () => {
     renderApp({
       loadingElement: <div>Loading</div>,
       routesElement: <div>Routes</div>,
-      errorHandler: jest.fn(),
+      errorHandler: vi.fn(),
     });
 
     expect(mockSetErrorHandler).toHaveBeenCalled();
-    expect((mockCreateRoot as jest.Mock).mock.calls[0]?.[0]).toBe(document.getElementById('root'));
-    const rootResult = (mockCreateRoot as jest.Mock).mock.results[0];
-    const renderFn = rootResult ? (rootResult.value as { render: jest.Mock }).render : undefined;
+    expect((mockCreateRoot as Mock).mock.calls[0]?.[0]).toBe(document.getElementById('root'));
+    const rootResult = (mockCreateRoot as Mock).mock.results[0];
+    const renderFn = rootResult ? (rootResult.value as { render: Mock }).render : undefined;
     expect(renderFn).toBeDefined();
     expect(renderFn).toHaveBeenCalledTimes(1);
     expect(addEventListenerMock).toHaveBeenCalledWith('unload', expect.any(Function));

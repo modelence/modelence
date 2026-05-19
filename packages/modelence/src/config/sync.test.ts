@@ -1,29 +1,29 @@
-import { beforeEach, describe, expect, jest, test, afterEach } from '@jest/globals';
+import { beforeEach, describe, expect, test, afterEach, vi } from 'vitest';
 
-const mockSeconds = jest.fn(() => 5000);
-const mockSyncStatus = jest.fn();
-const mockFetchConfigs = jest.fn();
-const mockLoadConfigs = jest.fn();
-const mockGetSchema = jest.fn(() => ({}));
-const mockGetLocalConfigs = jest.fn((_schema: unknown, _variant?: unknown) => []);
-const mockAcquireLock = jest.fn();
+const mockSeconds = vi.fn(() => 5000);
+const mockSyncStatus = vi.fn();
+const mockFetchConfigs = vi.fn();
+const mockLoadConfigs = vi.fn();
+const mockGetSchema = vi.fn(() => ({}));
+const mockGetLocalConfigs = vi.fn((_schema: unknown, _variant?: unknown) => []);
+const mockAcquireLock = vi.fn();
 
-jest.unstable_mockModule('../time', () => ({
+vi.doMock('../time', () => ({
   time: {
     seconds: mockSeconds,
   },
 }));
 
-jest.unstable_mockModule('../app/backendApi', () => ({
+vi.doMock('../app/backendApi', () => ({
   syncStatus: mockSyncStatus,
   fetchConfigs: mockFetchConfigs,
 }));
 
-jest.unstable_mockModule('./local', () => ({
+vi.doMock('./local', () => ({
   getLocalConfigs: mockGetLocalConfigs,
 }));
 
-jest.unstable_mockModule('./server', () => ({
+vi.doMock('./server', () => ({
   loadConfigs: mockLoadConfigs,
   getSchema: mockGetSchema,
 }));
@@ -36,7 +36,7 @@ describe('config/sync', () => {
   const originalSetInterval = global.setInterval;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     intervalCallback = null;
     intervalDelay = undefined;
     global.setInterval = ((handler: TimerHandler, timeout?: number) => {

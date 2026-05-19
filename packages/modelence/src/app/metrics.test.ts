@@ -1,4 +1,5 @@
-import { describe, expect, jest, test } from '@jest/globals';
+import { describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 type SetupOptions = {
   telemetryEnabled?: boolean;
@@ -10,7 +11,7 @@ type SetupOptions = {
 };
 
 async function setupMetrics(options: SetupOptions = {}) {
-  jest.resetModules();
+  vi.resetModules();
 
   const {
     telemetryEnabled = true,
@@ -26,43 +27,43 @@ async function setupMetrics(options: SetupOptions = {}) {
   } = options;
 
   const apmInstance = { name: 'apm' };
-  const loggerInstance = { log: jest.fn() };
+  const loggerInstance = { log: vi.fn() };
 
-  const elasticStart = jest.fn().mockReturnValue(apmInstance);
-  const createLogger = jest.fn().mockReturnValue(loggerInstance);
-  const formatCombine = jest.fn(() => 'combined-format');
-  const formatJson = jest.fn(() => 'json-format');
-  const startLoggerProcess = jest.fn();
-  const getConfig = jest.fn((key: string) => configValues[key]);
+  const elasticStart = vi.fn().mockReturnValue(apmInstance);
+  const createLogger = vi.fn().mockReturnValue(loggerInstance);
+  const formatCombine = vi.fn(() => 'combined-format');
+  const formatJson = vi.fn(() => 'json-format');
+  const startLoggerProcess = vi.fn();
+  const getConfig = vi.fn((key: string) => configValues[key]);
 
   const stateMocks = {
-    getAppAlias: jest.fn(() => appAlias),
-    getEnvironmentAlias: jest.fn(() => environmentAlias),
-    getEnvironmentId: jest.fn(() => environmentId),
-    getTelemetryServiceName: jest.fn(() => serviceName),
-    isTelemetryEnabled: jest.fn(() => telemetryEnabled),
+    getAppAlias: vi.fn(() => appAlias),
+    getEnvironmentAlias: vi.fn(() => environmentAlias),
+    getEnvironmentId: vi.fn(() => environmentId),
+    getTelemetryServiceName: vi.fn(() => serviceName),
+    isTelemetryEnabled: vi.fn(() => telemetryEnabled),
   };
 
-  type TransportInstance = { options: unknown; on: jest.Mock };
+  type TransportInstance = { options: unknown; on: Mock };
   const transportInstances: TransportInstance[] = [];
 
   class MockElasticsearchTransport {
     options: unknown;
-    on: jest.Mock;
+    on: Mock;
     constructor(opts: unknown) {
       this.options = opts;
-      this.on = jest.fn();
+      this.on = vi.fn();
       transportInstances.push(this);
     }
   }
 
-  jest.unstable_mockModule('elastic-apm-node', () => ({
+  vi.doMock('elastic-apm-node', () => ({
     default: {
       start: elasticStart,
     },
   }));
 
-  jest.unstable_mockModule('winston', () => ({
+  vi.doMock('winston', () => ({
     default: {
       createLogger,
       format: {
@@ -72,19 +73,19 @@ async function setupMetrics(options: SetupOptions = {}) {
     },
   }));
 
-  jest.unstable_mockModule('winston-elasticsearch', () => ({
+  vi.doMock('winston-elasticsearch', () => ({
     ElasticsearchTransport: MockElasticsearchTransport,
   }));
 
-  jest.unstable_mockModule('../config/server', () => ({
+  vi.doMock('../config/server', () => ({
     getConfig,
   }));
 
-  jest.unstable_mockModule('./loggerProcess', () => ({
+  vi.doMock('./loggerProcess', () => ({
     startLoggerProcess,
   }));
 
-  jest.unstable_mockModule('./state', () => stateMocks);
+  vi.doMock('./state', () => stateMocks);
 
   const metrics = await import('./metrics');
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { IndexDescription, MongoError, ObjectId, SearchIndexDescription } from 'mongodb';
 
 import { Store } from './store';
@@ -103,7 +103,7 @@ void assertExtendedStoreDotNotationTypeSafety;
 
 describe('data/store', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('extend merges schema and indexes and forbids extending after init', () => {
@@ -149,20 +149,20 @@ describe('data/store', () => {
     searchError.code = 68;
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } },
           // Same name, but stale options (missing unique) - should be replaced by code definition
           { name: '_modelence_nameIdx', key: { name: 1 } },
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
-      createSearchIndexes: jest
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: vi
         .fn()
         .mockRejectedValueOnce(searchError as never)
         .mockResolvedValueOnce(undefined as never),
-      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -182,14 +182,14 @@ describe('data/store', () => {
     });
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } },
           { name: '_modelence_title_1_completed_1', key: { title: 1, completed: 1 } },
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -206,8 +206,8 @@ describe('data/store', () => {
     });
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } },
           {
             name: 'environmentId_1_chatId_1_position_1',
@@ -215,8 +215,8 @@ describe('data/store', () => {
           },
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -233,16 +233,16 @@ describe('data/store', () => {
     });
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } }, // Default index, should not be dropped
           { name: '_modelence_name_1', key: { name: 1 } }, // Current index, should be kept
           { name: '_modelence_oldField_1', key: { oldField: 1 } }, // Orphaned index, should be dropped
           { name: 'customIndex_1', key: { customField: 1 } }, // Non-modelence index, should not be dropped
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -261,16 +261,16 @@ describe('data/store', () => {
     });
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } },
           { name: '_modelence_oldField_1', key: { oldField: 1 } },
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
-      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -289,13 +289,13 @@ describe('data/store', () => {
     });
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
-      createSearchIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -318,16 +318,16 @@ describe('data/store', () => {
     searchError.code = 68;
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
-      createSearchIndexes: jest
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+      createSearchIndexes: vi
         .fn()
         .mockRejectedValueOnce(searchError as never)
         .mockResolvedValueOnce(undefined as never),
-      dropSearchIndex: jest.fn().mockResolvedValue(undefined as never),
+      dropSearchIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -348,11 +348,11 @@ describe('data/store', () => {
     namespaceError.code = 26;
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockRejectedValue(namespaceError as never),
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockRejectedValue(namespaceError as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockResolvedValue(undefined as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -373,15 +373,15 @@ describe('data/store', () => {
     indexNotFoundError.code = 27;
 
     const collectionMock = {
-      listIndexes: jest.fn().mockReturnValue({
-        toArray: jest.fn().mockResolvedValue([
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
           { name: '_id_', key: { _id: 1 } },
           // Conflicting manual index with same key should be dropped, but race may already remove it
           { name: 'handle_1', key: { handle: 1 } },
         ] as never),
       }),
-      createIndexes: jest.fn().mockResolvedValue(undefined as never),
-      dropIndex: jest.fn().mockRejectedValue(indexNotFoundError as never),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockRejectedValue(indexNotFoundError as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -500,7 +500,7 @@ describe('data/store', () => {
   test('updateOne converts string selectors into ObjectIds', async () => {
     const store = createStore();
     const collectionMock = {
-      updateOne: jest.fn().mockResolvedValue(undefined as never),
+      updateOne: vi.fn().mockResolvedValue(undefined as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -516,13 +516,13 @@ describe('data/store', () => {
   test('fetch forwards projection and cursor options to MongoDB find', async () => {
     const store = createStore();
     const cursorMock = {
-      sort: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      toArray: jest.fn().mockResolvedValue([{ _id: new ObjectId(), name: 'test' }] as never),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), name: 'test' }] as never),
     };
     const collectionMock = {
-      find: jest.fn().mockReturnValue(cursorMock as never),
+      find: vi.fn().mockReturnValue(cursorMock as never),
     };
 
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -544,7 +544,7 @@ describe('data/store', () => {
 
   test('vectorSearch delegates to aggregate with expected pipeline', async () => {
     const store = createStore();
-    const aggregateSpy = jest
+    const aggregateSpy = vi
       .spyOn(store as unknown as { aggregate: typeof store.aggregate }, 'aggregate')
       .mockReturnValue('cursor' as never);
 
@@ -606,7 +606,7 @@ describe('data/store', () => {
     test('insertOne forwards session option to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        insertOne: jest.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
+        insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -621,7 +621,7 @@ describe('data/store', () => {
     test('insertMany forwards session option to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        insertMany: jest.fn().mockResolvedValue({ insertedCount: 1 } as never),
+        insertMany: vi.fn().mockResolvedValue({ insertedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -636,7 +636,7 @@ describe('data/store', () => {
     test('updateOne forwards session option to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -655,7 +655,7 @@ describe('data/store', () => {
     test('upsertOne merges session with upsert:true', async () => {
       const store = createStore();
       const collectionMock = {
-        updateOne: jest.fn().mockResolvedValue({ upsertedCount: 1 } as never),
+        updateOne: vi.fn().mockResolvedValue({ upsertedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -672,7 +672,7 @@ describe('data/store', () => {
     test('deleteOne forwards session option to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 } as never),
+        deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -685,7 +685,7 @@ describe('data/store', () => {
     test('deleteMany forwards session option to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        deleteMany: jest.fn().mockResolvedValue({ deletedCount: 2 } as never),
+        deleteMany: vi.fn().mockResolvedValue({ deletedCount: 2 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -701,7 +701,7 @@ describe('data/store', () => {
       const store = createStore();
       const doc = { _id: new ObjectId(), name: 'updated' };
       const collectionMock = {
-        findOneAndUpdate: jest.fn().mockResolvedValue(doc as never),
+        findOneAndUpdate: vi.fn().mockResolvedValue(doc as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -721,7 +721,7 @@ describe('data/store', () => {
     test('returns null when document not found', async () => {
       const store = createStore();
       const collectionMock = {
-        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+        findOneAndUpdate: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -737,7 +737,7 @@ describe('data/store', () => {
       const store = createStore();
       const id = '507f1f77bcf86cd799439011';
       const collectionMock = {
-        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+        findOneAndUpdate: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -751,7 +751,7 @@ describe('data/store', () => {
     test('forwards options to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        findOneAndUpdate: jest.fn().mockResolvedValue(null as never),
+        findOneAndUpdate: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -772,7 +772,7 @@ describe('data/store', () => {
       const store = createStore();
       const doc = { _id: new ObjectId(), name: 'deleted' };
       const collectionMock = {
-        findOneAndDelete: jest.fn().mockResolvedValue(doc as never),
+        findOneAndDelete: vi.fn().mockResolvedValue(doc as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -785,7 +785,7 @@ describe('data/store', () => {
     test('returns null when document not found', async () => {
       const store = createStore();
       const collectionMock = {
-        findOneAndDelete: jest.fn().mockResolvedValue(null as never),
+        findOneAndDelete: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -798,7 +798,7 @@ describe('data/store', () => {
       const store = createStore();
       const id = '507f1f77bcf86cd799439011';
       const collectionMock = {
-        findOneAndDelete: jest.fn().mockResolvedValue(null as never),
+        findOneAndDelete: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -814,7 +814,7 @@ describe('data/store', () => {
       const store = createStore();
       const doc = { _id: new ObjectId(), name: 'replacement' };
       const collectionMock = {
-        findOneAndReplace: jest.fn().mockResolvedValue(doc as never),
+        findOneAndReplace: vi.fn().mockResolvedValue(doc as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -832,7 +832,7 @@ describe('data/store', () => {
     test('returns null when document not found', async () => {
       const store = createStore();
       const collectionMock = {
-        findOneAndReplace: jest.fn().mockResolvedValue(null as never),
+        findOneAndReplace: vi.fn().mockResolvedValue(null as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -849,7 +849,7 @@ describe('data/store', () => {
     test('calls collection.replaceOne with selector and replacement', async () => {
       const store = createStore();
       const collectionMock = {
-        replaceOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+        replaceOne: vi.fn().mockResolvedValue({ modifiedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -867,7 +867,7 @@ describe('data/store', () => {
       const store = createStore();
       const id = '507f1f77bcf86cd799439011';
       const collectionMock = {
-        replaceOne: jest.fn().mockResolvedValue({ modifiedCount: 1 } as never),
+        replaceOne: vi.fn().mockResolvedValue({ modifiedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -881,7 +881,7 @@ describe('data/store', () => {
     test('forwards options to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        replaceOne: jest.fn().mockResolvedValue({ upsertedCount: 1 } as never),
+        replaceOne: vi.fn().mockResolvedValue({ upsertedCount: 1 } as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -899,7 +899,7 @@ describe('data/store', () => {
     test('returns distinct values for a field', async () => {
       const store = createStore();
       const collectionMock = {
-        distinct: jest.fn().mockResolvedValue(['alice', 'bob'] as never),
+        distinct: vi.fn().mockResolvedValue(['alice', 'bob'] as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -912,7 +912,7 @@ describe('data/store', () => {
     test('passes filter to MongoDB', async () => {
       const store = createStore();
       const collectionMock = {
-        distinct: jest.fn().mockResolvedValue(['alice'] as never),
+        distinct: vi.fn().mockResolvedValue(['alice'] as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -924,7 +924,7 @@ describe('data/store', () => {
     test('passes options to MongoDB when provided', async () => {
       const store = createStore();
       const collectionMock = {
-        distinct: jest.fn().mockResolvedValue([] as never),
+        distinct: vi.fn().mockResolvedValue([] as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -938,9 +938,9 @@ describe('data/store', () => {
   describe('watch', () => {
     test('calls collection.watch and returns the change stream', () => {
       const store = createStore();
-      const changeStream = { on: jest.fn() };
+      const changeStream = { on: vi.fn() };
       const collectionMock = {
-        watch: jest.fn().mockReturnValue(changeStream as never),
+        watch: vi.fn().mockReturnValue(changeStream as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -954,7 +954,7 @@ describe('data/store', () => {
       const store = createStore();
       const changeStream = {};
       const collectionMock = {
-        watch: jest.fn().mockReturnValue(changeStream as never),
+        watch: vi.fn().mockReturnValue(changeStream as never),
       };
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -970,7 +970,7 @@ describe('data/store', () => {
     test('$and operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -989,7 +989,7 @@ describe('data/store', () => {
     test('$or operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1008,7 +1008,7 @@ describe('data/store', () => {
     test('$nor operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1027,7 +1027,7 @@ describe('data/store', () => {
     test('$not operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1044,7 +1044,7 @@ describe('data/store', () => {
     test('$text operator with all options works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1077,7 +1077,7 @@ describe('data/store', () => {
     test('$text operator with minimal options works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1101,7 +1101,7 @@ describe('data/store', () => {
     test('$where operator with string works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1120,7 +1120,7 @@ describe('data/store', () => {
     test('$where operator with function works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1143,7 +1143,7 @@ describe('data/store', () => {
     test('$comment operator with string works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1163,7 +1163,7 @@ describe('data/store', () => {
     test('$comment operator with Document works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1185,7 +1185,7 @@ describe('data/store', () => {
     test('$expr operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1205,7 +1205,7 @@ describe('data/store', () => {
     test('$jsonSchema operator works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
@@ -1231,7 +1231,7 @@ describe('data/store', () => {
     test('combining multiple StrictRootFilterOperators works correctly', async () => {
       const store = createStore();
       const collectionMock = {
-        findOne: jest.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
+        findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(), name: 'test' } as never),
       };
 
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
