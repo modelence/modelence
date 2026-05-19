@@ -1,46 +1,46 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockGetConfig = jest.fn<(key: string) => unknown>();
-const mockStartTransaction = jest.fn();
-const mockCaptureError = jest.fn();
-const mockGenerateText = jest.fn<(options: unknown) => Promise<unknown>>();
+const mockGetConfig = vi.fn<(key: string) => unknown>();
+const mockStartTransaction = vi.fn();
+const mockCaptureError = vi.fn();
+const mockGenerateText = vi.fn<(options: unknown) => Promise<unknown>>();
 
-const mockOpenAIModelFactory = jest.fn<(model: string) => unknown>();
-const mockAnthropicModelFactory = jest.fn<(model: string) => unknown>();
-const mockGoogleModelFactory = jest.fn<(model: string) => unknown>();
+const mockOpenAIModelFactory = vi.fn<(model: string) => unknown>();
+const mockAnthropicModelFactory = vi.fn<(model: string) => unknown>();
+const mockGoogleModelFactory = vi.fn<(model: string) => unknown>();
 
-const mockCreateOpenAI = jest.fn<
+const mockCreateOpenAI = vi.fn<
   (options: { apiKey: string }) => typeof mockOpenAIModelFactory
 >(() => mockOpenAIModelFactory);
-const mockCreateAnthropic = jest.fn<
+const mockCreateAnthropic = vi.fn<
   (options: { apiKey: string }) => typeof mockAnthropicModelFactory
 >(() => mockAnthropicModelFactory);
-const mockCreateGoogleGenerativeAI = jest.fn<
+const mockCreateGoogleGenerativeAI = vi.fn<
   (options: { apiKey: string }) => typeof mockGoogleModelFactory
 >(() => mockGoogleModelFactory);
 
-jest.unstable_mockModule('modelence/server', () => ({
+vi.doMock('modelence/server', () => ({
   getConfig: mockGetConfig,
 }));
 
-jest.unstable_mockModule('modelence/telemetry', () => ({
+vi.doMock('modelence/telemetry', () => ({
   startTransaction: mockStartTransaction,
   captureError: mockCaptureError,
 }));
 
-jest.unstable_mockModule('ai', () => ({
+vi.doMock('ai', () => ({
   generateText: mockGenerateText,
 }));
 
-jest.unstable_mockModule('@ai-sdk/openai', () => ({
+vi.doMock('@ai-sdk/openai', () => ({
   createOpenAI: mockCreateOpenAI,
 }));
 
-jest.unstable_mockModule('@ai-sdk/anthropic', () => ({
+vi.doMock('@ai-sdk/anthropic', () => ({
   createAnthropic: mockCreateAnthropic,
 }));
 
-jest.unstable_mockModule('@ai-sdk/google', () => ({
+vi.doMock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: mockCreateGoogleGenerativeAI,
 }));
 
@@ -48,7 +48,7 @@ const { generateText } = await import('./index');
 
 describe('@modelence/ai generateText', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetConfig.mockImplementation((key: string) => {
       const values: Record<string, string> = {
         '_system.openai.apiKey': 'openai-key',
@@ -61,8 +61,8 @@ describe('@modelence/ai generateText', () => {
 
   test('uses OpenAI provider, forwards options, and ends transaction with usage context', async () => {
     const transaction = {
-      end: jest.fn(),
-      setContext: jest.fn(),
+      end: vi.fn(),
+      setContext: vi.fn(),
     };
     mockStartTransaction.mockReturnValue(transaction);
 
@@ -117,7 +117,7 @@ describe('@modelence/ai generateText', () => {
 
   test('supports older transaction API without setContext', async () => {
     const transaction = {
-      end: jest.fn(),
+      end: vi.fn(),
     };
     mockStartTransaction.mockReturnValue(transaction);
 
@@ -148,8 +148,8 @@ describe('@modelence/ai generateText', () => {
 
   test('captures and rethrows provider/model errors', async () => {
     const transaction = {
-      end: jest.fn(),
-      setContext: jest.fn(),
+      end: vi.fn(),
+      setContext: vi.fn(),
     };
     mockStartTransaction.mockReturnValue(transaction);
 
@@ -176,8 +176,8 @@ describe('@modelence/ai generateText', () => {
 
   test('captures unsupported provider failures and does not call AI SDK', async () => {
     const transaction = {
-      end: jest.fn(),
-      setContext: jest.fn(),
+      end: vi.fn(),
+      setContext: vi.fn(),
     };
     mockStartTransaction.mockReturnValue(transaction);
 

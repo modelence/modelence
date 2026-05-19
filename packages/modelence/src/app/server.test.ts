@@ -1,4 +1,5 @@
-import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';
+import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest';
+import type { Mock, MockedFunction } from 'vitest';
 import { ObjectId } from 'mongodb';
 import type { Request, Response, RequestHandler } from 'express';
 import type { AppServer, ExpressMiddleware } from '../types';
@@ -8,65 +9,65 @@ import type { RouteHandler } from '@/routes/types';
 
 // Type definitions for test mocks
 type MockExpressApp = {
-  use: jest.Mock;
-  post: jest.Mock;
-  get: jest.Mock;
-  put: jest.Mock;
-  patch: jest.Mock;
-  delete: jest.Mock;
-  all: jest.Mock;
+  use: Mock;
+  post: Mock;
+  get: Mock;
+  put: Mock;
+  patch: Mock;
+  delete: Mock;
+  all: Mock;
 };
 
 type MockHttpServer = {
-  listen: jest.Mock;
+  listen: Mock;
 };
 
 type MockAppServer = AppServer & {
-  init: jest.MockedFunction<AppServer['init']>;
-  handler: jest.MockedFunction<AppServer['handler']>;
-  middlewares?: jest.MockedFunction<NonNullable<AppServer['middlewares']>>;
+  init: MockedFunction<AppServer['init']>;
+  handler: MockedFunction<AppServer['handler']>;
+  middlewares?: MockedFunction<NonNullable<AppServer['middlewares']>>;
 };
 
 type ExpressRouteHandler = RequestHandler;
 
 const createMockServer = (): MockAppServer => ({
-  init: jest.fn(async () => {}),
-  handler: jest.fn<AppServer['handler']>(),
+  init: vi.fn<AppServer['init']>(async () => {}),
+  handler: vi.fn<AppServer['handler']>(),
 });
 
-const mockAuthenticate = jest.fn();
-const mockGetUnauthenticatedRoles = jest.fn();
-const mockGetMongodbUri = jest.fn();
-const mockGetClient = jest.fn();
-const mockConnect = jest.fn();
-const mockRequireAccess = jest.fn();
-const mockHasAccess = jest.fn();
-const mockHasPermission = jest.fn();
-const mockGetDefaultAuthenticatedRoles = jest.fn();
-const mockInitRoles = jest.fn();
+const mockAuthenticate = vi.fn();
+const mockGetUnauthenticatedRoles = vi.fn();
+const mockGetMongodbUri = vi.fn();
+const mockGetClient = vi.fn();
+const mockConnect = vi.fn();
+const mockRequireAccess = vi.fn();
+const mockHasAccess = vi.fn();
+const mockHasPermission = vi.fn();
+const mockGetDefaultAuthenticatedRoles = vi.fn();
+const mockInitRoles = vi.fn();
 const mockRunMethod =
-  jest.fn<
+  vi.fn<
     (methodName: string, args: unknown, context: unknown) => Promise<Record<string, unknown>>
   >();
-const mockGetResponseTypeMap = jest.fn<(result: unknown) => Record<string, string>>();
+const mockGetResponseTypeMap = vi.fn<(result: unknown) => Record<string, string>>();
 const mockCreateRouteHandler =
-  jest.fn<(method: string, path: string, handler: unknown) => RequestHandler>();
-const mockGoogleAuthRouter = jest.fn();
-const mockGithubAuthRouter = jest.fn();
-const mockLogInfo = jest.fn();
-const mockGetSecurityConfig = jest.fn();
-const mockGetWebsocketConfig = jest.fn();
-const mockExpressJson = jest.fn();
-const mockExpressUrlencoded = jest.fn();
-const mockExpressRaw = jest.fn();
-const mockCookieParser = jest.fn();
-const mockHttpCreateServer = jest.fn();
+  vi.fn<(method: string, path: string, handler: unknown) => RequestHandler>();
+const mockGoogleAuthRouter = vi.fn();
+const mockGithubAuthRouter = vi.fn();
+const mockLogInfo = vi.fn();
+const mockGetSecurityConfig = vi.fn();
+const mockGetWebsocketConfig = vi.fn();
+const mockExpressJson = vi.fn();
+const mockExpressUrlencoded = vi.fn();
+const mockExpressRaw = vi.fn();
+const mockCookieParser = vi.fn();
+const mockHttpCreateServer = vi.fn();
 
-jest.unstable_mockModule('../auth', () => ({
+vi.doMock('../auth', () => ({
   authenticate: mockAuthenticate,
 }));
 
-jest.unstable_mockModule('../auth/role', () => ({
+vi.doMock('../auth/role', () => ({
   getUnauthenticatedRoles: mockGetUnauthenticatedRoles,
   requireAccess: mockRequireAccess,
   hasAccess: mockHasAccess,
@@ -75,54 +76,54 @@ jest.unstable_mockModule('../auth/role', () => ({
   initRoles: mockInitRoles,
 }));
 
-jest.unstable_mockModule('../db/client', () => ({
+vi.doMock('../db/client', () => ({
   getMongodbUri: mockGetMongodbUri,
   getClient: mockGetClient,
   connect: mockConnect,
 }));
 
-jest.unstable_mockModule('@/methods', () => ({
+vi.doMock('@/methods', () => ({
   runMethod: mockRunMethod,
 }));
 
-jest.unstable_mockModule('@/methods/serialize', () => ({
+vi.doMock('@/methods/serialize', () => ({
   getResponseTypeMap: mockGetResponseTypeMap,
   sanitizeResult: (result: unknown) => result,
 }));
 
-jest.unstable_mockModule('@/routes/handler', () => ({
+vi.doMock('@/routes/handler', () => ({
   createRouteHandler: mockCreateRouteHandler,
 }));
 
-jest.unstable_mockModule('@/auth/providers/google', () => ({
+vi.doMock('@/auth/providers/google', () => ({
   default: mockGoogleAuthRouter,
 }));
 
-jest.unstable_mockModule('@/auth/providers/github', () => ({
+vi.doMock('@/auth/providers/github', () => ({
   default: mockGithubAuthRouter,
 }));
 
-jest.unstable_mockModule('@/telemetry', () => ({
+vi.doMock('@/telemetry', () => ({
   logInfo: mockLogInfo,
 }));
 
-jest.unstable_mockModule('./securityConfig', () => ({
+vi.doMock('./securityConfig', () => ({
   getSecurityConfig: mockGetSecurityConfig,
 }));
 
-jest.unstable_mockModule('./websocketConfig', () => ({
+vi.doMock('./websocketConfig', () => ({
   getWebsocketConfig: mockGetWebsocketConfig,
 }));
 
 let mockExpressApp: MockExpressApp;
 const createExpressAppMock = (): MockExpressApp => ({
-  use: jest.fn(),
-  post: jest.fn(),
-  get: jest.fn(),
-  put: jest.fn(),
-  patch: jest.fn(),
-  delete: jest.fn(),
-  all: jest.fn(),
+  use: vi.fn(),
+  post: vi.fn(),
+  get: vi.fn(),
+  put: vi.fn(),
+  patch: vi.fn(),
+  delete: vi.fn(),
+  all: vi.fn(),
 });
 
 type MiddlewareFn = (req: unknown, res: unknown, next: () => void) => void;
@@ -131,7 +132,7 @@ function findSecurityMiddleware(app: MockExpressApp): MiddlewareFn | undefined {
   for (const call of app.use.mock.calls) {
     const fn = call[0];
     if (typeof fn !== 'function') continue;
-    const mockRes = { setHeader: jest.fn() };
+    const mockRes = { setHeader: vi.fn() };
     (fn as MiddlewareFn)({}, mockRes, () => {});
     const setsCSP = mockRes.setHeader.mock.calls.some(
       (args: unknown[]) => args[0] === 'Content-Security-Policy'
@@ -161,22 +162,22 @@ const getRegisteredSetLinkCookieHandler = (app: MockExpressApp) => {
   return call[1] as (req: Request, res: Response) => Promise<unknown>;
 };
 
-jest.unstable_mockModule('express', () => {
-  const express = jest.fn(() => {
+vi.doMock('express', () => {
+  const express = vi.fn(() => {
     // Return the app set in beforeEach
     return mockExpressApp || createExpressAppMock();
-  }) as jest.Mock & { json: jest.Mock; urlencoded: jest.Mock; raw: jest.Mock };
+  }) as Mock & { json: Mock; urlencoded: Mock; raw: Mock };
   express.json = mockExpressJson;
   express.urlencoded = mockExpressUrlencoded;
   express.raw = mockExpressRaw;
   return { default: express };
 });
 
-jest.unstable_mockModule('cookie-parser', () => ({
+vi.doMock('cookie-parser', () => ({
   default: mockCookieParser,
 }));
 
-jest.unstable_mockModule('http', () => ({
+vi.doMock('http', () => ({
   default: {
     createServer: mockHttpCreateServer,
   },
@@ -205,19 +206,19 @@ function createRequest(overrides: Partial<Request> & { headers?: Record<string, 
 
 function createResponse(): Response {
   const res = {
-    json: jest.fn(),
-    send: jest.fn(),
-    status: jest.fn(),
-    sendFile: jest.fn(),
-    cookie: jest.fn(),
+    json: vi.fn(),
+    send: vi.fn(),
+    status: vi.fn(),
+    sendFile: vi.fn(),
+    cookie: vi.fn(),
   } as unknown as Response;
-  (res.status as jest.Mock).mockReturnValue(res);
+  (res.status as Mock).mockReturnValue(res);
   return res;
 }
 
 describe('app/server getCallContext', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockAuthenticate.mockResolvedValue({ session: null, user: null, roles: [] } as never);
     mockGetUnauthenticatedRoles.mockReturnValue(['guest']);
     mockGetMongodbUri.mockReturnValue(undefined);
@@ -419,27 +420,27 @@ describe('app/server startServer', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     originalEnv = { ...process.env };
 
     mockApp = {
-      use: jest.fn(),
-      post: jest.fn(),
-      get: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
-      all: jest.fn(),
+      use: vi.fn(),
+      post: vi.fn(),
+      get: vi.fn(),
+      put: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
+      all: vi.fn(),
     };
 
     // Set the app that will be returned by express()
     mockExpressApp = mockApp;
 
     mockHttpServer = {
-      listen: jest.fn(((_port: unknown, callback?: () => void) => {
+      listen: vi.fn(((_port: unknown, callback?: () => void) => {
         if (callback) callback();
         return mockHttpServer;
-      }) as jest.Mock),
+      }) as Mock),
     };
 
     mockExpressJson.mockReturnValue('json-middleware');
@@ -467,7 +468,7 @@ describe('app/server startServer', () => {
     const middleware = findSecurityMiddleware(mockApp);
     expect(middleware).toBeDefined();
 
-    const mockRes = { setHeader: jest.fn() };
+    const mockRes = { setHeader: vi.fn() };
     middleware!({}, mockRes, () => {});
 
     expect(mockRes.setHeader).toHaveBeenCalledWith(
@@ -492,7 +493,7 @@ describe('app/server startServer', () => {
     const middleware = findSecurityMiddleware(mockApp);
     expect(middleware).toBeDefined();
 
-    const mockRes = { setHeader: jest.fn() };
+    const mockRes = { setHeader: vi.fn() };
     middleware!({}, mockRes, () => {});
 
     expect(mockRes.setHeader).toHaveBeenCalledWith(
@@ -503,10 +504,10 @@ describe('app/server startServer', () => {
   });
 
   test('initializes express app with middleware', async () => {
-    const viteMiddleware = jest.fn() as unknown as ExpressMiddleware;
+    const viteMiddleware = vi.fn() as unknown as ExpressMiddleware;
     const mockServer = {
       ...createMockServer(),
-      middlewares: jest.fn(() => [viteMiddleware]),
+      middlewares: vi.fn(() => [viteMiddleware]),
     };
 
     await startServer(mockServer, {
@@ -549,10 +550,10 @@ describe('app/server startServer', () => {
 
   test('calls server init before adding middlewares', async () => {
     const callOrder: string[] = [];
-    const testMiddleware = jest.fn() as unknown as ExpressMiddleware;
+    const testMiddleware = vi.fn() as unknown as ExpressMiddleware;
     const mockServer = {
       ...createMockServer(),
-      middlewares: jest.fn(() => {
+      middlewares: vi.fn(() => {
         callOrder.push('middlewares');
         return [testMiddleware];
       }),
@@ -570,7 +571,7 @@ describe('app/server startServer', () => {
   });
 
   test('registers catch-all route handler', async () => {
-    const mockHandler = jest.fn<AppServer['handler']>();
+    const mockHandler = vi.fn<AppServer['handler']>();
     const mockServer = createMockServer();
     mockServer.handler = mockHandler;
 
@@ -633,8 +634,8 @@ describe('app/server startServer', () => {
 
   test('initializes websocket provider when configured', async () => {
     const mockWebsocketProvider = {
-      init: jest.fn(),
-      broadcast: jest.fn(),
+      init: vi.fn(),
+      broadcast: vi.fn(),
     };
     mockGetWebsocketConfig.mockReturnValue({ provider: mockWebsocketProvider });
 
@@ -667,7 +668,7 @@ describe('app/server startServer', () => {
   });
 
   test('registers module routes', async () => {
-    const mockRouteHandler = jest.fn() as unknown as ExpressRouteHandler;
+    const mockRouteHandler = vi.fn() as unknown as ExpressRouteHandler;
     mockCreateRouteHandler.mockReturnValue(mockRouteHandler);
 
     const mockModule = new Module('testModule', {
@@ -675,8 +676,8 @@ describe('app/server startServer', () => {
         {
           path: '/api/test',
           handlers: {
-            get: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })),
-            post: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })),
+            get: vi.fn<RouteHandler>(() => ({ status: 200, data: {} })),
+            post: vi.fn<RouteHandler>(() => ({ status: 200, data: {} })),
           },
         },
       ],
@@ -707,14 +708,14 @@ describe('app/server startServer', () => {
   });
 
   test('handles multiple modules with routes', async () => {
-    mockCreateRouteHandler.mockReturnValue(jest.fn() as unknown as ExpressRouteHandler);
+    mockCreateRouteHandler.mockReturnValue(vi.fn() as unknown as ExpressRouteHandler);
 
     const modules = [
       new Module('module1', {
         routes: [
           {
             path: '/api/foo',
-            handlers: { get: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
+            handlers: { get: vi.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
           },
         ],
       }),
@@ -722,7 +723,7 @@ describe('app/server startServer', () => {
         routes: [
           {
             path: '/api/bar',
-            handlers: { post: jest.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
+            handlers: { post: vi.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
           },
         ],
       }),
@@ -764,7 +765,7 @@ describe('app/server startServer', () => {
 
 describe('app/server method endpoint', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetSecurityConfig.mockReturnValue({});
     mockGetWebsocketConfig.mockReturnValue(null);
 
@@ -774,7 +775,7 @@ describe('app/server method endpoint', () => {
     mockGoogleAuthRouter.mockReturnValue('google-router');
     mockGithubAuthRouter.mockReturnValue('github-router');
     mockHttpCreateServer.mockReturnValue({
-      listen: jest.fn((_port: unknown, callback?: () => void) => {
+      listen: vi.fn((_port: unknown, callback?: () => void) => {
         if (callback) callback();
       }),
     });
@@ -959,7 +960,7 @@ describe('app/server method endpoint', () => {
 
 describe('app/server set-link-cookie endpoint', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetSecurityConfig.mockReturnValue({});
     mockGetWebsocketConfig.mockReturnValue(null);
 
@@ -969,7 +970,7 @@ describe('app/server set-link-cookie endpoint', () => {
     mockGoogleAuthRouter.mockReturnValue('google-router');
     mockGithubAuthRouter.mockReturnValue('github-router');
     mockHttpCreateServer.mockReturnValue({
-      listen: jest.fn((_port: unknown, callback?: () => void) => {
+      listen: vi.fn((_port: unknown, callback?: () => void) => {
         if (callback) callback();
       }),
     });

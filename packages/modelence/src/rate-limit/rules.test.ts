@@ -1,21 +1,22 @@
-import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 type SetupResult = {
   initRateLimits: typeof import('./rules').initRateLimits;
   consumeRateLimit: typeof import('./rules').consumeRateLimit;
   mocks: {
-    findOne: jest.Mock;
-    upsertOne: jest.Mock;
+    findOne: Mock;
+    upsertOne: Mock;
   };
 };
 
 async function loadModule(): Promise<SetupResult> {
-  jest.resetModules();
+  vi.resetModules();
 
-  const mockFindOne = jest.fn();
-  const mockUpsertOne = jest.fn();
+  const mockFindOne = vi.fn();
+  const mockUpsertOne = vi.fn();
 
-  jest.unstable_mockModule('./db', () => ({
+  vi.doMock('./db', () => ({
     dbRateLimits: {
       findOne: mockFindOne,
       upsertOne: mockUpsertOne,
@@ -36,7 +37,7 @@ async function loadModule(): Promise<SetupResult> {
 
 describe('rate-limit/rules', () => {
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('initRateLimits throws on duplicate initialization', async () => {
@@ -50,7 +51,7 @@ describe('rate-limit/rules', () => {
   });
 
   test('consumeRateLimit inserts new record when no existing entry', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
@@ -78,7 +79,7 @@ describe('rate-limit/rules', () => {
   });
 
   test('consumeRateLimit throws when limit exceeded in current window', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);
@@ -102,7 +103,7 @@ describe('rate-limit/rules', () => {
   });
 
   test('consumeRateLimit uses custom error message when provided', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);

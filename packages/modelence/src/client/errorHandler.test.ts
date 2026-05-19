@@ -1,15 +1,15 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 import { setErrorHandler, handleError } from './errorHandler';
 
 describe('client/errorHandler', () => {
-  let consoleErrorSpy: ReturnType<typeof jest.spyOn>;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     // Reset to default error handler before each test
     setErrorHandler((error, methodName) => {
       console.error(`Error calling method '${methodName}':`, error);
     });
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {

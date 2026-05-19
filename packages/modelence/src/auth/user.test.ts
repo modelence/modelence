@@ -1,29 +1,30 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 
-const mockRandomBytes = jest.fn();
-const mockInsertOne = jest.fn();
+const mockRandomBytes = vi.fn();
+const mockInsertOne = vi.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
 
-const mockUpdateDisposableEmailListCron = jest.fn();
-const mockHandleLoginWithPassword = jest.fn();
-const mockHandleLogout = jest.fn();
-const mockHandleSignupWithPassword = jest.fn();
-const mockHandleVerifyEmail = jest.fn();
-const mockHandleResendEmailVerification = jest.fn();
-const mockHandleSendResetPasswordToken = jest.fn();
-const mockHandleResetPassword = jest.fn();
-const mockGetOwnProfile = jest.fn();
-const mockHandleUpdateProfile = jest.fn();
+const mockUpdateDisposableEmailListCron = vi.fn();
+const mockHandleLoginWithPassword = vi.fn();
+const mockHandleLogout = vi.fn();
+const mockHandleSignupWithPassword = vi.fn();
+const mockHandleVerifyEmail = vi.fn();
+const mockHandleResendEmailVerification = vi.fn();
+const mockHandleSendResetPasswordToken = vi.fn();
+const mockHandleResetPassword = vi.fn();
+const mockGetOwnProfile = vi.fn();
+const mockHandleUpdateProfile = vi.fn();
 
-const moduleCtorMock = jest.fn();
+const moduleCtorMock = vi.fn();
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     insertOne: mockInsertOne,
   },
@@ -32,42 +33,42 @@ jest.unstable_mockModule('./db', () => ({
   resetPasswordTokensCollection: mockResetPasswordTokensCollection,
 }));
 
-jest.unstable_mockModule('./disposableEmails', () => ({
+vi.doMock('./disposableEmails', () => ({
   updateDisposableEmailListCron: mockUpdateDisposableEmailListCron,
 }));
 
-jest.unstable_mockModule('./login', () => ({
+vi.doMock('./login', () => ({
   handleLoginWithPassword: mockHandleLoginWithPassword,
   handleLogout: mockHandleLogout,
 }));
 
-jest.unstable_mockModule('./profile', () => ({
+vi.doMock('./profile', () => ({
   getOwnProfile: mockGetOwnProfile,
   handleUpdateProfile: mockHandleUpdateProfile,
 }));
 
-jest.unstable_mockModule('./signup', () => ({
+vi.doMock('./signup', () => ({
   handleSignupWithPassword: mockHandleSignupWithPassword,
 }));
 
-jest.unstable_mockModule('./verification', () => ({
+vi.doMock('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
   handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
-jest.unstable_mockModule('./resetPassword', () => ({
+vi.doMock('./resetPassword', () => ({
   handleSendResetPasswordToken: mockHandleSendResetPasswordToken,
   handleResetPassword: mockHandleResetPassword,
 }));
 
 const mockTime = {
-  seconds: jest.fn((value: number) => value * 1000),
-  minutes: jest.fn((value: number) => value * 60 * 1000),
-  hours: jest.fn((value: number) => value * 60 * 60 * 1000),
-  days: jest.fn((value: number) => value * 24 * 60 * 60 * 1000),
+  seconds: vi.fn((value: number) => value * 1000),
+  minutes: vi.fn((value: number) => value * 60 * 1000),
+  hours: vi.fn((value: number) => value * 60 * 60 * 1000),
+  days: vi.fn((value: number) => value * 24 * 60 * 60 * 1000),
 };
 
-jest.unstable_mockModule('../time', () => ({
+vi.doMock('../time', () => ({
   time: mockTime,
 }));
 
@@ -81,7 +82,7 @@ class ModuleMock {
   }
 }
 
-jest.unstable_mockModule('../app/module', () => ({
+vi.doMock('../app/module', () => ({
   Module: ModuleMock,
 }));
 
@@ -159,14 +160,14 @@ describe('auth/user', () => {
   });
 
   describe('buildAuthRateLimits', () => {
-    let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
+    let consoleWarnSpy: MockInstance<typeof console.warn>;
 
     beforeEach(() => {
       mockTime.seconds.mockClear();
       mockTime.minutes.mockClear();
       mockTime.hours.mockClear();
       mockTime.days.mockClear();
-      consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     });
 
     afterEach(() => {
