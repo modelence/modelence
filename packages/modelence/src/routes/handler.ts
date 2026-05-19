@@ -34,7 +34,7 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
         {
           query: req.query as Record<string, string>,
           body: req.body,
-          params: req.params,
+          params: req.params as Record<string, string>,
           headers: req.headers as Record<string, string>,
           cookies: req.cookies,
           rawBody: Buffer.isBuffer(req.body) ? req.body : undefined,

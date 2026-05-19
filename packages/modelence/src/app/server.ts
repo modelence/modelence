@@ -9,7 +9,7 @@ import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import z from 'zod';
-import type { AppServer } from '../types';
+import type { AppServer, HttpContext } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
@@ -102,7 +102,7 @@ export async function startServer(
 
   // Set httpOnly cookie for OAuth linking flow
   app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req);
+    const { session } = await getCallContext(req, res);
 
     if (!session?.userId) {
       res.status(401).json({ error: 'Not authenticated' });
@@ -121,8 +121,8 @@ export async function startServer(
   });
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
-    const { methodName } = req.params;
-    const context = await getCallContext(req);
+    const methodName = req.params.methodName as string;
+    const context = await getCallContext(req, res);
 
     try {
       const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
@@ -176,7 +176,7 @@ export async function startServer(
   });
 }
 
-export async function getCallContext(req: Request) {
+export async function getCallContext(req: Request, res: Response): Promise<HttpContext> {
   const path = (req.path ?? req.url ?? '').split('?')[0];
 
   const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
@@ -227,6 +227,8 @@ export async function getCallContext(req: Request) {
       session,
       user,
       roles,
+      req,
+      res,
     };
   }
 
@@ -236,6 +238,8 @@ export async function getCallContext(req: Request) {
     session: null,
     user: null,
     roles: getUnauthenticatedRoles(),
+    req,
+    res,
   };
 }
 
