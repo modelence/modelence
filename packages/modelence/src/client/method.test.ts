@@ -1,23 +1,24 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 
-const mockGetLocalStorageSession = jest.fn();
-const mockHandleError = jest.fn();
-const mockReviveResponseTypes = jest.fn();
+const mockGetLocalStorageSession = vi.fn();
+const mockHandleError = vi.fn();
+const mockReviveResponseTypes = vi.fn();
 
-jest.unstable_mockModule('@/client/localStorage', () => ({
+vi.doMock('@/client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
-  setLocalStorageSession: jest.fn(),
+  setLocalStorageSession: vi.fn(),
 }));
 
-jest.unstable_mockModule('./errorHandler', () => ({
+vi.doMock('./errorHandler', () => ({
   handleError: mockHandleError,
 }));
 
-jest.unstable_mockModule('../methods/serialize', () => ({
+vi.doMock('../methods/serialize', () => ({
   reviveResponseTypes: mockReviveResponseTypes,
 }));
 
-const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>;
+const fetchMock = vi.fn() as MockedFunction<typeof fetch>;
 const originalFetch = global.fetch;
 const originalWindow = globalThis.window;
 
@@ -25,7 +26,7 @@ const { callMethod, MethodError, _setCallMethodTransport } = await import('./met
 
 describe('client/method', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     global.fetch = fetchMock as unknown as typeof fetch;
     mockGetLocalStorageSession.mockReturnValue({ authToken: 'token' });
     mockReviveResponseTypes.mockImplementation((data) => data);
@@ -52,7 +53,7 @@ describe('client/method', () => {
   });
 
   test('callMethod posts to internal endpoint with client info and returns data', async () => {
-    const spyJSON = jest.spyOn(JSON, 'parse');
+    const spyJSON = vi.spyOn(JSON, 'parse');
     const result = await callMethod<{ ok: boolean }>('test.method', { foo: 'bar' });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/_internal/method/test.method', expect.any(Object));

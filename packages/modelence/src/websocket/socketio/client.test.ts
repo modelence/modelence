@@ -1,47 +1,48 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import type { Mocked, MockedFunction } from 'vitest';
 import type { Socket } from 'socket.io-client';
 import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
 import type { getLocalStorageSession } from '@/client/localStorage';
 
 type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit'>;
-const mockSocket: jest.Mocked<SocketMethods> = {
-  on: jest.fn(),
-  once: jest.fn(),
-  off: jest.fn(),
-  emit: jest.fn(),
+const mockSocket: Mocked<SocketMethods> = {
+  on: vi.fn(),
+  once: vi.fn(),
+  off: vi.fn(),
+  emit: vi.fn(),
 };
 
 type IoFactory = typeof ioClientFactory;
-const mockIo: jest.MockedFunction<IoFactory> = jest.fn(() => mockSocket as unknown as Socket);
+const mockIo: MockedFunction<IoFactory> = vi.fn(() => mockSocket as unknown as Socket);
 type LocalStorageSession = ReturnType<typeof getLocalStorageSession>;
-const mockGetLocalStorageSession = jest.fn<() => LocalStorageSession>();
+const mockGetLocalStorageSession = vi.fn<() => LocalStorageSession>();
 
 const createMockChannel = (category: string): ClientChannel => {
   const channel = {
     category,
-    init: jest.fn(),
-    joinChannel: jest.fn(),
-    leaveChannel: jest.fn(),
+    init: vi.fn(),
+    joinChannel: vi.fn(),
+    leaveChannel: vi.fn(),
   };
   // Add private property via type assertion
   return channel as unknown as ClientChannel;
 };
 
-jest.unstable_mockModule('socket.io-client', () => ({
+vi.doMock('socket.io-client', () => ({
   default: mockIo,
 }));
 
-jest.unstable_mockModule('@/client/localStorage', () => ({
+vi.doMock('@/client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
-  setLocalStorageSession: jest.fn(),
+  setLocalStorageSession: vi.fn(),
 }));
 
 const websocketProvider = (await import('./client')).default;
 
 describe('websocket/socketio/client', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetLocalStorageSession.mockReturnValue(null);
   });
 
@@ -92,10 +93,10 @@ describe('websocket/socketio/client', () => {
     test('initializes socket before initializing channels', () => {
       const callOrder: string[] = [];
       const mockChannel = {
-        init: jest.fn(() => callOrder.push('channel.init')),
+        init: vi.fn(() => callOrder.push('channel.init')),
         category: 'test',
-        joinChannel: jest.fn(),
-        leaveChannel: jest.fn(),
+        joinChannel: vi.fn(),
+        leaveChannel: vi.fn(),
       } as unknown as ClientChannel;
 
       mockIo.mockImplementationOnce(() => {
@@ -115,7 +116,7 @@ describe('websocket/socketio/client', () => {
     });
 
     test('registers event listener on socket', () => {
-      const listener = jest.fn();
+      const listener = vi.fn();
 
       websocketProvider.on({
         category: 'messages',
@@ -126,8 +127,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('can register multiple listeners for same category', () => {
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       websocketProvider.on({ category: 'updates', listener: listener1 });
       websocketProvider.on({ category: 'updates', listener: listener2 });
@@ -138,8 +139,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('can register listeners for different categories', () => {
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       websocketProvider.on({ category: 'messages', listener: listener1 });
       websocketProvider.on({ category: 'notifications', listener: listener2 });
@@ -155,7 +156,7 @@ describe('websocket/socketio/client', () => {
     });
 
     test('registers one-time event listener on socket', () => {
-      const listener = jest.fn();
+      const listener = vi.fn();
 
       websocketProvider.once({
         category: 'connect',
@@ -166,8 +167,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('can register multiple once listeners', () => {
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       websocketProvider.once({ category: 'ready', listener: listener1 });
       websocketProvider.once({ category: 'ready', listener: listener2 });
@@ -182,7 +183,7 @@ describe('websocket/socketio/client', () => {
     });
 
     test('removes event listener from socket', () => {
-      const listener = jest.fn();
+      const listener = vi.fn();
 
       websocketProvider.off({
         category: 'messages',
@@ -193,8 +194,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('can remove specific listener while keeping others', () => {
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       websocketProvider.off({ category: 'updates', listener: listener1 });
 
@@ -203,8 +204,8 @@ describe('websocket/socketio/client', () => {
     });
 
     test('can remove listeners from different categories', () => {
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       websocketProvider.off({ category: 'messages', listener: listener1 });
       websocketProvider.off({ category: 'notifications', listener: listener2 });
@@ -348,7 +349,7 @@ describe('websocket/socketio/client', () => {
 
   describe('integration scenarios', () => {
     test('typical workflow: init, join channel, listen for events, leave channel', () => {
-      const listener = jest.fn();
+      const listener = vi.fn();
 
       // Initialize
       websocketProvider.init({});
@@ -404,8 +405,8 @@ describe('websocket/socketio/client', () => {
     test('can subscribe and unsubscribe to same category multiple times', () => {
       websocketProvider.init({});
 
-      const listener1 = jest.fn();
-      const listener2 = jest.fn();
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
 
       // Subscribe
       websocketProvider.on({ category: 'updates', listener: listener1 });

@@ -1,17 +1,18 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { ObjectId } from 'mongodb';
 
-const mockRandomBytes = jest.fn(() => ({
+const mockRandomBytes = vi.fn(() => ({
   toString: () => 'auth-token',
 }));
 
-const mockDays = jest.fn(() => 7 * 24 * 60 * 60 * 1000);
+const mockDays = vi.fn(() => 7 * 24 * 60 * 60 * 1000);
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-jest.unstable_mockModule('@/time', () => ({
+vi.doMock('@/time', () => ({
   time: {
     days: mockDays,
   },
@@ -22,12 +23,12 @@ const { createSession, obtainSession, setSessionUser, clearSessionUser, sessions
   sessionModule;
 
 describe('auth/session', () => {
-  const insertOneMock: jest.Mock = jest.fn();
-  const findOneMock: jest.Mock = jest.fn();
-  const updateOneMock: jest.Mock = jest.fn();
+  const insertOneMock: Mock = vi.fn();
+  const findOneMock: Mock = vi.fn();
+  const updateOneMock: Mock = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     (sessionsCollection as unknown as { insertOne: typeof insertOneMock }).insertOne =
       insertOneMock;
     (sessionsCollection as unknown as { findOne: typeof findOneMock }).findOne = findOneMock;
@@ -41,7 +42,7 @@ describe('auth/session', () => {
 
     const result = await createSession(userId);
 
-    expect((mockRandomBytes as jest.Mock).mock.calls[0]?.[0]).toBe(32);
+    expect((mockRandomBytes as Mock).mock.calls[0]?.[0]).toBe(32);
     expect(insertOneMock).toHaveBeenCalledWith({
       authToken: 'auth-token',
       createdAt: expect.any(Date),

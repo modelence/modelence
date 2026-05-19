@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ObjectId } from 'mongodb';
 
 const createObjectId = (value: string): ObjectId =>
@@ -6,57 +6,57 @@ const createObjectId = (value: string): ObjectId =>
     toString: () => value,
   }) as unknown as ObjectId;
 
-const mockConsumeRateLimit = jest.fn();
-const mockSendVerificationEmail = jest.fn();
-const mockValidateEmail = jest.fn();
-const mockValidatePassword = jest.fn();
-const mockValidateHandle = jest.fn();
-const mockValidateProfileFields = jest.fn();
-const mockIsDisposableEmail = jest.fn();
-const mockHash = jest.fn();
-const mockGetAuthConfig = jest.fn();
-const mockFindOne = jest.fn();
-const mockInsertOne = jest.fn();
-const mockResolveUniqueHandle = jest.fn();
+const mockConsumeRateLimit = vi.fn();
+const mockSendVerificationEmail = vi.fn();
+const mockValidateEmail = vi.fn();
+const mockValidatePassword = vi.fn();
+const mockValidateHandle = vi.fn();
+const mockValidateProfileFields = vi.fn();
+const mockIsDisposableEmail = vi.fn();
+const mockHash = vi.fn();
+const mockGetAuthConfig = vi.fn();
+const mockFindOne = vi.fn();
+const mockInsertOne = vi.fn();
+const mockResolveUniqueHandle = vi.fn();
 
-jest.unstable_mockModule('../rate-limit/rules', () => ({
+vi.doMock('../rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
-jest.unstable_mockModule('./verification', () => ({
+vi.doMock('./verification', () => ({
   sendVerificationEmail: mockSendVerificationEmail,
 }));
 
-jest.unstable_mockModule('./validators', () => ({
+vi.doMock('./validators', () => ({
   validateEmail: mockValidateEmail,
   validatePassword: mockValidatePassword,
   validateHandle: mockValidateHandle,
   validateProfileFields: mockValidateProfileFields,
 }));
 
-jest.unstable_mockModule('./disposableEmails', () => ({
+vi.doMock('./disposableEmails', () => ({
   isDisposableEmail: mockIsDisposableEmail,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
+vi.doMock('bcrypt', () => ({
   default: {
     hash: mockHash,
   },
   hash: mockHash,
 }));
 
-jest.unstable_mockModule('@/app/authConfig', () => ({
+vi.doMock('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockFindOne,
     insertOne: mockInsertOne,
   },
 }));
 
-jest.unstable_mockModule('./utils', () => ({
+vi.doMock('./utils', () => ({
   resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
@@ -80,16 +80,16 @@ describe('auth/signup', () => {
   };
 
   const authConfig = {
-    onAfterSignup: jest.fn(),
-    onSignupError: jest.fn(),
+    onAfterSignup: vi.fn(),
+    onSignupError: vi.fn(),
     signup: {
-      onSuccess: jest.fn(),
-      onError: jest.fn(),
+      onSuccess: vi.fn(),
+      onError: vi.fn(),
     },
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetAuthConfig.mockReturnValue(authConfig as never);
     mockValidateEmail.mockImplementation((v: unknown) => v);
     mockValidatePassword.mockImplementation((v: unknown) => v);

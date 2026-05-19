@@ -1,53 +1,54 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { ObjectId } from 'mongodb';
 
-const mockConsumeRateLimit = jest.fn();
-const mockFindOne = jest.fn();
-const mockSetSessionUser = jest.fn();
-const mockClearSessionUser = jest.fn();
-const mockSendVerificationEmail = jest.fn();
-const mockValidateEmail = jest.fn();
-const mockGetEmailConfig = jest.fn();
-const mockGetAuthConfig = jest.fn();
-const mockCompare = jest.fn();
+const mockConsumeRateLimit = vi.fn();
+const mockFindOne = vi.fn();
+const mockSetSessionUser = vi.fn();
+const mockClearSessionUser = vi.fn();
+const mockSendVerificationEmail = vi.fn();
+const mockValidateEmail = vi.fn();
+const mockGetEmailConfig = vi.fn();
+const mockGetAuthConfig = vi.fn();
+const mockCompare = vi.fn();
 
-jest.unstable_mockModule('@/server', () => ({
+vi.doMock('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockFindOne,
   },
 }));
 
-jest.unstable_mockModule('./session', () => ({
+vi.doMock('./session', () => ({
   setSessionUser: mockSetSessionUser,
   clearSessionUser: mockClearSessionUser,
   setAuthTokenCookie: jest.fn(),
   clearAuthTokenCookie: jest.fn(),
 }));
 
-jest.unstable_mockModule('./verification', () => ({
+vi.doMock('./verification', () => ({
   sendVerificationEmail: mockSendVerificationEmail,
 }));
 
-jest.unstable_mockModule('./validators', () => ({
+vi.doMock('./validators', () => ({
   validateEmail: mockValidateEmail,
-  validateHandle: jest.fn((v: string) => v),
+  validateHandle: vi.fn((v: string) => v),
   MAX_HANDLE_LENGTH: 50,
   MIN_HANDLE_LENGTH: 3,
 }));
 
-jest.unstable_mockModule('@/app/emailConfig', () => ({
+vi.doMock('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
 }));
 
-jest.unstable_mockModule('@/app/authConfig', () => ({
+vi.doMock('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
+vi.doMock('bcrypt', () => ({
   default: {
     compare: mockCompare,
   },
@@ -66,16 +67,16 @@ describe('auth/login', () => {
   };
 
   let authConfig: {
-    onAfterLogin: jest.Mock;
-    onLoginError: jest.Mock;
+    onAfterLogin: Mock;
+    onLoginError: Mock;
     login: {
-      onSuccess: jest.Mock;
-      onError: jest.Mock;
+      onSuccess: Mock;
+      onError: Mock;
     };
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockValidateEmail.mockImplementation((value) => value);
     mockGetEmailConfig.mockReturnValue({ provider: null });
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
@@ -83,11 +84,11 @@ describe('auth/login', () => {
     mockCompare.mockResolvedValue(true as never);
 
     authConfig = {
-      onAfterLogin: jest.fn(),
-      onLoginError: jest.fn(),
+      onAfterLogin: vi.fn(),
+      onLoginError: vi.fn(),
       login: {
-        onSuccess: jest.fn(),
-        onError: jest.fn(),
+        onSuccess: vi.fn(),
+        onError: vi.fn(),
       },
     };
     mockGetAuthConfig.mockReturnValue(authConfig);

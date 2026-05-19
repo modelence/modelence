@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 import { ObjectId } from 'mongodb';
 import type { Context } from '@/methods/types';
 import type { usersCollection, resetPasswordTokensCollection } from './db';
@@ -6,40 +7,39 @@ import type { usersCollection, resetPasswordTokensCollection } from './db';
 type UsersCollection = typeof usersCollection;
 type ResetPasswordTokensCollection = typeof resetPasswordTokensCollection;
 
-const mockUsersFindOne: jest.MockedFunction<UsersCollection['findOne']> = jest.fn();
-const mockUsersUpdateOne: jest.MockedFunction<UsersCollection['updateOne']> = jest.fn();
-const mockResetTokensInsertOne: jest.MockedFunction<ResetPasswordTokensCollection['insertOne']> =
-  jest.fn();
-const mockResetTokensFindOne: jest.MockedFunction<ResetPasswordTokensCollection['findOne']> =
-  jest.fn();
-const mockResetTokensDeleteOne: jest.MockedFunction<ResetPasswordTokensCollection['deleteOne']> =
-  jest.fn();
-const mockGetEmailConfig = jest.fn();
-const mockHtmlToText: jest.MockedFunction<(html: string) => string> = jest.fn();
-const mockValidateEmail: jest.MockedFunction<(email: string) => string> = jest.fn();
-const mockValidatePassword: jest.MockedFunction<(password: string) => string> = jest.fn();
-const mockRandomBytes = jest.fn();
-const mockBcryptHash: jest.MockedFunction<(password: string, rounds: number) => Promise<string>> =
-  jest.fn();
-const mockTime = { hours: jest.fn() };
-const mockConsumeRateLimit = jest.fn();
-const mockGetConfig = jest.fn();
-const mockInvalidateAllUserSessions = jest.fn();
+const mockUsersFindOne: MockedFunction<UsersCollection['findOne']> = vi.fn();
+const mockUsersUpdateOne: MockedFunction<UsersCollection['updateOne']> = vi.fn();
+const mockResetTokensInsertOne: MockedFunction<ResetPasswordTokensCollection['insertOne']> =
+  vi.fn();
+const mockResetTokensFindOne: MockedFunction<ResetPasswordTokensCollection['findOne']> = vi.fn();
+const mockResetTokensDeleteOne: MockedFunction<ResetPasswordTokensCollection['deleteOne']> =
+  vi.fn();
+const mockGetEmailConfig = vi.fn();
+const mockHtmlToText: MockedFunction<(html: string) => string> = vi.fn();
+const mockValidateEmail: MockedFunction<(email: string) => string> = vi.fn();
+const mockValidatePassword: MockedFunction<(password: string) => string> = vi.fn();
+const mockRandomBytes = vi.fn();
+const mockBcryptHash: MockedFunction<(password: string, rounds: number) => Promise<string>> =
+  vi.fn();
+const mockTime = { hours: vi.fn() };
+const mockConsumeRateLimit = vi.fn();
+const mockGetConfig = vi.fn();
+const mockInvalidateAllUserSessions = vi.fn();
 
-jest.unstable_mockModule('./session', () => ({
+vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
 }));
 
-jest.unstable_mockModule('@/server', () => ({
+vi.doMock('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
-jest.unstable_mockModule('@/config/server', () => ({
+vi.doMock('@/config/server', () => ({
   getConfig: mockGetConfig,
-  getPublicConfigs: jest.fn().mockReturnValue({}),
+  getPublicConfigs: vi.fn().mockReturnValue({}),
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     updateOne: mockUsersUpdateOne,
@@ -51,30 +51,30 @@ jest.unstable_mockModule('./db', () => ({
   },
 }));
 
-jest.unstable_mockModule('@/app/emailConfig', () => ({
+vi.doMock('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
 }));
 
-jest.unstable_mockModule('@/utils', () => ({
+vi.doMock('@/utils', () => ({
   htmlToText: mockHtmlToText,
 }));
 
-jest.unstable_mockModule('./validators', () => ({
+vi.doMock('./validators', () => ({
   validateEmail: mockValidateEmail,
   validatePassword: mockValidatePassword,
 }));
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-jest.unstable_mockModule('bcrypt', () => ({
+vi.doMock('bcrypt', () => ({
   default: {
     hash: mockBcryptHash,
   },
 }));
 
-jest.unstable_mockModule('@/time', () => ({
+vi.doMock('@/time', () => ({
   time: mockTime,
 }));
 
@@ -143,11 +143,11 @@ const createMockResetToken = (
 
 describe('auth/resetPassword', () => {
   const mockEmailProvider = {
-    sendEmail: jest.fn(async (_message: unknown) => {}),
+    sendEmail: vi.fn(async (_message: unknown) => {}),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetEmailConfig.mockReturnValue({
       provider: mockEmailProvider,
       from: 'test@example.com',

@@ -1,24 +1,25 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 type CallMethodFn = (typeof import('./method'))['callMethod'];
-const mockCallMethod = jest.fn<CallMethodFn>();
-const mockSetConfig = jest.fn();
-const mockSetLocalStorageSession = jest.fn();
-const mockSeconds = jest.fn((value: number) => value * 1000);
+const mockCallMethod = vi.fn<CallMethodFn>();
+const mockSetConfig = vi.fn();
+const mockSetLocalStorageSession = vi.fn();
+const mockSeconds = vi.fn((value: number) => value * 1000);
 
-jest.unstable_mockModule('./method', () => ({
+vi.doMock('./method', () => ({
   callMethod: mockCallMethod,
 }));
 
-jest.unstable_mockModule('../config/client', () => ({
+vi.doMock('../config/client', () => ({
   _setConfig: mockSetConfig,
 }));
 
-jest.unstable_mockModule('./localStorage', () => ({
+vi.doMock('./localStorage', () => ({
   setLocalStorageSession: mockSetLocalStorageSession,
 }));
 
-jest.unstable_mockModule('../time', () => ({
+vi.doMock('../time', () => ({
   time: {
     seconds: mockSeconds,
   },
@@ -33,8 +34,8 @@ describe('client/session', () => {
   const originalSetTimeout = global.setTimeout;
 
   beforeEach(() => {
-    jest.resetModules();
-    (useSessionStore.setState as unknown as jest.Mock | undefined)?.mockClear?.();
+    vi.resetModules();
+    (useSessionStore.setState as unknown as Mock | undefined)?.mockClear?.();
     mockCallMethod.mockReset();
     mockSetConfig.mockReset();
     mockSetLocalStorageSession.mockReset();

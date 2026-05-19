@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import os from 'os';
 import type { CronJobMetadata } from '../cron/types';
 import type { ConfigSchema } from '../config/types';
@@ -18,7 +18,7 @@ function createStore(name: string, options?: { schema?: ModelSchema }) {
 describe('app/backendApi', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
-  const fetchMock = jest.fn<typeof fetch>();
+  const fetchMock = vi.fn<typeof fetch>();
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -29,7 +29,7 @@ describe('app/backendApi', () => {
   afterEach(() => {
     process.env = originalEnv;
     global.fetch = originalFetch;
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('connectCloudBackend', () => {
@@ -46,7 +46,7 @@ describe('app/backendApi', () => {
       process.env.MODELENCE_SERVICE_ENDPOINT = 'https://cloud.modelence.test';
       process.env.MODELENCE_SERVICE_TOKEN = 'token-abc';
 
-      const hostnameSpy = jest.spyOn(os, 'hostname').mockReturnValue('app-host');
+      const hostnameSpy = vi.spyOn(os, 'hostname').mockReturnValue('app-host');
 
       const okResponse = {
         status: 'ok',
@@ -122,7 +122,7 @@ describe('app/backendApi', () => {
         json: async () => ({ status: 'error', error: 'invalid container' }),
       } as unknown as Response);
 
-      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       await expect(
         connectCloudBackend({

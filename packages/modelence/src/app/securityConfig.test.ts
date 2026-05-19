@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, jest } from '@jest/globals';
+import { describe, expect, test, beforeEach, vi } from 'vitest';
 
 describe('securityConfig', () => {
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
   });
 
   test('returns a frozen empty config by default', async () => {
