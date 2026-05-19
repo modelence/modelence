@@ -28,7 +28,7 @@ export type Context = {
    * The Express request. `null` for in-process invocations that don't have
    * an active HTTP request (e.g. background jobs).
    */
-  req: Request | null;
+  req?: Request | null;
   /**
    * The Express response. Used by auth handlers to set/clear cookies so
    * server-rendered requests can read the auth token from the cookie jar.
@@ -36,11 +36,6 @@ export type Context = {
    * (e.g. background jobs).
    */
   res: Response | null;
-};
-
-export type HttpContext = Context & {
-  req: Request;
-  res: Response;
 };
 
 export type Args = Record<string, unknown>;
@@ -57,8 +52,7 @@ export type SignupProps = UpdateProfileProps & {
   password: string;
 };
 
-// TODO: Query-mutation and live query share the same handler, but only runMethod provides HttpContext (req, res) and Live queries receive plain Context, so handlers typed with HttpContext may access undefined req-res and fail at runtime.
-export type Handler<T = unknown> = (args: Args, context: Context | HttpContext) => Promise<T> | T;
+export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyMethodShape = ((...args: any[]) => any) | { handler: (...args: any[]) => any };
