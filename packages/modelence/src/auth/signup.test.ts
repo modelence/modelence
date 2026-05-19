@@ -78,9 +78,16 @@ describe('auth/signup', () => {
     },
   };
 
-  const authConfig = {
+  const authConfig: {
+    onAfterSignup: ReturnType<typeof vi.fn>;
+    onSignupError: ReturnType<typeof vi.fn>;
+    onBeforeSignup?: ReturnType<typeof vi.fn>;
+    allowDisposableEmails?: boolean;
+    signup: { onSuccess: ReturnType<typeof vi.fn>; onError: ReturnType<typeof vi.fn> };
+  } = {
     onAfterSignup: vi.fn(),
     onSignupError: vi.fn(),
+    onBeforeSignup: vi.fn(),
     signup: {
       onSuccess: vi.fn(),
       onError: vi.fn(),
@@ -89,6 +96,8 @@ describe('auth/signup', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authConfig.allowDisposableEmails = false;
+    authConfig.onBeforeSignup = vi.fn();
     mockGetAuthConfig.mockReturnValue(authConfig as never);
     mockValidateEmail.mockImplementation((v: unknown) => v);
     mockValidatePassword.mockImplementation((v: unknown) => v);
@@ -305,5 +314,107 @@ describe('auth/signup', () => {
 
     expect(authConfig.onSignupError).toHaveBeenCalled();
     expect(authConfig.signup.onError).toHaveBeenCalled();
+  });
+
+  test('invokes onBeforeSignup with normalized props before insert', async () => {
+    const insertedId = createObjectId('user-before-1');
+    mockInsertOne.mockResolvedValue({ insertedId } as never);
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: insertedId,
+      handle: 'test',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'test@example.com', verified: false }],
+    } as never);
+
+    await handleSignupWithPassword(
+      {
+        email: 'test@example.com',
+        password: 'Secret123',
+        firstName: 'Test',
+        lastName: 'User',
+        handle: 'desired',
+      },
+      baseContext
+    );
+
+    expect(authConfig.onBeforeSignup).toHaveBeenCalledWith({
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+      handle: 'desired',
+      provider: 'email',
+      connectionInfo: baseContext.connectionInfo,
+    });
+    // Hook must run before insert
+    const beforeOrder = authConfig.onBeforeSignup!.mock.invocationCallOrder[0];
+    const insertOrder = mockInsertOne.mock.invocationCallOrder[0];
+    expect(beforeOrder).toBeLessThan(insertOrder);
+  });
+
+  test('rejection from onBeforeSignup aborts signup and triggers onSignupError', async () => {
+    authConfig.onBeforeSignup = vi.fn(() => {
+      throw new Error('Domain not allowed');
+    });
+    mockFindOne.mockResolvedValueOnce(null as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Domain not allowed');
+
+    expect(mockInsertOne).not.toHaveBeenCalled();
+    expect(authConfig.onSignupError).toHaveBeenCalled();
+    expect(authConfig.signup.onError).toHaveBeenCalled();
+  });
+
+  test('does not invoke onBeforeSignup when user already exists', async () => {
+    mockFindOne.mockResolvedValueOnce({
+      _id: createObjectId('existing'),
+      handle: 'existinguser',
+      createdAt: new Date(),
+      authMethods: {},
+      status: 'active',
+      emails: [{ address: 'test@example.com', verified: true }],
+    } as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('User with email already exists');
+
+    expect(authConfig.onBeforeSignup).not.toHaveBeenCalled();
+  });
+
+  test('skips built-in disposable check when allowDisposableEmails is true', async () => {
+    authConfig.allowDisposableEmails = true;
+    mockIsDisposableEmail.mockResolvedValue(true as never);
+
+    const insertedId = createObjectId('user-disposable-allowed');
+    mockInsertOne.mockResolvedValue({ insertedId } as never);
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: insertedId,
+      handle: 'temp',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'temp@disposable.com', verified: false }],
+    } as never);
+
+    const result = await handleSignupWithPassword(
+      { email: 'temp@disposable.com', password: 'Secret123' },
+      baseContext
+    );
+
+    expect(result).toBe(insertedId);
+    expect(mockInsertOne).toHaveBeenCalled();
+  });
+
+  test('built-in disposable check still runs when allowDisposableEmails is false (default)', async () => {
+    mockIsDisposableEmail.mockResolvedValue(true as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'temp@disposable.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Please use a permanent email address');
+
+    expect(authConfig.onBeforeSignup).not.toHaveBeenCalled();
+    expect(mockInsertOne).not.toHaveBeenCalled();
   });
 });

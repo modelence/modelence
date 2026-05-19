@@ -30,7 +30,7 @@ export async function handleSignupWithPassword(
       });
     }
 
-    if (await isDisposableEmail(email)) {
+    if (!authConfig.allowDisposableEmails && (await isDisposableEmail(email))) {
       throw new Error('Please use a permanent email address');
     }
 
@@ -54,6 +54,15 @@ export async function handleSignupWithPassword(
       }
       throw new Error(`User with email already exists: ${existingEmail?.address}`);
     }
+
+    await authConfig.onBeforeSignup?.({
+      email,
+      firstName,
+      lastName,
+      handle,
+      provider: 'email',
+      connectionInfo,
+    });
 
     if (ip) {
       await consumeRateLimit({
