@@ -1,6 +1,5 @@
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Session, UserInfo, Permission } from '../auth/types';
-import { Request, Response } from 'express';
 
 export type ClientInfo = {
   screenWidth: number;
@@ -25,6 +24,11 @@ export type Context = {
   roles: string[];
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
+  /**
+   * The Express request. `null` for in-process invocations that don't have
+   * an active HTTP request (e.g. background jobs).
+   */
+  req: Request | null;
   /**
    * The Express response. Used by auth handlers to set/clear cookies so
    * server-rendered requests can read the auth token from the cookie jar.
