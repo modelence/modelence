@@ -6,7 +6,7 @@ const mockSetErrorHandler = vi.fn();
 
 vi.doMock('./errorHandler', () => ({
   setErrorHandler: mockSetErrorHandler,
-  handleError: jest.fn(),
+  handleError: vi.fn(),
 }));
 
 const mockCreateRoot = vi.fn(() => ({

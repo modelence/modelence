@@ -988,7 +988,8 @@ describe('auth/providers/oauth-common', () => {
     test('returns HTML when errorComponent is configured', () => {
       const mockErrorComponent = vi.fn().mockReturnValue('<html><body>Error</body></html>');
       mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
-      (res as any).send = vi.fn();
+      const sendMock = vi.fn();
+      (res as any).send = sendMock;
 
       moduleExports.sendOAuthError(res, 500, 'Auth failed');
 

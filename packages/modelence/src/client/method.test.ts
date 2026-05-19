@@ -97,7 +97,7 @@ describe('client/method', () => {
   });
 
   test('_setCallMethodTransport routes calls through the swapped transport and disposes back to fetch', async () => {
-    const swapped = jest.fn(async (name: string, args: Record<string, unknown>) => ({
+    const swapped = vi.fn(async (name: string, args: Record<string, unknown>) => ({
       methodName: name,
       forwardedArgs: args,
     }));

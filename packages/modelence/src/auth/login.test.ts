@@ -25,8 +25,8 @@ vi.doMock('./db', () => ({
 vi.doMock('./session', () => ({
   setSessionUser: mockSetSessionUser,
   clearSessionUser: mockClearSessionUser,
-  setAuthTokenCookie: jest.fn(),
-  clearAuthTokenCookie: jest.fn(),
+  setAuthTokenCookie: vi.fn(),
+  clearAuthTokenCookie: vi.fn(),
 }));
 
 vi.doMock('./verification', () => ({

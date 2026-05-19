@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { Writable } from 'node:stream';
 import React from 'react';
 import type { Context } from '../methods/types';
@@ -7,28 +7,28 @@ import type { SessionInitPayload } from '../client/session';
 // Mock the in-process method bridge. `_system.session.init` would normally
 // require the full methods runtime; here we return a fixed payload so the
 // stream renderer can run in isolation.
-const mockCallInProcessMethod = jest.fn<() => Promise<SessionInitPayload>>();
-jest.unstable_mockModule('./callInProcess', () => ({
+const mockCallInProcessMethod = vi.fn<() => Promise<SessionInitPayload>>();
+vi.doMock('./callInProcess', () => ({
   callInProcessMethod: mockCallInProcessMethod,
 }));
 
 // The render module pulls in AppProvider + ModelenceQueryProvider, which
 // transitively need the Modelence app server. Replace them with thin
 // passthrough components so we only exercise the streaming pipeline.
-jest.unstable_mockModule('../client/AppProvider', () => ({
+vi.doMock('../client/AppProvider', () => ({
   AppProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-jest.unstable_mockModule('../client/queryProvider', () => ({
+vi.doMock('../client/queryProvider', () => ({
   ModelenceQueryProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 // Likewise, side-effect-only installers — no-op.
-jest.unstable_mockModule('../client/session', () => ({
+vi.doMock('../client/session', () => ({
   _parseSessionUser: (u: unknown) => u,
-  _setSsrSessionResolver: jest.fn(),
+  _setSsrSessionResolver: vi.fn(),
 }));
-jest.unstable_mockModule('../config/client', () => ({
-  _setSsrConfigResolver: jest.fn(),
+vi.doMock('../config/client', () => ({
+  _setSsrConfigResolver: vi.fn(),
 }));
 
 const { renderSsrTreeStream } = await import('./render');
@@ -137,7 +137,7 @@ describe('renderSsrTreeStream', () => {
   });
 
   test('invokes onShellReady callback exactly once before pipe() begins writing', async () => {
-    const onShellReady = jest.fn<() => void>();
+    const onShellReady = vi.fn<() => void>();
 
     const handle = await renderSsrTreeStream({
       callContext: makeCallContext(),
