@@ -110,7 +110,61 @@ await dbTodos.updateMany(
 
 Failed migrations are recorded with `status: 'failed'`. Since version tracking
 is version-based, a failed version is still considered already seen on future
-starts.
+starts — it will **not** be retried automatically on the next boot.
 
-If you need to rerun logic, create a new migration version (recommended) or
-manually clean up the migration record before restarting.
+If you need to rerun logic, prefer creating a new migration version. Edit a
+previous version's handler only if the migration has never run successfully in
+any environment.
+
+### No Built-in Rollback
+
+Modelence migrations are forward-only. There is no `down` handler, no
+auto-revert on failure, and no CLI command to roll back. Failed handlers do
+**not** un-do partial writes — design each handler to be idempotent so a rerun
+(after manual cleanup) converges on the desired state.
+
+Practical guidance:
+
+- Use conditional updates (e.g. `{ field: { $exists: false } }`) so partial
+  progress is safe to resume.
+- Avoid destructive operations (drops, deletes) inside the same migration that
+  performs the new write. Split them into separate versions and only run the
+  destructive step after verifying the prior version succeeded everywhere.
+- Wrap multi-document changes in your own checkpoint logic if you need to
+  resume after a crash mid-handler — the runner itself records only the
+  final outcome per version.
+
+### Manual Cleanup of `_modelenceMigrations`
+
+To force a version to rerun, delete (or update) its document in the
+`_modelenceMigrations` collection before restarting the app. Each document has
+the shape:
+
+```typescript
+{
+  version: number;        // unique
+  status: 'completed' | 'failed';
+  description?: string;
+  output?: string;        // handler return value or error message (max ~15MB)
+  appliedAt: Date;
+}
+```
+
+To rerun a failed `version: 7` migration:
+
+```javascript
+// mongo shell or Compass
+db._modelenceMigrations.deleteOne({ version: 7 });
+```
+
+On the next startup the runner sees no record for version 7 and re-executes
+the handler. Do this only when you are sure the prior partial run is safe to
+re-apply, or you have manually undone its effects first.
+
+### CLI Surface
+
+Migrations are run **only at application startup**. There is currently no
+`modelence migrate` CLI command, no dry-run mode, and no way to invoke a
+single migration handler out-of-band. To run or re-run migrations you must
+(re)start the app — typically by deploying a new version that includes the
+new entries in your `migrations` array.

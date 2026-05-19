@@ -51,6 +51,64 @@ MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/myapp"
 # Server configuration
 PORT=3000
 MODELENCE_SITE_URL=http://localhost
+```
+
+### All Environment Variables
+
+Every `MODELENCE_*` variable (plus the few non-prefixed ones) that the framework or first-party packages read. Anything not listed here is application-specific and should go through `defineConfigs` / `getConfig` instead.
+
+#### Core
+
+| Variable | Type | Default | Consumed by |
+|----------|------|---------|-------------|
+| `MONGODB_URI` | string | — | `packages/modelence` (database connection) |
+| `MONGODB_POOL_SIZE` | number | driver default | `packages/modelence` (pool size override) |
+| `MODELENCE_SITE_URL` | string | — | `packages/modelence` (public site URL, used by auth callbacks and emails) |
+| `PORT` | number | `3000` | `packages/modelence/app/server.ts` |
+| `MODELENCE_PORT` | number | falls back to `PORT` | `packages/modelence/app/server.ts` |
+| `NODE_ENV` | `development` \| `production` | `development` | Build pipeline, cookie `secure` flag, Vite dev server |
+| `MODELENCE_LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` | `info` | `packages/modelence/telemetry` |
+| `MODELENCE_ENV_TYPE` | string | — | `packages/modelence/config` (`_system.env.type`) |
+| `MODELENCE_MULTI_INSTANCE` | boolean | `false` | `packages/modelence/config` (`_system.multiInstance`) |
+
+#### Modelence Cloud
+
+| Variable | Type | Default | Consumed by |
+|----------|------|---------|-------------|
+| `MODELENCE_SERVICE_ENDPOINT` | string | `https://cloud.modelence.com` | `packages/modelence/app` (cloud API endpoint) |
+| `MODELENCE_SERVICE_TOKEN` | string | — | `packages/modelence/app/backendApi.ts` (cloud auth token, written by `setup --token`) |
+| `MODELENCE_CONTAINER_ID` | string | — | `packages/modelence/app/backendApi.ts` (assigned per running container) |
+| `MODELENCE_ENVIRONMENT_ID` | string | — | `packages/modelence/app` (cloud environment binding) |
+| `MODELENCE_TRACKING_ENABLED` | boolean | `true` | `packages/modelence/app` (set to `false` to opt out of tracking) |
+
+#### Authentication (OAuth providers)
+
+| Variable | Type | Default | Consumed by |
+|----------|------|---------|-------------|
+| `MODELENCE_AUTH_GOOGLE_ENABLED` | boolean | `false` | `packages/modelence/auth/providers/google.ts` |
+| `MODELENCE_AUTH_GOOGLE_CLIENT_ID` | string | — | `packages/modelence/auth/providers/google.ts` |
+| `MODELENCE_AUTH_GOOGLE_CLIENT_SECRET` | string | — | `packages/modelence/auth/providers/google.ts` |
+| `MODELENCE_AUTH_GITHUB_ENABLED` | boolean | `false` | `packages/modelence/auth/providers/github.ts` |
+| `MODELENCE_AUTH_GITHUB_CLIENT_ID` | string | — | `packages/modelence/auth/providers/github.ts` |
+| `MODELENCE_AUTH_GITHUB_CLIENT_SECRET` | string | — | `packages/modelence/auth/providers/github.ts` |
+| `MODELENCE_AUTH_GITHUB_CLIENT_SCOPES` | string (comma-separated) | `read:user,user:email` | `packages/modelence/auth/providers/github.ts` |
+
+#### Email providers
+
+| Variable | Type | Default | Consumed by |
+|----------|------|---------|-------------|
+| `MODELENCE_EMAIL_RESEND_API_KEY` | string | — | `@modelence/resend` |
+| `MODELENCE_EMAIL_AWS_SES_REGION` | string | — | `@modelence/aws-ses` |
+| `MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID` | string | — | `@modelence/aws-ses` |
+| `MODELENCE_EMAIL_AWS_SES_SECRET_ACCESS_KEY` | string | — | `@modelence/aws-ses` |
+| `MODELENCE_EMAIL_SMTP_HOST` | string | — | `@modelence/smtp` |
+| `MODELENCE_EMAIL_SMTP_PORT` | number | — | `@modelence/smtp` |
+| `MODELENCE_EMAIL_SMTP_USER` | string | — | `@modelence/smtp` |
+| `MODELENCE_EMAIL_SMTP_PASS` | string | — | `@modelence/smtp` |
+
+<Tip>
+Any variable not listed here is application-specific. Define it through your modules' `configSchema` so Modelence Cloud can manage it and `getConfig()` can read it type-safely.
+</Tip>
 
 ## Modelence Cloud Configuration
 

@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import { Session, UserInfo, Permission } from '../auth/types';
+import { Request, Response } from 'express';
 
 export type ClientInfo = {
   screenWidth: number;
@@ -33,6 +34,11 @@ export type Context = {
   res: Response | null;
 };
 
+export type HttpContext = Context & {
+  req: Request;
+  res: Response;
+};
+
 export type Args = Record<string, unknown>;
 
 export type UpdateProfileProps = {
@@ -47,7 +53,8 @@ export type SignupProps = UpdateProfileProps & {
   password: string;
 };
 
-export type Handler<T = unknown> = (args: Args, context: Context) => Promise<T> | T;
+// TODO: Query-mutation and live query share the same handler, but only runMethod provides HttpContext (req, res) and Live queries receive plain Context, so handlers typed with HttpContext may access undefined req-res and fail at runtime.
+export type Handler<T = unknown> = (args: Args, context: Context | HttpContext) => Promise<T> | T;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyMethodShape = ((...args: any[]) => any) | { handler: (...args: any[]) => any };

@@ -103,7 +103,7 @@ export default new Module('todo', {
         }
       },
       async handler({ id }) {
-        return await dbTodos.deleteOne({ id });
+        return await dbTodos.deleteOne({ _id: new ObjectId(id) });
       }
     }
   }
@@ -161,7 +161,7 @@ export default new Module('todo', {
 ```
 
 <Tip>
-Learn more about rate limiting in the [Rate Limiting documentation](/rate-limiting).
+Learn more about rate limiting in the [Custom Rate Limiting documentation](/rate-limiting).
 </Tip>
 
 ## Best Practices
@@ -219,7 +219,7 @@ mutations: {
       throw new Error('Not authorized to delete this todo');
     }
 
-    return await dbTodos.deleteOne({ id });
+    return await dbTodos.deleteOne({ _id: new ObjectId(id) });
   }
 }
 ```
@@ -240,7 +240,7 @@ export default new Module('todo', {
         throw new Error('Todo is already completed');
       }
 
-      await dbTodos.updateOne({ id }, {
+      await dbTodos.updateOne(id, {
         $set: {
           isCompleted: true,
           completedAt: new Date()

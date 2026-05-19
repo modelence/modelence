@@ -102,7 +102,7 @@ export async function startServer(
 
   // Set httpOnly cookie for OAuth linking flow
   app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req);
+    const { session } = await getCallContext(req, res);
 
     if (!session?.userId) {
       res.status(401).json({ error: 'Not authenticated' });
@@ -121,7 +121,7 @@ export async function startServer(
   });
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
-    const { methodName } = req.params;
+    const methodName = req.params.methodName as string;
     const context = await getCallContext(req, res);
 
     try {
@@ -229,6 +229,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
       session,
       user,
       roles,
+      req,
       res,
     };
   }
@@ -239,6 +240,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
     session: null,
     user: null,
     roles: getUnauthenticatedRoles(),
+    req,
     res,
   };
 }

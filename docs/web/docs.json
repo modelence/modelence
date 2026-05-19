@@ -114,7 +114,7 @@
             "pages": [
               "api-reference/modelence/server/functions/getConfig",
               "api-reference/modelence/client/functions/getConfig",
-              "api-reference/modelence/server/type-aliases/ConfigSchema",
+              "api-reference/modelence/index/type-aliases/ConfigSchema",
               "api-reference/modelence/server/type-aliases/ConfigType"
             ]
           },
@@ -136,11 +136,23 @@
           {
             "group": "Files",
             "pages": [
-              "api-reference/modelence/server/functions/uploadFile",
+              "api-reference/modelence/client/functions/uploadFile",
               "api-reference/modelence/server/functions/getUploadUrl",
               "api-reference/modelence/server/functions/getFileUrl",
               "api-reference/modelence/server/functions/downloadFile",
               "api-reference/modelence/server/functions/deleteFile"
+            ]
+          },
+          {
+            "group": "WebSockets",
+            "pages": [
+              "api-reference/modelence/server/classes/ServerChannel",
+              "api-reference/modelence/client/classes/ClientChannel",
+              "api-reference/modelence/client/functions/startWebsockets",
+              "api-reference/modelence/index/interfaces/WebsocketServerProvider",
+              "api-reference/modelence/index/interfaces/WebsocketClientProvider",
+              "api-reference/modelence/client/functions/setWebsocketClientProvider",
+              "api-reference/modelence/client/functions/getWebsocketClientProvider"
             ]
           }
         ]

@@ -18,7 +18,7 @@ Typed client modules for mutations require:
 Define mutations inside a module's `mutations` object:
 
 ```typescript
-import { Module } from 'modelence/server';
+import { Module, ObjectId } from 'modelence/server';
 import { dbTodos } from './db';
 
 export default new Module('todo', {
@@ -38,14 +38,14 @@ export default new Module('todo', {
     // Update a todo
     async update({ id, title, isCompleted }) {
       return await dbTodos.updateOne(
-        { id },
+        id,
         { $set: { title, isCompleted } }
       );
     },
 
     // Delete a todo
     async delete({ id }) {
-      return await dbTodos.deleteOne({ id });
+      return await dbTodos.deleteOne({ _id: new ObjectId(id) });
     },
   },
 });

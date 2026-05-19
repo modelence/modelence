@@ -52,7 +52,7 @@ This creates a ready-to-use project with all the code from this tutorial pre-con
 
 5. **Add your Voyage AI API key**:
    - Get your API key from [voyageai.com](https://www.voyageai.com/)
-   - Add it as the value of `MODELENCE_VOYAGEAI_API_KEY` in your `.modelence.env` file
+   - In the Modelence Cloud dashboard, open your environment's **Application** tab and set the `voyage.apiKey` config to your API key
 
 6. **Run the project**:
    ```bash
@@ -67,7 +67,7 @@ You can also view a [live demo](https://voyage-ai-mg8435n3pj5-sandbox.prod.model
 
 If you want to add Voyage AI to an existing project, follow these steps:
 
-### Step 1: Install Dependencies
+## Step 1: Install Dependencies
 
 Install the Voyage AI client library:
 
@@ -180,7 +180,7 @@ export async function rerank<T extends Record<string, any>>(
 Create an `index.ts` file to tie everything together:
 
 ```typescript title="src/server/voyage/index.ts"
-import { Module } from 'modelence/server';
+import { Module, ObjectId } from 'modelence/server';
 import { z } from 'zod';
 import { dbDocuments } from './db';
 import { generateEmbedding, rerank } from './voyage';
@@ -254,14 +254,14 @@ export default new Module('voyage', {
         id: z.string(),
       }).parse(args);
 
-      await dbDocuments.deleteOne({ id });
+      await dbDocuments.deleteOne({ _id: new ObjectId(id) });
       return { success: true };
     },
   },
   configSchema: {
+    // 'secret' values are always server-only and masked in the Cloud dashboard; isPublic is not allowed.
     apiKey: {
-      type: 'string',
-      isPublic: false,
+      type: 'secret',
       default: '',
     },
   },

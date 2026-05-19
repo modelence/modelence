@@ -25,7 +25,7 @@ export {
   ModelenceQueryClient,
   type ModelenceQueryKey,
 } from './client/query';
-export { callMethod, MethodError, type MethodArgs } from './client/method';
+export { callMethod, MethodError, type MethodArgs, type CallMethodOptions } from './client/method';
 export { useSession } from './client/session';
 export {
   signupWithPassword,
