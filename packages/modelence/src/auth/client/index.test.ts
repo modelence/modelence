@@ -1,21 +1,22 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 
-const mockCallMethod = jest.fn();
-const mockSetCurrentUser = jest.fn();
+const mockCallMethod = vi.fn();
+const mockSetCurrentUser = vi.fn();
 
-jest.unstable_mockModule('../../client/method', () => ({
+vi.doMock('../../client/method', () => ({
   callMethod: mockCallMethod,
 }));
 
-jest.unstable_mockModule('../../client/session', () => ({
+vi.doMock('../../client/session', () => ({
   setCurrentUser: mockSetCurrentUser,
 }));
 
-const mockGetLocalStorageSession = jest.fn();
-jest.unstable_mockModule('../../client/localStorage', () => ({
+const mockGetLocalStorageSession = vi.fn();
+vi.doMock('../../client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
 }));
-const mockFetch: jest.MockedFunction<typeof fetch> = jest.fn();
+const mockFetch: MockedFunction<typeof fetch> = vi.fn();
 globalThis.fetch = mockFetch;
 
 const authClient = await import('./index');
@@ -28,7 +29,7 @@ Object.defineProperty(globalThis, 'window', {
 describe('auth/client', () => {
   beforeEach(() => {
     window.location.href = '';
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
   });
 

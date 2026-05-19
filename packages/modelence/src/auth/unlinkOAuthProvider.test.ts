@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ObjectId } from 'mongodb';
 import { SUPPORTED_OAUTH_PROVIDERS } from './types';
 
-const mockRequireById = jest.fn();
-const mockUpdateOne = jest.fn();
+const mockRequireById = vi.fn();
+const mockUpdateOne = vi.fn();
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     requireById: mockRequireById,
     updateOne: mockUpdateOne,
@@ -39,7 +39,7 @@ describe('auth/unlinkOAuthProvider', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockRequireById.mockReset();
     mockUpdateOne.mockReset();
   });

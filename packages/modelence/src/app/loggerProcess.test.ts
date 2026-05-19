@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockLogInfo = jest.fn();
-const mockLogError = jest.fn();
+const mockLogInfo = vi.fn();
+const mockLogError = vi.fn();
 
 type TelemetryMetadata = {
   timestamp: Date | null;
@@ -9,7 +9,7 @@ type TelemetryMetadata = {
   sequenceId?: number;
 };
 
-jest.unstable_mockModule('@/telemetry', () => ({
+vi.doMock('@/telemetry', () => ({
   logInfo: mockLogInfo,
   logError: mockLogError,
 }));
@@ -21,7 +21,7 @@ describe('app/loggerProcess', () => {
   const originalStderrWrite = process.stderr.write;
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     mockLogInfo.mockReset();
     mockLogError.mockReset();
   });
@@ -29,8 +29,8 @@ describe('app/loggerProcess', () => {
   afterEach(() => {
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
-    jest.clearAllTimers();
-    jest.useRealTimers();
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   test('flushes stdout and stderr logs through telemetry callbacks', () => {
@@ -42,7 +42,7 @@ describe('app/loggerProcess', () => {
     process.stdout.write('first line\nsecond line\n');
     process.stderr.write('error line\n');
 
-    jest.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1000);
 
     expect(mockLogInfo).toHaveBeenCalledTimes(2);
     const stdoutMetaFirst = mockLogInfo.mock.calls[0]?.[1] as TelemetryMetadata | undefined;
@@ -86,12 +86,12 @@ describe('app/loggerProcess', () => {
     });
 
     process.stdout.write('partial');
-    jest.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1000);
 
     expect(mockLogInfo).not.toHaveBeenCalled();
 
     process.stdout.write(' message\nnext line\n');
-    jest.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1000);
 
     expect(mockLogInfo).toHaveBeenCalledTimes(2);
 

@@ -1,40 +1,41 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import type { ViteDevServer, UserConfig, Plugin } from 'vite';
 import type { Request, Response } from 'express';
 import type { ExpressMiddleware } from './types';
 
 // Mock external dependencies
-const mockCreateServer = jest.fn<(config: UserConfig) => Promise<ViteDevServer>>();
+const mockCreateServer = vi.fn<(config: UserConfig) => Promise<ViteDevServer>>();
 const mockLoadConfigFromFile =
-  jest.fn<
+  vi.fn<
     (
       configEnv: { command: string; mode: string },
       configFile?: string
     ) => Promise<{ path: string; config: UserConfig; dependencies: string[] } | null>
   >();
-const mockMergeConfig = jest.fn<(base: UserConfig, user: UserConfig) => UserConfig>();
-const mockReactPlugin = jest.fn();
-const mockExpressStatic = jest.fn<(root: string) => ExpressMiddleware>();
-const mockExistsSync = jest.fn<(path: string) => boolean>();
+const mockMergeConfig = vi.fn<(base: UserConfig, user: UserConfig) => UserConfig>();
+const mockReactPlugin = vi.fn();
+const mockExpressStatic = vi.fn<(root: string) => ExpressMiddleware>();
+const mockExistsSync = vi.fn<(path: string) => boolean>();
 
-jest.unstable_mockModule('vite', () => ({
+vi.doMock('vite', () => ({
   createServer: mockCreateServer,
   defineConfig: <T>(config: T) => config,
   loadConfigFromFile: mockLoadConfigFromFile,
   mergeConfig: mockMergeConfig,
 }));
 
-jest.unstable_mockModule('@vitejs/plugin-react', () => ({
+vi.doMock('@vitejs/plugin-react', () => ({
   default: mockReactPlugin,
 }));
 
-jest.unstable_mockModule('express', () => ({
+vi.doMock('express', () => ({
   default: {
     static: mockExpressStatic,
   },
 }));
 
-jest.unstable_mockModule('fs', () => ({
+vi.doMock('fs', () => ({
   default: {
     existsSync: mockExistsSync,
   },
@@ -45,10 +46,10 @@ await import('./viteServer');
 
 const createResponse = (): Response => {
   const response = {
-    sendFile: jest.fn(),
-    status: jest.fn<(code: number) => Response>().mockReturnThis(),
-    send: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
-    json: jest.fn<(body?: unknown) => Response>().mockReturnThis(),
+    sendFile: vi.fn(),
+    status: vi.fn<(code: number) => Response>().mockReturnThis(),
+    send: vi.fn<(body?: unknown) => Response>().mockReturnThis(),
+    json: vi.fn<(body?: unknown) => Response>().mockReturnThis(),
   } satisfies Partial<Response>;
   return response as unknown as Response;
 };
@@ -78,14 +79,14 @@ describe('ViteServer', () => {
   let staticMiddleware: ExpressMiddleware;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     originalNodeEnv = process.env.NODE_ENV;
 
     // Reset module to get a fresh instance
-    jest.resetModules();
+    vi.resetModules();
 
     mockReactPlugin.mockReturnValue({ name: 'vite:react' });
-    staticMiddleware = jest.fn() as unknown as ExpressMiddleware;
+    staticMiddleware = vi.fn() as unknown as ExpressMiddleware;
     mockExpressStatic.mockReturnValue(staticMiddleware);
     mockExistsSync.mockReturnValue(false);
     mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult());
@@ -181,8 +182,8 @@ describe('ViteServer', () => {
     test('returns vite middlewares in development mode', async () => {
       process.env.NODE_ENV = 'development';
       const mockMiddlewares: ExpressMiddleware[] = [
-        jest.fn() as unknown as ExpressMiddleware,
-        jest.fn() as unknown as ExpressMiddleware,
+        vi.fn() as unknown as ExpressMiddleware,
+        vi.fn() as unknown as ExpressMiddleware,
       ];
       mockCreateServer.mockResolvedValue({
         middlewares: mockMiddlewares,
@@ -206,7 +207,7 @@ describe('ViteServer', () => {
 
     test('returns static middleware in production mode', async () => {
       process.env.NODE_ENV = 'production';
-      const productionMiddleware = jest.fn() as unknown as ExpressMiddleware;
+      const productionMiddleware = vi.fn() as unknown as ExpressMiddleware;
       mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
@@ -220,7 +221,7 @@ describe('ViteServer', () => {
     test('returns static middleware array in production mode', async () => {
       process.env.NODE_ENV = 'production';
       mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult({ publicDir: './public' }));
-      const productionMiddleware = jest.fn() as unknown as ExpressMiddleware;
+      const productionMiddleware = vi.fn() as unknown as ExpressMiddleware;
       mockExpressStatic.mockReturnValue(productionMiddleware);
 
       viteServer = new ViteServer();
@@ -263,10 +264,10 @@ describe('ViteServer', () => {
       process.env.NODE_ENV = 'development';
       const mockReq = createRequest();
       const mockRes = createResponse();
-      const sendMock = jest.fn();
-      const statusMock = mockRes.status as jest.Mock;
+      const sendMock = vi.fn();
+      const statusMock = mockRes.status as Mock;
       statusMock.mockReturnValue({ send: sendMock } as unknown as Response);
-      (mockRes.sendFile as jest.Mock).mockImplementation(() => {
+      (mockRes.sendFile as Mock).mockImplementation(() => {
         throw new Error('File not found');
       });
 
@@ -310,7 +311,7 @@ describe('loadUserViteConfig', () => {
 
 describe('safelyMergeConfig', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('merges base and user configs', () => {

@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 
 describe('authConfig', () => {
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
   });
 
   test('returns a frozen empty config by default', async () => {
@@ -17,10 +17,10 @@ describe('authConfig', () => {
   test('merges new config properties while preserving previous ones', async () => {
     const { setAuthConfig, getAuthConfig } = await import('./authConfig');
 
-    const onAfterLogin = jest.fn();
+    const onAfterLogin = vi.fn();
     setAuthConfig({ onAfterLogin });
 
-    const onSignupError = jest.fn();
+    const onSignupError = vi.fn();
     setAuthConfig({ onSignupError });
 
     const config = getAuthConfig();
@@ -32,11 +32,11 @@ describe('authConfig', () => {
   test('later updates override existing keys and create a new frozen object', async () => {
     const { setAuthConfig, getAuthConfig } = await import('./authConfig');
 
-    const firstHandler = jest.fn();
+    const firstHandler = vi.fn();
     setAuthConfig({ onAfterLogin: firstHandler });
     const previousConfig = getAuthConfig();
 
-    const secondHandler = jest.fn();
+    const secondHandler = vi.fn();
     setAuthConfig({ onAfterLogin: secondHandler });
 
     const updatedConfig = getAuthConfig();

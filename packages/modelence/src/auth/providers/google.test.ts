@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
 
 type RouteDef = {
@@ -7,31 +7,31 @@ type RouteDef = {
 };
 const registeredRoutes: RouteDef[] = [];
 
-const RouterMock = jest.fn(() => ({
+const RouterMock = vi.fn(() => ({
   get: (path: string, ...handlers: RouteDef['handlers']) => {
     registeredRoutes.push({ path, handlers });
   },
 }));
 
-jest.unstable_mockModule('express', () => ({
+vi.doMock('express', () => ({
   Router: RouterMock,
 }));
 
-const mockGetConfig = jest.fn<(key: string) => unknown>();
-jest.unstable_mockModule('@/server', () => ({
+const mockGetConfig = vi.fn<(key: string) => unknown>();
+vi.doMock('@/server', () => ({
   getConfig: mockGetConfig,
 }));
 
-const mockGetRedirectUri = jest.fn<() => string>();
-const mockHandleOAuthUserAuthentication = jest.fn();
-const mockHandleOAuthProviderLink = jest.fn();
-const mockValidateOAuthCode = jest.fn<() => string | null>();
-const mockClearOAuthLinkCookie = jest.fn();
+const mockGetRedirectUri = vi.fn<() => string>();
+const mockHandleOAuthUserAuthentication = vi.fn();
+const mockHandleOAuthProviderLink = vi.fn();
+const mockValidateOAuthCode = vi.fn<() => string | null>();
+const mockClearOAuthLinkCookie = vi.fn();
 const mockValidateOAuthStateAndGetMode =
-  jest.fn<(req: Request, res: Response, cookieName: string) => string | null>();
-const mockSendOAuthError = jest.fn();
+  vi.fn<(req: Request, res: Response, cookieName: string) => string | null>();
+const mockSendOAuthError = vi.fn();
 
-jest.unstable_mockModule('./oauth-common', () => ({
+vi.doMock('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
   handleOAuthProviderLink: mockHandleOAuthProviderLink,
@@ -41,13 +41,13 @@ jest.unstable_mockModule('./oauth-common', () => ({
   sendOAuthError: mockSendOAuthError,
 }));
 
-const fetchMock = jest.fn();
+const fetchMock = vi.fn();
 
 const { default: getRouter } = await import('./google');
 
 describe('auth/providers/google', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     registeredRoutes.length = 0;
     fetchMock.mockReset();
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -92,8 +92,8 @@ describe('auth/providers/google', () => {
     getRouter();
     const route = findRoute('/api/_internal/auth/google');
     const check = route.handlers[0];
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
-    const next = jest.fn();
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
+    const next = vi.fn();
 
     check({} as Request, res, next);
 
@@ -108,8 +108,8 @@ describe('auth/providers/google', () => {
   test('auth route redirects to Google OAuth when configured', () => {
     const route = findRoute('/api/_internal/auth/google');
     const handler = route.handlers[1];
-    const redirectMock = jest.fn();
-    const cookieMock = jest.fn();
+    const redirectMock = vi.fn();
+    const cookieMock = vi.fn();
     const res = { redirect: redirectMock, cookie: cookieMock } as unknown as Response;
 
     handler({ query: {} } as Request, res);
@@ -160,9 +160,9 @@ describe('auth/providers/google', () => {
       } as never);
 
     const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-      clearCookie: jest.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+      clearCookie: vi.fn(),
     } as unknown as Response;
 
     await handler(
@@ -193,7 +193,7 @@ describe('auth/providers/google', () => {
     mockValidateOAuthCode.mockReturnValueOnce(null);
     const route = findRoute('/api/_internal/auth/google/callback');
     const handler = route.handlers[1];
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
 
     await handler({ query: {}, cookies: {} } as unknown as Request, res);
 
@@ -207,7 +207,7 @@ describe('auth/providers/google', () => {
     });
     const route = findRoute('/api/_internal/auth/google/callback');
     const handler = route.handlers[1];
-    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as unknown as Response;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
 
     await handler(
       {
@@ -225,7 +225,7 @@ describe('auth/providers/google', () => {
   });
 
   test('callback handler responds 500 when token exchange fails', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockValidateOAuthStateAndGetMode.mockReturnValueOnce('login');
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -234,9 +234,9 @@ describe('auth/providers/google', () => {
     const route = findRoute('/api/_internal/auth/google/callback');
     const handler = route.handlers[1];
     const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-      clearCookie: jest.fn(),
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+      clearCookie: vi.fn(),
     } as unknown as Response;
 
     await handler(

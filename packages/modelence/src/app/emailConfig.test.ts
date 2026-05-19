@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 
 describe('emailConfig', () => {
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
   });
 
   test('returns a frozen empty config by default', async () => {
@@ -18,7 +18,7 @@ describe('emailConfig', () => {
     const { setEmailConfig, getEmailConfig } = await import('./emailConfig');
 
     const mockProvider = {
-      sendEmail: jest.fn(async () => {}),
+      sendEmail: vi.fn(async () => {}),
     };
 
     setEmailConfig({ from: 'noreply@example.com' });
@@ -115,7 +115,7 @@ describe('emailConfig', () => {
     const { setEmailConfig, getEmailConfig } = await import('./emailConfig');
 
     const mockProvider = {
-      sendEmail: jest.fn(async () => {}),
+      sendEmail: vi.fn(async () => {}),
     };
 
     setEmailConfig({
@@ -133,7 +133,7 @@ describe('emailConfig', () => {
     const { setEmailConfig, getEmailConfig } = await import('./emailConfig');
 
     const mockProvider = {
-      sendEmail: jest.fn(async () => {}),
+      sendEmail: vi.fn(async () => {}),
     };
 
     const verificationTemplate = ({

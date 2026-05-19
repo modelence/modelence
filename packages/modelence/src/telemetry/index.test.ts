@@ -1,29 +1,29 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockGetLogger = jest.fn();
-const mockGetApm = jest.fn();
-const mockIsTelemetryEnabled = jest.fn();
-const mockIsLoggerReady = jest.fn();
+const mockGetLogger = vi.fn();
+const mockGetApm = vi.fn();
+const mockIsTelemetryEnabled = vi.fn();
+const mockIsLoggerReady = vi.fn();
 
-jest.unstable_mockModule('@/app/metrics', () => ({
+vi.doMock('@/app/metrics', () => ({
   getLogger: mockGetLogger,
   getApm: mockGetApm,
   isLoggerReady: mockIsLoggerReady,
 }));
 
-jest.unstable_mockModule('@/app/state', () => ({
+vi.doMock('@/app/state', () => ({
   isTelemetryEnabled: mockIsTelemetryEnabled,
 }));
 
 const telemetry = await import('./index');
 
 describe('telemetry/index', () => {
-  const consoleDebug = jest.spyOn(console, 'debug').mockImplementation(() => {});
-  const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
-  const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const consoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     delete process.env.MODELENCE_LOG_LEVEL;
   });
 
@@ -42,7 +42,7 @@ describe('telemetry/index', () => {
   test('logDebug uses logger when telemetry enabled and console when log level is debug', () => {
     process.env.MODELENCE_LOG_LEVEL = 'debug';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -64,7 +64,7 @@ describe('telemetry/index', () => {
   test('logDebug does not log to console when log level is not debug', () => {
     process.env.MODELENCE_LOG_LEVEL = 'info';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -77,7 +77,7 @@ describe('telemetry/index', () => {
   test('logInfo uses logger when telemetry enabled and console when log level allows', () => {
     process.env.MODELENCE_LOG_LEVEL = 'info';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -90,7 +90,7 @@ describe('telemetry/index', () => {
   test('logInfo logs to console when log level is debug', () => {
     process.env.MODELENCE_LOG_LEVEL = 'debug';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -103,7 +103,7 @@ describe('telemetry/index', () => {
   test('logInfo does not log to console when log level is error', () => {
     process.env.MODELENCE_LOG_LEVEL = 'error';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -116,7 +116,7 @@ describe('telemetry/index', () => {
   test('logError uses logger when telemetry enabled and console when log level allows', () => {
     process.env.MODELENCE_LOG_LEVEL = 'error';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -138,7 +138,7 @@ describe('telemetry/index', () => {
   test('logError logs to console for debug and info levels', () => {
     process.env.MODELENCE_LOG_LEVEL = 'info';
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -150,7 +150,7 @@ describe('telemetry/index', () => {
 
   test('logError does not log to console when log level is not set', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
     mockGetLogger.mockReturnValue(logger);
     mockIsLoggerReady.mockReturnValue(true);
 
@@ -175,13 +175,13 @@ describe('telemetry/index', () => {
 
   test('startTransaction wires through to APM when telemetry enabled', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const end = jest.fn();
+    const end = vi.fn();
     const transaction = { end };
     const apm = {
-      startTransaction: jest.fn<(name: string, type: string) => typeof transaction>(
+      startTransaction: vi.fn<(name: string, type: string) => typeof transaction>(
         () => transaction
       ),
-      setCustomContext: jest.fn<(context: Record<string, unknown>) => void>(),
+      setCustomContext: vi.fn<(context: Record<string, unknown>) => void>(),
     };
     mockGetApm.mockReturnValue(apm);
 
@@ -209,7 +209,7 @@ describe('telemetry/index', () => {
 
   test('captureError delegates to APM when telemetry enabled', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
-    const captureError = jest.fn();
+    const captureError = vi.fn();
     mockGetApm.mockReturnValue({ captureError });
 
     const error = new Error('boom');
