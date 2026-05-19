@@ -75,84 +75,325 @@
         "tab": "API Reference",
         "groups": [
           {
-            "group": "Overview",
+            "group": "modelence",
             "pages": [
               "api-reference/modelence/index",
+              {
+                "group": "Server",
+                "pages": [
+                  "api-reference/modelence/server/index",
+                  {
+                    "group": "Classes",
+                    "pages": [
+                      "api-reference/modelence/server/classes/LiveData",
+                      "api-reference/modelence/server/classes/Module",
+                      "api-reference/modelence/server/classes/ServerChannel",
+                      "api-reference/modelence/server/classes/Store"
+                    ]
+                  },
+                  {
+                    "group": "Interfaces",
+                    "pages": [
+                      "api-reference/modelence/server/interfaces/LiveDataConfig"
+                    ]
+                  },
+                  {
+                    "group": "Functions",
+                    "pages": [
+                      "api-reference/modelence/server/functions/authenticate",
+                      "api-reference/modelence/server/functions/consumeRateLimit",
+                      "api-reference/modelence/server/functions/createQuery",
+                      "api-reference/modelence/server/functions/deleteFile",
+                      "api-reference/modelence/server/functions/deleteUser",
+                      "api-reference/modelence/server/functions/disableUser",
+                      "api-reference/modelence/server/functions/downloadFile",
+                      "api-reference/modelence/server/functions/getConfig",
+                      "api-reference/modelence/server/functions/getFileUrl",
+                      "api-reference/modelence/server/functions/getUploadUrl",
+                      "api-reference/modelence/server/functions/sendEmail",
+                      "api-reference/modelence/server/functions/startApp"
+                    ]
+                  },
+                  {
+                    "group": "Variables",
+                    "pages": [
+                      "api-reference/modelence/server/variables/dbUsers",
+                      "api-reference/modelence/server/variables/schema"
+                    ]
+                  },
+                  {
+                    "group": "Type Aliases",
+                    "pages": [
+                      "api-reference/modelence/server/type-aliases/AppOptions",
+                      "api-reference/modelence/server/type-aliases/AuthConfig",
+                      "api-reference/modelence/server/type-aliases/AuthOption",
+                      "api-reference/modelence/server/type-aliases/AuthRateLimitOverride",
+                      "api-reference/modelence/server/type-aliases/AuthRateLimitsConfig",
+                      "api-reference/modelence/server/type-aliases/CloudBackendConnectResponse",
+                      "api-reference/modelence/server/type-aliases/ConfigType",
+                      "api-reference/modelence/server/type-aliases/CronJobInputParams",
+                      "api-reference/modelence/server/type-aliases/FileVisibility",
+                      "api-reference/modelence/server/type-aliases/HttpMethod",
+                      "api-reference/modelence/server/type-aliases/LiveQueryCleanup",
+                      "api-reference/modelence/server/type-aliases/LiveQueryPublish",
+                      "api-reference/modelence/server/type-aliases/LiveQueryWatch",
+                      "api-reference/modelence/server/type-aliases/RateLimitRule",
+                      "api-reference/modelence/server/type-aliases/RateLimitType",
+                      "api-reference/modelence/server/type-aliases/RoleDefinition",
+                      "api-reference/modelence/server/type-aliases/RouteDefinition",
+                      "api-reference/modelence/server/type-aliases/RouteHandler",
+                      "api-reference/modelence/server/type-aliases/RouteParams",
+                      "api-reference/modelence/server/type-aliases/RouteResponse",
+                      "api-reference/modelence/server/type-aliases/SecurityConfig",
+                      "api-reference/modelence/server/type-aliases/UserInfo",
+                      "api-reference/modelence/server/type-aliases/ValueType"
+                    ]
+                  },
+                  {
+                    "group": "Namespaces",
+                    "pages": [
+                      "api-reference/modelence/server/namespaces/schema/index",
+                      "api-reference/modelence/server/namespaces/schema/type-aliases/infer"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Client",
+                "pages": [
+                  "api-reference/modelence/client/index",
+                  {
+                    "group": "Classes",
+                    "pages": [
+                      "api-reference/modelence/client/classes/ClientChannel",
+                      "api-reference/modelence/client/classes/MethodError"
+                    ]
+                  },
+                  {
+                    "group": "Functions",
+                    "pages": [
+                      "api-reference/modelence/client/functions/callMethod",
+                      "api-reference/modelence/client/functions/createClientModule",
+                      "api-reference/modelence/client/functions/deleteFile",
+                      "api-reference/modelence/client/functions/downloadFile",
+                      "api-reference/modelence/client/functions/getConfig",
+                      "api-reference/modelence/client/functions/getFileUrl",
+                      "api-reference/modelence/client/functions/getLocalStorageSession",
+                      "api-reference/modelence/client/functions/getWebsocketClientProvider",
+                      "api-reference/modelence/client/functions/linkOAuthProvider",
+                      "api-reference/modelence/client/functions/loginWithPassword",
+                      "api-reference/modelence/client/functions/logout",
+                      "api-reference/modelence/client/functions/renderApp",
+                      "api-reference/modelence/client/functions/resendEmailVerification",
+                      "api-reference/modelence/client/functions/resetPassword",
+                      "api-reference/modelence/client/functions/sendResetPasswordToken",
+                      "api-reference/modelence/client/functions/setWebsocketClientProvider",
+                      "api-reference/modelence/client/functions/signupWithPassword",
+                      "api-reference/modelence/client/functions/startWebsockets",
+                      "api-reference/modelence/client/functions/subscribeLiveQuery",
+                      "api-reference/modelence/client/functions/unlinkOAuthProvider",
+                      "api-reference/modelence/client/functions/updateProfile",
+                      "api-reference/modelence/client/functions/uploadFile",
+                      "api-reference/modelence/client/functions/useSession",
+                      "api-reference/modelence/client/functions/verifyEmail"
+                    ]
+                  },
+                  {
+                    "group": "Variables",
+                    "pages": [
+                      "api-reference/modelence/client/variables/AppProvider",
+                      "api-reference/modelence/client/variables/systemConfig"
+                    ]
+                  },
+                  {
+                    "group": "Type Aliases",
+                    "pages": [
+                      "api-reference/modelence/client/type-aliases/CallMethodOptions",
+                      "api-reference/modelence/client/type-aliases/MethodArgs",
+                      "api-reference/modelence/client/type-aliases/UserInfo"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Shared",
+                "pages": [
+                  "api-reference/modelence/index/index",
+                  {
+                    "group": "Classes",
+                    "pages": [
+                      "api-reference/modelence/index/classes/AuthError",
+                      "api-reference/modelence/index/classes/ModelenceError",
+                      "api-reference/modelence/index/classes/RateLimitError",
+                      "api-reference/modelence/index/classes/ValidationError"
+                    ]
+                  },
+                  {
+                    "group": "Interfaces",
+                    "pages": [
+                      "api-reference/modelence/index/interfaces/ModelenceConfig",
+                      "api-reference/modelence/index/interfaces/WebsocketClientProvider",
+                      "api-reference/modelence/index/interfaces/WebsocketServerProvider"
+                    ]
+                  },
+                  {
+                    "group": "Variables",
+                    "pages": [
+                      "api-reference/modelence/index/variables/time"
+                    ]
+                  },
+                  {
+                    "group": "Type Aliases",
+                    "pages": [
+                      "api-reference/modelence/index/type-aliases/ConfigSchema"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "group": "@modelence/react-query",
+            "pages": [
               "api-reference/@modelence/react-query/index",
+              {
+                "group": "Classes",
+                "pages": [
+                  "api-reference/@modelence/react-query/classes/ModelenceQueryClient"
+                ]
+              },
+              {
+                "group": "Functions",
+                "pages": [
+                  "api-reference/@modelence/react-query/functions/createQueryKey",
+                  "api-reference/@modelence/react-query/functions/modelenceLiveQuery",
+                  "api-reference/@modelence/react-query/functions/modelenceMutation",
+                  "api-reference/@modelence/react-query/functions/modelenceQuery"
+                ]
+              },
+              {
+                "group": "Type Aliases",
+                "pages": [
+                  "api-reference/@modelence/react-query/type-aliases/ModelenceQueryKey"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "@modelence/ai",
+            "pages": [
               "api-reference/@modelence/ai/index",
+              {
+                "group": "Functions",
+                "pages": [
+                  "api-reference/@modelence/ai/functions/generateText"
+                ]
+              },
+              {
+                "group": "Type Aliases",
+                "pages": [
+                  "api-reference/@modelence/ai/type-aliases/GenerateTextOptions"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "@modelence/next",
+            "pages": [
               "api-reference/@modelence/next/index",
+              {
+                "group": "Classes",
+                "pages": [
+                  "api-reference/@modelence/next/classes/NextServer"
+                ]
+              },
+              {
+                "group": "Variables",
+                "pages": [
+                  "api-reference/@modelence/next/variables/nextServer"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "@modelence/auth-ui",
+            "pages": [
               "api-reference/@modelence/auth-ui/index"
             ]
           },
           {
-            "group": "Core",
-            "pages": [
-              "api-reference/modelence/server/functions/startApp",
-              "api-reference/modelence/server/classes/Module",
-              "api-reference/modelence/client/functions/callMethod"
-            ]
-          },
-          {
-            "group": "Authentication",
-            "pages": [
-              "api-reference/modelence/client/functions/signupWithPassword",
-              "api-reference/modelence/client/functions/loginWithPassword",
-              "api-reference/modelence/client/functions/logout",
-              "api-reference/modelence/client/functions/useSession",
-              "api-reference/modelence/server/variables/dbUsers"
-            ]
-          },
-          {
-            "group": "Database",
-            "pages": [
-              "api-reference/modelence/server/classes/Store",
-              "api-reference/modelence/server/variables/schema"
-            ]
-          },
-          {
-            "group": "Config",
-            "pages": [
-              "api-reference/modelence/server/functions/getConfig",
-              "api-reference/modelence/client/functions/getConfig",
-              "api-reference/modelence/index/type-aliases/ConfigSchema",
-              "api-reference/modelence/server/type-aliases/ConfigType"
-            ]
-          },
-          {
-            "group": "Rate Limits",
-            "pages": [
-              "api-reference/modelence/server/type-aliases/RateLimitRule",
-              "api-reference/modelence/server/functions/consumeRateLimit"
-            ]
-          },
-          {
-            "group": "Email",
+            "group": "@modelence/smtp",
             "pages": [
               "api-reference/@modelence/smtp/index",
+              {
+                "group": "Functions",
+                "pages": [
+                  "api-reference/@modelence/smtp/functions/sendEmail"
+                ]
+              },
+              {
+                "group": "Variables",
+                "pages": [
+                  "api-reference/@modelence/smtp/variables/default"
+                ]
+              },
+              {
+                "group": "Type Aliases",
+                "pages": [
+                  "api-reference/@modelence/smtp/type-aliases/EmailAttachment",
+                  "api-reference/@modelence/smtp/type-aliases/EmailPayload"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "@modelence/resend",
+            "pages": [
               "api-reference/@modelence/resend/index",
-              "api-reference/@modelence/aws-ses/index"
+              {
+                "group": "Functions",
+                "pages": [
+                  "api-reference/@modelence/resend/functions/sendEmail"
+                ]
+              },
+              {
+                "group": "Variables",
+                "pages": [
+                  "api-reference/@modelence/resend/variables/default"
+                ]
+              },
+              {
+                "group": "Type Aliases",
+                "pages": [
+                  "api-reference/@modelence/resend/type-aliases/EmailAttachment",
+                  "api-reference/@modelence/resend/type-aliases/EmailPayload"
+                ]
+              }
             ]
           },
           {
-            "group": "Files",
+            "group": "@modelence/aws-ses",
             "pages": [
-              "api-reference/modelence/client/functions/uploadFile",
-              "api-reference/modelence/server/functions/getUploadUrl",
-              "api-reference/modelence/server/functions/getFileUrl",
-              "api-reference/modelence/server/functions/downloadFile",
-              "api-reference/modelence/server/functions/deleteFile"
-            ]
-          },
-          {
-            "group": "WebSockets",
-            "pages": [
-              "api-reference/modelence/server/classes/ServerChannel",
-              "api-reference/modelence/client/classes/ClientChannel",
-              "api-reference/modelence/client/functions/startWebsockets",
-              "api-reference/modelence/index/interfaces/WebsocketServerProvider",
-              "api-reference/modelence/index/interfaces/WebsocketClientProvider",
-              "api-reference/modelence/client/functions/setWebsocketClientProvider",
-              "api-reference/modelence/client/functions/getWebsocketClientProvider"
+              "api-reference/@modelence/aws-ses/index",
+              {
+                "group": "Functions",
+                "pages": [
+                  "api-reference/@modelence/aws-ses/functions/sendEmail"
+                ]
+              },
+              {
+                "group": "Variables",
+                "pages": [
+                  "api-reference/@modelence/aws-ses/variables/default"
+                ]
+              },
+              {
+                "group": "Type Aliases",
+                "pages": [
+                  "api-reference/@modelence/aws-ses/type-aliases/EmailAttachment",
+                  "api-reference/@modelence/aws-ses/type-aliases/EmailPayload"
+                ]
+              }
             ]
           }
         ]
