@@ -127,6 +127,7 @@
                       "api-reference/modelence/server/type-aliases/AppOptions",
                       "api-reference/modelence/server/type-aliases/AuthConfig",
                       "api-reference/modelence/server/type-aliases/AuthOption",
+                      "api-reference/modelence/server/type-aliases/AuthRateLimitOverride",
                       "api-reference/modelence/server/type-aliases/AuthRateLimitsConfig",
                       "api-reference/modelence/server/type-aliases/CloudBackendConnectResponse",
                       "api-reference/modelence/server/type-aliases/ConfigType",
@@ -207,6 +208,7 @@
                   {
                     "group": "Type Aliases",
                     "pages": [
+                      "api-reference/modelence/client/type-aliases/CallMethodOptions",
                       "api-reference/modelence/client/type-aliases/MethodArgs",
                       "api-reference/modelence/client/type-aliases/UserInfo"
                     ]
@@ -392,18 +394,6 @@
                   "api-reference/@modelence/aws-ses/type-aliases/EmailPayload"
                 ]
               }
-            ]
-          },
-          {
-            "group": "WebSockets",
-            "pages": [
-              "api-reference/modelence/server/classes/ServerChannel",
-              "api-reference/modelence/client/classes/ClientChannel",
-              "api-reference/modelence/client/functions/startWebsockets",
-              "api-reference/modelence/index/interfaces/WebsocketServerProvider",
-              "api-reference/modelence/index/interfaces/WebsocketClientProvider",
-              "api-reference/modelence/client/functions/setWebsocketClientProvider",
-              "api-reference/modelence/client/functions/getWebsocketClientProvider"
             ]
           }
         ]
