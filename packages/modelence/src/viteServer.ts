@@ -13,6 +13,7 @@ import path from 'path';
 import fs from 'fs';
 import express from 'express';
 import type { AppServer, AppServerInitOptions, ExpressMiddleware } from './types';
+import { escapeJsonForScript } from './ssr/escapeJsonForScript';
 
 const CLIENT_BUILD_DIR = './.modelence/build/client'.replace(/\\/g, '/');
 const SSR_BUILD_DIR = './.modelence/build/ssr'.replace(/\\/g, '/');
@@ -314,15 +315,6 @@ function isDocumentRequest(req: express.Request): boolean {
   }
 
   return true;
-}
-
-export function escapeJsonForScript(json: string): string {
-  // Escape </script>, HTML chars, and U+2028/U+2029 (illegal in JS source).
-  // Single-pass replace avoids order-dependent double-escape pitfalls.
-  return json.replace(
-    /[<>&\u2028\u2029]/g,
-    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`
-  );
 }
 
 /**

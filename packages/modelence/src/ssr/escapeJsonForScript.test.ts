@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { escapeJsonForScript } from '../viteServer';
+import { escapeJsonForScript } from './escapeJsonForScript';
 
 describe('escapeJsonForScript', () => {
   test('escapes </script> so embedded JSON cannot break out', () => {
