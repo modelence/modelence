@@ -7,7 +7,6 @@ const configSchema = z.object({
   serverDir: z.string(),
   serverEntry: z.string(),
   postBuildCommand: z.string().optional(),
-  ssr: z.boolean().optional(),
 });
 
 export async function loadModelenceConfig(): Promise<ModelenceConfig> {

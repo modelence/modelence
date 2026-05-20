@@ -30,7 +30,6 @@ import systemModule from '../system';
 import lockModule, { acquireLock, releaseLock } from '../lock';
 import filesModule from '../files';
 import { viteServer } from '../viteServer';
-import { loadModelenceConfig } from './modelenceConfig';
 import { connectCloudBackend } from './backendApi';
 import { initMetrics } from './metrics';
 import { Module } from './module';
@@ -70,6 +69,8 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
+  /** Enable server-side rendering of the user's React tree. */
+  ssr?: boolean;
 };
 
 export async function startApp({
@@ -82,7 +83,11 @@ export async function startApp({
   auth = {},
   security = {},
   websocket = {},
+  ssr = false,
 }: AppOptions) {
+  if (ssr && server === viteServer) {
+    viteServer.enableSsr();
+  }
   dotenv.config();
 
   dotenv.config({ path: '.modelence.env' });
@@ -175,13 +180,6 @@ export async function startApp({
   }
 
   startCronJobs().catch(console.error);
-
-  if (server === viteServer) {
-    const modelenceConfig = await loadModelenceConfig().catch(() => null);
-    if (modelenceConfig?.ssr) {
-      viteServer.enableSsr();
-    }
-  }
 
   await startServer(server, { combinedModules, channels });
 }

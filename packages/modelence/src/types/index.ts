@@ -5,8 +5,6 @@ export interface ModelenceConfig {
   serverDir: string;
   serverEntry: string;
   postBuildCommand?: string;
-  /** Enable server-side rendering of the user's React tree. */
-  ssr?: boolean;
 }
 
 export type ExpressMiddleware = (

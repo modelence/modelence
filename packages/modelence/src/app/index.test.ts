@@ -244,13 +244,6 @@ vi.doMock('../data/resolveStores', () => ({
   resolveStores: mockResolveStores,
 }));
 
-vi.doMock('./modelenceConfig', () => ({
-  loadModelenceConfig: vi.fn(async () => ({
-    serverDir: 'src/server',
-    serverEntry: 'app.ts',
-  })),
-}));
-
 const { startApp } = await import('./index');
 
 // Helper to create a test module

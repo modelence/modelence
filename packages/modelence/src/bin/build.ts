@@ -1,11 +1,5 @@
 import fs from 'fs/promises';
-import {
-  getBuildPath,
-  getConfig,
-  getModelencePath,
-  getPostBuildCommand,
-  getServerPath,
-} from './config';
+import { getBuildPath, getModelencePath, getPostBuildCommand, getServerPath } from './config';
 import { build as tsupBuild } from 'tsup';
 import { build as viteBuild, mergeConfig, loadConfigFromFile } from 'vite';
 import path from 'path';
@@ -19,16 +13,16 @@ async function buildClient() {
     return;
   }
 
-  const ssrEnabled = Boolean(getConfig().ssr);
-
-  await buildVite({ ssr: ssrEnabled });
-
-  if (ssrEnabled) {
-    await buildViteSsr();
-  }
+  // Always build the SSR bundle and emit `ssr-manifest.json`. Whether the
+  // runtime actually uses them is decided by `startApp({ ssr: true })`.
+  // Building unconditionally avoids the build-vs-runtime config mismatch
+  // class of bugs (e.g. "I enabled SSR but the deployed app serves a CSR
+  // shell because the build was missing the SSR artifact").
+  await buildVite();
+  await buildViteSsr();
 }
 
-async function buildVite({ ssr }: { ssr: boolean }) {
+async function buildVite() {
   console.log('Building client with Vite...');
 
   const userConfig = await loadConfigFromFile({
@@ -42,7 +36,7 @@ async function buildVite({ ssr }: { ssr: boolean }) {
       emptyOutDir: true,
       // Emit `.vite/ssr-manifest.json` so the SSR runtime can map rendered
       // modules to their CSS assets (see ssr/collectCss.ts:loadProdCssAssets).
-      ssrManifest: ssr,
+      ssrManifest: true,
     },
   };
 
