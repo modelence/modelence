@@ -76,6 +76,17 @@ class ViteServer implements AppServer {
 
   async handler(req: express.Request, res: express.Response) {
     if (this.ssrEnabled && isDocumentRequest(req)) {
+      // HEAD requests get headers only — no point running the full SSR
+      // pipeline (DB call + React render + dehydration) just to have Node
+      // strip the body downstream. Headers match what a GET would emit so
+      // caches and probes see the same cacheability signals.
+      if (req.method === 'HEAD') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(200).end();
+        return;
+      }
+
       try {
         await this.handleSsr(req, res);
       } catch (error) {
@@ -273,8 +284,14 @@ function isDocumentRequest(req: express.Request): boolean {
     return false;
   }
 
+  // The Accept header is advisory, not authoritative. Browsers always include
+  // `text/html`, but health checks, `curl`, and similar non-browser clients
+  // commonly send `*/*` or no Accept at all. Treat the request as a document
+  // unless the client *explicitly* asked for something other than HTML
+  // (e.g. `Accept: application/json`). Path-based filters below (`/api/`,
+  // non-HTML extensions) catch the truly non-document cases.
   const accept = req.get('accept') ?? '';
-  if (!accept.includes('text/html')) {
+  if (accept && !accept.includes('text/html') && !accept.includes('*/*')) {
     return false;
   }
 

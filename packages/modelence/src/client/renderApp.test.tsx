@@ -12,12 +12,27 @@ vi.doMock('./errorHandler', () => ({
 const mockCreateRoot = vi.fn(() => ({
   render: vi.fn(),
 }));
+const mockHydrateRoot = vi.fn();
 
 vi.doMock('react-dom/client', () => ({
   createRoot: mockCreateRoot,
+  hydrateRoot: mockHydrateRoot,
   default: {
     createRoot: mockCreateRoot,
+    hydrateRoot: mockHydrateRoot,
   },
+}));
+
+const mockHydrateSession = vi.fn();
+const mockStartSessionHeartbeat = vi.fn();
+
+vi.doMock('./session', () => ({
+  hydrateSession: mockHydrateSession,
+  startSessionHeartbeat: mockStartSessionHeartbeat,
+}));
+
+vi.doMock('./queryProvider', () => ({
+  ModelenceQueryProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.doMock('../client', () => ({
@@ -42,10 +57,12 @@ describe('client/renderApp', () => {
   const originalWindow = globalThis.window;
   let addEventListenerMock: Mock;
   let linkElement: { rel: string; href: string } | null;
+  let ssrStateNode: { textContent: string } | null;
 
   beforeEach(() => {
     vi.clearAllMocks();
     linkElement = null;
+    ssrStateNode = null;
     const rootElement = {};
     addEventListenerMock = vi.fn();
     const head = {
@@ -57,7 +74,11 @@ describe('client/renderApp', () => {
     globalThis.document = {
       body: { innerHTML: '' },
       head,
-      getElementById: (id: string) => (id === 'root' ? rootElement : null),
+      getElementById: (id: string) => {
+        if (id === 'root') return rootElement;
+        if (id === '__MODELENCE_STATE__') return ssrStateNode;
+        return null;
+      },
       querySelector: (selector: string) => {
         if (selector.includes("link[rel~='icon']") || selector.includes("link[rel='icon']")) {
           return linkElement;
@@ -118,5 +139,51 @@ describe('client/renderApp', () => {
     const link = document.querySelector("link[rel='icon']") as HTMLLinkElement;
     expect(link.href).toContain('/new.ico');
     expect(document.head.querySelectorAll("link[rel='icon']").length).toBe(1);
+  });
+
+  test('calls createRoot when no SSR marker is present', () => {
+    renderApp({
+      loadingElement: null,
+      routesElement: null,
+    });
+
+    expect(mockCreateRoot).toHaveBeenCalledTimes(1);
+    expect(mockHydrateRoot).not.toHaveBeenCalled();
+    expect(mockHydrateSession).not.toHaveBeenCalled();
+  });
+
+  test('calls hydrateRoot and hydrates session when SSR marker has valid JSON', () => {
+    const session = { user: null, configs: {} };
+    ssrStateNode = { textContent: JSON.stringify({ session }) };
+
+    renderApp({
+      loadingElement: null,
+      routesElement: null,
+    });
+
+    expect(mockHydrateRoot).toHaveBeenCalledTimes(1);
+    expect(mockCreateRoot).not.toHaveBeenCalled();
+    expect(mockHydrateSession).toHaveBeenCalledWith(session);
+    expect(mockStartSessionHeartbeat).toHaveBeenCalledTimes(1);
+  });
+
+  test('calls hydrateRoot when SSR marker exists but JSON is malformed', () => {
+    // Regression test: the SSR marker's presence — not the parsed payload —
+    // determines hydration mode. A malformed payload still means the DOM
+    // contains server-rendered markup that must be hydrated, not replaced.
+    ssrStateNode = { textContent: '{not valid json' };
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderApp({
+      loadingElement: null,
+      routesElement: null,
+    });
+
+    expect(mockHydrateRoot).toHaveBeenCalledTimes(1);
+    expect(mockCreateRoot).not.toHaveBeenCalled();
+    expect(mockHydrateSession).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });

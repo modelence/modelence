@@ -11,6 +11,13 @@ type SsrState = {
   session?: SessionInitPayload;
 };
 
+function hasSsrMarker(): boolean {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+  return document.getElementById(SSR_STATE_SCRIPT_ID) !== null;
+}
+
 function readSsrState(): SsrState | null {
   if (typeof document === 'undefined') {
     return null;
@@ -24,6 +31,9 @@ function readSsrState(): SsrState | null {
   try {
     return JSON.parse(node.textContent ?? '') as SsrState;
   } catch (e) {
+    // The script tag still signals that SSR ran — the caller must hydrate,
+    // not createRoot, even if the payload is unreadable. Session bootstrap
+    // is the only thing we lose here.
     console.error('Modelence: failed to parse SSR state', e);
     return null;
   }
@@ -78,8 +88,13 @@ export function renderApp(options: RenderAppOptions) {
   // ORDER MATTERS: hydrate session BEFORE building the React tree / calling
   // hydrateRoot, so `isSessionInitialized()` is true on the first render and
   // AppProvider's initial `isLoading` matches the server-rendered output.
+  //
+  // Hydration mode is keyed off the SSR marker script's *presence*, not off
+  // the parsed payload — a parse failure would still leave server-rendered
+  // markup in the DOM, and calling createRoot on it would wipe it out and
+  // trigger a flash plus hydration mismatch warnings.
+  const isHydrating = hasSsrMarker();
   const ssrState = readSsrState();
-  const isHydrating = ssrState !== null;
   if (ssrState?.session) {
     hydrateSession(ssrState.session);
     startSessionHeartbeat();
