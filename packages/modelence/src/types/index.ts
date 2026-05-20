@@ -5,7 +5,7 @@ export interface ModelenceConfig {
   serverDir: string;
   serverEntry: string;
   postBuildCommand?: string;
-  /** Must match the `ssr` flag passed to `startApp()`. */
+  /** Enable server-side rendering of the user's React tree. */
   ssr?: boolean;
 }
 
