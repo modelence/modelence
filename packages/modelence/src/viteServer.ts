@@ -48,6 +48,26 @@ class ViteServer implements AppServer {
     if (this.isDev()) {
       console.log('Starting Vite dev server...');
       this.viteServer = await createServer(this.config);
+    } else if (this.ssrEnabled) {
+      // Fail fast in prod when SSR is enabled but the build skipped the SSR
+      // bundle. This happens when `postBuildCommand` is set in
+      // modelence.config.ts: it replaces the default Vite build, so
+      // `.modelence/build/ssr/index.mjs` and the client SSR manifest are
+      // never produced. Without this check, the first document request
+      // would crash with an opaque "Cannot find module" error.
+      const ssrEntryPath = path.resolve(process.cwd(), SSR_BUILD_DIR, 'index.mjs');
+      if (!fs.existsSync(ssrEntryPath)) {
+        throw new Error(
+          `Modelence: SSR is enabled (startApp({ ssr: true })) but the SSR ` +
+            `bundle is missing at ${ssrEntryPath}.\n\n` +
+            `This usually means \`postBuildCommand\` is set in modelence.config.ts, ` +
+            `which replaces the default Vite client build (and the SSR build along ` +
+            `with it). Either:\n` +
+            `  • remove \`postBuildCommand\` so Modelence builds the SSR bundle, or\n` +
+            `  • remove \`ssr: true\` from startApp() if your custom toolchain ` +
+            `handles SSR itself.`
+        );
+      }
     }
 
     if (this.ssrEnabled && !this.ssrTransportInstalled) {

@@ -8,7 +8,12 @@
 'use client';
 
 import React, { useState, useEffect, ReactNode } from 'react';
-import { initSession, isSessionInitialized } from './session';
+import {
+  _isReconciliationPending,
+  initSession,
+  isSessionInitialized,
+  reconcileSession,
+} from './session';
 
 const SSR_STATE_SCRIPT_ID = '__MODELENCE_STATE__';
 
@@ -50,6 +55,13 @@ export function AppProvider({ children, loadingElement }: AppProviderProps) {
       isInitialized = true;
 
       if (isSessionInitialized()) {
+        // SSR hydrated the session, but if `hydrateSession` detected a
+        // token-in-localStorage / no-cookie mismatch it deferred actual
+        // authentication. Run it now from the client where the token can
+        // travel in the request body and the server can set the cookie.
+        if (_isReconciliationPending()) {
+          await reconcileSession();
+        }
         return;
       }
 

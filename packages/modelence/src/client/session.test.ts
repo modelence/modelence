@@ -5,6 +5,7 @@ type CallMethodFn = (typeof import('./method'))['callMethod'];
 const mockCallMethod = vi.fn<CallMethodFn>();
 const mockSetConfig = vi.fn();
 const mockSetLocalStorageSession = vi.fn();
+const mockGetLocalStorageSession = vi.fn<() => object | null>(() => null);
 const mockSeconds = vi.fn((value: number) => value * 1000);
 
 vi.doMock('./method', () => ({
@@ -17,6 +18,7 @@ vi.doMock('../config/client', () => ({
 
 vi.doMock('./localStorage', () => ({
   setLocalStorageSession: mockSetLocalStorageSession,
+  getLocalStorageSession: mockGetLocalStorageSession,
 }));
 
 vi.doMock('../time', () => ({
@@ -39,6 +41,8 @@ describe('client/session', () => {
     mockCallMethod.mockReset();
     mockSetConfig.mockReset();
     mockSetLocalStorageSession.mockReset();
+    mockGetLocalStorageSession.mockReset();
+    mockGetLocalStorageSession.mockReturnValue(null);
     global.setTimeout = ((fn: Parameters<typeof originalSetTimeout>[0], delay?: number) => {
       return originalSetTimeout(fn, delay);
     }) as typeof setTimeout;
@@ -169,5 +173,86 @@ describe('client/session', () => {
 
     expect(mockSetConfig).not.toHaveBeenCalled();
     expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
+  });
+
+  test('hydrateSession preserves localStorage token when SSR was rendered anonymously', async () => {
+    // Regression: previously `hydrateSession` would overwrite localStorage with
+    // the freshly-minted anonymous SSR token, destroying a user's pre-existing
+    // auth and logging them out permanently.
+    mockGetLocalStorageSession.mockReturnValue({ authToken: 'real-localstorage-token' });
+
+    const fresh = await import('./session');
+    const payload = {
+      configs: [],
+      session: { authToken: 'fresh-anonymous-ssr-token' },
+      user: null,
+    };
+
+    fresh.hydrateSession(payload as unknown as Parameters<HydrateSessionFn>[0]);
+
+    // The anonymous SSR token must NOT clobber the real localStorage token.
+    expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
+    // Reconciliation must be flagged so AppProvider can repair via initSession.
+    expect(fresh._isReconciliationPending()).toBe(true);
+    // Session is still marked initialized so AppProvider matches the server.
+    expect(fresh.isSessionInitialized()).toBe(true);
+  });
+
+  test('hydrateSession overwrites localStorage when SSR is authoritative (user present)', async () => {
+    // When the SSR payload has a real user, the server's authToken IS the
+    // source of truth — overwrite localStorage as normal.
+    mockGetLocalStorageSession.mockReturnValue({ authToken: 'stale-token' });
+
+    const fresh = await import('./session');
+    const payload = {
+      configs: [],
+      session: { authToken: 'authoritative-ssr-token' },
+      user: { id: '1', handle: 'u', roles: [] },
+    };
+
+    fresh.hydrateSession(payload as unknown as Parameters<HydrateSessionFn>[0]);
+
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith(payload.session);
+    expect(fresh._isReconciliationPending()).toBe(false);
+  });
+
+  test('reconcileSession re-authenticates via callMethod and updates localStorage', async () => {
+    mockGetLocalStorageSession.mockReturnValue({ authToken: 'real-localstorage-token' });
+
+    const fresh = await import('./session');
+    fresh.hydrateSession({
+      configs: [],
+      session: { authToken: 'fresh-anonymous-ssr-token' },
+      user: null,
+    } as unknown as Parameters<HydrateSessionFn>[0]);
+
+    expect(fresh._isReconciliationPending()).toBe(true);
+
+    mockCallMethod.mockResolvedValueOnce({
+      configs: [{ key: 'k', value: 'v' }],
+      session: { authToken: 'real-localstorage-token' },
+      user: { id: '7', handle: 'reconciled', roles: ['admin'] },
+    } as never);
+
+    await fresh.reconcileSession();
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.session.init');
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith({
+      authToken: 'real-localstorage-token',
+    });
+    expect(fresh.useSessionStore.getState().user?.id).toBe('7');
+    expect(fresh._isReconciliationPending()).toBe(false);
+  });
+
+  test('reconcileSession is a no-op when no reconciliation is pending', async () => {
+    const fresh = await import('./session');
+    fresh.hydrateSession({
+      configs: [],
+      session: { authToken: 'abc' },
+      user: { id: '1', handle: 'u', roles: [] },
+    } as unknown as Parameters<HydrateSessionFn>[0]);
+
+    await fresh.reconcileSession();
+    expect(mockCallMethod).not.toHaveBeenCalled();
   });
 });
