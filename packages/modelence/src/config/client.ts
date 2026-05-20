@@ -5,11 +5,7 @@ let config: Record<ConfigKey, AppConfig> = {};
 type SsrConfigResolver = (key: ConfigKey) => string | number | boolean | undefined;
 let ssrConfigResolver: SsrConfigResolver | null = null;
 
-/**
- * @internal
- * Installed once by the SSR runtime. The resolver reads per-request configs
- * from AsyncLocalStorage, so this single global is safe under concurrency.
- */
+/** @internal SSR resolver reads from AsyncLocalStorage (per-request scoped). */
 export function _setSsrConfigResolver(resolver: SsrConfigResolver | null) {
   ssrConfigResolver = resolver;
 }

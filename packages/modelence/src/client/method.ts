@@ -27,17 +27,13 @@ export type CallMethodOptions = {
   errorHandler?: (error: Error, methodName: string) => void;
 };
 
-// Defaults to fetch-based HTTP; the SSR runtime swaps in an in-process transport.
+// Default: fetch HTTP. SSR swaps in an in-process transport via globalThis
+// so Vite's ssrLoadModule (separate module graph) shares the same instance.
 export type CallMethodTransport = <T = unknown>(methodName: string, args: MethodArgs) => Promise<T>;
 
 const defaultTransport: CallMethodTransport = async <T>(methodName: string, args: MethodArgs) =>
   call<T>(`/api/_internal/method/${methodName}`, args);
 
-// Shared on globalThis so Vite's `ssrLoadModule` (which loads the user's tree
-// in a separate module graph from the framework runtime) sees the same
-// transport that the SSR runtime installed. Without this, `useQuery` calls
-// during SSR fall through to the default fetch-based transport and never
-// populate the dehydrated cache.
 const TRANSPORT_KEY = '__modelence_call_method_transport__';
 
 type GlobalWithTransport = typeof globalThis & {

@@ -28,11 +28,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
 }));
 
 let isInitialized = false;
-// Set when `hydrateSession` detects the SSR payload was rendered without an
-// auth token but localStorage holds one (e.g. the user logged in before the
-// app enabled cookie-based auth / SSR). The client must follow up with
-// `reconcileSession()` to re-authenticate via the token in the request body
-// and refresh the cookie so subsequent SSR requests render logged-in.
+// Set when SSR rendered anonymously but localStorage holds a token (no
+// cookie yet). `reconcileSession()` then re-auths via the body and refreshes
+// the cookie for subsequent SSR requests.
 let pendingReconciliation = false;
 const SESSION_HEARTBEAT_INTERVAL = time.seconds(30);
 let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
@@ -90,22 +88,16 @@ export function hydrateSession(payload: SessionInitPayload) {
 
   _setConfig(payload.configs);
 
-  // Detect a server-vs-client auth mismatch: localStorage holds an authToken
-  // but the SSR payload was rendered anonymously (no user). This happens when
-  // a user logged in before SSR was enabled (or before cookie-based auth was
-  // introduced) and the server couldn't read their token. In that case we
-  // MUST preserve the localStorage token instead of overwriting it with the
-  // freshly-minted anonymous one, and signal that the client should call
-  // `_system.session.init` to re-authenticate.
+  // localStorage token + anonymous SSR payload = server couldn't read the
+  // token (no cookie yet). Preserve the localStorage token and defer to
+  // `reconcileSession()`; overwriting here would log the user out permanently.
   const existingLocalSession = getLocalStorageSession() as { authToken?: string } | null;
   const existingToken = existingLocalSession?.authToken;
   const ssrSession = payload.session as { authToken?: string };
 
   if (existingToken && !payload.user && existingToken !== ssrSession.authToken) {
     pendingReconciliation = true;
-    // Render the React tree with the SSR'd anonymous user so hydration
-    // matches the server. `reconcileSession()` will swap in the real user
-    // once the client round-trip completes.
+    // First render must match the server (anonymous); reconcile swaps later.
     useSessionStore.getState().setUser(parseUser(payload.user));
     return;
   }
@@ -114,13 +106,7 @@ export function hydrateSession(payload: SessionInitPayload) {
   useSessionStore.getState().setUser(parseUser(payload.user));
 }
 
-/**
- * Re-authenticate using the token in localStorage when `hydrateSession`
- * detected a server-vs-client mismatch. Sends the token via the request body
- * (where the SSR pipeline can't reach), which lets the server set the cookie
- * for subsequent SSR requests. Idempotent: a no-op if no reconciliation is
- * needed.
- */
+/** Re-auth via the body token when SSR couldn't read it from a cookie. */
 export async function reconcileSession() {
   if (!pendingReconciliation) {
     return;
@@ -137,7 +123,7 @@ export async function reconcileSession() {
   }
 }
 
-/** @internal — used by AppProvider to decide whether to run reconcileSession on mount. */
+/** @internal */
 export function _isReconciliationPending(): boolean {
   return pendingReconciliation;
 }
@@ -203,16 +189,12 @@ export function stopHeartbeatTimer() {
 type SsrSessionResolver = () => User | null;
 let ssrSessionResolver: SsrSessionResolver | null = null;
 
-/**
- * @internal
- * Installed once by the SSR runtime. The resolver reads per-request state
- * from AsyncLocalStorage, so this single global is safe under concurrency.
- */
+/** @internal SSR resolver reads from AsyncLocalStorage (per-request scoped). */
 export function _setSsrSessionResolver(resolver: SsrSessionResolver | null) {
   ssrSessionResolver = resolver;
 }
 
-/** @internal Used by the SSR runtime to enrich a raw user payload. */
+/** @internal */
 export function _parseSessionUser(user: unknown): User | null {
   return parseUser(user);
 }

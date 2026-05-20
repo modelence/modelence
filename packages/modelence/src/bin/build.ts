@@ -13,11 +13,7 @@ async function buildClient() {
     return;
   }
 
-  // Always build the SSR bundle and emit `ssr-manifest.json`. Whether the
-  // runtime actually uses them is decided by `startApp({ ssr: true })`.
-  // Building unconditionally avoids the build-vs-runtime config mismatch
-  // class of bugs (e.g. "I enabled SSR but the deployed app serves a CSR
-  // shell because the build was missing the SSR artifact").
+  // Always emit SSR artifacts; `startApp({ ssr: true })` decides if they're used.
   await buildVite();
   await buildViteSsr();
 }
@@ -34,8 +30,7 @@ async function buildVite() {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
       emptyOutDir: true,
-      // Emit `.vite/ssr-manifest.json` so the SSR runtime can map rendered
-      // modules to their CSS assets (see ssr/collectCss.ts:loadProdCssAssets).
+      // Emit `.vite/ssr-manifest.json` for ssr/collectCss.ts.
       ssrManifest: true,
     },
   };

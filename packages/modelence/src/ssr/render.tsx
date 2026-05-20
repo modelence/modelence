@@ -33,8 +33,6 @@ const configResolver = (key: ConfigKey) => {
 };
 
 function ensureSsrResolversInstalled() {
-  // Idempotent — safe to call repeatedly. Re-installs the framework's own
-  // resolvers if they were swapped out (tests, future reload code).
   _setSsrSessionResolver(sessionResolver);
   _setSsrConfigResolver(configResolver);
 }
@@ -48,42 +46,21 @@ export type SsrRenderOptions = {
 };
 
 export type SsrStreamHandle = {
-  /** Session bootstrap payload — safe to inline before the React shell flushes. */
+  /** Session bootstrap payload — inline before the shell flushes. */
   sessionState: string;
-  /**
-   * Pipe React's HTML stream into the response. Resolves once every Suspense
-   * boundary has settled and the stream has finished writing.
-   */
+  /** Pipe React's HTML into `destination`. Resolves when streaming finishes. */
   pipe: (destination: Writable) => Promise<void>;
-  /**
-   * Read the dehydrated query state. Only call AFTER `pipe()` resolves —
-   * queries that resolve mid-stream populate the cache during render.
-   */
+  /** Dehydrated query state. Only call after `pipe()` resolves. */
   getQueryState: () => string;
 };
 
 export type SsrStreamOptions = SsrRenderOptions & {
-  /**
-   * Called once React has flushed the shell (head + above-fallback content)
-   * and the stream is ready to pipe. The framework uses this hook to write
-   * the opening template + state scripts before piping React's HTML.
-   */
+  /** Fires when the shell is flushed; caller writes prelude + state here. */
   onShellReady?: () => void;
   /** Non-fatal SSR errors (Suspense fallbacks, etc.). */
   onError?: (error: unknown) => void;
 };
 
-/**
- * Renders the SSR tree as a stream. Returns a handle that lets the caller
- * flush a template prelude (head + opening shell) as soon as the React shell
- * is ready, pipe the React HTML stream into the response, then append the
- * dehydrated query state once streaming completes.
- *
- * This is what enables fast First Contentful Paint: the browser receives the
- * <head> (with CSS <link> tags) immediately, starts the stylesheet fetch in
- * parallel with the HTML stream, and paints the streamed shell with styles
- * applied — instead of the dev-mode FOUC caused by JS-injected CSS.
- */
 export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<SsrStreamHandle> {
   const { callContext, loadingElement, routesElement, router, location, onShellReady, onError } =
     options;
@@ -113,12 +90,11 @@ export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<Ss
   );
 
   let streamRef: PipeableStream | null = null;
-  // The shell-ready promise resolves with the PipeableStream as soon as React
-  // has rendered above-fallback content. Errors during the shell render
-  // reject it so the caller can fall back to a static response.
+  // Resolves with the stream once React renders above-fallback content;
+  // rejects on shell errors so the caller can fall back to a static response.
   const shellReady = new Promise<PipeableStream>((resolve, reject) => {
-    // Run the render inside the SSR context so server-rendered components
-    // can resolve session/config/query state from the per-request scope.
+    // Run the render inside the SSR context so components can resolve
+    // session/config/query state from the per-request scope.
     runWithSsrContext(
       {
         callContext,
@@ -147,7 +123,7 @@ export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<Ss
     );
   });
 
-  // Surface shell errors synchronously by awaiting before returning the handle.
+  // Await so shell errors surface before the caller starts piping.
   await shellReady;
 
   let queryStateJson: string | null = null;
@@ -159,18 +135,14 @@ export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<Ss
         return;
       }
 
-      // react-dom calls `.end()` on the destination it pipes into. We need to
-      // keep writing AFTER React is done (epilogue + query state script), so
-      // we wrap the real destination in a pass-through Writable whose `end()`
-      // flushes pending data but does NOT close the underlying response.
+      // react-dom calls `destination.end()` when done. The caller still needs
+      // to write the epilogue + query state, so wrap with a passthrough whose
+      // `final()` resolves the pipe promise without closing the response.
       const passthrough = new Writable({
         write(chunk, _encoding, callback) {
           destination.write(chunk, (err) => callback(err ?? undefined));
         },
         final(callback) {
-          // Triggered by react-dom's `destination.end()`. Resolve the pipe
-          // promise so the caller can write the epilogue, but leave the real
-          // response open.
           try {
             const dehydratedState: DehydratedState = dehydrate(queryClient);
             queryStateJson = JSON.stringify(dehydratedState);

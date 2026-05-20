@@ -117,11 +117,8 @@ export default new Module('_system.session', {
   stores: [sessionsCollection],
   mutations: {
     init: async function (args, { session, user, res }) {
-      // Refresh the authToken cookie on every init so logged-in sessions
-      // established before cookie-based auth was introduced get a cookie
-      // they can carry on subsequent SSR requests. No-op when called from
-      // a context without a response (background jobs, SSR with no cookie
-      // mutation desired).
+      // Refresh the cookie so pre-cookie-era sessions can carry it forward
+      // on subsequent SSR requests. No-op without a response (background jobs).
       if (res && session) {
         setAuthTokenCookie(res, session.authToken);
       }

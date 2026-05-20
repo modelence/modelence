@@ -24,23 +24,14 @@ interface AppProviderProps {
 
 let isInitialized = false;
 
+// Presence of the state script signals server-rendered markup in the DOM,
+// even if `hydrateSession` failed to parse it. Hiding under a loading shell
+// here would cause a hydration mismatch and a flash-of-spinner.
 function hasServerRenderedMarkup(): boolean {
-  // The SSR pipeline emits `<script id="__MODELENCE_STATE__">` before the
-  // root container. Its presence is the canonical signal that the DOM
-  // already contains server-rendered markup we must hydrate. We deliberately
-  // do NOT depend on `isSessionInitialized()` here: if `renderApp` failed
-  // to parse the state script (malformed JSON), the session resolver hasn't
-  // run, but the server-rendered HTML is still in the DOM. Showing the
-  // loading shell in that case would cause a hydration mismatch and a
-  // flash-of-spinner over already-rendered content.
   return typeof document !== 'undefined' && document.getElementById(SSR_STATE_SCRIPT_ID) !== null;
 }
 
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
-  // Skip the loading shell on the server (would defeat SSR), when the
-  // session has already been hydrated client-side, or when the SSR marker
-  // is present (the server-rendered content must be hydrated as-is, even
-  // if session hydration silently failed).
   const isServer = typeof window === 'undefined';
   const [isLoading, setIsLoading] = useState(
     () => !isServer && !isSessionInitialized() && !hasServerRenderedMarkup()
@@ -55,10 +46,7 @@ export function AppProvider({ children, loadingElement }: AppProviderProps) {
       isInitialized = true;
 
       if (isSessionInitialized()) {
-        // SSR hydrated the session, but if `hydrateSession` detected a
-        // token-in-localStorage / no-cookie mismatch it deferred actual
-        // authentication. Run it now from the client where the token can
-        // travel in the request body and the server can set the cookie.
+        // SSR couldn't authenticate via cookie; reconcile via body token now.
         if (_isReconciliationPending()) {
           await reconcileSession();
         }

@@ -100,11 +100,8 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
     queryKey,
     queryFn: () =>
       new Promise<T>((resolve, reject) => {
-        // Live queries are WebSocket subscriptions — there's no meaningful
-        // server-side snapshot to dehydrate. Return a never-resolving promise
-        // so React's Suspense fallback (or the component's loading branch)
-        // renders on the server, and the client re-runs the queryFn after
-        // hydration with a real WebSocket connection.
+        // Live queries are WebSocket subscriptions — no server snapshot. Stay
+        // pending on the server so Suspense renders; client re-runs after hydration.
         if (typeof window === 'undefined') {
           return;
         }
@@ -158,8 +155,7 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
           subscriptions.set(subscriptionKey, sub);
         }
 
-        // Cast required: the shared `subscriptions` map stores resolvers from
-        // calls with different `T` instantiations, so the union must be erased.
+        // Shared map stores resolvers across `T` instantiations; erase the union.
         sub.resolvers.add({
           resolve: resolve as (data: unknown) => void,
           reject,

@@ -31,9 +31,7 @@ function readSsrState(): SsrState | null {
   try {
     return JSON.parse(node.textContent ?? '') as SsrState;
   } catch (e) {
-    // The script tag still signals that SSR ran — the caller must hydrate,
-    // not createRoot, even if the payload is unreadable. Session bootstrap
-    // is the only thing we lose here.
+    // Caller must still hydrate (marker presence drives that, not parsed payload).
     console.error('Modelence: failed to parse SSR state', e);
     return null;
   }
@@ -52,8 +50,8 @@ export interface RenderAppOptions {
   router?: SsrRouter;
 }
 
-// Shared on globalThis because Vite's ssrLoadModule loads the user's entry
-// in a separate module graph from the framework runtime.
+// Shared via globalThis: ssrLoadModule loads the user's entry in a separate
+// module graph from the framework runtime.
 const SNAPSHOT_KEY = '__modelence_ssr_snapshot__';
 
 type GlobalWithSnapshot = typeof globalThis & {
@@ -81,18 +79,13 @@ export function renderApp(options: RenderAppOptions) {
     setErrorHandler(errorHandler);
   }
 
-  window.addEventListener('unload', () => {
-    // Empty 'unload' handler prevents bfcache in most browsers.
-  });
+  // Empty 'unload' handler prevents bfcache in most browsers.
+  window.addEventListener('unload', () => {});
 
-  // ORDER MATTERS: hydrate session BEFORE building the React tree / calling
-  // hydrateRoot, so `isSessionInitialized()` is true on the first render and
-  // AppProvider's initial `isLoading` matches the server-rendered output.
-  //
-  // Hydration mode is keyed off the SSR marker script's *presence*, not off
-  // the parsed payload — a parse failure would still leave server-rendered
-  // markup in the DOM, and calling createRoot on it would wipe it out and
-  // trigger a flash plus hydration mismatch warnings.
+  // Hydrate session BEFORE building the tree so `isSessionInitialized()` is
+  // true on the first render and matches the server output. Hydration mode
+  // tracks marker presence (not parse success): a parse failure still leaves
+  // server-rendered DOM that must be hydrated, not replaced.
   const isHydrating = hasSsrMarker();
   const ssrState = readSsrState();
   if (ssrState?.session) {
