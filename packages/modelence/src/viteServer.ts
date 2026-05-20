@@ -61,9 +61,15 @@ class ViteServer implements AppServer {
       return (this.viteServer?.middlewares ?? []) as ExpressMiddleware[];
     }
 
-    const staticFolders = [express.static(CLIENT_BUILD_DIR)];
+    // `index: false` prevents express.static from auto-serving the built
+    // `index.html` for directory requests (notably `/`). With SSR enabled,
+    // the SSR handler must own document requests so it can render the React
+    // tree; without it, `/` would be intercepted here and never reach the
+    // SSR pipeline. Asset requests under `/assets/*` still serve normally.
+    const staticOptions = this.ssrEnabled ? { index: false } : undefined;
+    const staticFolders = [express.static(CLIENT_BUILD_DIR, staticOptions)];
     if (this.config?.publicDir) {
-      staticFolders.push(express.static(this.config.publicDir));
+      staticFolders.push(express.static(this.config.publicDir, staticOptions));
     }
     return staticFolders;
   }
