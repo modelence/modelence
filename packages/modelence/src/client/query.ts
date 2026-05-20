@@ -100,6 +100,15 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
     queryKey,
     queryFn: () =>
       new Promise<T>((resolve, reject) => {
+        // Live queries are WebSocket subscriptions — there's no meaningful
+        // server-side snapshot to dehydrate. Return a never-resolving promise
+        // so React's Suspense fallback (or the component's loading branch)
+        // renders on the server, and the client re-runs the queryFn after
+        // hydration with a real WebSocket connection.
+        if (typeof window === 'undefined') {
+          return;
+        }
+
         if (!queryClientRef) {
           const error = new Error(
             'Modelence: connect a QueryClient before using modelenceLiveQuery(). Mount <ModelenceQueryProvider> or call connectModelenceQueryClient().'

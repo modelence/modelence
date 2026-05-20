@@ -10,6 +10,8 @@
 import React, { useState, useEffect, ReactNode } from 'react';
 import { initSession, isSessionInitialized } from './session';
 
+const SSR_STATE_SCRIPT_ID = '__MODELENCE_STATE__';
+
 interface AppProviderProps {
   children: ReactNode;
   loadingElement?: ReactNode;
@@ -17,14 +19,27 @@ interface AppProviderProps {
 
 let isInitialized = false;
 
+function hasServerRenderedMarkup(): boolean {
+  // The SSR pipeline emits `<script id="__MODELENCE_STATE__">` before the
+  // root container. Its presence is the canonical signal that the DOM
+  // already contains server-rendered markup we must hydrate. We deliberately
+  // do NOT depend on `isSessionInitialized()` here: if `renderApp` failed
+  // to parse the state script (malformed JSON), the session resolver hasn't
+  // run, but the server-rendered HTML is still in the DOM. Showing the
+  // loading shell in that case would cause a hydration mismatch and a
+  // flash-of-spinner over already-rendered content.
+  return typeof document !== 'undefined' && document.getElementById(SSR_STATE_SCRIPT_ID) !== null;
+}
+
 export function AppProvider({ children, loadingElement }: AppProviderProps) {
-  // Skip loading on the server (would defeat SSR) and when session is already
-  // hydrated client-side (would cause a hydration mismatch).
-  // INVARIANT: when SSR is enabled, `hydrateSession()` MUST run before
-  // `hydrateRoot()` so `isSessionInitialized()` is true on the first render
-  // and matches the server's `isLoading=false`. See renderApp.tsx.
+  // Skip the loading shell on the server (would defeat SSR), when the
+  // session has already been hydrated client-side, or when the SSR marker
+  // is present (the server-rendered content must be hydrated as-is, even
+  // if session hydration silently failed).
   const isServer = typeof window === 'undefined';
-  const [isLoading, setIsLoading] = useState(() => !isServer && !isSessionInitialized());
+  const [isLoading, setIsLoading] = useState(
+    () => !isServer && !isSessionInitialized() && !hasServerRenderedMarkup()
+  );
 
   useEffect(() => {
     async function initConfig() {
