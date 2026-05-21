@@ -98,7 +98,7 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
   res.cookie('authToken', authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
     maxAge: time.days(7),
   });
@@ -108,7 +108,7 @@ export function clearAuthTokenCookie(res: Response) {
   res.clearCookie('authToken', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
   });
 }
