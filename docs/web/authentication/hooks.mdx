@@ -41,6 +41,57 @@ startApp({
 
 **Returns:** `void | Promise<void>` 
 
+### `onBeforeSignup`
+
+Called after `validateSignup` and the built-in disposable-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
+
+Currently only invoked for `'email'` provider signups. OAuth signups are not gated because OAuth providers (Google, GitHub, etc.) do not issue disposable accounts.
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    onBeforeSignup: async ({ email, firstName, lastName, handle, provider, connectionInfo }) => {
+      const domain = email.split('@')[1];
+      const allowed = await isAllowedDomain(domain);
+      if (!allowed) {
+        throw new Error(`Signups from ${domain} are not allowed`);
+      }
+    },
+  },
+});
+```
+
+To replace the built-in disposable-email check entirely with your own logic, set `allowDisposableEmails: true` and enforce your policy in `onBeforeSignup`.
+
+```typescript
+startApp({
+  auth: {
+    allowDisposableEmails: true,
+    onBeforeSignup: async ({ email }) => {
+      const verdict = await classifyEmailDomain(email);
+      if (verdict === 'disposable') {
+        throw new Error('Disposable email addresses are not allowed');
+      }
+    },
+  },
+});
+```
+
+**Props:**
+
+| Property         | Type                       |
+| ---------------- | -------------------------- |
+| `email`          | `string`                   |
+| `firstName`      | `string \| undefined`      |
+| `lastName`       | `string \| undefined`      |
+| `handle`         | `string \| undefined`      |
+| `provider`       | `'email'`                  |
+| `connectionInfo` | `ConnectionInfo \| undefined` |
+
+**Returns:** `void | Promise<void>`
+
 ### `validateProfileUpdate`
 
 Called before a user's profile is updated. Use this to enforce custom validation rules on profile updates. Throw an error to reject the update.
@@ -176,6 +227,12 @@ startApp({
     validateProfileUpdate: ({ handle }) => {
       if (handle && !/^[a-z0-9-]+$/.test(handle)) {
         throw new Error('Handle can only contain lowercase letters, numbers, and hyphens');
+      }
+    },
+    onBeforeSignup: async ({ email }) => {
+      const domain = email.split('@')[1];
+      if (domain === 'blocked.example') {
+        throw new Error(`Signups from ${domain} are not allowed`);
       }
     },
     generateHandle: ({ email, firstName, lastName }) => {
