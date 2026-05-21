@@ -155,9 +155,6 @@ class ViteServer implements AppServer {
       location: req.originalUrl,
     });
 
-    if (!ROOT_PLACEHOLDER_REGEX.test(template)) {
-      throw new Error('SSR template is missing the expected `<div id="root"></div>` placeholder.');
-    }
     const [rawPrelude, rawEpilogue] = splitTemplateAtRoot(template);
     const prelude = injectStylesheets(rawPrelude, cssModule.renderStylesheetLinks(cssAssets));
 
