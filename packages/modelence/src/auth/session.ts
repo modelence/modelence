@@ -117,9 +117,12 @@ export default new Module('_system.session', {
   stores: [sessionsCollection],
   mutations: {
     init: async function (args, { session, user, res }) {
-      // Refresh the cookie so pre-cookie-era sessions can carry it forward
-      // on subsequent SSR requests. No-op without a response (background jobs).
-      if (res && session) {
+      // Only refresh the cookie for logged-in sessions. Writing one for a
+      // freshly-minted anonymous session creates a Set-Cookie that the
+      // browser then attaches to the client's reconciliation request,
+      // shadowing the localStorage token sent in the body — see
+      // getCallContext's `cookie || body.authToken` precedence.
+      if (res && session?.userId) {
         setAuthTokenCookie(res, session.authToken);
       }
 
