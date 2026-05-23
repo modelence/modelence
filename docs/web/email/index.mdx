@@ -39,8 +39,7 @@ That's it. Verification and password reset emails go out automatically. You can 
 
 ### How it works
 
-- Outbound mail is relayed through Modelence Cloud (`/api/email/send`), which sends via Amazon SES on a Modelence-owned domain.
-- The sender domain is locked to a Modelence subdomain in v1 — you do not need to verify a domain to start sending.
+- Outbound mail is relayed through Modelence Cloud (`/api/email/send`), which sends via Resend on a Modelence-owned domain.
 - You can still pass `from: '"Your App" <noreply@anything>'` to set a friendly **name**; the address part is replaced by the managed sender. The `replyTo` field works normally so users can still reply to your support inbox.
 - Local development (no Modelence Cloud connection) falls back to the legacy "no provider configured" behavior so misconfigurations fail loudly during development.
 
