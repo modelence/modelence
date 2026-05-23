@@ -1,0 +1,152 @@
+---
+title: 'Custom Email Providers'
+description: 'Use Resend, Amazon SES, or SMTP instead of the built-in managed email provider'
+---
+
+By default, Modelence sends transactional email through its [built-in managed provider](/email) — no setup required. Configure a custom provider only when you need:
+
+- A custom sender domain / full DKIM control
+- Attachments, `cc` / `bcc`, or custom email headers
+- A specific deliverability vendor (Resend, SES in your own AWS account, your own SMTP relay)
+
+Setting `email.provider` on `startApp` overrides the managed provider. If you omit `provider`, Modelence keeps using the managed email service.
+
+## Supported Providers
+
+- **[Resend](/api-reference/@modelence/resend/index)** — modern email API service
+- **[Amazon SES](/api-reference/@modelence/aws-ses/index)** — AWS Simple Email Service
+- **[SMTP](/api-reference/@modelence/smtp/index)** — any SMTP-compatible email service
+
+## 1. Install a provider package
+
+```bash
+# For Resend
+npm install @modelence/resend
+
+# For Amazon SES
+npm install @modelence/aws-ses
+
+# For SMTP
+npm install @modelence/smtp
+```
+
+## 2. Configure credentials
+
+### Option A: Cloud Configuration (Recommended)
+
+1. Go to [cloud.modelence.com](https://cloud.modelence.com)
+2. Choose your environment
+3. Open the **Application** tab
+4. Select the **Email** configuration section
+5. Choose your provider and enter the required credentials:
+
+**For Resend:**
+- API Key (get it from [resend.com/api-keys](https://resend.com/api-keys))
+
+**For Amazon SES:**
+- Region (e.g., `us-east-1`)
+- Access Key ID
+- Secret Access Key
+
+See [AWS SES documentation](https://docs.aws.amazon.com/ses/) for obtaining credentials.
+
+**For SMTP:**
+- Host (e.g., `smtp.gmail.com`)
+- Port (usually `465` for secure connections)
+- Username
+- Password
+
+The cloud configuration syncs to your app automatically.
+
+### Option B: Local Environment Variables
+
+Useful for local development:
+
+**For Resend:**
+```bash
+MODELENCE_EMAIL_RESEND_API_KEY=your_resend_api_key
+```
+
+**For Amazon SES:**
+```bash
+MODELENCE_EMAIL_AWS_SES_REGION=us-east-1
+MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID=your_access_key_id
+MODELENCE_EMAIL_AWS_SES_SECRET_ACCESS_KEY=your_secret_access_key
+```
+
+**For SMTP:**
+```bash
+MODELENCE_EMAIL_SMTP_HOST=smtp.example.com
+MODELENCE_EMAIL_SMTP_PORT=465
+MODELENCE_EMAIL_SMTP_USER=your_smtp_username
+MODELENCE_EMAIL_SMTP_PASS=your_smtp_password
+```
+
+Cloud configuration takes precedence over local environment variables.
+
+## 3. Pass the provider to `startApp`
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+// or import awsSesProvider from '@modelence/aws-ses';
+// or import smtpProvider from '@modelence/smtp';
+
+startApp({
+  // ... your other app configuration
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    verification: {
+      subject: 'Verify your email',
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+    passwordReset: {
+      subject: 'Reset your password',
+      redirectUrl: 'https://yourdomain.com/password-reset-success',
+    },
+  },
+});
+```
+
+With a custom provider, the full [email payload](/email#email-payload-options) is supported — including `cc`, `bcc`, custom headers, and attachments:
+
+```typescript
+await sendEmail({
+  from: 'noreply@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Invoice',
+  html: '<h1>Your Invoice</h1>',
+  attachments: [
+    {
+      filename: 'invoice.pdf',
+      content: pdfBuffer,
+      contentType: 'application/pdf',
+    },
+  ],
+});
+```
+
+## Troubleshooting
+
+### SMTP connection issues
+
+- Verify your SMTP credentials are correct
+- Check that the port is correct (usually 465 for secure connections)
+- Ensure your firewall allows outbound connections on the SMTP port
+- Some email providers require you to enable "less secure app access" or create an app-specific password
+
+### AWS SES sending limits
+
+If you're in the AWS SES sandbox:
+
+- You can only send emails to verified email addresses
+- Request production access to send to any email address
+- Verify your sending domain or individual email addresses in the AWS Console
+
+### Error: "Email provider is not configured"
+
+You're running locally without a Modelence Cloud connection and haven't set `email.provider`. Either:
+
+- Connect your app to Modelence Cloud to use the [built-in managed provider](/email), or
+- Configure a provider via `startApp({ email: { provider, ... } })`.
