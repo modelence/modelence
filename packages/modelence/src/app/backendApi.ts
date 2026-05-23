@@ -54,7 +54,7 @@ export async function connectCloudBackend({
       indexCreationMode: store.getIndexCreationMode(),
     }));
 
-    const data = await callApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
+    const data = await callCloudApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
       containerId,
       dataModels: dataStores,
@@ -77,30 +77,20 @@ export async function connectCloudBackend({
 }
 
 export async function fetchConfigs() {
-  return callApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
+  return callCloudApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
 }
 
 export async function syncStatus() {
-  const data = await callApi('/api/sync', 'POST', {
+  const data = await callCloudApi('/api/sync', 'POST', {
     containerId: process.env.MODELENCE_CONTAINER_ID,
   });
   return data;
 }
 
-async function callApi<T = unknown>(endpoint: string, method: string, payload?: object) {
-  return callCloudApi<T>(
-    endpoint,
-    method,
-    payload ? JSON.stringify(payload) : undefined,
-    payload ? { 'Content-Type': 'application/json' } : {}
-  );
-}
-
-export async function callCloudApi<T>(
+export async function callCloudApi<T = unknown>(
   endpoint: string,
   method: string,
-  body?: BodyInit,
-  extraHeaders?: Record<string, string>
+  payload?: object
 ): Promise<T> {
   const { MODELENCE_SERVICE_ENDPOINT, MODELENCE_SERVICE_TOKEN } = process.env;
 
@@ -112,23 +102,39 @@ export async function callCloudApi<T>(
     method,
     headers: {
       Authorization: `Bearer ${MODELENCE_SERVICE_TOKEN}`,
-      ...extraHeaders,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
     },
-    body,
+    body: payload ? JSON.stringify(payload) : undefined,
   });
 
   if (!response.ok) {
     const data = await response.text();
+    let parsed: unknown;
+    let messageDetail: string = data;
     try {
-      const json = JSON.parse(data);
-      throw new Error(
-        `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${json?.error}`
-      );
+      parsed = JSON.parse(data);
+      const errorField = (parsed as { error?: unknown }).error;
+      if (typeof errorField === 'string') {
+        messageDetail = errorField;
+      } else if (errorField && typeof errorField === 'object') {
+        // Structured error envelope from newer endpoints — keep the body on
+        // the thrown Error so callers can pull a code if they need to.
+        const message = (errorField as { message?: unknown }).message;
+        if (typeof message === 'string') {
+          messageDetail = message;
+        }
+      }
     } catch {
-      throw new Error(
-        `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${data}`
-      );
+      /* response was not JSON — fall back to raw text */
     }
+    const error = new Error(
+      `Unable to connect to Modelence Cloud: HTTP status: ${response.status}, ${messageDetail}`
+    );
+    if (parsed !== undefined) {
+      (error as Error & { responseBody?: unknown }).responseBody = parsed;
+    }
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
   }
 
   if (response.status === 204 || response.headers?.get('content-length') === '0') {
