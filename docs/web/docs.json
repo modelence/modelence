@@ -50,7 +50,14 @@
                 ]
               },
               "roles",
-              "email",
+              {
+                "group": "Email",
+                "icon": "envelope",
+                "pages": [
+                  "email/index",
+                  "email/providers"
+                ]
+              },
               "files",
               "stores",
               "indexes",
