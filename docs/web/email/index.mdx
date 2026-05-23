@@ -1,0 +1,200 @@
+---
+title: 'Built-in Email'
+description: 'Send transactional emails out of the box, or plug in your own provider'
+---
+
+Modelence sends transactional emails — verification, password reset, and any custom emails you trigger via `sendEmail` — through a built-in managed email provider. No provider setup, no API keys, no SMTP credentials. Apps connected to Modelence Cloud get email working immediately.
+
+If you outgrow the managed provider or need custom domains, attachments, or full deliverability control, you can swap in a [custom provider](/email/providers) (Resend, Amazon SES, or SMTP) at any time.
+
+## Built-in Managed Email (Default)
+
+<Note>
+  Built-in managed email requires **`modelence` v0.18.0 or newer**. Earlier versions still require you to configure a provider explicitly. Update with `npm install modelence@latest`.
+</Note>
+
+When your app is connected to Modelence Cloud, the managed email provider is enabled automatically. You don't need to install any package, configure credentials, or pass a `provider` to `startApp`.
+
+### Minimum setup
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  // ... your other app configuration
+  email: {
+    verification: {
+      subject: 'Verify your email',
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+    passwordReset: {
+      subject: 'Reset your password',
+      redirectUrl: 'https://yourdomain.com/password-reset-success',
+    },
+  },
+});
+```
+
+That's it. Verification and password reset emails go out automatically. You can also call `sendEmail` for custom transactional messages (see [Sending Custom Emails](#sending-custom-emails)).
+
+### How it works
+
+- Outbound mail is relayed through Modelence Cloud (`/api/email/send`), which sends via Amazon SES on a Modelence-owned domain.
+- The sender domain is locked to a Modelence subdomain in v1 — you do not need to verify a domain to start sending.
+- You can still pass `from: '"Your App" <noreply@anything>'` to set a friendly **name**; the address part is replaced by the managed sender. The `replyTo` field works normally so users can still reply to your support inbox.
+- Local development (no Modelence Cloud connection) falls back to the legacy "no provider configured" behavior so misconfigurations fail loudly during development.
+
+### Limitations in v1
+
+The managed provider focuses on the common transactional case. It does **not** support:
+
+- `cc` / `bcc` recipients
+- File attachments
+- Custom email headers
+- Custom sender domains
+
+If you call `sendEmail` with any of these, Modelence throws a clear error. Use a [custom provider](/email/providers) when you need them.
+
+## Custom Email Templates
+
+You can customize the HTML for verification and password reset emails. Templates work the same whether you use the built-in provider or a custom one:
+
+```typescript
+startApp({
+  // ... your other app configuration
+  email: {
+    verification: {
+      subject: 'Welcome! Please verify your email',
+      template: ({ name, email, verificationUrl }) => `
+        <h1>Welcome ${name}!</h1>
+        <p>Please click the link below to verify your email address:</p>
+        <a href="${verificationUrl}">Verify Email</a>
+      `,
+      redirectUrl: 'https://yourdomain.com/email-verified',
+    },
+    passwordReset: {
+      subject: 'Reset Your Password',
+      template: ({ name, email, resetUrl }) => `
+        <h1>Hello ${name}</h1>
+        <p>Click the link below to reset your password:</p>
+        <a href="${resetUrl}">Reset Password</a>
+        <p>If you didn't request this, please ignore this email.</p>
+      `,
+      redirectUrl: 'https://yourdomain.com/password-reset-success',
+    },
+  },
+});
+```
+
+## Sending Custom Emails
+
+Use `sendEmail` to send arbitrary transactional emails — order confirmations, invites, notifications, anything you trigger from your own code. It routes through whichever provider is active (managed or custom), so the call site stays the same.
+
+### Basic example
+
+```typescript
+import { sendEmail } from 'modelence/server';
+
+await sendEmail({
+  to: 'user@example.com',
+  subject: 'Welcome to Acme',
+  html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>',
+});
+```
+
+### Calling `sendEmail` from a mutation
+
+A typical use case — sending a notification when a user completes an action:
+
+```typescript
+import { Module, sendEmail } from 'modelence/server';
+import { z } from 'zod';
+
+export default new Module('orders', {
+  mutations: {
+    async create(args, { user }) {
+      const { items } = z.object({ items: z.array(z.string()) }).parse(args);
+
+      const order = await dbOrders.insertOne({
+        userId: user.id,
+        items,
+        createdAt: new Date(),
+      });
+
+      await sendEmail({
+        to: user.emails[0].address,
+        subject: `Order #${order.insertedId} confirmed`,
+        html: `
+          <h1>Thanks for your order!</h1>
+          <p>We received your order with ${items.length} item(s).</p>
+        `,
+      });
+
+      return { orderId: order.insertedId };
+    },
+  },
+});
+```
+
+### Plain-text and multipart emails
+
+Provide `text` for clients that don't render HTML, or both `html` and `text` for a multipart message:
+
+```typescript
+await sendEmail({
+  to: 'user@example.com',
+  subject: 'Your weekly digest',
+  text: 'You have 3 new notifications. Visit https://yourdomain.com to view.',
+  html: '<p>You have <strong>3</strong> new notifications.</p>',
+});
+```
+
+### Sending to multiple recipients
+
+```typescript
+await sendEmail({
+  to: ['alice@example.com', 'bob@example.com'],
+  replyTo: 'support@yourdomain.com',
+  subject: 'Team update',
+  html: '<p>Here is this week\'s update.</p>',
+});
+```
+
+### Email Payload Options
+
+```typescript
+{
+  from?: string;                   // Sender address (managed provider uses the name only)
+  to: string | string[];           // Recipient(s)
+  subject: string;                 // Email subject
+  html?: string;                   // HTML content
+  text?: string;                   // Plain text content
+  cc?: string | string[];          // CC recipients (custom provider only)
+  bcc?: string | string[];         // BCC recipients (custom provider only)
+  replyTo?: string | string[];     // Reply-to address(es)
+  headers?: Record<string, string>; // Custom headers (custom provider only)
+  attachments?: EmailAttachment[]; // File attachments (custom provider only)
+}
+```
+
+You must provide either `html` or `text` (or both). Fields marked **custom provider only** are rejected by the built-in managed provider — see [Custom Email Providers](/email/providers) if you need them.
+
+## Troubleshooting
+
+### Error: "Modelence managed email does not support cc, bcc, attachments, or custom headers"
+
+The built-in managed provider does not support these fields in v1. Either remove them from your `sendEmail` call, or configure a [custom provider](/email/providers) (Resend, SES, or SMTP).
+
+### Error: "Email provider is not configured"
+
+You're running locally without a Modelence Cloud connection and haven't set a `provider`. Either:
+
+- Connect your app to Modelence Cloud to use the managed provider, or
+- Configure a [custom provider](/email/providers).
+
+## Next Steps
+
+- Use a [custom email provider](/email/providers) for attachments, custom domains, or specific vendor requirements
+- Learn about [Authentication](/authentication) to understand how email verification works
+- Explore [User Management](/authentication/user-management) features
+- Review the [API Reference](/api-reference) for more details on email functions
