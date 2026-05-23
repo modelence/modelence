@@ -1,21 +1,22 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 
-const mockSeconds = jest.fn((value: number) => value * 1000);
-const mockMinutes = jest.fn((value: number) => value * 60 * 1000);
-const mockDays = jest.fn((value: number) => value * 24 * 60 * 60 * 1000);
-const mockStartTransaction = jest.fn(() => ({
-  end: jest.fn(),
+const mockSeconds = vi.fn((value: number) => value * 1000);
+const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
+const mockDays = vi.fn((value: number) => value * 24 * 60 * 60 * 1000);
+const mockStartTransaction = vi.fn(() => ({
+  end: vi.fn(),
 }));
-const mockCaptureError = jest.fn();
-const mockAcquireLock: jest.Mock = jest.fn();
+const mockCaptureError = vi.fn();
+const mockAcquireLock: Mock = vi.fn();
 
-const cronStoreMocks: { fetch: jest.Mock; updateOne: jest.Mock } = {
-  fetch: jest.fn(),
-  updateOne: jest.fn(),
+const cronStoreMocks: { fetch: Mock; updateOne: Mock } = {
+  fetch: vi.fn(),
+  updateOne: vi.fn(),
 };
 
 function registerMocks() {
-  jest.unstable_mockModule('../time', () => ({
+  vi.doMock('../time', () => ({
     time: {
       seconds: mockSeconds,
       minutes: mockMinutes,
@@ -23,16 +24,16 @@ function registerMocks() {
     },
   }));
 
-  jest.unstable_mockModule('@/telemetry', () => ({
+  vi.doMock('@/telemetry', () => ({
     startTransaction: mockStartTransaction,
     captureError: mockCaptureError,
   }));
 
-  jest.unstable_mockModule('../data/store', () => ({
-    Store: jest.fn().mockImplementation(() => cronStoreMocks),
+  vi.doMock('../data/store', () => ({
+    Store: vi.fn().mockImplementation(() => cronStoreMocks),
   }));
 
-  jest.unstable_mockModule('../lock/helpers', () => ({
+  vi.doMock('../lock/helpers', () => ({
     acquireLock: mockAcquireLock,
   }));
 }
@@ -43,20 +44,20 @@ describe('cron/jobs', () => {
   let getCronJobsMetadata: typeof import('./jobs').getCronJobsMetadata;
   let intervalCallback: (() => Promise<void>) | null;
   let intervalDelay: number | undefined;
-  let setIntervalMock: ReturnType<typeof jest.spyOn>;
+  let setIntervalMock: MockInstance;
 
-  let consoleErrorSpy: ReturnType<typeof jest.spyOn>;
+  let consoleErrorSpy: MockInstance;
 
   beforeEach(async () => {
-    jest.resetModules();
+    vi.resetModules();
     Object.assign(cronStoreMocks, {
-      fetch: jest.fn(),
-      updateOne: jest.fn().mockResolvedValue(undefined as never),
+      fetch: vi.fn(),
+      updateOne: vi.fn().mockResolvedValue(undefined as never),
     });
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
-    setIntervalMock = jest.spyOn(global, 'setInterval').mockImplementation(((
+    setIntervalMock = vi.spyOn(global, 'setInterval').mockImplementation(((
       handler: TimerHandler,
       timeout?: number
     ) => {
@@ -65,7 +66,7 @@ describe('cron/jobs', () => {
       return 123 as unknown as NodeJS.Timeout;
     }) as unknown as typeof setInterval);
     registerMocks();
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     ({ defineCronJob, startCronJobs, getCronJobsMetadata } = await import('./jobs'));
   });
 
@@ -102,7 +103,7 @@ describe('cron/jobs', () => {
 
   test('startCronJobs initializes schedule, fetches last run, and sets interval', async () => {
     const now = Date.now();
-    jest.spyOn(Date, 'now').mockReturnValue(now);
+    vi.spyOn(Date, 'now').mockReturnValue(now);
     cronStoreMocks.fetch.mockResolvedValue([] as never);
 
     defineCronJob('nightlyCleanup', {
@@ -120,7 +121,7 @@ describe('cron/jobs', () => {
     expect(intervalCallback).toBeTruthy();
 
     await expect(startCronJobs()).rejects.toThrow('Cron jobs already started');
-    (Date.now as jest.Mock).mockRestore();
+    (Date.now as Mock).mockRestore();
   });
 
   test('startCronJobs no-ops when no cron jobs defined', async () => {
@@ -129,7 +130,7 @@ describe('cron/jobs', () => {
     expect(setIntervalMock).not.toHaveBeenCalled();
   });
   test('cron loop executes job handler and records completion', async () => {
-    const handler = jest.fn(async () => {});
+    const handler = vi.fn(async () => {});
     cronStoreMocks.fetch.mockResolvedValue([] as never);
     defineCronJob('hourly', {
       description: '',
@@ -149,14 +150,14 @@ describe('cron/jobs', () => {
         $set: { lastStartDate: expect.any(Date) },
       }
     );
-    const transactionCall = (mockStartTransaction as jest.Mock).mock.calls.slice(-1)[0];
+    const transactionCall = (mockStartTransaction as Mock).mock.calls.slice(-1)[0];
     expect(transactionCall).toEqual(['cron', 'cron:hourly']);
-    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: jest.Mock };
+    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
     expect(transaction.end).toHaveBeenCalledWith('success');
   });
 
   test('cron loop captures errors and continues schedule', async () => {
-    const handler = jest.fn(async () => {
+    const handler = vi.fn(async () => {
       throw new Error('boom');
     });
     cronStoreMocks.fetch.mockResolvedValue([] as never);
@@ -172,7 +173,7 @@ describe('cron/jobs', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
-    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: jest.Mock };
+    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
 });

@@ -1,26 +1,26 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { MongoClient } from 'mongodb';
 
-const mockConnect = jest.fn<() => Promise<void>>();
-const mockCommand = jest.fn<(command: unknown) => Promise<unknown>>();
-const mockDb = jest.fn<(dbName: string) => { command: typeof mockCommand }>(() => ({
+const mockConnect = vi.fn<() => Promise<void>>();
+const mockCommand = vi.fn<(command: unknown) => Promise<unknown>>();
+const mockDb = vi.fn<(dbName: string) => { command: typeof mockCommand }>(() => ({
   command: mockCommand,
 }));
-const mockGetConfig = jest.fn<(key: string) => unknown>();
+const mockGetConfig = vi.fn<(key: string) => unknown>();
 
 // Mock MongoClient constructor
-const MockMongoClient = jest.fn((uri: string, options?: unknown) => ({
+const MockMongoClient = vi.fn((uri: string, options?: unknown) => ({
   connect: mockConnect,
   db: mockDb,
   uri,
   options,
 })) as unknown as typeof MongoClient;
 
-jest.unstable_mockModule('mongodb', () => ({
+vi.doMock('mongodb', () => ({
   MongoClient: MockMongoClient,
 }));
 
-jest.unstable_mockModule('../config/server', () => ({
+vi.doMock('../config/server', () => ({
   getConfig: mockGetConfig,
 }));
 
@@ -32,11 +32,11 @@ describe('db/client', () => {
   const originalConsoleError = console.error;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset the client state between tests by reimporting
-    jest.resetModules();
-    console.log = jest.fn();
-    console.error = jest.fn();
+    vi.resetModules();
+    console.log = vi.fn();
+    console.error = vi.fn();
   });
 
   afterEach(() => {
@@ -318,7 +318,7 @@ describe('db/client', () => {
         await connect();
 
         expect(MockMongoClient).toHaveBeenCalledWith(uri, expect.any(Object));
-        jest.resetModules();
+        vi.resetModules();
       }
     });
   });

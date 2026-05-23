@@ -1,37 +1,37 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Handler } from './types';
 
-const transactionEnd = jest.fn();
-const mockRequireServer = jest.fn();
-const mockStartTransaction = jest.fn();
-const mockRequireAccess = jest.fn();
+const transactionEnd = vi.fn();
+const mockRequireServer = vi.fn();
+const mockStartTransaction = vi.fn();
+const mockRequireAccess = vi.fn();
 
-jest.unstable_mockModule('../utils', () => ({
+vi.doMock('../utils', () => ({
   requireServer: mockRequireServer,
 }));
 
-jest.unstable_mockModule('@/telemetry', () => ({
+vi.doMock('@/telemetry', () => ({
   startTransaction: mockStartTransaction,
 }));
 
-jest.unstable_mockModule('../auth/role', () => ({
+vi.doMock('../auth/role', () => ({
   requireAccess: mockRequireAccess,
-  getUnauthenticatedRoles: jest.fn(),
-  hasAccess: jest.fn(),
-  hasPermission: jest.fn(),
-  getDefaultAuthenticatedRoles: jest.fn(),
-  initRoles: jest.fn(),
+  getUnauthenticatedRoles: vi.fn(),
+  hasAccess: vi.fn(),
+  hasPermission: vi.fn(),
+  getDefaultAuthenticatedRoles: vi.fn(),
+  initRoles: vi.fn(),
 }));
 
 describe('methods/index', () => {
   beforeEach(() => {
-    jest.resetModules();
-    jest.clearAllMocks();
+    vi.resetModules();
+    vi.clearAllMocks();
     transactionEnd.mockClear();
     mockRequireServer.mockImplementation(() => undefined);
     mockStartTransaction.mockImplementation(() => ({
       end: transactionEnd,
-      setContext: jest.fn(),
+      setContext: vi.fn(),
     }));
     mockRequireAccess.mockImplementation(() => undefined);
   });
@@ -39,7 +39,7 @@ describe('methods/index', () => {
   test('registers and runs a query', async () => {
     const { createQuery, runMethod } = await import('./index');
     const handler: Handler<string> = async () => 'ok';
-    const handlerSpy = jest.fn(handler);
+    const handlerSpy = vi.fn(handler);
 
     createQuery('demo.getData', handlerSpy as never);
     const response = await runMethod('demo.getData', { id: 1 }, { roles: [] } as never);
@@ -57,7 +57,7 @@ describe('methods/index', () => {
   test('prevents duplicate method registrations', async () => {
     const { createMutation } = await import('./index');
     const handler: Handler<void> = async () => undefined;
-    const handlerSpy = jest.fn(handler);
+    const handlerSpy = vi.fn(handler);
     createMutation('demo.update', handlerSpy as never);
 
     expect(() => createMutation('demo.update', handlerSpy as never)).toThrow(
@@ -86,7 +86,7 @@ describe('methods/index', () => {
     const handler: Handler = async () => {
       throw new Error('fail');
     };
-    const handlerSpy = jest.fn(handler);
+    const handlerSpy = vi.fn(handler);
     createQuery('demo.fail', handlerSpy as never);
 
     await expect(runMethod('demo.fail', {}, { roles: [] } as never)).rejects.toThrow('fail');

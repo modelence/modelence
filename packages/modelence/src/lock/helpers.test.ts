@@ -1,16 +1,17 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { MongoError } from 'mongodb';
 
-const mockUpsertOne = jest.fn();
-const mockDeleteOne = jest.fn();
-const mockFindOne = jest.fn();
-const mockLogDebug = jest.fn();
-const mockSeconds = jest.fn((value: number) => value * 1000);
-const mockRandomBytes = jest.fn(() => ({
+const mockUpsertOne = vi.fn();
+const mockDeleteOne = vi.fn();
+const mockFindOne = vi.fn();
+const mockLogDebug = vi.fn();
+const mockSeconds = vi.fn((value: number) => value * 1000);
+const mockRandomBytes = vi.fn(() => ({
   toString: () => 'instance-1',
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   locksCollection: {
     upsertOne: mockUpsertOne,
     deleteOne: mockDeleteOne,
@@ -18,17 +19,17 @@ jest.unstable_mockModule('./db', () => ({
   },
 }));
 
-jest.unstable_mockModule('../telemetry', () => ({
+vi.doMock('../telemetry', () => ({
   logDebug: mockLogDebug,
 }));
 
-jest.unstable_mockModule('@/time', () => ({
+vi.doMock('@/time', () => ({
   time: {
     seconds: mockSeconds,
   },
 }));
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
@@ -36,11 +37,11 @@ const helpers = await import('./helpers');
 const { acquireLock, releaseLock } = helpers;
 
 describe('lock/helpers', () => {
-  let dateSpy: jest.SpiedFunction<typeof Date.now>;
+  let dateSpy: MockInstance<typeof Date.now>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    dateSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.clearAllMocks();
+    dateSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
   });
 
   afterEach(() => {
@@ -215,7 +216,7 @@ describe('lock/helpers', () => {
   });
 
   test('acquireLock refreshes lock with heartbeat and releaseLock stops it', async () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
 
     try {
       mockUpsertOne
@@ -231,11 +232,11 @@ describe('lock/helpers', () => {
       expect(acquired).toBe(true);
       expect(mockUpsertOne).toHaveBeenCalledTimes(1);
 
-      await jest.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1000);
       expect(mockUpsertOne).toHaveBeenCalledTimes(2);
 
       await releaseLock('heartbeat');
-      await jest.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(mockUpsertOne).toHaveBeenCalledTimes(2);
       expect(mockDeleteOne).toHaveBeenCalledWith({
@@ -243,7 +244,7 @@ describe('lock/helpers', () => {
         instanceId: 'instance-1',
       });
     } finally {
-      jest.useRealTimers();
+      vi.useRealTimers();
     }
   });
 

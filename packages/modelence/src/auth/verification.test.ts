@@ -1,24 +1,24 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Response } from 'express';
 import { ObjectId } from 'mongodb';
 
-const mockUsersFindOne = jest.fn();
-const mockUsersUpdateOne = jest.fn();
-const mockFindOneAndUpdate = jest.fn();
-const mockTokensFindOne = jest.fn();
-const mockTokensInsertOne = jest.fn();
-const mockTokensDeleteOne = jest.fn();
-const mockGetEmailConfig = jest.fn();
-const mockRandomBytes = jest.fn();
-const mockTimeHours = jest.fn();
-const mockHtmlToText = jest.fn<(html: string) => string>();
+const mockUsersFindOne = vi.fn();
+const mockUsersUpdateOne = vi.fn();
+const mockFindOneAndUpdate = vi.fn();
+const mockTokensFindOne = vi.fn();
+const mockTokensInsertOne = vi.fn();
+const mockTokensDeleteOne = vi.fn();
+const mockGetEmailConfig = vi.fn();
+const mockRandomBytes = vi.fn();
+const mockTimeHours = vi.fn();
+const mockHtmlToText = vi.fn<(html: string) => string>();
 const mockTemplate =
-  jest.fn<(args: { name?: string; email: string; verificationUrl: string }) => string>();
-const mockGetAuthConfig = jest.fn();
-const mockValidateEmail = jest.fn<(value: string) => string>();
-const mockConsumeRateLimit = jest.fn();
+  vi.fn<(args: { name?: string; email: string; verificationUrl: string }) => string>();
+const mockGetAuthConfig = vi.fn();
+const mockValidateEmail = vi.fn<(value: string) => string>();
+const mockConsumeRateLimit = vi.fn();
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     updateOne: mockUsersUpdateOne,
@@ -31,54 +31,54 @@ jest.unstable_mockModule('./db', () => ({
   },
 }));
 
-jest.unstable_mockModule('@/app/emailConfig', () => ({
+vi.doMock('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
 }));
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-const mockTimeMinutes = jest.fn();
-jest.unstable_mockModule('@/time', () => ({
+const mockTimeMinutes = vi.fn();
+vi.doMock('@/time', () => ({
   time: {
     hours: mockTimeHours,
     minutes: mockTimeMinutes,
   },
 }));
 
-jest.unstable_mockModule('@/utils', () => ({
+vi.doMock('@/utils', () => ({
   htmlToText: mockHtmlToText,
 }));
 
-jest.unstable_mockModule('./templates/emailVerficationTemplate', () => ({
+vi.doMock('./templates/emailVerficationTemplate', () => ({
   emailVerificationTemplate: mockTemplate,
 }));
 
-jest.unstable_mockModule('@/app/authConfig', () => ({
+vi.doMock('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-jest.unstable_mockModule('./validators', () => ({
+vi.doMock('./validators', () => ({
   validateEmail: mockValidateEmail,
-  validateHandle: jest.fn((v: string) => v),
+  validateHandle: vi.fn((v: string) => v),
   MAX_HANDLE_LENGTH: 50,
   MIN_HANDLE_LENGTH: 3,
 }));
 
-jest.unstable_mockModule('@/rate-limit/rules', () => ({
+vi.doMock('@/rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
 
-const mockGetConfig = jest.fn();
-jest.unstable_mockModule('@/config/server', () => ({
+const mockGetConfig = vi.fn();
+vi.doMock('@/config/server', () => ({
   getConfig: mockGetConfig,
 }));
 
-const mockCreateSession = jest.fn();
-jest.unstable_mockModule('./session', () => ({
+const mockCreateSession = vi.fn();
+vi.doMock('./session', () => ({
   createSession: mockCreateSession,
-  setAuthTokenCookie: jest.fn((res: Response, authToken: string) => {
+  setAuthTokenCookie: vi.fn((res: Response, authToken: string) => {
     res.cookie('authToken', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -94,10 +94,10 @@ const { handleVerifyEmail, sendVerificationEmail, handleResendEmailVerification 
 
 describe('auth/verification', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockValidateEmail.mockImplementation((value) => value);
     mockGetEmailConfig.mockReturnValue({
-      provider: { sendEmail: jest.fn() },
+      provider: { sendEmail: vi.fn() },
       from: 'no-reply@example.com',
       emailVerifiedRedirectUrl: '/verified',
       verification: {
@@ -106,8 +106,8 @@ describe('auth/verification', () => {
       },
     });
     mockGetAuthConfig.mockReturnValue({
-      onAfterEmailVerification: jest.fn(),
-      onEmailVerificationError: jest.fn(),
+      onAfterEmailVerification: vi.fn(),
+      onEmailVerificationError: vi.fn(),
     });
     mockHtmlToText.mockImplementation((html: string) => html);
     mockTemplate.mockImplementation(
@@ -122,7 +122,7 @@ describe('auth/verification', () => {
   });
 
   describe('handleVerifyEmail', () => {
-    const mockCookie = jest.fn();
+    const mockCookie = vi.fn();
     const baseParams = {
       query: { token: 'token' },
       headers: {
@@ -136,7 +136,7 @@ describe('auth/verification', () => {
       },
       res: { cookie: mockCookie },
     };
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     afterEach(() => {
       consoleErrorSpy.mockClear();
@@ -159,8 +159,8 @@ describe('auth/verification', () => {
         emails: [{ address: 'user@example.com', verified: true }],
       };
       const authConfig = {
-        onAfterEmailVerification: jest.fn(),
-        onEmailVerificationError: jest.fn(),
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
@@ -215,8 +215,8 @@ describe('auth/verification', () => {
 
     test('redirects with error when token is invalid', async () => {
       const authConfig = {
-        onAfterEmailVerification: jest.fn(),
-        onEmailVerificationError: jest.fn(),
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       mockTokensFindOne.mockResolvedValue(null as never);
@@ -243,8 +243,8 @@ describe('auth/verification', () => {
 
     test('redirects with error when user not found', async () => {
       const authConfig = {
-        onAfterEmailVerification: jest.fn(),
-        onEmailVerificationError: jest.fn(),
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
       };
       mockGetAuthConfig.mockReturnValue(authConfig);
       const tokenDoc = {
@@ -280,7 +280,7 @@ describe('auth/verification', () => {
 
   describe('sendVerificationEmail', () => {
     test('stores token and sends email using default template', async () => {
-      const provider = { sendEmail: jest.fn() };
+      const provider = { sendEmail: vi.fn() };
       mockGetEmailConfig.mockReturnValue({
         provider,
         from: 'support@example.com',
@@ -393,7 +393,7 @@ describe('auth/verification', () => {
         emails: [{ address: 'user@example.com', verified: false }],
       } as never);
 
-      const provider = { sendEmail: jest.fn() };
+      const provider = { sendEmail: vi.fn() };
       mockGetEmailConfig.mockReturnValue({
         provider,
         from: 'no-reply@example.com',

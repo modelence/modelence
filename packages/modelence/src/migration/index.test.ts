@@ -1,21 +1,21 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockAcquireLock = jest.fn();
-const mockReleaseLock = jest.fn();
-const mockLogInfo = jest.fn();
-const mockFetch = jest.fn();
-const mockUpsertOne = jest.fn();
+const mockAcquireLock = vi.fn();
+const mockReleaseLock = vi.fn();
+const mockLogInfo = vi.fn();
+const mockFetch = vi.fn();
+const mockUpsertOne = vi.fn();
 
-jest.unstable_mockModule('@/lock', () => ({
+vi.doMock('@/lock', () => ({
   acquireLock: mockAcquireLock,
   releaseLock: mockReleaseLock,
 }));
 
-jest.unstable_mockModule('../telemetry', () => ({
+vi.doMock('../telemetry', () => ({
   logInfo: mockLogInfo,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   dbMigrations: {
     fetch: mockFetch,
     upsertOne: mockUpsertOne,
@@ -27,14 +27,14 @@ const { runMigrations, startMigrations } = migrationModule;
 
 describe('migration/index', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockAcquireLock.mockResolvedValue(true as never);
     mockFetch.mockResolvedValue([] as never);
     mockUpsertOne.mockResolvedValue(undefined as never);
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   test('returns immediately when no migrations supplied', async () => {
@@ -59,8 +59,8 @@ describe('migration/index', () => {
   });
 
   test('executes pending migrations and records completion', async () => {
-    const handlerOne = jest.fn(async () => 'ran-one');
-    const handlerTwo = jest.fn(async () => 'ran-two');
+    const handlerOne = vi.fn(async () => 'ran-one');
+    const handlerTwo = vi.fn(async () => 'ran-two');
     mockFetch.mockResolvedValue([{ version: 1 }] as never);
 
     await runMigrations([
@@ -89,7 +89,7 @@ describe('migration/index', () => {
   });
 
   test('supports lockMode skip without lock acquire/release', async () => {
-    const handler = jest.fn(async () => 'ran');
+    const handler = vi.fn(async () => 'ran');
 
     await runMigrations([{ version: 4, description: 'skip-lock', handler }], { lockMode: 'skip' });
 
@@ -99,7 +99,7 @@ describe('migration/index', () => {
   });
 
   test('records failed migration attempts', async () => {
-    const handler = jest.fn(async () => {
+    const handler = vi.fn(async () => {
       throw new Error('boom');
     });
     mockFetch.mockResolvedValue([] as never);
@@ -134,14 +134,14 @@ describe('migration/index', () => {
   });
 
   test('startMigrations schedules execution and logs errors', async () => {
-    jest.useFakeTimers();
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockAcquireLock.mockRejectedValue(new Error('lock failure') as never);
 
     startMigrations([{ version: 1, description: 'one', handler: async () => undefined }]);
 
     expect(mockAcquireLock).not.toHaveBeenCalled();
-    jest.runAllTimers();
+    vi.runAllTimers();
     await Promise.resolve();
     await Promise.resolve();
 

@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { deleteFile, downloadFile, getFileUrl, getUploadUrl } from './index';
 
 describe('files', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
-  const fetchMock = jest.fn<typeof fetch>();
+  const fetchMock = vi.fn<typeof fetch>();
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -17,7 +17,7 @@ describe('files', () => {
   afterEach(() => {
     process.env = originalEnv;
     global.fetch = originalFetch;
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('getUploadUrl', () => {

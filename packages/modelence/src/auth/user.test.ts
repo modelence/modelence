@@ -1,29 +1,29 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockRandomBytes = jest.fn();
-const mockInsertOne = jest.fn();
+const mockRandomBytes = vi.fn();
+const mockInsertOne = vi.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
 
-const mockUpdateDisposableEmailListCron = jest.fn();
-const mockHandleLoginWithPassword = jest.fn();
-const mockHandleLogout = jest.fn();
-const mockHandleSignupWithPassword = jest.fn();
-const mockHandleVerifyEmail = jest.fn();
-const mockHandleResendEmailVerification = jest.fn();
-const mockHandleSendResetPasswordToken = jest.fn();
-const mockHandleResetPassword = jest.fn();
-const mockGetOwnProfile = jest.fn();
-const mockHandleUpdateProfile = jest.fn();
+const mockUpdateDisposableEmailListCron = vi.fn();
+const mockHandleLoginWithPassword = vi.fn();
+const mockHandleLogout = vi.fn();
+const mockHandleSignupWithPassword = vi.fn();
+const mockHandleVerifyEmail = vi.fn();
+const mockHandleResendEmailVerification = vi.fn();
+const mockHandleSendResetPasswordToken = vi.fn();
+const mockHandleResetPassword = vi.fn();
+const mockGetOwnProfile = vi.fn();
+const mockHandleUpdateProfile = vi.fn();
 
-const moduleCtorMock = jest.fn();
+const moduleCtorMock = vi.fn();
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
 }));
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     insertOne: mockInsertOne,
   },
@@ -32,42 +32,42 @@ jest.unstable_mockModule('./db', () => ({
   resetPasswordTokensCollection: mockResetPasswordTokensCollection,
 }));
 
-jest.unstable_mockModule('./disposableEmails', () => ({
+vi.doMock('./disposableEmails', () => ({
   updateDisposableEmailListCron: mockUpdateDisposableEmailListCron,
 }));
 
-jest.unstable_mockModule('./login', () => ({
+vi.doMock('./login', () => ({
   handleLoginWithPassword: mockHandleLoginWithPassword,
   handleLogout: mockHandleLogout,
 }));
 
-jest.unstable_mockModule('./profile', () => ({
+vi.doMock('./profile', () => ({
   getOwnProfile: mockGetOwnProfile,
   handleUpdateProfile: mockHandleUpdateProfile,
 }));
 
-jest.unstable_mockModule('./signup', () => ({
+vi.doMock('./signup', () => ({
   handleSignupWithPassword: mockHandleSignupWithPassword,
 }));
 
-jest.unstable_mockModule('./verification', () => ({
+vi.doMock('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
   handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
-jest.unstable_mockModule('./resetPassword', () => ({
+vi.doMock('./resetPassword', () => ({
   handleSendResetPasswordToken: mockHandleSendResetPasswordToken,
   handleResetPassword: mockHandleResetPassword,
 }));
 
 const mockTime = {
-  seconds: jest.fn((value: number) => value * 1000),
-  minutes: jest.fn((value: number) => value * 60 * 1000),
-  hours: jest.fn((value: number) => value * 60 * 60 * 1000),
-  days: jest.fn((value: number) => value * 24 * 60 * 60 * 1000),
+  seconds: vi.fn((value: number) => value * 1000),
+  minutes: vi.fn((value: number) => value * 60 * 1000),
+  hours: vi.fn((value: number) => value * 60 * 60 * 1000),
+  days: vi.fn((value: number) => value * 24 * 60 * 60 * 1000),
 };
 
-jest.unstable_mockModule('../time', () => ({
+vi.doMock('../time', () => ({
   time: mockTime,
 }));
 
@@ -81,7 +81,7 @@ class ModuleMock {
   }
 }
 
-jest.unstable_mockModule('../app/module', () => ({
+vi.doMock('../app/module', () => ({
   Module: ModuleMock,
 }));
 
@@ -191,41 +191,87 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('applies signup limit overrides', () => {
+    test('produces exactly 12 rules covering all auth buckets', () => {
+      const rules = buildAuthRateLimits();
+      expect(rules).toHaveLength(12);
+
+      const buckets = new Set(rules.map((r) => r.bucket));
+      expect(buckets).toEqual(
+        new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset'])
+      );
+    });
+
+    test('array override merges into defaults by (bucket, type, window)', () => {
       const rules = buildAuthRateLimits({
-        signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+        signup: [
+          { type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+          { type: 'ip', window: 24 * 60 * 60 * 1000, limit: 30 },
+        ],
       });
 
-      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
-      const signupDay = rules.find(
-        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signup15m?.limit).toBe(5);
-      expect(signupDay?.limit).toBe(50);
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toEqual([
+        { bucket: 'signup', type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'signup', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 30 },
+      ]);
+    });
 
-      // Unrelated buckets keep their defaults
-      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
+    test('array override of a single window preserves the other defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 5 }],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toHaveLength(2);
+      const signup15m = signupRules.find((r) => r.window === 15 * 60 * 1000);
+      const signupDay = signupRules.find((r) => r.window === 24 * 60 * 60 * 1000);
+      expect(signup15m?.limit).toBe(5);
+      expect(signupDay?.limit).toBe(200);
+    });
+
+    test('array override can add new windows alongside the defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [
+          { type: 'ip', window: 60 * 1000, limit: 2 },
+          { type: 'ip', window: 60 * 60 * 1000, limit: 20 },
+        ],
+      });
+
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      // 2 defaults + 2 additions = 4
+      expect(signupRules).toHaveLength(4);
+      const windows = signupRules.map((r) => r.window).sort((a, b) => a - b);
+      expect(windows).toEqual([60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000, 24 * 60 * 60 * 1000]);
+    });
+
+    test('empty array override leaves the bucket defaults intact', () => {
+      const rules = buildAuthRateLimits({ signup: [] });
+      const signupRules = rules.filter((r) => r.bucket === 'signup');
+      expect(signupRules).toHaveLength(2);
+    });
+
+    test('array override on one bucket leaves other buckets at defaults', () => {
+      const rules = buildAuthRateLimits({
+        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 7 }],
+      });
+
+      const signinRules = rules.filter((r) => r.bucket === 'signin');
+      expect(signinRules).toHaveLength(2);
+      const signin15m = signinRules.find((r) => r.window === 15 * 60 * 1000);
       expect(signin15m?.limit).toBe(50);
     });
 
-    test('applies partial overrides — unspecified fields keep defaults', () => {
+    test('overrides applied across multiple buckets', () => {
       const rules = buildAuthRateLimits({
-        signup: { perIp15Minutes: 3 },
-      });
-
-      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
-      const signupDay = rules.find(
-        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signup15m?.limit).toBe(3);
-      expect(signupDay?.limit).toBe(200); // default preserved
-    });
-
-    test('applies overrides across multiple buckets', () => {
-      const rules = buildAuthRateLimits({
-        signup: { perIpPerDay: 10 },
-        signin: { perIp15Minutes: 5, perIpPerDay: 20 },
-        passwordReset: { perEmailPerHour: 2, perEmailPerDay: 3 },
+        signup: [{ type: 'ip', window: 24 * 60 * 60 * 1000, limit: 10 }],
+        signin: [
+          { type: 'ip', window: 15 * 60 * 1000, limit: 5 },
+          { type: 'ip', window: 24 * 60 * 60 * 1000, limit: 20 },
+        ],
+        passwordReset: [
+          { type: 'email', window: 60 * 60 * 1000, limit: 2 },
+          { type: 'email', window: 24 * 60 * 60 * 1000, limit: 3 },
+        ],
       });
 
       const signupDay = rules.find(
@@ -249,16 +295,6 @@ describe('auth/user', () => {
       );
       expect(pwResetEmailHour?.limit).toBe(2);
       expect(pwResetEmailDay?.limit).toBe(3);
-    });
-
-    test('produces exactly 12 rules covering all auth buckets', () => {
-      const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(12);
-
-      const buckets = new Set(rules.map((r) => r.bucket));
-      expect(buckets).toEqual(
-        new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset'])
-      );
     });
   });
 });

@@ -1,14 +1,15 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 import { dbDisposableEmailDomains } from './db';
 import { isDisposableEmail, updateDisposableEmailListCron } from './disposableEmails';
 
 describe('auth/disposableEmails', () => {
-  const findOneSpy = jest.spyOn(dbDisposableEmailDomains, 'findOne');
-  const insertManySpy = jest.spyOn(dbDisposableEmailDomains, 'insertMany');
+  const findOneSpy = vi.spyOn(dbDisposableEmailDomains, 'findOne');
+  const insertManySpy = vi.spyOn(dbDisposableEmailDomains, 'insertMany');
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    global.fetch = jest.fn() as unknown as typeof fetch;
+    vi.clearAllMocks();
+    global.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   test('isDisposableEmail queries domains collection', async () => {
@@ -22,7 +23,7 @@ describe('auth/disposableEmails', () => {
   });
 
   test('cron handler downloads domain list and stores batches', async () => {
-    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+    (global.fetch as MockedFunction<typeof fetch>).mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('temp-mail.org\nexample.org\n'),
     } as Response);
@@ -39,7 +40,7 @@ describe('auth/disposableEmails', () => {
   });
 
   test('cron handler ignores duplicate insert errors', async () => {
-    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+    (global.fetch as MockedFunction<typeof fetch>).mockResolvedValue({
       ok: true,
       text: () => Promise.resolve('temp-mail.org'),
     } as Response);

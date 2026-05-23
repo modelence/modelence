@@ -18,88 +18,89 @@ import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
 import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
 
+function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
+  return `${rule.bucket}\n${rule.type}\n${rule.window}`;
+}
+
+function defaultAuthRateLimits(): RateLimitRule[] {
+  return [
+    { bucket: 'signup', type: 'ip', window: time.minutes(15), limit: 20 },
+    { bucket: 'signup', type: 'ip', window: time.days(1), limit: 200 },
+    { bucket: 'signupAttempt', type: 'ip', window: time.minutes(15), limit: 50 },
+    { bucket: 'signupAttempt', type: 'ip', window: time.days(1), limit: 500 },
+    { bucket: 'signin', type: 'ip', window: time.minutes(15), limit: 50 },
+    { bucket: 'signin', type: 'ip', window: time.days(1), limit: 500 },
+    { bucket: 'verification', type: 'user', window: time.seconds(60), limit: 1 },
+    { bucket: 'verification', type: 'user', window: time.days(1), limit: 10 },
+    { bucket: 'passwordReset', type: 'ip', window: time.minutes(15), limit: 10 },
+    { bucket: 'passwordReset', type: 'ip', window: time.days(1), limit: 100 },
+    { bucket: 'passwordReset', type: 'email', window: time.hours(1), limit: 5 },
+    { bucket: 'passwordReset', type: 'email', window: time.days(1), limit: 10 },
+  ];
+}
+
+function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
+  const overrides: RateLimitRule[] = [];
+
+  const buckets: Array<keyof AuthRateLimitsConfig> = [
+    'signup',
+    'signupAttempt',
+    'signin',
+    'verification',
+    'passwordReset',
+  ];
+
+  for (const bucket of buckets) {
+    const rules = config[bucket];
+    if (rules === undefined) continue;
+    for (const rule of rules) {
+      overrides.push({ bucket, ...rule });
+    }
+  }
+
+  return overrides;
+}
+
 /**
- * Builds the rate limit rules for all authentication endpoints, merging any
- * caller-supplied overrides with the built-in defaults.
+ * Builds the rate limit rules for all authentication endpoints by merging
+ * caller-supplied overrides into the built-in defaults.
  *
- * Exposed so that `startApp` can pass user-configured limits at startup rather
- * than relying on static values baked into the Module constructor.
+ * Merge semantics:
+ *   - Each override rule replaces the default rule with the same
+ *     (bucket, type, window) tuple.
+ *   - Defaults whose tuple is not overridden are preserved.
+ *   - Override rules with no matching default are added.
+ *
+ * This means `signup: [{ type: 'ip', window: time.minutes(15), limit: 10 }]`
+ * tightens the 15-minute signup cap without dropping the per-day cap.
  */
 export function buildAuthRateLimits(config: AuthRateLimitsConfig = {}): RateLimitRule[] {
-  return [
-    {
-      bucket: 'signup',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: config.signup?.perIp15Minutes ?? 20,
-    },
-    {
-      bucket: 'signup',
-      type: 'ip',
-      window: time.days(1),
-      limit: config.signup?.perIpPerDay ?? 200,
-    },
-    {
-      bucket: 'signupAttempt',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: config.signupAttempt?.perIp15Minutes ?? 50,
-    },
-    {
-      bucket: 'signupAttempt',
-      type: 'ip',
-      window: time.days(1),
-      limit: config.signupAttempt?.perIpPerDay ?? 500,
-    },
-    {
-      bucket: 'signin',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: config.signin?.perIp15Minutes ?? 50,
-    },
-    {
-      bucket: 'signin',
-      type: 'ip',
-      window: time.days(1),
-      limit: config.signin?.perIpPerDay ?? 500,
-    },
-    {
-      bucket: 'verification',
-      type: 'user',
-      window: time.seconds(60),
-      limit: config.verification?.perUserPerMinute ?? 1,
-    },
-    {
-      bucket: 'verification',
-      type: 'user',
-      window: time.days(1),
-      limit: config.verification?.perUserPerDay ?? 10,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'ip',
-      window: time.minutes(15),
-      limit: config.passwordReset?.perIp15Minutes ?? 10,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'ip',
-      window: time.days(1),
-      limit: config.passwordReset?.perIpPerDay ?? 100,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'email',
-      window: time.hours(1),
-      limit: config.passwordReset?.perEmailPerHour ?? 5,
-    },
-    {
-      bucket: 'passwordReset',
-      type: 'email',
-      window: time.days(1),
-      limit: config.passwordReset?.perEmailPerDay ?? 10,
-    },
-  ];
+  const defaults = defaultAuthRateLimits();
+  const overrides = collectOverrides(config);
+
+  const overrideByKey = new Map<string, RateLimitRule>();
+  for (const rule of overrides) {
+    overrideByKey.set(ruleKey(rule), rule);
+  }
+
+  const merged: RateLimitRule[] = [];
+  const consumed = new Set<string>();
+  for (const def of defaults) {
+    const key = ruleKey(def);
+    const override = overrideByKey.get(key);
+    if (override !== undefined) {
+      merged.push(override);
+      consumed.add(key);
+    } else {
+      merged.push(def);
+    }
+  }
+  for (const [key, rule] of overrideByKey) {
+    if (!consumed.has(key)) {
+      merged.push(rule);
+    }
+  }
+  return merged;
 }
 
 export async function createGuestUser() {

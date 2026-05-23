@@ -1,12 +1,12 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ObjectId } from 'mongodb';
 
-const mockUsersUpdateOne = jest.fn();
-const mockEmailDeleteMany = jest.fn();
-const mockResetDeleteMany = jest.fn();
-const mockRandomUUID = jest.fn(() => 'uuid-123');
+const mockUsersUpdateOne = vi.fn();
+const mockEmailDeleteMany = vi.fn();
+const mockResetDeleteMany = vi.fn();
+const mockRandomUUID = vi.fn(() => 'uuid-123');
 
-jest.unstable_mockModule('./db', () => ({
+vi.doMock('./db', () => ({
   usersCollection: {
     updateOne: mockUsersUpdateOne,
   },
@@ -18,7 +18,7 @@ jest.unstable_mockModule('./db', () => ({
   },
 }));
 
-jest.unstable_mockModule('crypto', () => ({
+vi.doMock('crypto', () => ({
   randomUUID: mockRandomUUID,
 }));
 
@@ -26,7 +26,7 @@ const { clearTokens, disableUser, deleteUser } = await import('./deleteUser');
 
 describe('auth/deleteUser', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('clearTokens removes verification and reset tokens for user', async () => {

@@ -1,17 +1,17 @@
-import { beforeEach, describe, expect, jest, test } from '@jest/globals';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Request, Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 
-const mockUsersFindOne = jest.fn();
-const mockUsersInsertOne = jest.fn();
-const mockUsersUpdateOne = jest.fn();
-const mockCreateSession = jest.fn();
-const mockGetAuthConfig = jest.fn();
-const mockGetCallContext = jest.fn();
-const mockGetConfig = jest.fn();
-const mockResolveUniqueHandle = jest.fn();
+const mockUsersFindOne = vi.fn();
+const mockUsersInsertOne = vi.fn();
+const mockUsersUpdateOne = vi.fn();
+const mockCreateSession = vi.fn();
+const mockGetAuthConfig = vi.fn();
+const mockGetCallContext = vi.fn();
+const mockGetConfig = vi.fn();
+const mockResolveUniqueHandle = vi.fn();
 
-jest.unstable_mockModule('../db', () => ({
+vi.doMock('../db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
     insertOne: mockUsersInsertOne,
@@ -19,9 +19,9 @@ jest.unstable_mockModule('../db', () => ({
   },
 }));
 
-jest.unstable_mockModule('../session', () => ({
+vi.doMock('../session', () => ({
   createSession: mockCreateSession,
-  setAuthTokenCookie: jest.fn((res: Response, authToken: string) => {
+  setAuthTokenCookie: vi.fn((res: Response, authToken: string) => {
     res.cookie('authToken', authToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -31,19 +31,19 @@ jest.unstable_mockModule('../session', () => ({
   }),
 }));
 
-jest.unstable_mockModule('@/app/authConfig', () => ({
+vi.doMock('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
-jest.unstable_mockModule('@/app/server', () => ({
+vi.doMock('@/app/server', () => ({
   getCallContext: mockGetCallContext,
 }));
 
-jest.unstable_mockModule('@/config/server', () => ({
+vi.doMock('@/config/server', () => ({
   getConfig: mockGetConfig,
 }));
 
-jest.unstable_mockModule('../utils', () => ({
+vi.doMock('../utils', () => ({
   resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
@@ -51,32 +51,32 @@ const moduleExports = await import('./oauth-common');
 
 describe('auth/providers/oauth-common', () => {
   const res = {
-    cookie: jest.fn(),
-    status: jest.fn().mockReturnThis(),
-    redirect: jest.fn(),
-    json: jest.fn(),
-    send: jest.fn(),
+    cookie: vi.fn(),
+    status: vi.fn().mockReturnThis(),
+    redirect: vi.fn(),
+    json: vi.fn(),
+    send: vi.fn(),
   } as unknown as Response;
 
   const req = {} as Request;
 
   const authConfig = {
     login: {
-      onSuccess: jest.fn(),
-      onError: jest.fn(),
+      onSuccess: vi.fn(),
+      onError: vi.fn(),
     },
-    onAfterLogin: jest.fn(),
-    onLoginError: jest.fn(),
+    onAfterLogin: vi.fn(),
+    onLoginError: vi.fn(),
     signup: {
-      onSuccess: jest.fn(),
-      onError: jest.fn(),
+      onSuccess: vi.fn(),
+      onError: vi.fn(),
     },
-    onAfterSignup: jest.fn(),
-    onSignupError: jest.fn(),
+    onAfterSignup: vi.fn(),
+    onSignupError: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockUsersFindOne.mockReset();
     mockUsersInsertOne.mockReset();
     mockUsersUpdateOne.mockReset();
@@ -691,8 +691,8 @@ describe('auth/providers/oauth-common', () => {
   describe('handleOAuthProviderLink', () => {
     const linkAuthConfig = {
       ...authConfig,
-      onAfterOAuthLink: jest.fn(),
-      onOAuthLinkError: jest.fn(),
+      onAfterOAuthLink: vi.fn(),
+      onOAuthLinkError: vi.fn(),
     };
 
     const userData = {
@@ -986,8 +986,9 @@ describe('auth/providers/oauth-common', () => {
     });
 
     test('returns HTML when errorComponent is configured', () => {
-      const mockErrorComponent = jest.fn().mockReturnValue('<html><body>Error</body></html>');
+      const mockErrorComponent = vi.fn().mockReturnValue('<html><body>Error</body></html>');
       mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
+      (res as any).send = vi.fn();
 
       moduleExports.sendOAuthError(res, 500, 'Auth failed');
 
@@ -998,7 +999,7 @@ describe('auth/providers/oauth-common', () => {
     });
 
     test('falls back to JSON when errorComponent returns falsy', () => {
-      const mockErrorComponent = jest.fn().mockReturnValue(null);
+      const mockErrorComponent = vi.fn().mockReturnValue(null);
       mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
 
       moduleExports.sendOAuthError(res, 403, 'Forbidden');
@@ -1008,7 +1009,7 @@ describe('auth/providers/oauth-common', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Forbidden' });
     });
     test('falls back to JSON when errorComponent throws', () => {
-      const mockErrorComponent = jest.fn().mockImplementation(() => {
+      const mockErrorComponent = vi.fn().mockImplementation(() => {
         throw new Error('render failed');
       });
 

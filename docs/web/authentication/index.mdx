@@ -13,9 +13,19 @@ Modelence authentication includes:
 - **[User Management](/authentication/user-management)** - User profile and role management
 - **[Email Verification](/authentication/email-verification)** - Optional email verification for new signups
 - **[Password Reset](/authentication/password-reset)** - Secure password reset flow with email tokens
-- **[Hooks](/authentication/hooks)** - Add custom handlers that run after login or signup
+- **[Hooks](/authentication/hooks)** - Add custom handlers and error rendering components for your authentication flow
 - **[Rate Limiting](/authentication/rate-limiting)** - Built-in protection against brute force attacks
 - **[Google Sign-In](/authentication/google-sign-in)** - OAuth authentication with Google accounts
+- **[GitHub Sign-In](/authentication/github-sign-in)** - OAuth authentication with GitHub accounts
+
+## Where to configure what
+
+Modelence splits authentication configuration across two top-level keys in `startApp`:
+
+- **`auth: { ... }`** — authentication *lifecycle*: validation hooks (`validateSignup`, `validateProfileUpdate`), event callbacks (`onAfterLogin`, `onAfterSignup`, `onAfterEmailVerification`, …), `generateHandle`, OAuth linking behavior, and `rateLimits`. See [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) and [Hooks](/authentication/hooks).
+- **`email: { ... }`** — email *delivery*: the email provider, sender address, and per-flow templates/subjects/redirect URLs for `verification` and `passwordReset`. See [Email Configuration](/email).
+
+The two are complementary: `email:` controls whether and how the verification/reset email is delivered; `auth:` controls what happens when the user clicks the link (and the rest of the auth lifecycle).
 
 ## How Authentication Works
 
@@ -61,6 +71,17 @@ When a user logs in:
 2. **Session Update** - Current session is linked to the authenticated user
 3. **User Data** - User information is returned to the client
 4. **State Update** - Client-side session state is updated
+
+### OAuth Account Linking
+
+When a user signs in with an OAuth provider (Google or GitHub) using an email that already matches an existing email/password account, behavior is controlled by the [`oauthAccountLinking`](/api-reference/modelence/server/type-aliases/AuthConfig#oauthaccountlinking) auth config option:
+
+- **`'manual'`** (default) - The OAuth sign-in is rejected with an error: *"User with this email already exists. Please log in instead."* The user must log in with their existing password first and link the provider deliberately.
+- **`'auto'`** - The OAuth provider is automatically linked to the existing account, but only when **both** the OAuth-provided email is verified by the provider **and** the matching email on the existing account is also marked verified locally. This dual-verification requirement prevents pre-registration account takeover (e.g., someone registering a password account against an email they don't own, then waiting for the real owner to sign in via OAuth). When auto-linking succeeds, missing `firstName`, `lastName`, and `avatarUrl` fields are backfilled from the provider profile.
+
+If either email is unverified — even in `'auto'` mode — the sign-in is rejected with the same error.
+
+Once an OAuth provider is linked, subsequent sign-ins with the same provider look up the user directly by the provider's user ID, regardless of email.
 
 ## Basic Implementation
 

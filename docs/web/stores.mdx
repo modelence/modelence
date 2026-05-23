@@ -173,7 +173,7 @@ const result = await dbTodos.insertMany([
 ```typescript
 // Update one
 await dbTodos.updateOne(
-  { id: todoId },
+  { _id: new ObjectId(todoId) },
   { $set: { isCompleted: true } }
 );
 
@@ -200,7 +200,7 @@ await dbTodos.updateMany(
 
 ```typescript
 // Delete one
-await dbTodos.deleteOne({ id: todoId });
+await dbTodos.deleteOne({ _id: new ObjectId(todoId) });
 
 // Delete many
 await dbTodos.deleteMany({ isCompleted: true });
@@ -221,8 +221,8 @@ const stats = await dbTodos.aggregate([
 // Bulk write operations
 await dbTodos.bulkWrite([
   { insertOne: { document: { title: 'New task', /* ... */ } } },
-  { updateOne: { filter: { id: todoId }, update: { $set: { isCompleted: true } } } },
-  { deleteOne: { filter: { id: oldTodoId } } }
+  { updateOne: { filter: { _id: new ObjectId(todoId) }, update: { $set: { isCompleted: true } } } },
+  { deleteOne: { filter: { _id: new ObjectId(oldTodoId) } } }
 ]);
 ```
 

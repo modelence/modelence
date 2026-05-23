@@ -1,9 +1,9 @@
-import { describe, expect, test, jest, beforeEach } from '@jest/globals';
+import { describe, expect, test, beforeEach, vi } from 'vitest';
 import type { EmailPayload } from '../types';
 
-const mockGetEmailConfig = jest.fn();
+const mockGetEmailConfig = vi.fn();
 
-jest.unstable_mockModule('@/app/emailConfig', () => ({
+vi.doMock('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
 }));
 
@@ -23,7 +23,7 @@ describe('app/email', () => {
   });
 
   test('delegates to configured provider', () => {
-    const sendEmailFn = jest.fn().mockReturnValue('sent');
+    const sendEmailFn = vi.fn().mockReturnValue('sent');
     const provider = { sendEmail: sendEmailFn };
     const payload: EmailPayload = {
       from: 'noreply@example.com',

@@ -2,7 +2,7 @@
 title: 'Auth Hooks'
 ---
 
-The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events. Configure these in your `startApp` call:
+The [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) type provides hooks for authentication events. Configure these in your `startApp` call under the **`auth:`** key.
 
 ## Validation Hooks
 
@@ -40,6 +40,59 @@ startApp({
 | `handle`    | `string \| undefined` | 
 
 **Returns:** `void | Promise<void>` 
+
+### `onBeforeSignup`
+
+<Note>Available since `modelence@0.17.0`.</Note>
+
+Called after `validateSignup` and the built-in disposable-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
+
+Currently only invoked for `'email'` provider signups. OAuth signups are not gated because OAuth providers (Google, GitHub, etc.) do not issue disposable accounts.
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    onBeforeSignup: async ({ email, firstName, lastName, handle, provider, connectionInfo }) => {
+      const domain = email.split('@')[1];
+      const allowed = await isAllowedDomain(domain);
+      if (!allowed) {
+        throw new Error(`Signups from ${domain} are not allowed`);
+      }
+    },
+  },
+});
+```
+
+To replace the built-in disposable-email check entirely with your own logic, set `allowDisposableEmails: true` (also available since `modelence@0.17.0`) and enforce your policy in `onBeforeSignup`.
+
+```typescript
+startApp({
+  auth: {
+    allowDisposableEmails: true,
+    onBeforeSignup: async ({ email }) => {
+      const verdict = await classifyEmailDomain(email);
+      if (verdict === 'disposable') {
+        throw new Error('Disposable email addresses are not allowed');
+      }
+    },
+  },
+});
+```
+
+**Props:**
+
+| Property         | Type                       |
+| ---------------- | -------------------------- |
+| `email`          | `string`                   |
+| `firstName`      | `string \| undefined`      |
+| `lastName`       | `string \| undefined`      |
+| `handle`         | `string \| undefined`      |
+| `provider`       | `'email'`                  |
+| `connectionInfo` | `ConnectionInfo \| undefined` |
+
+**Returns:** `void | Promise<void>`
 
 ### `validateProfileUpdate`
 
@@ -129,6 +182,38 @@ startApp({
 });
 ```
 
+## Error Rendering
+
+### `errorComponent`
+
+Use `errorComponent` to customize how OAuth authentication errors are rendered. 
+
+By default, OAuth errors are returned as JSON. Providing `errorComponent` allows you to return a custom HTML response instead. 
+
+This is useful when OAuth flows are triggered in a browser context.
+
+```typescript
+startApp({
+  auth: {
+    errorComponent: ({ error, statusCode }) => {
+      // Safely escape the error string to prevent XSS vulnerabilities
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+
+      return `
+        <html>
+          <body>
+            <h1>Error ${escapeHtml(statusCode)}</h1>
+            <p>${escapeHtml(error)}</p>
+          </body>
+        </html>
+      `;
+    },
+  },
+});
+```
+
 ## Full Example
 
 ```typescript
@@ -146,11 +231,23 @@ startApp({
         throw new Error('Handle can only contain lowercase letters, numbers, and hyphens');
       }
     },
+    onBeforeSignup: async ({ email }) => {
+      const domain = email.split('@')[1];
+      if (domain === 'blocked.example') {
+        throw new Error(`Signups from ${domain} are not allowed`);
+      }
+    },
     generateHandle: ({ email, firstName, lastName }) => {
       if (firstName && lastName) {
         return `${firstName}-${lastName}`.toLowerCase();
       }
       return email.split('@')[0];
+    },
+    errorComponent: ({ error, statusCode }) => {
+      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[m as any] || m);
+      return `<html><body><h1>Error ${escapeHtml(statusCode)}</h1><p>${escapeHtml(error)}</p></body></html>`;
     },
     onAfterSignup: ({ user }) => {
       console.log('Welcome!', user.handle);
