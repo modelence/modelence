@@ -988,13 +988,13 @@ describe('auth/providers/oauth-common', () => {
     test('returns HTML when errorComponent is configured', () => {
       const mockErrorComponent = vi.fn().mockReturnValue('<html><body>Error</body></html>');
       mockGetAuthConfig.mockReturnValue({ errorComponent: mockErrorComponent });
-      (res as any).send = vi.fn();
+      (res.send as ReturnType<typeof vi.fn>).mockClear();
 
       moduleExports.sendOAuthError(res, 500, 'Auth failed');
 
       expect(mockErrorComponent).toHaveBeenCalledWith({ error: 'Auth failed', statusCode: 500 });
       expect(res.status).toHaveBeenCalledWith(500);
-      expect((res as any).send).toHaveBeenCalledWith('<html><body>Error</body></html>');
+      expect(res.send).toHaveBeenCalledWith('<html><body>Error</body></html>');
       expect(res.json).not.toHaveBeenCalled();
     });
 

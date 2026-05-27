@@ -27,38 +27,6 @@ export type AuthRateLimitOverride = {
   limit: number;
 };
 
-/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
-export type LegacySignupRateLimits = {
-  perIp15Minutes?: number;
-  perIpPerDay?: number;
-};
-
-/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
-export type LegacySignupAttemptRateLimits = {
-  perIp15Minutes?: number;
-  perIpPerDay?: number;
-};
-
-/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
-export type LegacySigninRateLimits = {
-  perIp15Minutes?: number;
-  perIpPerDay?: number;
-};
-
-/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
-export type LegacyVerificationRateLimits = {
-  perUserPerMinute?: number;
-  perUserPerDay?: number;
-};
-
-/** @internal Remove in 1.0.0 — superseded by `AuthRateLimitOverride[]`. */
-export type LegacyPasswordResetRateLimits = {
-  perIp15Minutes?: number;
-  perIpPerDay?: number;
-  perEmailPerHour?: number;
-  perEmailPerDay?: number;
-};
-
 /**
  * Per-action rate limit overrides for authentication endpoints.
  *
@@ -112,22 +80,6 @@ export type AuthRateLimitsConfig = {
   verification?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
   passwordReset?: AuthRateLimitOverride[];
-};
-
-/**
- * @internal Internal shape used by `buildAuthRateLimits` to accept both the
- * public array form and the deprecated legacy object form for back-compat.
- * Not part of the public API surface.
- *
- * Remove the legacy union arms in 1.0.0 — collapse this back to
- * `AuthRateLimitsConfig` once the object shape is gone.
- */
-export type InternalAuthRateLimitsConfig = {
-  signup?: AuthRateLimitOverride[] | LegacySignupRateLimits;
-  signupAttempt?: AuthRateLimitOverride[] | LegacySignupAttemptRateLimits;
-  signin?: AuthRateLimitOverride[] | LegacySigninRateLimits;
-  verification?: AuthRateLimitOverride[] | LegacyVerificationRateLimits;
-  passwordReset?: AuthRateLimitOverride[] | LegacyPasswordResetRateLimits;
 };
 
 type GenerateHandleProps = {
