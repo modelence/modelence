@@ -33,9 +33,9 @@ import {
   ChangeStreamOptions,
   DistinctOptions,
 } from 'mongodb';
-
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
+import { applyDefaultsToModelSchema } from './schemaDefaults';
 
 /**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
@@ -939,10 +939,10 @@ export class Store<
     document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>,
     options?: { session?: ClientSession }
   ): Promise<this['_doc']> {
-    const docWithId = {
+    const docWithId = applyDefaultsToModelSchema(this.schema, {
       _id: new ObjectId(),
       ...document,
-    } as OptionalUnlessRequiredId<InferDocumentType<TSchema>>;
+    }) as OptionalUnlessRequiredId<InferDocumentType<TSchema>>;
 
     await this.requireCollection().insertOne(docWithId, options);
 

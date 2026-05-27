@@ -542,6 +542,47 @@ describe('data/store', () => {
     expect(result[0]).toMatchObject({ name: 'test' });
   });
 
+  test('create applies schema defaults before insert and return', async () => {
+    const store = new Store('todos', {
+      schema: {
+        title: schema.string(),
+        completed: schema.boolean(),
+        category: schema.string().default('general').optional(),
+        meta: schema
+          .object({
+            source: schema.string().default('manual').optional(),
+          })
+          .optional(),
+      },
+      indexes: [],
+      methods: undefined,
+    });
+    const collectionMock = {
+      insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const result = await store.create({
+      title: 'Buy milk',
+      completed: false,
+      meta: {},
+    });
+    const insertedDocument = collectionMock.insertOne.mock.calls[0]?.[0] as {
+      _id?: ObjectId;
+      category?: string;
+      meta?: { source?: string };
+    };
+
+    expect(result.category).toBe('general');
+    expect(result.meta?.source).toBe('manual');
+    expect(insertedDocument).toMatchObject({
+      category: 'general',
+      meta: { source: 'manual' },
+    });
+    expect(insertedDocument._id).toBeInstanceOf(ObjectId);
+  });
+
   test('vectorSearch delegates to aggregate with expected pipeline', async () => {
     const store = createStore();
     const aggregateSpy = vi
