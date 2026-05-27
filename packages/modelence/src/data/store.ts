@@ -33,9 +33,9 @@ import {
   ChangeStreamOptions,
   DistinctOptions,
 } from 'mongodb';
-
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
+import { applyDefaultsToModelSchema } from './schemaDefaults';
 
 /**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
@@ -915,6 +915,38 @@ export class Store<
     options?: { session?: ClientSession }
   ): Promise<InsertOneResult> {
     return await this.requireCollection().insertOne(document, options);
+  }
+
+  /**
+   * Inserts a single document and returns the inserted document with its generated `_id`
+   * and any helper methods applied.
+   *
+   * Unlike {@link insertOne}, which only returns the insert result metadata, this method
+   * returns the full inserted document — useful when you need to immediately use the
+   * newly created record (e.g. returning it from an API handler).
+   *
+   * @param document - The document to insert
+   * @returns The inserted document with `_id` populated and methods applied
+   *
+   * @example
+   * ```ts
+   * const todo = await dbTodos.create({ title: 'Buy milk', completed: false });
+   * console.log(todo._id);    // ObjectId
+   * console.log(todo.title);  // 'Buy milk'
+   * ```
+   */
+  async create(
+    document: OptionalUnlessRequiredId<InferDocumentType<TSchema>>,
+    options?: { session?: ClientSession }
+  ): Promise<this['_doc']> {
+    const docWithId = applyDefaultsToModelSchema(this.schema, {
+      _id: new ObjectId(),
+      ...document,
+    }) as OptionalUnlessRequiredId<InferDocumentType<TSchema>>;
+
+    await this.requireCollection().insertOne(docWithId, options);
+
+    return this.wrapDocument(docWithId as unknown as this['_rawDoc']);
   }
 
   /**
