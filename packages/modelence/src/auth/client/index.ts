@@ -1,7 +1,8 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
-import { ClientInfo } from '@/methods/types';
+import { getClientConfig } from '@/client/clientConfig';
+import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
 
 export type UserInfo = {
@@ -143,6 +144,10 @@ export async function resendEmailVerification(options: { email: string }) {
  */
 export async function logout() {
   await callMethod('_system.user.logout');
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(null);
+  }
   setCurrentUser(null);
 }
 
@@ -183,11 +188,12 @@ export async function resetPassword(options: { token: string; password: string }
  */
 export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
   const { provider } = options;
+  const config = getClientConfig();
+  const baseUrl = config?.baseUrl ?? '';
 
   const token = getAuthToken();
   if (token) {
-    // Ask the server to set a secure httpOnly cookie for the OAuth linking flow
-    const response = await fetch('/api/_internal/auth/set-link-cookie', {
+    const response = await fetch(`${baseUrl}/api/_internal/auth/set-link-cookie`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authToken: token }),
@@ -197,7 +203,13 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
   }
-  window.location.href = `/api/_internal/auth/${provider}?mode=link`;
+
+  const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
+  if (config?.openUrl) {
+    config.openUrl(url);
+  } else {
+    window.location.href = url;
+  }
 }
 /**
  * Unlink an OAuth provider from the currently signed-in user's account.
@@ -218,10 +230,18 @@ export async function unlinkOAuthProvider(options: { provider: OAuthProvider }):
  * @returns The auth token or undefined if not authenticated.
  */
 export function getAuthToken(): string | undefined {
+  const config = getClientConfig();
+  if (config) {
+    return config.getAuthToken();
+  }
   return getLocalStorageSession()?.authToken;
 }
 
 export function getClientInfo(): ClientInfo {
+  const config = getClientConfig();
+  if (config) {
+    return config.getClientInfo();
+  }
   return {
     screenWidth: window.screen.width,
     screenHeight: window.screen.height,
