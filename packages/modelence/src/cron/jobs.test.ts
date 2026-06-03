@@ -10,9 +10,10 @@ const mockStartTransaction = vi.fn(() => ({
 const mockCaptureError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
 
-const cronStoreMocks: { fetch: Mock; updateOne: Mock } = {
+const cronStoreMocks: { fetch: Mock; updateOne: Mock; upsertOne: Mock } = {
   fetch: vi.fn(),
   updateOne: vi.fn(),
+  upsertOne: vi.fn(),
 };
 
 function registerMocks() {
@@ -53,6 +54,7 @@ describe('cron/jobs', () => {
     Object.assign(cronStoreMocks, {
       fetch: vi.fn(),
       updateOne: vi.fn().mockResolvedValue(undefined as never),
+      upsertOne: vi.fn().mockResolvedValue(undefined as never),
     });
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
@@ -144,10 +146,11 @@ describe('cron/jobs', () => {
 
     expect(mockAcquireLock).toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
+    expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
       { alias: 'hourly' },
       {
         $set: { lastStartDate: expect.any(Date) },
+        $setOnInsert: { alias: 'hourly' },
       }
     );
     const transactionCall = (mockStartTransaction as Mock).mock.calls.slice(-1)[0];
