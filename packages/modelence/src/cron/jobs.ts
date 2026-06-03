@@ -75,12 +75,13 @@ export async function registerNewCronJobs() {
   const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
   const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
 
-  // Skips already added cron jobs and adds only new ones
+  // Skips already added cron jobs and adds only new ones.
+  // lastStartDate is intentionally omitted for new jobs so that startCronJobs
+  // schedules their first run immediately.
   const insertItems = Object.values(cronJobs)
     .filter((job) => !existingCronJobAliases.has(job.alias))
     .map((job) => ({
       alias: job.alias,
-      lastStartDate: new Date(job.state.scheduledRunTs || Date.now()),
     }));
   if (insertItems.length > 0) {
     await cronJobsCollection.insertMany(insertItems);
