@@ -163,12 +163,11 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   state.startTs = Date.now();
 
-  await cronJobsCollection.updateOne(
+  await cronJobsCollection.upsertOne(
     { alias },
     {
-      $set: {
-        lastStartDate: new Date(state.startTs),
-      },
+      $set: { lastStartDate: new Date(state.startTs) },
+      $setOnInsert: { alias },
     }
   );
 
