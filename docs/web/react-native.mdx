@@ -34,18 +34,27 @@ Modelence's client library works in React Native. Because React Native lacks bro
 
     const AUTH_TOKEN_KEY = 'modelence_auth_token';
 
+    // getAuthToken is called synchronously on every request, so we keep the
+    // token in memory and mirror writes to AsyncStorage for persistence across
+    // app restarts. Load the persisted value before mounting your app (see
+    // the loadAuthToken helper below).
+    let authToken: string | undefined;
+
+    export async function loadAuthToken() {
+      authToken = (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ?? undefined;
+    }
+
     configureClient({
       baseUrl: 'https://your-modelence-app.com',
 
-      getAuthToken: async () => {
-        return (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ?? undefined;
-      },
+      getAuthToken: () => authToken,
 
-      setAuthToken: async (token) => {
+      setAuthToken: (token) => {
+        authToken = token ?? undefined;
         if (token === null) {
-          await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+          AsyncStorage.removeItem(AUTH_TOKEN_KEY);
         } else {
-          await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+          AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
         }
       },
 
@@ -69,12 +78,22 @@ Modelence's client library works in React Native. Because React Native lacks bro
   </Step>
 
   <Step title="Wrap your app with AppProvider">
-    Wrap your root component with `AppProvider` the same way you would in a web app:
+    Load the persisted auth token before mounting your app, then wrap your root component with `AppProvider`:
 
     ```tsx
     import { AppProvider } from 'modelence/client';
+    import { loadAuthToken } from './modelenceConfig'; // the file from the previous step
+    import { useEffect, useState } from 'react';
 
     export default function App() {
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        loadAuthToken().then(() => setReady(true));
+      }, []);
+
+      if (!ready) return null;
+
       return (
         <AppProvider>
           <RootNavigator />
@@ -90,8 +109,8 @@ Modelence's client library works in React Native. Because React Native lacks bro
 | Field | Type | Description |
 |-------|------|-------------|
 | `baseUrl` | `string` | Absolute URL of your Modelence server, e.g. `https://myapp.com`. All API and WebSocket connections are made relative to this URL. |
-| `getAuthToken` | `() => string \| undefined` | Returns the stored auth token. Called before every request. |
-| `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token. Called after login, signup, and logout. |
+| `getAuthToken` | `() => string \| undefined` | Returns the stored auth token synchronously. Called before every request — must not return a `Promise`. |
+| `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token synchronously. Called after login and logout. Async side-effects (e.g. writing to `AsyncStorage`) are fine as long as the function itself is not `async`. |
 | `getClientInfo` | `() => ClientInfo` | Returns device screen dimensions and pixel ratio. Used for telemetry. |
 | `openUrl` | `(url: string) => void` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. |
 

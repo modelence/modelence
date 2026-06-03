@@ -71,10 +71,17 @@ export async function signupWithPassword(options: {
  */
 export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginWithPassword', {
-    email,
-    password,
-  });
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithPassword',
+    {
+      email,
+      password,
+    }
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }
