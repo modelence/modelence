@@ -18,7 +18,8 @@
             "pages": [
               "index",
               "quickstart",
-              "setup"
+              "setup",
+              "react-native"
             ]
           },
           {
@@ -181,6 +182,7 @@
                     "group": "Functions",
                     "pages": [
                       "api-reference/modelence/client/functions/callMethod",
+                      "api-reference/modelence/client/functions/configureClient",
                       "api-reference/modelence/client/functions/connectModelenceQueryClient",
                       "api-reference/modelence/client/functions/createClientModule",
                       "api-reference/modelence/client/functions/createQueryKey",
@@ -224,6 +226,7 @@
                     "group": "Type Aliases",
                     "pages": [
                       "api-reference/modelence/client/type-aliases/CallMethodOptions",
+                      "api-reference/modelence/client/type-aliases/ClientConfig",
                       "api-reference/modelence/client/type-aliases/MethodArgs",
                       "api-reference/modelence/client/type-aliases/ModelenceQueryKey",
                       "api-reference/modelence/client/type-aliases/UserInfo"
