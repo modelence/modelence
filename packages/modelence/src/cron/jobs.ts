@@ -71,6 +71,16 @@ export async function registerNewCronJobs() {
   if (aliasList.length === 0) {
     return;
   }
+
+  const hasLock = await acquireLock('cron-registration', {
+    lockDuration: time.seconds(10),
+    successfulLockCacheDuration: time.seconds(5),
+    failedLockCacheDuration: time.seconds(2),
+  });
+  if (!hasLock) {
+    return;
+  }
+
   const aliasSelector = { alias: { $in: aliasList } };
   const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
   const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));

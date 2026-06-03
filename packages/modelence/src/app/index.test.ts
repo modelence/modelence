@@ -39,6 +39,7 @@ const mockLoadRemoteConfigs = vi.fn();
 const mockRunMigrations = vi.fn();
 const mockStartMigrations = vi.fn();
 const mockStartCronJobs = vi.fn<() => Promise<void>>();
+const mockRegisterNewCronJobs = vi.fn<() => Promise<void>>();
 const mockDefineCronJob = vi.fn();
 const mockGetCronJobsMetadata = vi.fn();
 const mockCreateQuery = vi.fn();
@@ -164,6 +165,7 @@ vi.doMock('../cron/jobs', () => ({
   defineCronJob: mockDefineCronJob,
   getCronJobsMetadata: mockGetCronJobsMetadata,
   startCronJobs: mockStartCronJobs,
+  registerNewCronJobs: mockRegisterNewCronJobs,
 }));
 
 vi.doMock('../methods', () => ({
@@ -292,6 +294,7 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
+    mockRegisterNewCronJobs.mockResolvedValue(undefined);
     // Default resolveStores: each store is its own effective store
     mockResolveStores.mockImplementation((stores: unknown[]) => {
       const unique = [...new Set(stores)] as MinimalStore[];
