@@ -57,6 +57,36 @@ export function defineCronJob(
   };
 }
 
+/**
+ * Registers newly defined cron jobs in the database (If MongoDB Client Connected).
+ *
+ * This function initializes the database registry for all cron jobs defined
+ * in the application. It compares the application's cron job definitions against
+ * the database records and inserts only those that haven't been registered yet.
+ * This prevents duplicate entries and maintains an audit trail of when each
+ * cron job was first scheduled.
+ */
+export async function registerNewCronJobs() {
+  const aliasList = Object.keys(cronJobs);
+  if (aliasList.length === 0) {
+    return;
+  }
+  const aliasSelector = { alias: { $in: aliasList } };
+  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+
+  // Skips already added cron jobs and adds only new ones
+  const insertItems = Object.values(cronJobs)
+    .filter((job) => !existingCronJobAliases.has(job.alias))
+    .map((job) => ({
+      alias: job.alias,
+      lastStartDate: new Date(job.state.scheduledRunTs || Date.now()),
+    }));
+  if (insertItems.length > 0) {
+    await cronJobsCollection.insertMany(insertItems);
+  }
+}
+
 export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');

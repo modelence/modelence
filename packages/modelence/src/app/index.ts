@@ -13,7 +13,7 @@ import { getLocalConfigs } from '../config/local';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
-import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
+import cronModule, { defineCronJob, registerNewCronJobs, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { type IndexReconcileMode, Store } from '../data/store';
 import { resolveStores } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -174,6 +174,7 @@ export async function startApp({
     const allStoresToInit = [...new Set([...storesToInit, ...effectiveStores])];
     initStores(allStoresToInit);
     await createIndexesAndMigrationsWithLock(effectiveStores, migrations);
+    await registerNewCronJobs();
   } else {
     startMigrations(migrations);
   }
