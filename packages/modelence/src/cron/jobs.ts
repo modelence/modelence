@@ -73,6 +73,7 @@ export async function registerNewCronJobs() {
   }
 
   const hasLock = await acquireLock('cron-registration', {
+    lockDuration: time.seconds(10),
     successfulLockCacheDuration: time.seconds(5),
     failedLockCacheDuration: time.seconds(2),
   });
