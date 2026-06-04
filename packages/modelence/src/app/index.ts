@@ -98,7 +98,7 @@ export async function startApp({
     });
 
   for (const module of modules) {
-    if (module.name.startsWith('_system.')) {
+    if (module.name.toLowerCase().startsWith('_system.')) {
       throw new Error(
         `Invalid module name: '${module.name}'\n\n` +
           `The '_system.' prefix is reserved for internal use and cannot be used in user-defined modules.\n\n` +
