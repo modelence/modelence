@@ -199,12 +199,23 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
   const baseUrl = config?.baseUrl ?? '';
 
   if (config?.openUrl) {
-    // React Native: pass authToken as a URL param; server embeds userId in state cookie.
+    // React Native: exchange authToken for a single-use nonce via an authenticated
+    // request, then put the nonce in the URL. A crafted external link can't work
+    // because the nonce is bound to this session and consumed on first use.
     const token = getAuthToken();
     if (!token) {
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
-    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&authToken=${encodeURIComponent(token)}`;
+    const nonceResponse = await fetch(`${baseUrl}/api/_internal/auth/issue-link-nonce`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authToken: token }),
+    });
+    if (!nonceResponse.ok) {
+      throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+    }
+    const { nonce } = await nonceResponse.json();
+    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}`;
     config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).

@@ -16,7 +16,7 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
-  resolveUserIdFromAuthTokenParam,
+  resolveUserIdFromLinkNonce,
   sendOAuthError,
 } from './oauth-common';
 
@@ -159,12 +159,12 @@ function getRouter(): ExpressRouter {
 
       const mode = req.query.mode === 'link' ? 'link' : 'login';
 
-      // React Native: resolve userId from authToken param and embed in state cookie.
+      // React Native: consume single-use nonce and embed resolved userId in state cookie.
       let linkedUserId: string | null = null;
-      if (mode === 'link' && req.query.authToken) {
-        linkedUserId = await resolveUserIdFromAuthTokenParam(req.query.authToken as string);
+      if (mode === 'link' && req.query.linkNonce) {
+        linkedUserId = await resolveUserIdFromLinkNonce(req.query.linkNonce as string);
         if (!linkedUserId) {
-          sendOAuthError(res, 401, 'Invalid or expired auth token for OAuth linking.');
+          sendOAuthError(res, 401, 'Invalid or expired link nonce for OAuth linking.');
           return;
         }
       }

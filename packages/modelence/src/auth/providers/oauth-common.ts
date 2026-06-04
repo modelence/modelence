@@ -1,7 +1,7 @@
 import { type Request, type Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
-import { createSession, setAuthTokenCookie, sessionsCollection } from '@/auth/session';
+import { createSession, setAuthTokenCookie, consumeLinkNonce } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
@@ -18,14 +18,12 @@ export interface OAuthUserData {
   lastName?: string;
   avatarUrl?: string;
 }
-/** Looks up a session by authToken query param; returns stringified userId or null. */
-export async function resolveUserIdFromAuthTokenParam(
-  authToken: string | undefined
+/** Consumes a single-use link nonce; returns the bound userId string or null. */
+export async function resolveUserIdFromLinkNonce(
+  nonce: string | undefined
 ): Promise<string | null> {
-  if (!authToken || typeof authToken !== 'string') return null;
-  const session = await sessionsCollection.findOne({ authToken });
-  if (!session?.userId) return null;
-  return String(session.userId);
+  if (!nonce || typeof nonce !== 'string') return null;
+  return consumeLinkNonce(nonce);
 }
 
 /*

@@ -6,9 +6,9 @@ export interface ClientConfig {
   setAuthToken: (token: string | null) => void;
   getClientInfo: () => ClientInfo;
   /**
-   * Opens an external URL (used for OAuth redirects). Defaults to
-   * `window.location.href` assignment when not provided. React Native apps
-   * should pass `(url) => Linking.openURL(url)`.
+   * Opens a URL for OAuth redirects. React Native must use
+   * `(url) => Linking.openURL(url)` — WebView is not supported.
+   * Defaults to `window.location.href` when not provided.
    */
   openUrl?: (url: string) => void;
 }
@@ -25,6 +25,7 @@ let config: ClientConfig | null = null;
  * @example
  * ```ts
  * import { configureClient } from 'modelence/client';
+ * import { Linking } from 'react-native';
  *
  * let authToken: string | undefined;
  *
@@ -40,6 +41,7 @@ let config: ClientConfig | null = null;
  *     pixelRatio: PixelRatio.get(),
  *     orientation: null,
  *   }),
+ *   openUrl: (url) => Linking.openURL(url),
  * });
  * ```
  */
