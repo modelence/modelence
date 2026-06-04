@@ -16,6 +16,7 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
+  resolveUserIdFromAuthTokenParam,
   sendOAuthError,
 } from './oauth-common';
 
@@ -117,8 +118,9 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
-  const mode = validateOAuthStateAndGetMode(req, res, 'authStateGithub');
-  if (!mode) return;
+  const stateResult = validateOAuthStateAndGetMode(req, res, 'authStateGithub');
+  if (!stateResult) return;
+  const { mode, linkedUserId } = stateResult;
 
   const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
   const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
@@ -167,7 +169,7 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     };
 
     if (mode === 'link') {
-      await handleOAuthProviderLink(req, res, userData);
+      await handleOAuthProviderLink(req, res, userData, linkedUserId);
     } else {
       await handleOAuthUserAuthentication(req, res, userData);
     }
@@ -201,7 +203,7 @@ function getRouter(): ExpressRouter {
   githubAuthRouter.get(
     '/api/_internal/auth/github',
     checkGitHubEnabled,
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
       const redirectUri = getRedirectUri('github');
       const githubScopes = getConfig('_system.user.auth.github.scopes');
@@ -216,7 +218,20 @@ function getRouter(): ExpressRouter {
 
       const mode = req.query.mode === 'link' ? 'link' : 'login';
 
-      res.cookie('authStateGithub', `${state}:${mode}`, {
+      // React Native linking: resolve the userId from the authToken query param
+      // so it can be embedded in the state cookie (the system browser won't carry
+      // the app's session cookie).
+      let linkedUserId: string | null = null;
+      if (mode === 'link' && req.query.authToken) {
+        linkedUserId = await resolveUserIdFromAuthTokenParam(req.query.authToken as string);
+        if (!linkedUserId) {
+          sendOAuthError(res, 401, 'Invalid or expired auth token for OAuth linking.');
+          return;
+        }
+      }
+
+      const stateValue = linkedUserId ? `${state}:${mode}:${linkedUserId}` : `${state}:${mode}`;
+      res.cookie('authStateGithub', stateValue, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

@@ -1,7 +1,7 @@
 import { type Request, type Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
-import { createSession, setAuthTokenCookie } from '@/auth/session';
+import { createSession, setAuthTokenCookie, sessionsCollection } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
@@ -18,6 +18,22 @@ export interface OAuthUserData {
   lastName?: string;
   avatarUrl?: string;
 }
+/**
+ * Resolves the userId for an authToken passed as a URL query parameter.
+ * Used by the React Native linking flow where the app cannot share an httpOnly
+ * cookie with the system browser.
+ * Returns the stringified ObjectId on success, or null if the token is missing
+ * / invalid / not associated with an authenticated user.
+ */
+export async function resolveUserIdFromAuthTokenParam(
+  authToken: string | undefined
+): Promise<string | null> {
+  if (!authToken || typeof authToken !== 'string') return null;
+  const session = await sessionsCollection.findOne({ authToken });
+  if (!session?.userId) return null;
+  return String(session.userId);
+}
+
 /*
  * Sends OAuth error response.
  * If `errorComponent` is configured, renders HTML.
@@ -371,15 +387,21 @@ function safelyCallHook(hook?: () => void) {
   }
 }
 
+export interface OAuthStateResult {
+  mode: string;
+  /** Present only when the React Native authToken-in-URL linking flow is used. */
+  linkedUserId?: string;
+}
+
 export function validateOAuthStateAndGetMode(
   req: Request,
   res: Response,
   stateCookieName: string
-): string | null {
+): OAuthStateResult | null {
   const state = req.query.state as string;
   const storedState = req.cookies[stateCookieName];
 
-  const [storedStateValue, storedMode] = (storedState || '').split(':');
+  const [storedStateValue, storedMode, storedUserId] = (storedState || '').split(':');
 
   if (!state || !storedState || state !== storedStateValue) {
     sendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
@@ -387,24 +409,40 @@ export function validateOAuthStateAndGetMode(
   }
 
   res.clearCookie(stateCookieName);
-  return storedMode || 'login';
+  return {
+    mode: storedMode || 'login',
+    ...(storedUserId ? { linkedUserId: storedUserId } : {}),
+  };
 }
 
 export async function handleOAuthProviderLink(
   req: Request,
   res: Response,
-  userData: OAuthUserData
+  userData: OAuthUserData,
+  linkedUserId?: string
 ): Promise<void> {
   const authConfig = getAuthConfig();
   const { session, connectionInfo } = await getCallContext(req, res);
 
-  if (!session?.userId) {
+  // In the React Native flow, the userId is carried in the state cookie rather
+  // than the browser session cookie (which doesn't exist in that context).
+  let resolvedUserId: ObjectId | null = session?.userId ?? null;
+  if (!resolvedUserId && linkedUserId) {
+    if (!ObjectId.isValid(linkedUserId)) {
+      clearOAuthLinkCookie(res);
+      sendOAuthError(res, 400, 'Invalid OAuth linking state.');
+      return;
+    }
+    resolvedUserId = new ObjectId(linkedUserId);
+  }
+
+  if (!resolvedUserId) {
     clearOAuthLinkCookie(res);
     sendOAuthError(res, 401, 'You must be signed in to link a provider.');
     return;
   }
 
-  const userId = session.userId;
+  const userId = resolvedUserId;
 
   try {
     // Atomically attach the provider to the current user while preventing

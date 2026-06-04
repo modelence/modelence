@@ -198,24 +198,33 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
   const config = getClientConfig();
   const baseUrl = config?.baseUrl ?? '';
 
-  const token = getAuthToken();
-  if (token) {
-    const response = await fetch(`${baseUrl}/api/_internal/auth/set-link-cookie`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ authToken: token }),
-      credentials: 'include',
-    });
-    if (!response.ok) {
+  if (config?.openUrl) {
+    // React Native: the system browser has no shared cookie jar with the in-app
+    // fetch layer, so we pass the auth token as a URL param instead. The server
+    // validates it during OAuth initiation (which runs in the browser) and
+    // embeds the resolved userId in its state cookie.
+    const token = getAuthToken();
+    if (!token) {
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
-  }
-
-  const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
-  if (config?.openUrl) {
+    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&authToken=${encodeURIComponent(token)}`;
     config.openUrl(url);
   } else {
-    window.location.href = url;
+    // Browser: set an httpOnly cookie via a same-origin fetch so the token is
+    // never exposed to the OAuth provider as a redirect parameter.
+    const token = getAuthToken();
+    if (token) {
+      const response = await fetch(`${baseUrl}/api/_internal/auth/set-link-cookie`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken: token }),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+      }
+    }
+    window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
   }
 }
 /**

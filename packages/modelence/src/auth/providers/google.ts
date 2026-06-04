@@ -16,6 +16,7 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
+  resolveUserIdFromAuthTokenParam,
   sendOAuthError,
 } from './oauth-common';
 
@@ -86,8 +87,9 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
     return;
   }
 
-  const mode = validateOAuthStateAndGetMode(req, res, 'authStateGoogle');
-  if (!mode) return;
+  const stateResult = validateOAuthStateAndGetMode(req, res, 'authStateGoogle');
+  if (!stateResult) return;
+  const { mode, linkedUserId } = stateResult;
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -115,7 +117,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       avatarUrl: googleUser.picture || undefined,
     };
     if (mode === 'link') {
-      await handleOAuthProviderLink(req, res, userData);
+      await handleOAuthProviderLink(req, res, userData, linkedUserId);
     } else {
       await handleOAuthUserAuthentication(req, res, userData);
     }
@@ -149,7 +151,7 @@ function getRouter(): ExpressRouter {
   googleAuthRouter.get(
     '/api/_internal/auth/google',
     checkGoogleEnabled,
-    (req: Request, res: Response) => {
+    async (req: Request, res: Response) => {
       const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
       const redirectUri = getRedirectUri('google');
 
@@ -157,7 +159,20 @@ function getRouter(): ExpressRouter {
 
       const mode = req.query.mode === 'link' ? 'link' : 'login';
 
-      res.cookie('authStateGoogle', `${state}:${mode}`, {
+      // React Native linking: resolve the userId from the authToken query param
+      // so it can be embedded in the state cookie (the system browser won't carry
+      // the app's session cookie).
+      let linkedUserId: string | null = null;
+      if (mode === 'link' && req.query.authToken) {
+        linkedUserId = await resolveUserIdFromAuthTokenParam(req.query.authToken as string);
+        if (!linkedUserId) {
+          sendOAuthError(res, 401, 'Invalid or expired auth token for OAuth linking.');
+          return;
+        }
+      }
+
+      const stateValue = linkedUserId ? `${state}:${mode}:${linkedUserId}` : `${state}:${mode}`;
+      res.cookie('authStateGoogle', stateValue, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
