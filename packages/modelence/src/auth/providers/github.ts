@@ -218,9 +218,7 @@ function getRouter(): ExpressRouter {
 
       const mode = req.query.mode === 'link' ? 'link' : 'login';
 
-      // React Native linking: resolve the userId from the authToken query param
-      // so it can be embedded in the state cookie (the system browser won't carry
-      // the app's session cookie).
+      // React Native: resolve userId from authToken param and embed in state cookie.
       let linkedUserId: string | null = null;
       if (mode === 'link' && req.query.authToken) {
         linkedUserId = await resolveUserIdFromAuthTokenParam(req.query.authToken as string);

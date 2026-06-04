@@ -18,13 +18,7 @@ export interface OAuthUserData {
   lastName?: string;
   avatarUrl?: string;
 }
-/**
- * Resolves the userId for an authToken passed as a URL query parameter.
- * Used by the React Native linking flow where the app cannot share an httpOnly
- * cookie with the system browser.
- * Returns the stringified ObjectId on success, or null if the token is missing
- * / invalid / not associated with an authenticated user.
- */
+/** Looks up a session by authToken query param; returns stringified userId or null. */
 export async function resolveUserIdFromAuthTokenParam(
   authToken: string | undefined
 ): Promise<string | null> {
@@ -389,7 +383,7 @@ function safelyCallHook(hook?: () => void) {
 
 export interface OAuthStateResult {
   mode: string;
-  /** Present only when the React Native authToken-in-URL linking flow is used. */
+  /** Set only in the React Native linking flow. */
   linkedUserId?: string;
 }
 
@@ -424,16 +418,18 @@ export async function handleOAuthProviderLink(
   const authConfig = getAuthConfig();
   const { session, connectionInfo } = await getCallContext(req, res);
 
-  // In the React Native flow, the userId is carried in the state cookie rather
-  // than the browser session cookie (which doesn't exist in that context).
-  let resolvedUserId: ObjectId | null = session?.userId ?? null;
-  if (!resolvedUserId && linkedUserId) {
+  // React Native: linkedUserId (from state cookie) takes precedence over the
+  // browser session, which may belong to a different user.
+  let resolvedUserId: ObjectId | null = null;
+  if (linkedUserId) {
     if (!ObjectId.isValid(linkedUserId)) {
       clearOAuthLinkCookie(res);
       sendOAuthError(res, 400, 'Invalid OAuth linking state.');
       return;
     }
     resolvedUserId = new ObjectId(linkedUserId);
+  } else {
+    resolvedUserId = session?.userId ?? null;
   }
 
   if (!resolvedUserId) {
