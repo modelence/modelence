@@ -1,0 +1,185 @@
+---
+title: 'React Native'
+icon: 'mobile'
+---
+
+<Note>React Native support is available from **modelence v0.19.0**.</Note>
+
+Modelence's client library works in React Native. Because React Native lacks browser APIs like `localStorage` and `window`, you configure the client with `configureClient` so the SDK knows how to store auth tokens, read device dimensions, and resolve server URLs.
+
+## Setup
+
+<Steps>
+  <Step title="Install dependencies">
+    Add Modelence to your React Native project:
+
+    ```bash
+    npm install modelence
+    ```
+
+    You'll also need `@react-native-async-storage/async-storage` (or any other persistent key-value store) to persist the auth token across app restarts.
+
+    ```bash
+    npm install @react-native-async-storage/async-storage
+    ```
+  </Step>
+
+  <Step title="Configure the client">
+    Call `configureClient` once, before your app mounts — for example at the top of your entry file (`App.tsx` or `index.ts`).
+
+    ```typescript
+    import { configureClient } from 'modelence/client';
+    import AsyncStorage from '@react-native-async-storage/async-storage';
+    import { Dimensions, Linking, PixelRatio } from 'react-native';
+
+    const AUTH_TOKEN_KEY = 'modelence_auth_token';
+
+    // getAuthToken is called synchronously on every request, so we keep the
+    // token in memory and mirror writes to AsyncStorage for persistence across
+    // app restarts. Load the persisted value before mounting your app (see
+    // the loadAuthToken helper below).
+    let authToken: string | undefined;
+
+    export async function loadAuthToken() {
+      authToken = (await AsyncStorage.getItem(AUTH_TOKEN_KEY)) ?? undefined;
+    }
+
+    configureClient({
+      baseUrl: 'https://your-modelence-app.com',
+
+      getAuthToken: () => authToken,
+
+      setAuthToken: (token) => {
+        authToken = token ?? undefined;
+        if (token === null) {
+          AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        } else {
+          AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+        }
+      },
+
+      getClientInfo: () => {
+        const screen = Dimensions.get('screen');
+        const window = Dimensions.get('window');
+        return {
+          screenWidth: screen.width,
+          screenHeight: screen.height,
+          windowWidth: window.width,
+          windowHeight: window.height,
+          pixelRatio: PixelRatio.get(),
+          orientation: screen.width > screen.height ? 'landscape' : 'portrait',
+        };
+      },
+
+      // Used for OAuth redirects — opens the URL in the device browser
+      openUrl: (url) => Linking.openURL(url),
+    });
+    ```
+  </Step>
+
+  <Step title="Wrap your app with AppProvider">
+    Load the persisted auth token before mounting your app, then wrap your root component with `AppProvider`:
+
+    ```tsx
+    import { AppProvider } from 'modelence/client';
+    import { loadAuthToken } from './modelenceConfig'; // the file from the previous step
+    import { useEffect, useState } from 'react';
+
+    export default function App() {
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        loadAuthToken().then(() => setReady(true));
+      }, []);
+
+      if (!ready) return null;
+
+      return (
+        <AppProvider>
+          <RootNavigator />
+        </AppProvider>
+      );
+    }
+    ```
+  </Step>
+</Steps>
+
+## ClientConfig reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `baseUrl` | `string` | Absolute URL of your Modelence server, e.g. `https://myapp.com`. All API and WebSocket connections are made relative to this URL. |
+| `getAuthToken` | `() => string \| undefined` | Returns the stored auth token synchronously. Called before every request — must not return a `Promise`. |
+| `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token synchronously. Called after login and logout. Async side-effects (e.g. writing to `AsyncStorage`) are fine as long as the function itself is not `async`. |
+| `getClientInfo` | `() => ClientInfo` | Returns device screen dimensions and pixel ratio. Used for telemetry. |
+| `openUrl` | `(url: string) => void` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. |
+
+## Using authentication
+
+Auth functions work the same way as on the web:
+
+```typescript
+import { loginWithPassword, logout, useSession } from 'modelence/client';
+
+// Login
+await loginWithPassword({ email: 'user@example.com', password: 'secret' });
+
+// Access current user
+function ProfileScreen() {
+  const { user } = useSession();
+  if (!user) return <Text>Not logged in</Text>;
+  return <Text>Hello, {user.handle}</Text>;
+}
+
+// Logout
+await logout(); // clears the stored token via setAuthToken(null)
+```
+
+## Calling methods
+
+`callMethod` works without any changes — it automatically prepends `baseUrl` to every request:
+
+```typescript
+import { callMethod } from 'modelence/client';
+
+const result = await callMethod('myModule.getData', { id: '123' });
+```
+
+## Live queries and WebSockets
+
+Live queries connect over WebSocket to `baseUrl`. No additional configuration is needed beyond `configureClient`:
+
+```typescript
+import { useQuery } from 'modelence/client';
+import { myModule } from './modules/myModule';
+
+function ItemList() {
+  const items = useQuery(myModule.queries.listItems);
+  return items?.map(item => <Text key={item._id}>{item.name}</Text>);
+}
+```
+
+## OAuth sign-in
+
+For Google or GitHub sign-in, Modelence opens an OAuth URL in the browser. On React Native, provide `openUrl` in `configureClient` so the SDK can hand off to the device browser via `Linking.openURL`:
+
+```typescript
+import { linkOAuthProvider } from 'modelence/client';
+import { Linking } from 'react-native';
+
+configureClient({
+  // ...
+  openUrl: (url) => Linking.openURL(url),
+});
+
+// Trigger OAuth linking
+await linkOAuthProvider({ provider: 'google' });
+```
+
+After the OAuth flow completes, the provider redirects back to your app via a deep link. Configure your deep link scheme to call `loginWithOAuth` with the returned token.
+
+## Notes
+
+- **No `AppProvider` required for auth-only usage.** You can call `loginWithPassword`, `callMethod`, etc. without `AppProvider`. The provider is needed only if you use React hooks like `useSession` or `useQuery`.
+- **Token persistence is your responsibility.** Modelence calls `setAuthToken` and `getAuthToken` but does not bundle a storage library. Use `AsyncStorage`, `expo-secure-store`, or any store that fits your security requirements.
+- **`orientation` in `ClientInfo` is optional.** Pass `null` if your app does not track orientation.

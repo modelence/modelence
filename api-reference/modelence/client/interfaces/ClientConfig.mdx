@@ -1,0 +1,18 @@
+---
+sidebar_position: 1
+title: ClientConfig
+---
+
+[API Reference](/api-reference/modelence/client/interfaces/../../../index) / [modelence](/api-reference/modelence/client/interfaces/../../index) / [client](/api-reference/modelence/client/interfaces/../index) / ClientConfig
+
+Defined in: [packages/modelence/src/client/clientConfig.ts:3](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L3)
+
+## Properties
+
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="baseurl"></a> `baseUrl` | `string` | - | [packages/modelence/src/client/clientConfig.ts:4](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L4) |
+| <a id="getauthtoken"></a> `getAuthToken` | () => `undefined` \| `string` | - | [packages/modelence/src/client/clientConfig.ts:5](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L5) |
+| <a id="getclientinfo"></a> `getClientInfo` | () => `ClientInfo` | - | [packages/modelence/src/client/clientConfig.ts:7](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L7) |
+| <a id="openurl"></a> `openUrl?` | (`url`) => `void` | Opens a URL for OAuth redirects. React Native must use `(url) => Linking.openURL(url)` — WebView is not supported. Defaults to `window.location.href` when not provided. | [packages/modelence/src/client/clientConfig.ts:13](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L13) |
+| <a id="setauthtoken"></a> `setAuthToken` | (`token`) => `void` | - | [packages/modelence/src/client/clientConfig.ts:6](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L6) |

@@ -1,0 +1,50 @@
+---
+sidebar_position: 1
+title: configureClient
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / configureClient
+
+> **configureClient**(`userConfig`): `void`
+
+Defined in: [packages/modelence/src/client/clientConfig.ts:48](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/client/clientConfig.ts#L48)
+
+Configure the Modelence client for non-browser environments like React Native.
+
+When configured, the client uses the provided functions for auth-token
+storage, client-info collection, and URL resolution instead of the
+default browser APIs (localStorage, window.screen, relative URLs).
+
+## Example
+
+```ts
+import { configureClient } from 'modelence/client';
+import { Linking } from 'react-native';
+
+let authToken: string | undefined;
+
+configureClient({
+  baseUrl: 'https://myapp.com',
+  getAuthToken: () => authToken,
+  setAuthToken: (token) => { authToken = token ?? undefined; },
+  getClientInfo: () => ({
+    screenWidth: Dimensions.get('screen').width,
+    screenHeight: Dimensions.get('screen').height,
+    windowWidth: Dimensions.get('window').width,
+    windowHeight: Dimensions.get('window').height,
+    pixelRatio: PixelRatio.get(),
+    orientation: null,
+  }),
+  openUrl: (url) => Linking.openURL(url),
+});
+```
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userConfig` | [`ClientConfig`](/api-reference/modelence/client/functions/../interfaces/ClientConfig) |
+
+## Returns
+
+`void`

@@ -7,7 +7,7 @@ title: AuthRateLimitsConfig
 
 > **AuthRateLimitsConfig** = `object`
 
-Defined in: [packages/modelence/src/app/authConfig.ts:72](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L72)
+Defined in: [packages/modelence/src/app/authConfig.ts:72](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L72)
 
 Per-action rate limit overrides for authentication endpoints.
 
@@ -54,8 +54,8 @@ startApp({
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="passwordreset"></a> `passwordReset?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Rate limits for password reset requests. | [packages/modelence/src/app/authConfig.ts:82](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L82) |
-| <a id="signin"></a> `signin?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for login attempts. | [packages/modelence/src/app/authConfig.ts:78](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L78) |
-| <a id="signup"></a> `signup?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for the signup endpoint (successful signups only). | [packages/modelence/src/app/authConfig.ts:74](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L74) |
-| <a id="signupattempt"></a> `signupAttempt?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for signup attempts (checked before duplicate detection). | [packages/modelence/src/app/authConfig.ts:76](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L76) |
-| <a id="verification"></a> `verification?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-user limits for email verification requests. | [packages/modelence/src/app/authConfig.ts:80](https://github.com/modelence/modelence/blob/2a354e51799b81cba8e8a3c8728b1ddaa35802f4/packages/modelence/src/app/authConfig.ts#L80) |
+| <a id="passwordreset"></a> `passwordReset?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Rate limits for password reset requests. | [packages/modelence/src/app/authConfig.ts:82](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L82) |
+| <a id="signin"></a> `signin?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for login attempts. | [packages/modelence/src/app/authConfig.ts:78](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L78) |
+| <a id="signup"></a> `signup?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for the signup endpoint (successful signups only). | [packages/modelence/src/app/authConfig.ts:74](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L74) |
+| <a id="signupattempt"></a> `signupAttempt?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-IP limits for signup attempts (checked before duplicate detection). | [packages/modelence/src/app/authConfig.ts:76](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L76) |
+| <a id="verification"></a> `verification?` | [`AuthRateLimitOverride`](/api-reference/modelence/server/type-aliases/AuthRateLimitOverride)[] | Per-user limits for email verification requests. | [packages/modelence/src/app/authConfig.ts:80](https://github.com/modelence/modelence/blob/e995ac6cd8f2fd3e97eaceaa80c7daa31ef125f2/packages/modelence/src/app/authConfig.ts#L80) |
