@@ -18,7 +18,8 @@
             "pages": [
               "index",
               "quickstart",
-              "setup"
+              "setup",
+              "react-native"
             ]
           },
           {
@@ -177,9 +178,16 @@
                     ]
                   },
                   {
+                    "group": "Interfaces",
+                    "pages": [
+                      "api-reference/modelence/client/interfaces/ClientConfig"
+                    ]
+                  },
+                  {
                     "group": "Functions",
                     "pages": [
                       "api-reference/modelence/client/functions/callMethod",
+                      "api-reference/modelence/client/functions/configureClient",
                       "api-reference/modelence/client/functions/createClientModule",
                       "api-reference/modelence/client/functions/deleteFile",
                       "api-reference/modelence/client/functions/downloadFile",

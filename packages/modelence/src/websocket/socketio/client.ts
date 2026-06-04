@@ -2,6 +2,7 @@ import io, { Socket } from 'socket.io-client';
 import { WebsocketClientProvider } from '../types';
 import { ClientChannel } from '../clientChannel';
 import { getAuthToken, getClientInfo } from '@/auth/client';
+import { getClientConfig } from '@/client/clientConfig';
 import { reviveResponseTypes } from '@/methods/serialize';
 
 let socketClient: Socket | null = null;
@@ -35,7 +36,8 @@ function resubscribeAll() {
 }
 
 function init(props: { channels?: ClientChannel<unknown>[] }) {
-  socketClient = io('/', {
+  const baseUrl = getClientConfig()?.baseUrl ?? '/';
+  socketClient = io(baseUrl, {
     transports: ['websocket'],
     auth: {
       token: getAuthToken(),

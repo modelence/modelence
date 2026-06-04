@@ -73,6 +73,7 @@ export async function handleLoginWithPassword(
 
     return {
       user: serializeUserForClient(userDoc),
+      session: { authToken: session.authToken },
     };
   } catch (error) {
     if (error instanceof Error) {

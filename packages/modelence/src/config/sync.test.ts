@@ -103,7 +103,7 @@ describe('config/sync', () => {
     expect(intervalCallback).toBeTruthy();
     const firstRun = intervalCallback?.();
     await Promise.resolve();
-    intervalCallback?.();
+    void intervalCallback?.();
     expect(mockFetchConfigs).toHaveBeenCalledTimes(1);
 
     if (fetchResolve) {

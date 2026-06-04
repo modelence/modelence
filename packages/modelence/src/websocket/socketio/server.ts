@@ -96,7 +96,7 @@ export async function init({
       for (const channel of channels) {
         if (channel.category === category) {
           if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
-            socket.join(channelName);
+            void socket.join(channelName);
             authorized = true;
             socket.emit('joinedChannel', channelName);
           }
@@ -110,7 +110,7 @@ export async function init({
     });
 
     socket.on('leaveChannel', (channelName: string) => {
-      socket.leave(channelName);
+      void socket.leave(channelName);
       console.log(`User ${socket.id} left channel ${channelName}`);
       socket.emit('leftChannel', channelName);
     });

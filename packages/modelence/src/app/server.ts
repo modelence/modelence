@@ -20,6 +20,7 @@ import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
+import { issueLinkNonce } from '@/auth/session';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -100,7 +101,7 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
-  // Set httpOnly cookie for OAuth linking flow
+  // Browser OAuth linking: set httpOnly cookie so the authToken never travels in a URL.
   app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
     const { session } = await getCallContext(req, res);
 
@@ -118,6 +119,19 @@ export async function startServer(
     });
 
     res.json({ ok: true });
+  });
+
+  // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
+  app.post('/api/_internal/auth/issue-link-nonce', async (req: Request, res: Response) => {
+    const { session } = await getCallContext(req, res);
+
+    if (!session?.userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const nonce = await issueLinkNonce(String(session.userId));
+    res.json({ nonce });
   });
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
@@ -162,7 +176,7 @@ export async function startServer(
 
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
-    websocketProvider.init({
+    void websocketProvider.init({
       httpServer,
       channels,
     });

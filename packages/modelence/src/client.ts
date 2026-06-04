@@ -2,6 +2,7 @@ import React from 'react';
 
 import { AppProvider as OriginalAppProvider } from './client/AppProvider';
 
+export { configureClient, type ClientConfig } from './client/clientConfig';
 export { getConfig } from './config/client';
 export { createClientModule } from './client/module';
 export type { ValueType } from './config/types';

@@ -9,6 +9,7 @@
 
 import { getAuthToken, getClientInfo } from '@/auth/client';
 import { handleError } from '@/client/errorHandler';
+import { getClientConfig } from '@/client/clientConfig';
 import { reviveResponseTypes } from '@/methods/serialize';
 
 export class MethodError extends Error {
@@ -63,7 +64,8 @@ export async function callMethod<T = unknown>(
   args = args ?? {};
   options = options ?? {};
   try {
-    return await call<T>(`/api/_internal/method/${methodName}`, args);
+    const baseUrl = getClientConfig()?.baseUrl ?? '';
+    return await call<T>(`${baseUrl}/api/_internal/method/${methodName}`, args);
   } catch (error) {
     const handler = options.errorHandler ?? handleError;
     handler(error as Error, methodName);

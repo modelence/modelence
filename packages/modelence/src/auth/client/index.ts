@@ -1,7 +1,8 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
 import { getLocalStorageSession } from '@/client/localStorage';
-import { ClientInfo } from '@/methods/types';
+import { getClientConfig } from '@/client/clientConfig';
+import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
 
 export type UserInfo = {
@@ -70,10 +71,17 @@ export async function signupWithPassword(options: {
  */
 export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user } = await callMethod<{ user: RawUserData }>('_system.user.loginWithPassword', {
-    email,
-    password,
-  });
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithPassword',
+    {
+      email,
+      password,
+    }
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }
@@ -143,6 +151,10 @@ export async function resendEmailVerification(options: { email: string }) {
  */
 export async function logout() {
   await callMethod('_system.user.logout');
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(null);
+  }
   setCurrentUser(null);
 }
 
@@ -183,21 +195,44 @@ export async function resetPassword(options: { token: string; password: string }
  */
 export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
   const { provider } = options;
+  const config = getClientConfig();
+  const baseUrl = config?.baseUrl ?? '';
 
-  const token = getAuthToken();
-  if (token) {
-    // Ask the server to set a secure httpOnly cookie for the OAuth linking flow
-    const response = await fetch('/api/_internal/auth/set-link-cookie', {
+  if (config?.openUrl) {
+    // React Native: exchange authToken for a single-use nonce via an authenticated
+    // request, then put the nonce in the URL. A crafted external link can't work
+    // because the nonce is bound to this session and consumed on first use.
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+    }
+    const nonceResponse = await fetch(`${baseUrl}/api/_internal/auth/issue-link-nonce`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ authToken: token }),
-      credentials: 'include',
     });
-    if (!response.ok) {
+    if (!nonceResponse.ok) {
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
+    const { nonce } = await nonceResponse.json();
+    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}`;
+    config.openUrl(url);
+  } else {
+    // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).
+    const token = getAuthToken();
+    if (token) {
+      const response = await fetch(`${baseUrl}/api/_internal/auth/set-link-cookie`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authToken: token }),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
+      }
+    }
+    window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
   }
-  window.location.href = `/api/_internal/auth/${provider}?mode=link`;
 }
 /**
  * Unlink an OAuth provider from the currently signed-in user's account.
@@ -218,10 +253,18 @@ export async function unlinkOAuthProvider(options: { provider: OAuthProvider }):
  * @returns The auth token or undefined if not authenticated.
  */
 export function getAuthToken(): string | undefined {
+  const config = getClientConfig();
+  if (config) {
+    return config.getAuthToken();
+  }
   return getLocalStorageSession()?.authToken;
 }
 
 export function getClientInfo(): ClientInfo {
+  const config = getClientConfig();
+  if (config) {
+    return config.getClientInfo();
+  }
   return {
     screenWidth: window.screen.width,
     screenHeight: window.screen.height,

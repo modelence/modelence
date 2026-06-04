@@ -127,7 +127,11 @@ describe('auth/login', () => {
         id: userId,
         handle: 'demo',
         roles: [],
+        firstName: undefined,
+        lastName: undefined,
+        avatarUrl: undefined,
       },
+      session: { authToken: 'token-1' },
     });
   });
 
