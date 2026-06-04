@@ -9,7 +9,7 @@ import type { RateLimitType } from '@/rate-limit/types';
  *
  * @example
  * ```typescript
- * import { time } from 'modelence/server';
+ * import { time } from 'modelence';
  *
  * const rule: AuthRateLimitOverride = {
  *   type: 'ip',
@@ -43,7 +43,8 @@ export type AuthRateLimitOverride = {
  *
  * @example Tighten the 15-minute signup cap; per-day default is preserved.
  * ```typescript
- * import { startApp, time } from 'modelence/server';
+ * import { startApp } from 'modelence/server';
+ * import { time } from 'modelence';
  *
  * startApp({
  *   auth: {
@@ -122,6 +123,7 @@ export type AuthOption = {
  * @example
  * ```typescript
  * import { startApp } from 'modelence/server';
+ * import { time } from 'modelence';
  *
  * startApp({
  *   auth: {
