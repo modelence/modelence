@@ -318,9 +318,7 @@ describe('app/index', () => {
       startApp({
         modules: [createTestModule({ name: '_system.evil' })],
       })
-    ).rejects.toThrow(
-      "Module name '_system.evil' is reserved. User modules must not start with '_system.'"
-    );
+    ).rejects.toThrow("Invalid module name: '_system.evil'");
   });
 
   test('loads dotenv configuration', async () => {
