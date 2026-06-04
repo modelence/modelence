@@ -313,6 +313,16 @@ describe('app/index', () => {
     expect(mockMarkAppStarted).toHaveBeenCalledTimes(1);
   });
 
+  test('throws when a user module name starts with _system.', async () => {
+    await expect(
+      startApp({
+        modules: [createTestModule({ name: '_system.evil' })],
+      })
+    ).rejects.toThrow(
+      "Module name '_system.evil' is reserved. User modules must not start with '_system.'"
+    );
+  });
+
   test('loads dotenv configuration', async () => {
     await startApp({});
 
