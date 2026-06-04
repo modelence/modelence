@@ -37,7 +37,7 @@ async function buildVite() {
 async function buildServer() {
   console.log('Building server with tsup...');
   return new Promise((resolve) => {
-    tsupBuild({
+    void tsupBuild({
       entry: [getServerPath()],
       format: 'esm',
       sourcemap: true,

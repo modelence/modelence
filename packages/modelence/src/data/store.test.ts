@@ -35,7 +35,7 @@ function assertFetchOptionTypeSafety() {
     methods: undefined,
   });
 
-  typedStore.fetch(
+  void typedStore.fetch(
     { name: 'john' },
     {
       sort: { name: 1, score: -1, 'nested.level': 1 },
@@ -44,9 +44,9 @@ function assertFetchOptionTypeSafety() {
   );
 
   // @ts-expect-error unknown top-level field should be rejected in sort
-  typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
+  void typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
   // @ts-expect-error unknown top-level field should be rejected in projection
-  typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
+  void typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
 }
 void assertFetchOptionTypeSafety;
 
@@ -81,8 +81,8 @@ function assertExtendedStoreDotNotationTypeSafety() {
   });
 
   // Dot-notation paths must be accepted in filter queries on extended stores
-  extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
-  extendedStore.fetch({
+  void extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
+  void extendedStore.fetch({
     'integrations.resend.syncStatus': 'error',
     $or: [
       { 'integrations.resend.id': { $exists: false } },
@@ -91,7 +91,7 @@ function assertExtendedStoreDotNotationTypeSafety() {
   });
 
   // Dot-notation paths must be accepted in $set updates on extended stores
-  extendedStore.updateOne('someId', {
+  void extendedStore.updateOne('someId', {
     $set: {
       'integrations.resend.id': 'abc',
       'integrations.resend.syncStatus': 'success',

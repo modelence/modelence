@@ -130,7 +130,7 @@ export async function startServer(
       return;
     }
 
-    const nonce = issueLinkNonce(String(session.userId));
+    const nonce = await issueLinkNonce(String(session.userId));
     res.json({ nonce });
   });
 
@@ -176,7 +176,7 @@ export async function startServer(
 
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
-    websocketProvider.init({
+    void websocketProvider.init({
       httpServer,
       channels,
     });

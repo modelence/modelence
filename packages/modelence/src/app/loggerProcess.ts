@@ -111,7 +111,7 @@ async function sendLogs() {
 
 function loopSendLogs() {
   setTimeout(() => {
-    sendLogs();
+    void sendLogs();
     loopSendLogs();
   }, 1000);
 }
