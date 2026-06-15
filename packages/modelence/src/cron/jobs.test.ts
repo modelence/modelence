@@ -10,10 +10,11 @@ const mockStartTransaction = vi.fn(() => ({
 const mockCaptureError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
 
-const cronStoreMocks: { fetch: Mock; updateOne: Mock; upsertOne: Mock } = {
+const cronStoreMocks: { fetch: Mock; updateOne: Mock; upsertOne: Mock; insertMany: Mock } = {
   fetch: vi.fn(),
   updateOne: vi.fn(),
   upsertOne: vi.fn(),
+  insertMany: vi.fn(),
 };
 
 function registerMocks() {
@@ -43,6 +44,7 @@ describe('cron/jobs', () => {
   let defineCronJob: typeof import('./jobs').defineCronJob;
   let startCronJobs: typeof import('./jobs').startCronJobs;
   let getCronJobsMetadata: typeof import('./jobs').getCronJobsMetadata;
+  let registerNewCronJobs: typeof import('./jobs').registerNewCronJobs;
   let intervalCallback: (() => Promise<void>) | null;
   let intervalDelay: number | undefined;
   let setIntervalMock: MockInstance;
@@ -55,6 +57,7 @@ describe('cron/jobs', () => {
       fetch: vi.fn(),
       updateOne: vi.fn().mockResolvedValue(undefined as never),
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
+      insertMany: vi.fn().mockResolvedValue(undefined as never),
     });
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
@@ -69,7 +72,8 @@ describe('cron/jobs', () => {
     }) as unknown as typeof setInterval);
     registerMocks();
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    ({ defineCronJob, startCronJobs, getCronJobsMetadata } = await import('./jobs'));
+    ({ defineCronJob, startCronJobs, getCronJobsMetadata, registerNewCronJobs } =
+      await import('./jobs'));
   });
 
   afterEach(() => {
@@ -104,79 +108,172 @@ describe('cron/jobs', () => {
   });
 
   test('startCronJobs initializes schedule, fetches last run, and sets interval', async () => {
-    const now = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(now);
-    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+      // First fetch resolves the waitForCronJobsRegistered poll, second is the lastStartDate read.
+      cronStoreMocks.fetch
+        .mockResolvedValueOnce([{ alias: 'nightlyCleanup' }] as never)
+        .mockResolvedValueOnce([] as never);
 
-    defineCronJob('nightlyCleanup', {
-      description: 'cleanup',
-      interval: mockSeconds(10),
-      handler: async () => {},
-    });
+      defineCronJob('nightlyCleanup', {
+        description: 'cleanup',
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
 
-    await startCronJobs();
+      await startCronJobs();
 
-    expect(cronStoreMocks.fetch).toHaveBeenCalledWith({
-      alias: { $in: ['nightlyCleanup'] },
-    });
-    expect(intervalDelay).toBe(mockSeconds(1));
-    expect(intervalCallback).toBeTruthy();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledWith({
+        alias: { $in: ['nightlyCleanup'] },
+      });
+      expect(intervalDelay).toBe(mockSeconds(1));
+      expect(intervalCallback).toBeTruthy();
 
-    await expect(startCronJobs()).rejects.toThrow('Cron jobs already started');
-    (Date.now as Mock).mockRestore();
+      await expect(startCronJobs()).rejects.toThrow('Cron jobs already started');
+      (Date.now as Mock).mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('startCronJobs no-ops when no cron jobs defined', async () => {
-    await startCronJobs();
-    expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
-    expect(setIntervalMock).not.toHaveBeenCalled();
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
+      expect(setIntervalMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
+
   test('cron loop executes job handler and records completion', async () => {
-    const handler = vi.fn(async () => {});
-    cronStoreMocks.fetch.mockResolvedValue([] as never);
-    defineCronJob('hourly', {
-      description: '',
-      interval: mockSeconds(10),
-      handler,
-    });
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const handler = vi.fn(async () => {});
+      // First fetch satisfies waitForCronJobsRegistered, second is the lastStartDate read.
+      cronStoreMocks.fetch
+        .mockResolvedValueOnce([{ alias: 'hourly' }] as never)
+        .mockResolvedValueOnce([] as never);
+      defineCronJob('hourly', {
+        description: '',
+        interval: mockSeconds(10),
+        handler,
+      });
 
-    await startCronJobs();
-    await intervalCallback?.();
-    await Promise.resolve();
+      await startCronJobs();
+      await intervalCallback?.();
+      await Promise.resolve();
 
-    expect(mockAcquireLock).toHaveBeenCalled();
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
-      { alias: 'hourly' },
-      {
-        $set: { lastStartDate: expect.any(Date) },
-        $setOnInsert: { alias: 'hourly' },
-      }
-    );
-    const transactionCall = (mockStartTransaction as Mock).mock.calls.slice(-1)[0];
-    expect(transactionCall).toEqual(['cron', 'cron:hourly']);
-    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
-    expect(transaction.end).toHaveBeenCalledWith('success');
+      expect(mockAcquireLock).toHaveBeenCalled();
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
+        { alias: 'hourly' },
+        {
+          $set: { lastStartDate: expect.any(Date) },
+          $setOnInsert: { alias: 'hourly' },
+        }
+      );
+      const transactionCall = (mockStartTransaction as Mock).mock.calls.slice(-1)[0];
+      expect(transactionCall).toEqual(['cron', 'cron:hourly']);
+      const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
+      expect(transaction.end).toHaveBeenCalledWith('success');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('cron loop captures errors and continues schedule', async () => {
-    const handler = vi.fn(async () => {
-      throw new Error('boom');
-    });
-    cronStoreMocks.fetch.mockResolvedValue([] as never);
-    defineCronJob('hourly', {
-      description: '',
-      interval: mockSeconds(10),
-      handler,
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const handler = vi.fn(async () => {
+        throw new Error('boom');
+      });
+      // First fetch satisfies waitForCronJobsRegistered, second is the lastStartDate read.
+      cronStoreMocks.fetch
+        .mockResolvedValueOnce([{ alias: 'hourly' }] as never)
+        .mockResolvedValueOnce([] as never);
+      defineCronJob('hourly', {
+        description: '',
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      await intervalCallback?.();
+      await Promise.resolve();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+      const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
+      expect(transaction.end).toHaveBeenCalledWith('error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe('registerNewCronJobs', () => {
+    test('no-ops when no cron jobs are defined', async () => {
+      await registerNewCronJobs();
+
+      expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
+      expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
     });
 
-    await startCronJobs();
-    await intervalCallback?.();
-    await Promise.resolve();
+    test('inserts only jobs that are not already in the DB', async () => {
+      defineCronJob('existingJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      defineCronJob('newJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([{ alias: 'existingJob' }] as never);
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
-    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
-    expect(transaction.end).toHaveBeenCalledWith('error');
+      await registerNewCronJobs();
+
+      expect(cronStoreMocks.fetch).toHaveBeenCalledWith({
+        alias: { $in: expect.arrayContaining(['existingJob', 'newJob']) },
+      });
+      expect(cronStoreMocks.insertMany).toHaveBeenCalledWith([{ alias: 'newJob' }]);
+    });
+
+    test('does not call insertMany when all jobs are already registered', async () => {
+      defineCronJob('alreadyRegistered', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([{ alias: 'alreadyRegistered' }] as never);
+
+      await registerNewCronJobs();
+
+      expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
+    });
+
+    test('rethrows when fetch throws', async () => {
+      defineCronJob('myJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      const fetchError = new Error('DB fetch failed');
+      cronStoreMocks.fetch.mockRejectedValue(fetchError as never);
+
+      await expect(registerNewCronJobs()).rejects.toThrow('DB fetch failed');
+    });
+
+    test('rethrows when insertMany throws', async () => {
+      defineCronJob('myJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([] as never);
+      const insertError = new Error('DB insert failed');
+      cronStoreMocks.insertMany.mockRejectedValue(insertError as never);
+
+      await expect(registerNewCronJobs()).rejects.toThrow('DB insert failed');
+    });
   });
 });

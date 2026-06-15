@@ -72,29 +72,36 @@ export async function registerNewCronJobs() {
     return;
   }
 
-  const hasLock = await acquireLock('cron-registration', {
-    lockDuration: time.seconds(10),
-    successfulLockCacheDuration: time.seconds(5),
-    failedLockCacheDuration: time.seconds(2),
-  });
-  if (!hasLock) {
-    return;
+  try {
+    const aliasSelector = { alias: { $in: aliasList } };
+    const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+    const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+
+    const insertItems = Object.values(cronJobs)
+      .filter((job) => !existingCronJobAliases.has(job.alias))
+      .map((job) => ({
+        alias: job.alias,
+      }));
+
+    if (insertItems.length > 0) {
+      await cronJobsCollection.insertMany(insertItems);
+    }
+  } catch (error) {
+    throw error;
   }
+}
 
-  const aliasSelector = { alias: { $in: aliasList } };
-  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
-  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+async function waitForCronJobsRegistered(aliasList: string[], timeout: number): Promise<void> {
+  const deadline = Date.now() + timeout;
+  const pollInterval = time.seconds(1);
 
-  // Skips already added cron jobs and adds only new ones.
-  // lastStartDate is intentionally omitted for new jobs so that startCronJobs
-  // schedules their first run immediately.
-  const insertItems = Object.values(cronJobs)
-    .filter((job) => !existingCronJobAliases.has(job.alias))
-    .map((job) => ({
-      alias: job.alias,
-    }));
-  if (insertItems.length > 0) {
-    await cronJobsCollection.insertMany(insertItems);
+  while (Date.now() < deadline) {
+    const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
+    const registeredAliases = new Set(records.map((r) => r.alias));
+    if (aliasList.every((alias) => registeredAliases.has(alias))) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 }
 
@@ -105,6 +112,7 @@ export async function startCronJobs() {
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
+    await waitForCronJobsRegistered(aliasList, time.seconds(30));
     const aliasSelector = { alias: { $in: aliasList } };
 
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
