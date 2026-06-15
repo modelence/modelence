@@ -213,6 +213,7 @@ function createResponse(): Response {
     status: vi.fn(),
     sendFile: vi.fn(),
     cookie: vi.fn(),
+    setHeader: vi.fn(),
   } as unknown as Response;
   (res.status as Mock).mockReturnValue(res);
   return res;
@@ -896,6 +897,39 @@ describe('app/server method endpoint', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.send).toHaveBeenCalledWith('Unauthorized');
+    expect(res.setHeader).not.toHaveBeenCalledWith('X-Modelence-Error-Code', expect.anything());
+  });
+
+  test('sets X-Modelence-Error-Code header when error carries a code', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+
+    const { AuthError } = await import('../error');
+    mockRunMethod.mockRejectedValue(new AuthError('Unverified', 'EMAIL_NOT_VERIFIED'));
+
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = getRegisteredMethodHandler(mockApp);
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith('Unverified');
+    expect(res.setHeader).toHaveBeenCalledWith('X-Modelence-Error-Code', 'EMAIL_NOT_VERIFIED');
   });
 
   test('handles ZodError with validation messages', async () => {

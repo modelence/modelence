@@ -272,6 +272,12 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     if (error.status >= 500 && error.status < 600) {
       console.error(`Error calling ${methodName}:`, error);
     }
+    // Surface a machine-readable code (when present) via a header so clients can
+    // branch on the error kind without parsing the human-readable message. The
+    // response body is left as the message text to preserve the existing format.
+    if (error.code) {
+      res.setHeader('X-Modelence-Error-Code', error.code);
+    }
     res.status(error.status).send(error.message);
     return;
   }

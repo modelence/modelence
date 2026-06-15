@@ -9,6 +9,26 @@ import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { getConfig } from '@/config/server';
+import { AuthError } from '../error';
+
+/**
+ * Whether unverified emails should be blocked from logging in.
+ *
+ * Verification can only be enforced when an email provider is configured (there
+ * is otherwise no way to deliver a verification email). When a provider exists,
+ * the `auth.email.verification` config flag acts as the actual switch — it
+ * defaults to `true`, preserving the historical behavior where configuring a
+ * provider implicitly turned verification on. Operators can now set the flag to
+ * `false` to keep a provider while allowing unverified users to sign in.
+ */
+function isEmailVerificationRequired(): boolean {
+  if (!getEmailConfig()?.provider) {
+    return false;
+  }
+
+  return Boolean(getConfig('_system.user.auth.email.verification'));
+}
 
 export async function handleLoginWithPassword(
   args: Args,
@@ -50,9 +70,10 @@ export async function handleLoginWithPassword(
 
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
-    if (!emailDoc?.verified && getEmailConfig()?.provider) {
-      throw new Error(
-        "Your email address hasn't been verified yet. Please check your inbox for the verification email."
+    if (!emailDoc?.verified && isEmailVerificationRequired()) {
+      throw new AuthError(
+        "Your email address hasn't been verified yet. Please check your inbox for the verification email.",
+        'EMAIL_NOT_VERIFIED'
       );
     }
 
