@@ -72,8 +72,9 @@ describe('cron/jobs', () => {
     }) as unknown as typeof setInterval);
     registerMocks();
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    ({ defineCronJob, startCronJobs, getCronJobsMetadata, registerNewCronJobs } =
-      await import('./jobs'));
+    ({ defineCronJob, startCronJobs, getCronJobsMetadata, registerNewCronJobs } = await import(
+      './jobs'
+    ));
   });
 
   afterEach(() => {
