@@ -9,6 +9,7 @@ import type { RouteHandler } from '@/routes/types';
 
 // Type definitions for test mocks
 type MockExpressApp = {
+  set: Mock;
   use: Mock;
   post: Mock;
   get: Mock;
@@ -117,6 +118,7 @@ vi.doMock('./websocketConfig', () => ({
 
 let mockExpressApp: MockExpressApp;
 const createExpressAppMock = (): MockExpressApp => ({
+  set: vi.fn(),
   use: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
@@ -412,6 +414,51 @@ describe('app/server getCallContext', () => {
 
     expect(ctx.connectionInfo.ip).toBe('10.0.0.5');
   });
+
+  test('derives baseUrl from X-Forwarded-Host / X-Forwarded-Proto behind a proxy', async () => {
+    const req = createRequest({
+      headers: {
+        // The internal container values seen behind the reverse proxy.
+        host: '10.1.118.6:3000',
+        'x-forwarded-host': 'tenant-sandbox-3cus3.sandbox.modelence.app',
+        'x-forwarded-proto': 'https',
+      },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('https://tenant-sandbox-3cus3.sandbox.modelence.app');
+  });
+
+  test('uses the first value of comma-separated forwarded headers', async () => {
+    const req = createRequest({
+      headers: {
+        host: '10.1.118.6:3000',
+        'x-forwarded-host': 'public.example.com, internal.example.com',
+        'x-forwarded-proto': 'https, http',
+      },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('https://public.example.com');
+  });
+
+  test('falls back to direct host and protocol without forwarded headers', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost:3000' },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('http://localhost:3000');
+  });
 });
 
 describe('app/server startServer', () => {
@@ -424,6 +471,7 @@ describe('app/server startServer', () => {
     originalEnv = { ...process.env };
 
     mockApp = {
+      set: vi.fn(),
       use: vi.fn(),
       post: vi.fn(),
       get: vi.fn(),
@@ -515,6 +563,7 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
     expect(mockApp.use).toHaveBeenCalledWith('json-middleware');
     expect(mockApp.use).toHaveBeenCalledWith('urlencoded-middleware');
     expect(mockApp.use).toHaveBeenCalledWith('cookie-parser-middleware');

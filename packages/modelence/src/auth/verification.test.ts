@@ -324,6 +324,44 @@ describe('auth/verification', () => {
 
       expect(mockTokensInsertOne).not.toHaveBeenCalled();
     });
+
+    test('prefers _system.site.url over the request-derived baseUrl', async () => {
+      const provider = { sendEmail: vi.fn() };
+      mockGetEmailConfig.mockReturnValue({ provider, verification: {} });
+      mockGetConfig.mockReturnValue('https://app.example.com');
+
+      await sendVerificationEmail({
+        userId: 'user123' as never,
+        email: 'user@example.com',
+        // Simulates the internal container host seen behind a reverse proxy.
+        baseUrl: 'http://10.1.118.6:3000',
+      });
+
+      expect(mockTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verificationUrl: 'https://app.example.com/api/_internal/auth/verify-email?token=token123',
+        })
+      );
+    });
+
+    test('falls back to the request-derived baseUrl when config is unset', async () => {
+      const provider = { sendEmail: vi.fn() };
+      mockGetEmailConfig.mockReturnValue({ provider, verification: {} });
+      mockGetConfig.mockReturnValue(undefined);
+
+      await sendVerificationEmail({
+        userId: 'user123' as never,
+        email: 'user@example.com',
+        baseUrl: 'https://custom-domain.example.com',
+      });
+
+      expect(mockTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verificationUrl:
+            'https://custom-domain.example.com/api/_internal/auth/verify-email?token=token123',
+        })
+      );
+    });
   });
 
   describe('handleResendEmailVerification', () => {

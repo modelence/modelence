@@ -87,6 +87,14 @@ export async function startServer(
 ) {
   const app = express();
 
+  // Trust the reverse proxy so that req.protocol, req.ip and req.hostname
+  // reflect the X-Forwarded-Proto / X-Forwarded-For / X-Forwarded-Host
+  // headers set by the proxy, rather than the internal container connection.
+  // Defaults to `true` (trust the whole chain); self-hosted apps can tighten
+  // this via the `security.trustProxy` option. See {@link SecurityConfig}.
+  const { trustProxy = true } = getSecurityConfig();
+  app.set('trust proxy', trustProxy);
+
   app.use(cookieParser());
 
   app.use(securityHeadersMiddleware());
@@ -229,7 +237,7 @@ export async function getCallContext(req: Request, res: Response): Promise<HttpC
     userAgent: req.get('user-agent'),
     acceptLanguage: req.get('accept-language'),
     referrer: req.get('referrer'),
-    baseUrl: req.protocol + '://' + req.get('host'),
+    baseUrl: getRequestBaseUrl(req),
   };
 
   const hasDatabase = Boolean(getMongodbUri());
@@ -309,6 +317,25 @@ function securityHeadersMiddleware(): express.RequestHandler {
     }
     next();
   };
+}
+
+function getRequestBaseUrl(req: Request): string {
+  // Behind a reverse proxy the inbound Host header / connection protocol can
+  // reflect the internal container address rather than the public URL. Honor
+  // the X-Forwarded-Host / X-Forwarded-Proto headers when present (the first
+  // value in each comma-separated list is the original client-facing value),
+  // falling back to the direct request values otherwise.
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const host =
+    (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost?.split(',')[0])?.trim() ||
+    req.get('host');
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol =
+    (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto?.split(',')[0])?.trim() ||
+    req.protocol;
+
+  return `${protocol}://${host}`;
 }
 
 function getClientIp(req: Request): string | undefined {
