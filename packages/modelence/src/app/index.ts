@@ -257,6 +257,9 @@ async function createIndexesAndMigrationsWithLock(
     for (const store of blockingStores) {
       await createStoreIndexes(store, 'full');
     }
+    // registerNewCronJobs runs here — after the unique alias index is guaranteed
+    // to exist (cronJobsCollection is now blocking!)
+    await registerNewCronJobs();
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'drop-only');
     }
@@ -269,7 +272,6 @@ async function createIndexesAndMigrationsWithLock(
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'create-only');
     }
-    await registerNewCronJobs();
   })();
   const migrationPromise = runMigrations(migrations, { lockMode: 'skip' });
 

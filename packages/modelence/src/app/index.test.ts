@@ -869,9 +869,6 @@ describe('app/index', () => {
     mockGetClient.mockReturnValue({ db: vi.fn() });
 
     await startApp({});
-    // Flush the micro-task queue so the fire-and-forgotten
-    // backgroundIndexCreationPromise (which calls registerNewCronJobs) settles.
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(mockRegisterNewCronJobs).toHaveBeenCalledTimes(1);
     // Verify it runs after the migrations lock is acquired
@@ -880,20 +877,18 @@ describe('app/index', () => {
     );
   });
 
-  test('registerNewCronJobs failure is logged but does not crash startApp', async () => {
+  test('registerNewCronJobs failure propagates and crashes startApp', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: vi.fn() });
 
     const cronError = new Error('cron registration failed');
     mockRegisterNewCronJobs.mockRejectedValue(cronError);
 
-    // registerNewCronJobs runs inside the fire-and-forgotten backgroundIndexCreationPromise;
-    // its rejection is caught and logged by Promise.allSettled, so startApp itself resolves.
-    await expect(startApp({})).resolves.toBeUndefined();
-    // Flush the micro-task queue so the background promise settles.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // registerNewCronJobs now runs synchronously inside the try block of
+    // createIndexesAndMigrationsWithLock, so its rejection propagates through startApp.
+    await expect(startApp({})).rejects.toThrow('cron registration failed');
 
-    expect(mockRegisterNewCronJobs).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
   test('starts server with combined modules and channels', async () => {

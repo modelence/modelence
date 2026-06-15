@@ -16,7 +16,8 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
   },
-  indexes: [{ key: { alias: 1 }, unique: true, background: true }],
+  indexes: [{ key: { alias: 1 }, unique: true }],
+  indexCreationMode: 'blocking',
 });
 
 // TODO: allow changing interval and timeout with cron jobconfigs
