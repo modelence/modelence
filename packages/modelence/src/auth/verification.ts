@@ -133,12 +133,14 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 export async function sendVerificationEmail({
   userId,
   email,
-  baseUrl = getConfig('_system.site.url') as string | undefined,
+  baseUrl: requestBaseUrl,
 }: {
   userId: ObjectId;
   email: string;
   baseUrl?: string;
 }) {
+  const baseUrl = (getConfig('_system.site.url') as string | undefined) || requestBaseUrl;
+
   if (getEmailConfig().provider) {
     const emailProvider = getEmailConfig().provider;
 

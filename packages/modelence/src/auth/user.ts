@@ -161,7 +161,7 @@ export default new Module('_system.user', {
     'auth.email.verification': {
       type: 'boolean',
       isPublic: true,
-      default: false,
+      default: true,
     },
     'auth.google.enabled': {
       type: 'boolean',
