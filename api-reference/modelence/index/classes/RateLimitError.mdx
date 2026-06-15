@@ -5,7 +5,7 @@ title: RateLimitError
 
 [API Reference](/api-reference/modelence/index/classes/../../../index) / [modelence](/api-reference/modelence/index/classes/../../index) / [index](/api-reference/modelence/index/classes/../index) / RateLimitError
 
-Defined in: [packages/modelence/src/error.ts:23](https://github.com/modelence/modelence/blob/e86490d903eb3e60f85ca5d6d7afc0ef0b002e4b/packages/modelence/src/error.ts#L23)
+Defined in: [packages/modelence/src/error.ts:29](https://github.com/modelence/modelence/blob/8184b1e157d4218229402ac79221b6c919342778/packages/modelence/src/error.ts#L29)
 
 ## Extends
 
@@ -17,7 +17,7 @@ Defined in: [packages/modelence/src/error.ts:23](https://github.com/modelence/mo
 
 > **new RateLimitError**(`message`): `RateLimitError`
 
-Defined in: [packages/modelence/src/error.ts:26](https://github.com/modelence/modelence/blob/e86490d903eb3e60f85ca5d6d7afc0ef0b002e4b/packages/modelence/src/error.ts#L26)
+Defined in: [packages/modelence/src/error.ts:32](https://github.com/modelence/modelence/blob/8184b1e157d4218229402ac79221b6c919342778/packages/modelence/src/error.ts#L32)
 
 #### Parameters
 
@@ -35,6 +35,7 @@ Defined in: [packages/modelence/src/error.ts:26](https://github.com/modelence/mo
 
 ## Properties
 
-| Property | Type | Default value | Overrides | Defined in |
-| ------ | ------ | ------ | ------ | ------ |
-| <a id="status"></a> `status` | `number` | `429` | [`ModelenceError`](/api-reference/modelence/index/classes/ModelenceError).[`status`](ModelenceError#status) | [packages/modelence/src/error.ts:24](https://github.com/modelence/modelence/blob/e86490d903eb3e60f85ca5d6d7afc0ef0b002e4b/packages/modelence/src/error.ts#L24) |
+| Property | Type | Default value | Description | Overrides | Inherited from | Defined in |
+| ------ | ------ | ------ | ------ | ------ | ------ | ------ |
+| <a id="code"></a> `code?` | `string` | `undefined` | Optional machine-readable error code so clients can branch on the kind of error without string-matching `message` (which may be reworded or localized). | - | [`ModelenceError`](/api-reference/modelence/index/classes/ModelenceError).[`code`](ModelenceError#code) | [packages/modelence/src/error.ts:7](https://github.com/modelence/modelence/blob/8184b1e157d4218229402ac79221b6c919342778/packages/modelence/src/error.ts#L7) |
+| <a id="status"></a> `status` | `number` | `429` | - | [`ModelenceError`](/api-reference/modelence/index/classes/ModelenceError).[`status`](ModelenceError#status) | - | [packages/modelence/src/error.ts:30](https://github.com/modelence/modelence/blob/8184b1e157d4218229402ac79221b6c919342778/packages/modelence/src/error.ts#L30) |
