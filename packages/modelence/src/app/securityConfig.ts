@@ -26,19 +26,6 @@ export type SecurityConfig = {
    * When set, `X-Frame-Options` is omitted since it cannot express multiple origins.
    */
   frameAncestors?: string[];
-
-  /**
-   * Express `trust proxy` setting, controlling how `req.protocol`, `req.ip` and
-   * `req.hostname` are derived from `X-Forwarded-*` headers.
-   *
-   * Defaults to `true` (trusts the whole chain) — fine when the app is only
-   * reachable through a trusted proxy. Tighten when self-hosting: a number is
-   * trusted hop count (e.g. `1`), a string/array trusts IPs or subnets
-   * (e.g. `['loopback', '10.0.0.0/8']`), `false` disables proxy trust.
-   *
-   * https://expressjs.com/en/guide/behind-proxies.html
-   */
-  trustProxy?: boolean | number | string | string[];
 };
 
 let securityConfig: SecurityConfig = Object.freeze({});

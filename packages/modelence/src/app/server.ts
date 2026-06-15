@@ -87,14 +87,6 @@ export async function startServer(
 ) {
   const app = express();
 
-  // Trust the reverse proxy so that req.protocol, req.ip and req.hostname
-  // reflect the X-Forwarded-Proto / X-Forwarded-For / X-Forwarded-Host
-  // headers set by the proxy, rather than the internal container connection.
-  // Defaults to `true` (trust the whole chain); self-hosted apps can tighten
-  // this via the `security.trustProxy` option. See {@link SecurityConfig}.
-  const { trustProxy = true } = getSecurityConfig();
-  app.set('trust proxy', trustProxy);
-
   app.use(cookieParser());
 
   app.use(securityHeadersMiddleware());

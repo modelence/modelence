@@ -564,7 +564,6 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
-    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
     expect(mockApp.use).toHaveBeenCalledWith('json-middleware');
     expect(mockApp.use).toHaveBeenCalledWith('urlencoded-middleware');
     expect(mockApp.use).toHaveBeenCalledWith('cookie-parser-middleware');
