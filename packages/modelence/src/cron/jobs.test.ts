@@ -112,7 +112,6 @@ describe('cron/jobs', () => {
     try {
       const now = Date.now();
       vi.spyOn(Date, 'now').mockReturnValue(now);
-      // First fetch resolves the waitForCronJobsRegistered poll, second is the lastStartDate read.
       cronStoreMocks.fetch
         .mockResolvedValueOnce([{ alias: 'nightlyCleanup' }] as never)
         .mockResolvedValueOnce([] as never);
@@ -153,7 +152,6 @@ describe('cron/jobs', () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
       const handler = vi.fn(async () => {});
-      // First fetch satisfies waitForCronJobsRegistered, second is the lastStartDate read.
       cronStoreMocks.fetch
         .mockResolvedValueOnce([{ alias: 'hourly' }] as never)
         .mockResolvedValueOnce([] as never);
@@ -191,7 +189,6 @@ describe('cron/jobs', () => {
       const handler = vi.fn(async () => {
         throw new Error('boom');
       });
-      // First fetch satisfies waitForCronJobsRegistered, second is the lastStartDate read.
       cronStoreMocks.fetch
         .mockResolvedValueOnce([{ alias: 'hourly' }] as never)
         .mockResolvedValueOnce([] as never);
