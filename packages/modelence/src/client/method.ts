@@ -40,7 +40,15 @@ export type CallMethodOptions = {
 // so Vite's ssrLoadModule (separate module graph) shares the same instance.
 export type CallMethodTransport = <T = unknown>(methodName: string, args: MethodArgs) => Promise<T>;
 
-const defaultTransport: CallMethodTransport = async <T>(methodName: string, args: MethodArgs) => {
+/**
+ * The default HTTP transport. Exported so alternative transports (e.g. the SSR
+ * in-process transport) can delegate to it when they don't apply.
+ * @internal
+ */
+export const _defaultCallMethodTransport: CallMethodTransport = async <T>(
+  methodName: string,
+  args: MethodArgs
+) => {
   const baseUrl = getClientConfig()?.baseUrl ?? '';
   return call<T>(`${baseUrl}/api/_internal/method/${methodName}`, args);
 };
@@ -52,7 +60,7 @@ type GlobalWithTransport = typeof globalThis & {
 };
 
 function getTransport(): CallMethodTransport {
-  return (globalThis as GlobalWithTransport)[TRANSPORT_KEY] ?? defaultTransport;
+  return (globalThis as GlobalWithTransport)[TRANSPORT_KEY] ?? _defaultCallMethodTransport;
 }
 
 /** Returns a disposer that restores the previous transport. */

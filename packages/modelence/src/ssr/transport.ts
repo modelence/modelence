@@ -1,16 +1,22 @@
-import { _setCallMethodTransport, type MethodArgs } from '../client/method';
+import {
+  _setCallMethodTransport,
+  _defaultCallMethodTransport,
+  type MethodArgs,
+} from '../client/method';
 import { callInProcessMethod } from './callInProcess';
 import { getSsrContext } from './context';
 
-/** Routes `callMethod` through `runMethod` in-process during SSR. */
+/**
+ * Routes `callMethod` through `runMethod` in-process during an active SSR
+ * render. Outside a render (e.g. server-side `callMethod` from jobs or other
+ * non-render code) there is no request context, so it falls back to the
+ * default HTTP transport — installing SSR must not break those call sites.
+ */
 export function installSsrCallMethodTransport(): () => void {
   return _setCallMethodTransport(async <T>(methodName: string, args: MethodArgs) => {
     const ssrCtx = getSsrContext();
     if (!ssrCtx) {
-      throw new Error(
-        `callMethod('${methodName}') was invoked during SSR but no request context is active. ` +
-          `Wrap the render in runWithSsrContext().`
-      );
+      return _defaultCallMethodTransport<T>(methodName, args);
     }
 
     return callInProcessMethod<T>(methodName, args, ssrCtx.callContext);
