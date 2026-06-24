@@ -9,6 +9,7 @@ import type { RouteHandler } from '@/routes/types';
 
 // Type definitions for test mocks
 type MockExpressApp = {
+  set: Mock;
   use: Mock;
   post: Mock;
   get: Mock;
@@ -117,6 +118,7 @@ vi.doMock('./websocketConfig', () => ({
 
 let mockExpressApp: MockExpressApp;
 const createExpressAppMock = (): MockExpressApp => ({
+  set: vi.fn(),
   use: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
@@ -211,6 +213,7 @@ function createResponse(): Response {
     status: vi.fn(),
     sendFile: vi.fn(),
     cookie: vi.fn(),
+    setHeader: vi.fn(),
   } as unknown as Response;
   (res.status as Mock).mockReturnValue(res);
   return res;
@@ -412,6 +415,51 @@ describe('app/server getCallContext', () => {
 
     expect(ctx.connectionInfo.ip).toBe('10.0.0.5');
   });
+
+  test('derives baseUrl from X-Forwarded-Host / X-Forwarded-Proto behind a proxy', async () => {
+    const req = createRequest({
+      headers: {
+        // The internal container values seen behind the reverse proxy.
+        host: '10.1.118.6:3000',
+        'x-forwarded-host': 'tenant-sandbox-3cus3.sandbox.modelence.app',
+        'x-forwarded-proto': 'https',
+      },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('https://tenant-sandbox-3cus3.sandbox.modelence.app');
+  });
+
+  test('uses the first value of comma-separated forwarded headers', async () => {
+    const req = createRequest({
+      headers: {
+        host: '10.1.118.6:3000',
+        'x-forwarded-host': 'public.example.com, internal.example.com',
+        'x-forwarded-proto': 'https, http',
+      },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('https://public.example.com');
+  });
+
+  test('falls back to direct host and protocol without forwarded headers', async () => {
+    const req = createRequest({
+      headers: { host: 'localhost:3000' },
+      protocol: 'http',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('http://localhost:3000');
+  });
 });
 
 describe('app/server startServer', () => {
@@ -424,6 +472,7 @@ describe('app/server startServer', () => {
     originalEnv = { ...process.env };
 
     mockApp = {
+      set: vi.fn(),
       use: vi.fn(),
       post: vi.fn(),
       get: vi.fn(),
@@ -847,6 +896,39 @@ describe('app/server method endpoint', () => {
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.send).toHaveBeenCalledWith('Unauthorized');
+    expect(res.setHeader).not.toHaveBeenCalledWith('X-Modelence-Error-Code', expect.anything());
+  });
+
+  test('sets X-Modelence-Error-Code header when error carries a code', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+
+    const { AuthError } = await import('../error');
+    mockRunMethod.mockRejectedValue(new AuthError('Unverified', 'EMAIL_NOT_VERIFIED'));
+
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const methodHandler = getRegisteredMethodHandler(mockApp);
+
+    const req = createRequest({
+      params: { methodName: 'testMethod' },
+      body: { args: {} },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    mockGetMongodbUri.mockReturnValue('');
+
+    await methodHandler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith('Unverified');
+    expect(res.setHeader).toHaveBeenCalledWith('X-Modelence-Error-Code', 'EMAIL_NOT_VERIFIED');
   });
 
   test('handles ZodError with validation messages', async () => {

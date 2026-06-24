@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { callMethod } from './method';
 import { _setConfig } from '../config/client';
 import { getLocalStorageSession, setLocalStorageSession } from './localStorage';
+import { getClientConfig } from './clientConfig';
 import { time } from '../time';
 import { Configs } from '../config/types';
 
@@ -74,7 +75,7 @@ function parseUser(user: unknown): User | null {
 
 export type SessionInitPayload = {
   configs: Configs;
-  session: object;
+  session: object & { authToken: string };
   user: object;
 };
 
@@ -137,7 +138,13 @@ export async function initSession() {
 
   const { configs, session, user } = await callMethod<SessionInitPayload>('_system.session.init');
   _setConfig(configs);
-  setLocalStorageSession(session);
+
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  } else {
+    setLocalStorageSession(session);
+  }
 
   useSessionStore.getState().setUser(parseUser(user));
 

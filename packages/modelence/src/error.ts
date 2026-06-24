@@ -1,13 +1,19 @@
 export abstract class ModelenceError extends Error {
   abstract status: number;
+  /**
+   * Optional machine-readable error code so clients can branch on the kind of
+   * error without string-matching `message` (which may be reworded or localized).
+   */
+  code?: string;
 }
 
 export class AuthError extends ModelenceError {
   status = 401;
 
-  constructor(message: string) {
+  constructor(message: string, code?: string) {
     super(message);
     this.name = 'AuthError';
+    this.code = code;
   }
 }
 

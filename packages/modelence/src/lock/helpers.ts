@@ -200,7 +200,7 @@ const startLockHeartbeat = ({
 
   const scheduleRefresh = () => {
     heartbeat.timer = setTimeout(() => {
-      acquireLock(resource, {
+      void acquireLock(resource, {
         lockDuration,
         bypassCache: true,
         instanceId,

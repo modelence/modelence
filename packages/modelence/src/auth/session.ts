@@ -8,6 +8,34 @@ import { schema } from '../data/types';
 import { time } from '../time';
 import { Session } from './types';
 
+export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
+  schema: {
+    nonce: schema.string(),
+    userId: schema.string(),
+    expiresAt: schema.date(),
+  },
+  indexes: [
+    { key: { nonce: 1 }, unique: true },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ],
+});
+
+export async function issueLinkNonce(userId: string): Promise<string> {
+  const nonce = randomBytes(32).toString('hex');
+  await linkNoncesCollection.insertOne({
+    nonce,
+    userId,
+    expiresAt: new Date(Date.now() + time.minutes(10)),
+  });
+  return nonce;
+}
+
+export async function consumeLinkNonce(nonce: string): Promise<string | null> {
+  const entry = await linkNoncesCollection.findOneAndDelete({ nonce });
+  if (!entry) return null;
+  return entry.userId;
+}
+
 export const sessionsCollection = new Store('_modelenceSessions', {
   schema: {
     authToken: schema.string(),
@@ -114,7 +142,7 @@ export function clearAuthTokenCookie(res: Response) {
 }
 
 export default new Module('_system.session', {
-  stores: [sessionsCollection],
+  stores: [sessionsCollection, linkNoncesCollection],
   mutations: {
     init: async function (args, { session, user, res }) {
       // Only refresh the cookie for logged-in sessions. Writing one for a

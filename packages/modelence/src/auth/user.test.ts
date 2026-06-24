@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { MockInstance } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockRandomBytes = vi.fn();
 const mockInsertOne = vi.fn();
@@ -160,18 +159,11 @@ describe('auth/user', () => {
   });
 
   describe('buildAuthRateLimits', () => {
-    let consoleWarnSpy: MockInstance<typeof console.warn>;
-
     beforeEach(() => {
       mockTime.seconds.mockClear();
       mockTime.minutes.mockClear();
       mockTime.hours.mockClear();
       mockTime.days.mockClear();
-      consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    });
-
-    afterEach(() => {
-      consoleWarnSpy.mockRestore();
     });
 
     test('returns default limits when called with no config', () => {
@@ -197,66 +189,6 @@ describe('auth/user', () => {
       expect(mockTime.minutes).toHaveBeenCalledWith(15);
       expect(mockTime.hours).toHaveBeenCalledWith(1);
       expect(mockTime.days).toHaveBeenCalledWith(1);
-    });
-
-    test('applies signup limit overrides', () => {
-      const rules = buildAuthRateLimits({
-        signup: { perIp15Minutes: 5, perIpPerDay: 50 },
-      });
-
-      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
-      const signupDay = rules.find(
-        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signup15m?.limit).toBe(5);
-      expect(signupDay?.limit).toBe(50);
-
-      // Unrelated buckets keep their defaults
-      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
-      expect(signin15m?.limit).toBe(50);
-    });
-
-    test('applies partial overrides — unspecified fields keep defaults', () => {
-      const rules = buildAuthRateLimits({
-        signup: { perIp15Minutes: 3 },
-      });
-
-      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
-      const signupDay = rules.find(
-        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signup15m?.limit).toBe(3);
-      expect(signupDay?.limit).toBe(200); // default preserved
-    });
-
-    test('applies overrides across multiple buckets', () => {
-      const rules = buildAuthRateLimits({
-        signup: { perIpPerDay: 10 },
-        signin: { perIp15Minutes: 5, perIpPerDay: 20 },
-        passwordReset: { perEmailPerHour: 2, perEmailPerDay: 3 },
-      });
-
-      const signupDay = rules.find(
-        (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signupDay?.limit).toBe(10);
-
-      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
-      const signinDay = rules.find(
-        (r) => r.bucket === 'signin' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(signin15m?.limit).toBe(5);
-      expect(signinDay?.limit).toBe(20);
-
-      const pwResetEmailHour = rules.find(
-        (r) => r.bucket === 'passwordReset' && r.type === 'email' && r.window === 60 * 60 * 1000
-      );
-      const pwResetEmailDay = rules.find(
-        (r) =>
-          r.bucket === 'passwordReset' && r.type === 'email' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(pwResetEmailHour?.limit).toBe(2);
-      expect(pwResetEmailDay?.limit).toBe(3);
     });
 
     test('produces exactly 12 rules covering all auth buckets', () => {
@@ -329,40 +261,40 @@ describe('auth/user', () => {
       expect(signin15m?.limit).toBe(50);
     });
 
-    test('legacy object form still works (back-compat)', () => {
+    test('overrides applied across multiple buckets', () => {
       const rules = buildAuthRateLimits({
-        signup: { perIp15Minutes: 5, perIpPerDay: 50 },
+        signup: [{ type: 'ip', window: 24 * 60 * 60 * 1000, limit: 10 }],
+        signin: [
+          { type: 'ip', window: 15 * 60 * 1000, limit: 5 },
+          { type: 'ip', window: 24 * 60 * 60 * 1000, limit: 20 },
+        ],
+        passwordReset: [
+          { type: 'email', window: 60 * 60 * 1000, limit: 2 },
+          { type: 'email', window: 24 * 60 * 60 * 1000, limit: 3 },
+        ],
       });
 
-      const signup15m = rules.find((r) => r.bucket === 'signup' && r.window === 15 * 60 * 1000);
       const signupDay = rules.find(
         (r) => r.bucket === 'signup' && r.window === 24 * 60 * 60 * 1000
       );
-      expect(signup15m?.limit).toBe(5);
-      expect(signupDay?.limit).toBe(50);
-    });
-
-    test('mixing array and legacy forms across buckets works', () => {
-      const rules = buildAuthRateLimits({
-        signup: [{ type: 'ip', window: 15 * 60 * 1000, limit: 7 }],
-        signin: { perIp15Minutes: 9 },
-      });
-
-      // Array override merges with defaults — per-day default preserved
-      const signup = rules.filter((r) => r.bucket === 'signup');
-      expect(signup).toHaveLength(2);
-      const signup15m = signup.find((r) => r.window === 15 * 60 * 1000);
-      const signupDay = signup.find((r) => r.window === 24 * 60 * 60 * 1000);
-      expect(signup15m?.limit).toBe(7);
-      expect(signupDay?.limit).toBe(200);
+      expect(signupDay?.limit).toBe(10);
 
       const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
-      expect(signin15m?.limit).toBe(9);
-      // Legacy partial override keeps unspecified default
       const signinDay = rules.find(
         (r) => r.bucket === 'signin' && r.window === 24 * 60 * 60 * 1000
       );
-      expect(signinDay?.limit).toBe(500);
+      expect(signin15m?.limit).toBe(5);
+      expect(signinDay?.limit).toBe(20);
+
+      const pwResetEmailHour = rules.find(
+        (r) => r.bucket === 'passwordReset' && r.type === 'email' && r.window === 60 * 60 * 1000
+      );
+      const pwResetEmailDay = rules.find(
+        (r) =>
+          r.bucket === 'passwordReset' && r.type === 'email' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(pwResetEmailHour?.limit).toBe(2);
+      expect(pwResetEmailDay?.limit).toBe(3);
     });
   });
 });

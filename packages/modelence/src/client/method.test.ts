@@ -76,15 +76,33 @@ describe('client/method', () => {
       ok: false,
       status: 402,
       text: async () => 'Payment required',
+      headers: {
+        get: (name: string) => (name === 'X-Modelence-Error-Code' ? 'PAYMENT_REQUIRED' : null),
+      },
     } as unknown as Response);
 
     await expect(callMethod('test.method')).rejects.toThrow('Payment required');
     expect(mockHandleError).toHaveBeenCalledWith(expect.any(MethodError), 'test.method');
 
-    // Verify the error has the correct status
+    // Verify the error has the correct status and propagated code
     const thrownError = mockHandleError.mock.calls[0][0] as InstanceType<typeof MethodError>;
     expect(thrownError.status).toBe(402);
     expect(thrownError.name).toBe('MethodError');
+    expect(thrownError.code).toBe('PAYMENT_REQUIRED');
+  });
+
+  test('callMethod leaves code undefined when error code header is absent', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'Server error',
+      headers: { get: () => null },
+    } as unknown as Response);
+
+    const thrownError = await callMethod('test.method').catch((e: unknown) => e);
+
+    expect(thrownError).toBeInstanceOf(MethodError);
+    expect((thrownError as InstanceType<typeof MethodError>).code).toBeUndefined();
   });
 
   test('callMethod throws when response lacks data', async () => {

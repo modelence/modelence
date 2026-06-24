@@ -11,7 +11,7 @@ You can define your own rate limits by adding a `rateLimits` array to a [Module]
 
 ```typescript
 import { Module } from 'modelence/server';
-import { time } from 'modelence/server';
+import { time } from 'modelence';
 
 const myModule = new Module('myFeature', {
   rateLimits: [

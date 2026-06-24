@@ -57,7 +57,7 @@ export function AppProvider({ children, loadingElement }: AppProviderProps) {
       setIsLoading(false);
     }
 
-    initConfig();
+    void initConfig();
   }, []);
 
   if (isLoading) {

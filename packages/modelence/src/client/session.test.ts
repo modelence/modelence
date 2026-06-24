@@ -6,6 +6,7 @@ const mockCallMethod = vi.fn<CallMethodFn>();
 const mockSetConfig = vi.fn();
 const mockSetLocalStorageSession = vi.fn();
 const mockGetLocalStorageSession = vi.fn<() => object | null>(() => null);
+const mockGetClientConfig = vi.fn();
 const mockSeconds = vi.fn((value: number) => value * 1000);
 
 vi.doMock('./method', () => ({
@@ -19,6 +20,10 @@ vi.doMock('../config/client', () => ({
 vi.doMock('./localStorage', () => ({
   setLocalStorageSession: mockSetLocalStorageSession,
   getLocalStorageSession: mockGetLocalStorageSession,
+}));
+
+vi.doMock('./clientConfig', () => ({
+  getClientConfig: mockGetClientConfig,
 }));
 
 vi.doMock('../time', () => ({
@@ -43,6 +48,8 @@ describe('client/session', () => {
     mockSetLocalStorageSession.mockReset();
     mockGetLocalStorageSession.mockReset();
     mockGetLocalStorageSession.mockReturnValue(null);
+    mockGetClientConfig.mockReset();
+    mockGetClientConfig.mockReturnValue(null);
     global.setTimeout = ((fn: Parameters<typeof originalSetTimeout>[0], delay?: number) => {
       return originalSetTimeout(fn, delay);
     }) as typeof setTimeout;
@@ -76,6 +83,23 @@ describe('client/session', () => {
     );
     const sameRef = useSessionStore.getState().user;
     expect(storedUser).toBe(sameRef);
+  });
+
+  test('initSession delegates token storage to client config when configured', async () => {
+    const mockSetAuthToken = vi.fn();
+    mockGetClientConfig.mockReturnValue({ setAuthToken: mockSetAuthToken });
+    mockCallMethod.mockResolvedValueOnce({
+      configs: { demo: 'value' },
+      session: { authToken: 'rn-token' },
+      user: { id: '1', handle: 'demo', roles: [] },
+    } as never);
+    mockCallMethod.mockResolvedValueOnce(undefined as never);
+
+    const { initSession: freshInitSession } = await import('./session');
+    await freshInitSession();
+
+    expect(mockSetAuthToken).toHaveBeenCalledWith('rn-token');
+    expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
   });
 
   test('initSession handles null user and schedules heartbeat', async () => {

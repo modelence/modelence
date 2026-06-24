@@ -35,7 +35,7 @@ function assertFetchOptionTypeSafety() {
     methods: undefined,
   });
 
-  typedStore.fetch(
+  void typedStore.fetch(
     { name: 'john' },
     {
       sort: { name: 1, score: -1, 'nested.level': 1 },
@@ -44,9 +44,9 @@ function assertFetchOptionTypeSafety() {
   );
 
   // @ts-expect-error unknown top-level field should be rejected in sort
-  typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
+  void typedStore.fetch({ name: 'john' }, { sort: { unknownField: 1 } });
   // @ts-expect-error unknown top-level field should be rejected in projection
-  typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
+  void typedStore.fetch({ name: 'john' }, { projection: { unknownField: 1 } });
 }
 void assertFetchOptionTypeSafety;
 
@@ -81,8 +81,8 @@ function assertExtendedStoreDotNotationTypeSafety() {
   });
 
   // Dot-notation paths must be accepted in filter queries on extended stores
-  extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
-  extendedStore.fetch({
+  void extendedStore.findOne({ 'integrations.resend.syncStatus': 'success' });
+  void extendedStore.fetch({
     'integrations.resend.syncStatus': 'error',
     $or: [
       { 'integrations.resend.id': { $exists: false } },
@@ -91,7 +91,7 @@ function assertExtendedStoreDotNotationTypeSafety() {
   });
 
   // Dot-notation paths must be accepted in $set updates on extended stores
-  extendedStore.updateOne('someId', {
+  void extendedStore.updateOne('someId', {
     $set: {
       'integrations.resend.id': 'abc',
       'integrations.resend.syncStatus': 'success',
@@ -540,6 +540,47 @@ describe('data/store', () => {
     expect(cursorMock.skip).toHaveBeenCalledWith(2);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ name: 'test' });
+  });
+
+  test('create applies schema defaults before insert and return', async () => {
+    const store = new Store('todos', {
+      schema: {
+        title: schema.string(),
+        completed: schema.boolean(),
+        category: schema.string().default('general').optional(),
+        meta: schema
+          .object({
+            source: schema.string().default('manual').optional(),
+          })
+          .optional(),
+      },
+      indexes: [],
+      methods: undefined,
+    });
+    const collectionMock = {
+      insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() } as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    const result = await store.create({
+      title: 'Buy milk',
+      completed: false,
+      meta: {},
+    });
+    const insertedDocument = collectionMock.insertOne.mock.calls[0]?.[0] as {
+      _id?: ObjectId;
+      category?: string;
+      meta?: { source?: string };
+    };
+
+    expect(result.category).toBe('general');
+    expect(result.meta?.source).toBe('manual');
+    expect(insertedDocument).toMatchObject({
+      category: 'general',
+      meta: { source: 'manual' },
+    });
+    expect(insertedDocument._id).toBeInstanceOf(ObjectId);
   });
 
   test('vectorSearch delegates to aggregate with expected pipeline', async () => {

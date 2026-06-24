@@ -10,6 +10,7 @@ const mockSendVerificationEmail = vi.fn();
 const mockValidateEmail = vi.fn();
 const mockGetEmailConfig = vi.fn();
 const mockGetAuthConfig = vi.fn();
+const mockGetConfig = vi.fn();
 const mockCompare = vi.fn();
 
 vi.doMock('@/server', () => ({
@@ -48,6 +49,10 @@ vi.doMock('@/app/authConfig', () => ({
   getAuthConfig: mockGetAuthConfig,
 }));
 
+vi.doMock('@/config/server', () => ({
+  getConfig: mockGetConfig,
+}));
+
 vi.doMock('bcrypt', () => ({
   default: {
     compare: mockCompare,
@@ -79,6 +84,10 @@ describe('auth/login', () => {
     vi.clearAllMocks();
     mockValidateEmail.mockImplementation((value) => value);
     mockGetEmailConfig.mockReturnValue({ provider: null });
+    // Mirror the schema default: verification is required unless explicitly disabled.
+    mockGetConfig.mockImplementation((key: string) =>
+      key === '_system.user.auth.email.verification' ? true : undefined
+    );
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockSendVerificationEmail.mockResolvedValue(undefined as never);
     mockCompare.mockResolvedValue(true as never);
@@ -130,7 +139,11 @@ describe('auth/login', () => {
         id: userId,
         handle: 'demo',
         roles: [],
+        firstName: undefined,
+        lastName: undefined,
+        avatarUrl: undefined,
       },
+      session: { authToken: 'token-1' },
     });
   });
 
@@ -144,14 +157,16 @@ describe('auth/login', () => {
     } as never);
     mockGetEmailConfig.mockReturnValue({ provider: 'resend' });
 
-    await expect(
-      handleLoginWithPassword(
-        { email: 'user@example.com', password: 'Secret123' },
-        baseContext as never
-      )
-    ).rejects.toThrow(
+    const error = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
       "Your email address hasn't been verified yet. Please check your inbox for the verification email."
     );
+    expect((error as { code?: string }).code).toBe('EMAIL_NOT_VERIFIED');
 
     expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
     expect(mockConsumeRateLimit).toHaveBeenCalledWith({
@@ -167,6 +182,50 @@ describe('auth/login', () => {
       connectionInfo: baseContext.connectionInfo,
     });
     expect(authConfig.login.onError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  test('allows unverified login when verification flag is disabled', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439021');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: false }],
+    } as never);
+    mockGetEmailConfig.mockReturnValue({ provider: 'resend' });
+    // Operator explicitly disabled verification while keeping a provider.
+    mockGetConfig.mockImplementation((key: string) =>
+      key === '_system.user.auth.email.verification' ? false : undefined
+    );
+
+    const result = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    );
+
+    expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
+    expect(result.session).toEqual({ authToken: 'token-1' });
+  });
+
+  test('allows unverified login when no email provider is configured', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439022');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: false }],
+    } as never);
+    // No provider: the flag defaults to true (see beforeEach) but verification
+    // cannot be enforced without a way to deliver the email.
+    mockGetEmailConfig.mockReturnValue({ provider: null });
+
+    const result = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    );
+
+    expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
+    expect(result.session).toEqual({ authToken: 'token-1' });
   });
 
   test('throws incorrect credentials error when password comparison fails', async () => {

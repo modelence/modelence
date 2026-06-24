@@ -9,15 +9,24 @@
 
 import { getAuthToken, getClientInfo } from '@/auth/client';
 import { handleError } from '@/client/errorHandler';
+import { getClientConfig } from '@/client/clientConfig';
 import { reviveResponseTypes } from '@/methods/serialize';
 
 export class MethodError extends Error {
   status: number;
+  /**
+   * Machine-readable error code set by the server (when available), so callers
+   * can branch on the error kind without matching the human-readable message.
+   * For example, a login attempt with an unverified email yields
+   * `code === 'EMAIL_NOT_VERIFIED'`.
+   */
+  code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = 'MethodError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -31,8 +40,10 @@ export type CallMethodOptions = {
 // so Vite's ssrLoadModule (separate module graph) shares the same instance.
 export type CallMethodTransport = <T = unknown>(methodName: string, args: MethodArgs) => Promise<T>;
 
-const defaultTransport: CallMethodTransport = async <T>(methodName: string, args: MethodArgs) =>
-  call<T>(`/api/_internal/method/${methodName}`, args);
+const defaultTransport: CallMethodTransport = async <T>(methodName: string, args: MethodArgs) => {
+  const baseUrl = getClientConfig()?.baseUrl ?? '';
+  return call<T>(`${baseUrl}/api/_internal/method/${methodName}`, args);
+};
 
 const TRANSPORT_KEY = '__modelence_call_method_transport__';
 
@@ -112,7 +123,8 @@ async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T>
 
   if (!response.ok) {
     const error = await response.text();
-    throw new MethodError(error, response.status);
+    const code = response.headers?.get('X-Modelence-Error-Code') ?? undefined;
+    throw new MethodError(error, response.status, code);
   }
 
   const text = await response.text();

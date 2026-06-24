@@ -20,6 +20,7 @@ import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
+import { issueLinkNonce } from '@/auth/session';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -100,7 +101,7 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
-  // Set httpOnly cookie for OAuth linking flow
+  // Browser OAuth linking: set httpOnly cookie so the authToken never travels in a URL.
   app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
     const { session } = await getCallContext(req, res);
 
@@ -118,6 +119,19 @@ export async function startServer(
     });
 
     res.json({ ok: true });
+  });
+
+  // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
+  app.post('/api/_internal/auth/issue-link-nonce', async (req: Request, res: Response) => {
+    const { session } = await getCallContext(req, res);
+
+    if (!session?.userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const nonce = await issueLinkNonce(String(session.userId));
+    res.json({ nonce });
   });
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
@@ -162,7 +176,7 @@ export async function startServer(
 
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
-    websocketProvider.init({
+    void websocketProvider.init({
       httpServer,
       channels,
     });
@@ -217,7 +231,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
     userAgent: req.get('user-agent'),
     acceptLanguage: req.get('accept-language'),
     referrer: req.get('referrer'),
-    baseUrl: req.protocol + '://' + req.get('host'),
+    baseUrl: getRequestBaseUrl(req),
   };
 
   const hasDatabase = Boolean(getMongodbUri());
@@ -251,6 +265,12 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
       console.error(`Error calling ${methodName}:`, error);
+    }
+    // Surface a machine-readable code (when present) via a header so clients can
+    // branch on the error kind without parsing the human-readable message. The
+    // response body is left as the message text to preserve the existing format.
+    if (error.code) {
+      res.setHeader('X-Modelence-Error-Code', error.code);
     }
     res.status(error.status).send(error.message);
     return;
@@ -297,6 +317,25 @@ function securityHeadersMiddleware(): express.RequestHandler {
     }
     next();
   };
+}
+
+function getRequestBaseUrl(req: Request): string {
+  // Behind a reverse proxy the inbound Host header / connection protocol can
+  // reflect the internal container address rather than the public URL. Honor
+  // the X-Forwarded-Host / X-Forwarded-Proto headers when present (the first
+  // value in each comma-separated list is the original client-facing value),
+  // falling back to the direct request values otherwise.
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const host =
+    (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost?.split(',')[0])?.trim() ||
+    req.get('host');
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol =
+    (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto?.split(',')[0])?.trim() ||
+    req.protocol;
+
+  return `${protocol}://${host}`;
 }
 
 function getClientIp(req: Request): string | undefined {

@@ -63,7 +63,7 @@ describe('renderSsrTreeStream', () => {
   beforeEach(() => {
     mockCallInProcessMethod.mockReset();
     mockCallInProcessMethod.mockResolvedValue({
-      session: { id: 'sess-1' },
+      session: { id: 'sess-1', authToken: 'token-1' },
       user: { id: 'user-1', email: 'a@b.c' },
       configs: {},
     } as SessionInitPayload);
