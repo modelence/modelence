@@ -45,7 +45,7 @@ export type CallMethodTransport = <T = unknown>(methodName: string, args: Method
  * in-process transport) can delegate to it when they don't apply.
  * @internal
  */
-export const _defaultCallMethodTransport: CallMethodTransport = async <T>(
+export const defaultCallMethodTransport: CallMethodTransport = async <T>(
   methodName: string,
   args: MethodArgs
 ) => {
@@ -60,11 +60,11 @@ type GlobalWithTransport = typeof globalThis & {
 };
 
 function getTransport(): CallMethodTransport {
-  return (globalThis as GlobalWithTransport)[TRANSPORT_KEY] ?? _defaultCallMethodTransport;
+  return (globalThis as GlobalWithTransport)[TRANSPORT_KEY] ?? defaultCallMethodTransport;
 }
 
 /** Returns a disposer that restores the previous transport. */
-export function _setCallMethodTransport(next: CallMethodTransport): () => void {
+export function setCallMethodTransport(next: CallMethodTransport): () => void {
   const previous = (globalThis as GlobalWithTransport)[TRANSPORT_KEY];
   (globalThis as GlobalWithTransport)[TRANSPORT_KEY] = next;
   return () => {

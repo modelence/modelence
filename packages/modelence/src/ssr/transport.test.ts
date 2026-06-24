@@ -16,8 +16,8 @@ const mockSetCallMethodTransport = vi.fn((next: typeof installedTransport) => {
 const mockDefaultTransport = vi.fn(async () => 'http-result');
 
 vi.doMock('../client/method', () => ({
-  _setCallMethodTransport: mockSetCallMethodTransport,
-  _defaultCallMethodTransport: mockDefaultTransport,
+  setCallMethodTransport: mockSetCallMethodTransport,
+  defaultCallMethodTransport: mockDefaultTransport,
 }));
 
 const mockCallInProcessMethod = vi.fn(async () => 'in-process-result');

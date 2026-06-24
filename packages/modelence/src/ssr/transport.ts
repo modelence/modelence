@@ -1,6 +1,6 @@
 import {
-  _setCallMethodTransport,
-  _defaultCallMethodTransport,
+  setCallMethodTransport,
+  defaultCallMethodTransport,
   type MethodArgs,
 } from '../client/method';
 import { callInProcessMethod } from './callInProcess';
@@ -13,10 +13,10 @@ import { getSsrContext } from './context';
  * default HTTP transport — installing SSR must not break those call sites.
  */
 export function installSsrCallMethodTransport(): () => void {
-  return _setCallMethodTransport(async <T>(methodName: string, args: MethodArgs) => {
+  return setCallMethodTransport(async <T>(methodName: string, args: MethodArgs) => {
     const ssrCtx = getSsrContext();
     if (!ssrCtx) {
-      return _defaultCallMethodTransport<T>(methodName, args);
+      return defaultCallMethodTransport<T>(methodName, args);
     }
 
     return callInProcessMethod<T>(methodName, args, ssrCtx.callContext);

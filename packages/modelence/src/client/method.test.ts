@@ -22,7 +22,7 @@ const fetchMock = vi.fn() as MockedFunction<typeof fetch>;
 const originalFetch = global.fetch;
 const originalWindow = globalThis.window;
 
-const { callMethod, MethodError, _setCallMethodTransport } = await import('./method');
+const { callMethod, MethodError, setCallMethodTransport } = await import('./method');
 
 describe('client/method', () => {
   beforeEach(() => {
@@ -114,13 +114,13 @@ describe('client/method', () => {
     await expect(callMethod('test.method')).rejects.toThrow('Invalid response from server');
   });
 
-  test('_setCallMethodTransport routes calls through the swapped transport and disposes back to fetch', async () => {
+  test('setCallMethodTransport routes calls through the swapped transport and disposes back to fetch', async () => {
     const swapped = vi.fn(async (name: string, args: Record<string, unknown>) => ({
       methodName: name,
       forwardedArgs: args,
     }));
 
-    const dispose = _setCallMethodTransport(swapped as never);
+    const dispose = setCallMethodTransport(swapped as never);
 
     const result = await callMethod('routed.method', { id: 1 });
     expect(swapped).toHaveBeenCalledWith('routed.method', { id: 1 });
