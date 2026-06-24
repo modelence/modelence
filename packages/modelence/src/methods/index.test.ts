@@ -12,6 +12,7 @@ vi.doMock('../utils', () => ({
 
 vi.doMock('@/telemetry', () => ({
   startTransaction: mockStartTransaction,
+  redactSensitive: (v: unknown) => v,
 }));
 
 vi.doMock('../auth/role', () => ({

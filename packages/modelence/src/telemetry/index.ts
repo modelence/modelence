@@ -4,6 +4,35 @@ import { isTelemetryEnabled } from '@/app/state';
 type LogLevel = 'error' | 'info' | 'debug' | '';
 
 /**
+ * Keys whose values are secrets and must never be recorded in telemetry/APM
+ * context. Matched case-insensitively as a substring (e.g. `linkNonce` matches
+ * `nonce`, `authToken` matches `token`). Used to scrub request args/query/body
+ * before they are sent to the APM sink, where they would otherwise persist in
+ * plaintext — the same "readable secret at rest" risk hashing-at-rest avoids.
+ */
+const SENSITIVE_KEYS = ['token', 'password', 'secret', 'nonce', 'code'];
+
+/**
+ * Returns a deep copy of `value` with any sensitive keys (see
+ * {@link SENSITIVE_KEYS}) replaced by `'[redacted]'`. Non-object values pass
+ * through unchanged.
+ */
+export function redactSensitive(value: unknown): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(redactSensitive);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    const isSensitive = SENSITIVE_KEYS.some((k) => key.toLowerCase().includes(k));
+    result[key] = isSensitive ? '[redacted]' : redactSensitive(val);
+  }
+  return result;
+}
+
+/**
  * Gets the logging level for console logs based on the MODELENCE_LOG_LEVEL environment variable.
  *
  * @returns The log level ('error' | 'info' | 'debug' | '')

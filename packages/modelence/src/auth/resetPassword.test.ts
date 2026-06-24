@@ -462,6 +462,29 @@ describe('auth/resetPassword', () => {
       );
     });
 
+    test('throws (no email sent) when no base URL can be resolved', async () => {
+      const email = 'user@example.com';
+
+      mockGetConfig.mockReturnValue(undefined); // no _system.site.url
+      mockValidateEmail.mockReturnValue(email);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          emails: [{ address: email, verified: true }],
+          authMethods: { password: { hash: 'hash' } },
+          status: 'active',
+        })
+      );
+      mockRandomBytes.mockReturnValue({ toString: () => 'tok' });
+
+      await expect(
+        // connectionInfo.baseUrl also absent
+        handleSendResetPasswordToken({ email }, createContext({ connectionInfo: {} }))
+      ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
+
+      // A broken link must never be emailed.
+      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+    });
+
     test('email always links to the server landing route regardless of redirectUrl', async () => {
       // redirectUrl now configures only the SPA page the landing route redirects
       // to after stashing the token; the email itself always targets the server

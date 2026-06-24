@@ -147,6 +147,13 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   // redirects to the tokenless SPA page — so the raw token never reaches a
   // client-rendered URL where analytics/ad scripts could read it.
   const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
+  if (!baseUrl) {
+    // Without a base URL we'd email a broken `undefined/...` link. Fail loudly
+    // instead of sending a dead reset link.
+    throw new Error(
+      'Unable to build password reset link: set _system.site.url (MODELENCE_SITE_URL)'
+    );
+  }
   const resetUrl = `${baseUrl}/api/_internal/auth/reset-password?token=${resetToken}`;
 
   // Send email
