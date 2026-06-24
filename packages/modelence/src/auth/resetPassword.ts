@@ -2,7 +2,8 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 
-import { Args, Context } from '@/methods/types';
+import { Args, Context, HttpContext } from '@/methods/types';
+import { RouteParams, RouteResponse } from '@/server';
 import { usersCollection, resetPasswordTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
@@ -11,6 +12,54 @@ import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
+import { hashToken } from './tokenHash';
+
+/**
+ * Name of the short-lived, httpOnly cookie that carries the reset token from the
+ * server landing route to the `resetPassword` mutation. The token never appears
+ * on a client-rendered (SPA) URL, so analytics/ad scripts cannot read it from
+ * `location.href`.
+ */
+const RESET_PASSWORD_COOKIE = 'resetPasswordToken';
+
+/**
+ * Scope the cookie to the API surface so it is only ever sent on the
+ * `resetPassword` mutation request, never on SPA navigations.
+ */
+const RESET_PASSWORD_COOKIE_PATH = '/api/_internal/';
+
+/**
+ * Looks up a reset token without consuming it, accepting either the
+ * hashed-at-rest form (new tokens) or a legacy plaintext match (tokens emailed
+ * before hashing was introduced). Used by the landing route, which validates the
+ * token but must not consume it (no new password has been submitted yet).
+ *
+ * The plaintext fallback can be removed once one max-TTL window (1 hour) has
+ * elapsed after deploying token hashing.
+ */
+async function findResetTokenDoc(rawToken: string) {
+  const hashedDoc = await resetPasswordTokensCollection.findOne({ token: hashToken(rawToken) });
+  if (hashedDoc) {
+    return hashedDoc;
+  }
+  return resetPasswordTokensCollection.findOne({ token: rawToken });
+}
+
+/**
+ * Atomically claims (finds and deletes) a reset token so that concurrent
+ * requests with the same token cannot both succeed. Returns the consumed doc, or
+ * null if no matching token exists. Tries the hashed form first, then the legacy
+ * plaintext form. This is the single-use enforcement point for password reset.
+ */
+async function consumeResetTokenDoc(rawToken: string) {
+  const hashedDoc = await resetPasswordTokensCollection.findOneAndDelete({
+    token: hashToken(rawToken),
+  });
+  if (hashedDoc) {
+    return hashedDoc;
+  }
+  return resetPasswordTokensCollection.findOneAndDelete({ token: rawToken });
+}
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   if (!configuredUrl) {
@@ -86,19 +135,21 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   const createdAt = new Date(now);
   const expiresAt = new Date(now + time.hours(1)); // 1 hour expiry
 
-  // Store reset token
+  // Store only the hash of the token, never the raw value (defense against db leaks)
   await resetPasswordTokensCollection.insertOne({
     userId: userDoc._id,
     email,
-    token: resetToken,
+    token: hashToken(resetToken),
     createdAt,
     expiresAt,
   });
 
-  // Build reset URL
+  // Point the email at the server-side landing route rather than the SPA page.
+  // The landing route validates the token, moves it into an httpOnly cookie, and
+  // redirects to the tokenless SPA page — so the raw token never reaches a
+  // client-rendered URL where analytics/ad scripts could read it.
   const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
-  const resetPasswordUrl = resolveUrl(baseUrl!, getEmailConfig().passwordReset?.redirectUrl);
-  const resetUrl = `${resetPasswordUrl}?token=${resetToken}`;
+  const resetUrl = `${baseUrl}/api/_internal/auth/reset-password?token=${resetToken}`;
 
   // Send email
   const template = getEmailConfig()?.passwordReset?.template || defaultPasswordResetTemplate;
@@ -116,19 +167,97 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   return passwordResetSent;
 }
 
-export async function handleResetPassword(args: Args, {}: Context) {
-  const token = z.string().parse(args.token);
+/**
+ * Server landing route for password reset.
+ *
+ * The reset email links here (a server route that runs before the SPA catch-all)
+ * instead of directly to the SPA page. We validate the token, stash it in a
+ * short-lived httpOnly cookie, and 302-redirect to the tokenless SPA page where
+ * the user enters a new password. The token is never exposed to client-side JS,
+ * closing the leak where analytics/ad scripts read it from `location.href`.
+ */
+export async function handleResetPasswordLanding(params: RouteParams): Promise<RouteResponse> {
+  const baseUrl =
+    (getConfig('_system.site.url') as string | undefined) ||
+    `${params.req.protocol}://${params.req.get('host')}`;
+  const resetPasswordUrl = resolveUrl(baseUrl, getEmailConfig().passwordReset?.redirectUrl);
+
+  try {
+    const token = z.string().parse(params.query.token);
+
+    const resetTokenDoc = await findResetTokenDoc(token);
+    if (!resetTokenDoc || resetTokenDoc.expiresAt < new Date()) {
+      throw new Error('This password reset link is invalid or has expired.');
+    }
+
+    // Hand the token to the SPA via an httpOnly cookie scoped to the API path,
+    // so it is only ever sent back on the resetPassword mutation request.
+    params.res.cookie(RESET_PASSWORD_COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: RESET_PASSWORD_COOKIE_PATH,
+      maxAge: time.hours(1),
+    });
+
+    return {
+      status: 302,
+      // Suppress the Referer so the token-bearing landing URL never leaks via the
+      // Referer header on any request that follows this navigation.
+      headers: { 'Referrer-Policy': 'no-referrer' },
+      redirect: resetPasswordUrl,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'This password reset link is invalid or has expired.';
+    return {
+      status: 302,
+      headers: { 'Referrer-Policy': 'no-referrer' },
+      redirect: `${resetPasswordUrl}?status=error&message=${encodeURIComponent(message)}`,
+    };
+  }
+}
+
+export async function handleResetPassword(args: Args, context: Context | HttpContext) {
+  // Prefer the token from the httpOnly cookie set by the landing route.
+  const cookieToken = 'req' in context ? context.req?.cookies?.[RESET_PASSWORD_COOKIE] : undefined;
+
+  // DEPRECATED fallback: accept the token from the request body for older clients
+  // that submit it directly. This reintroduces the URL/body-leak risk the cookie
+  // exchange was designed to eliminate, so it is intended only for the rollout
+  // window and should be removed once all clients link via the landing route.
+  // TODO(reset-token-arg-fallback): remove the `args.token` path.
+  if (!cookieToken && args.token) {
+    console.warn(
+      '[modelence] resetPassword received a token via request args instead of the httpOnly ' +
+        'cookie. This path is deprecated and will be removed; ensure password reset emails link ' +
+        'to /api/_internal/auth/reset-password so the token is exchanged server-side.'
+    );
+  }
+
+  const token = z.string().parse(cookieToken ?? args.token);
   const password = validatePassword(args.password as string);
 
-  // Find the reset token
-  const resetTokenDoc = await resetPasswordTokensCollection.findOne({ token });
+  const clearCookie = () => {
+    if ('res' in context) {
+      context.res?.clearCookie(RESET_PASSWORD_COOKIE, { path: RESET_PASSWORD_COOKIE_PATH });
+    }
+  };
+
+  // Atomically claim the token (single-use): even under concurrent requests with
+  // the same token, only one caller gets the doc; the rest see null.
+  const resetTokenDoc = await consumeResetTokenDoc(token);
   if (!resetTokenDoc) {
+    clearCookie();
     throw new Error('Invalid or expired reset token');
   }
 
-  // Check if token is expired
+  // Check if token is expired (it has already been consumed above, so an expired
+  // token is simply rejected without leaving a reusable record behind).
   if (resetTokenDoc.expiresAt < new Date()) {
-    await resetPasswordTokensCollection.deleteOne({ token });
+    clearCookie();
     throw new Error('Reset token has expired');
   }
 
@@ -159,8 +288,9 @@ export async function handleResetPassword(args: Args, {}: Context) {
   // are forced to re-authenticate with the new password
   await invalidateAllUserSessions(userDoc._id);
 
-  // Delete the used reset token
-  await resetPasswordTokensCollection.deleteOne({ token });
+  // The token was already consumed atomically at the start (single-use). Drop the
+  // short-lived reset cookie now that the flow has completed.
+  clearCookie();
 
   return { success: true, message: 'Password has been reset successfully' };
 }

@@ -90,11 +90,19 @@ describe('auth/client', () => {
     });
   });
 
-  test('resetPassword submits token and password', async () => {
+  test('resetPassword submits token and password when token is provided', async () => {
     await authClient.resetPassword({ token: 'token123', password: 'newpass' });
 
     expect(mockCallMethod).toHaveBeenCalledWith('_system.user.resetPassword', {
       token: 'token123',
+      password: 'newpass',
+    });
+  });
+
+  test('resetPassword submits only the password when token is omitted (cookie exchange)', async () => {
+    await authClient.resetPassword({ password: 'newpass' });
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.resetPassword', {
       password: 'newpass',
     });
   });

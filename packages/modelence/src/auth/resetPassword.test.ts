@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { MockedFunction } from 'vitest';
 import { ObjectId } from 'mongodb';
+import { createHash as actualCreateHash } from 'crypto';
 import type { Context } from '@/methods/types';
 import type { usersCollection, resetPasswordTokensCollection } from './db';
+
+const sha256 = (value: string) => actualCreateHash('sha256').update(value).digest('hex');
 
 type UsersCollection = typeof usersCollection;
 type ResetPasswordTokensCollection = typeof resetPasswordTokensCollection;
@@ -14,6 +17,9 @@ const mockResetTokensInsertOne: MockedFunction<ResetPasswordTokensCollection['in
 const mockResetTokensFindOne: MockedFunction<ResetPasswordTokensCollection['findOne']> = vi.fn();
 const mockResetTokensDeleteOne: MockedFunction<ResetPasswordTokensCollection['deleteOne']> =
   vi.fn();
+const mockResetTokensFindOneAndDelete: MockedFunction<
+  ResetPasswordTokensCollection['findOneAndDelete']
+> = vi.fn();
 const mockGetEmailConfig = vi.fn();
 const mockHtmlToText: MockedFunction<(html: string) => string> = vi.fn();
 const mockValidateEmail: MockedFunction<(email: string) => string> = vi.fn();
@@ -48,6 +54,7 @@ vi.doMock('./db', () => ({
     insertOne: mockResetTokensInsertOne,
     findOne: mockResetTokensFindOne,
     deleteOne: mockResetTokensDeleteOne,
+    findOneAndDelete: mockResetTokensFindOneAndDelete,
   },
 }));
 
@@ -66,6 +73,8 @@ vi.doMock('./validators', () => ({
 
 vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
+  // tokenHash.ts (imported transitively) needs the real createHash.
+  createHash: actualCreateHash,
 }));
 
 vi.doMock('bcrypt', () => ({
@@ -78,7 +87,9 @@ vi.doMock('@/time', () => ({
   time: mockTime,
 }));
 
-const { handleSendResetPasswordToken, handleResetPassword } = await import('./resetPassword');
+const resetPasswordModule = await import('./resetPassword');
+const { handleSendResetPasswordToken, handleResetPassword, handleResetPasswordLanding } =
+  resetPasswordModule;
 
 const createContext = (overrides: Partial<Context> = {}): Context => ({
   session: overrides.session ?? null,
@@ -221,19 +232,23 @@ describe('auth/resetPassword', () => {
         { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
         { collation: { locale: 'en', strength: 2 } }
       );
+      // Token is stored hashed at rest, never as the raw value.
       expect(mockResetTokensInsertOne).toHaveBeenCalledWith({
         userId,
         email,
-        token: resetToken,
+        token: sha256(resetToken),
         createdAt: expect.any(Date),
         expiresAt: expect.any(Date),
       });
+      // Email links to the server landing route carrying the raw token, not the SPA page.
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith({
         to: email,
         from: 'test@example.com',
         subject: 'Reset your password',
         text: expect.any(String),
-        html: expect.stringContaining(resetToken),
+        html: expect.stringContaining(
+          `https://example.com/api/_internal/auth/reset-password?token=${resetToken}`
+        ),
       });
       expect(result).toEqual({
         success: true,
@@ -378,7 +393,7 @@ describe('auth/resetPassword', () => {
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: `<p>Custom: ${email} - https://example.com/reset?token=${resetToken}</p>`,
+          html: `<p>Custom: ${email} - https://example.com/api/_internal/auth/reset-password?token=${resetToken}</p>`,
         })
       );
     });
@@ -408,7 +423,9 @@ describe('auth/resetPassword', () => {
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringContaining('https://custom.com/reset-password?token='),
+          html: expect.stringContaining(
+            'https://custom.com/api/_internal/auth/reset-password?token='
+          ),
         })
       );
     });
@@ -438,12 +455,17 @@ describe('auth/resetPassword', () => {
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringContaining('https://connection.com/reset-password?token='),
+          html: expect.stringContaining(
+            'https://connection.com/api/_internal/auth/reset-password?token='
+          ),
         })
       );
     });
 
-    test('handles absolute URL in redirectUrl configuration', async () => {
+    test('email always links to the server landing route regardless of redirectUrl', async () => {
+      // redirectUrl now configures only the SPA page the landing route redirects
+      // to after stashing the token; the email itself always targets the server
+      // landing route so the raw token never reaches a client-rendered URL.
       const email = 'user@example.com';
       const resetToken = 'token000';
 
@@ -474,7 +496,15 @@ describe('auth/resetPassword', () => {
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringContaining('https://external.com/custom-reset?token='),
+          html: expect.stringContaining(
+            `https://example.com/api/_internal/auth/reset-password?token=${resetToken}`
+          ),
+        })
+      );
+      // The raw external SPA URL must not appear with the token.
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.not.stringContaining('https://external.com/custom-reset?token='),
         })
       );
     });
@@ -528,15 +558,6 @@ describe('auth/resetPassword', () => {
       const email = 'user@example.com';
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(
-        createMockResetToken({
-          userId,
-          email,
-          token,
-          expiresAt: new Date(Date.now() + 1000000), // Not expired
-          createdAt: new Date(),
-        })
-      );
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
           _id: userId,
@@ -546,10 +567,22 @@ describe('auth/resetPassword', () => {
       );
       mockBcryptHash.mockResolvedValue(hashedPassword);
 
+      // The token is claimed atomically (single-use) via findOneAndDelete.
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
+        createMockResetToken({
+          userId,
+          email,
+          token,
+          expiresAt: new Date(Date.now() + 1000000),
+          createdAt: new Date(),
+        })
+      );
+
       const result = await handleResetPassword({ token, password }, createContext());
 
       expect(mockValidatePassword).toHaveBeenCalledWith(password);
-      expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token });
+      // Atomic claim is keyed by the hashed token, not the raw value.
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ token: sha256(token) });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
       expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
@@ -563,7 +596,8 @@ describe('auth/resetPassword', () => {
         { $set: { 'emails.$.verified': true } }
       );
       expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
-      expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
+      // No separate delete — consumption happened atomically during the claim.
+      expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: 'Password has been reset successfully',
@@ -576,7 +610,7 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue({
+      mockResetTokensFindOneAndDelete.mockResolvedValue({
         _id: new ObjectId(),
         userId,
         token,
@@ -604,7 +638,7 @@ describe('auth/resetPassword', () => {
       const password = 'NewP@ssw0rd!';
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(null);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(null);
 
       await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'Invalid or expired reset token'
@@ -620,20 +654,20 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(
-        createMockResetToken({
-          userId,
-          token,
-          expiresAt: new Date(Date.now() - 1000), // Expired 1 second ago
-          createdAt: new Date(Date.now() - 4000000),
-        })
-      );
+      const expiredDoc = createMockResetToken({
+        userId,
+        token,
+        expiresAt: new Date(Date.now() - 1000), // Expired 1 second ago
+        createdAt: new Date(Date.now() - 4000000),
+      });
+      // The expired token is claimed (and thus removed) atomically, then rejected.
+      mockResetTokensFindOneAndDelete.mockResolvedValue(expiredDoc);
 
       await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
         'Reset token has expired'
       );
 
-      expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ token: sha256(token) });
       expect(mockBcryptHash).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
@@ -644,7 +678,7 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
         createMockResetToken({
           userId,
           token,
@@ -660,7 +694,6 @@ describe('auth/resetPassword', () => {
 
       expect(mockBcryptHash).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
-      expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
     });
 
     test('validates password before resetting', async () => {
@@ -671,7 +704,7 @@ describe('auth/resetPassword', () => {
       mockValidatePassword.mockImplementation(() => {
         throw new Error('Password must be at least 8 characters');
       });
-      mockResetTokensFindOne.mockResolvedValue(
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
         createMockResetToken({
           userId,
           token,
@@ -686,6 +719,8 @@ describe('auth/resetPassword', () => {
 
       expect(mockBcryptHash).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+      // Validation runs before the token is claimed, so the token is left intact.
+      expect(mockResetTokensFindOneAndDelete).not.toHaveBeenCalled();
     });
 
     test('uses bcrypt with salt rounds 10', async () => {
@@ -694,7 +729,7 @@ describe('auth/resetPassword', () => {
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
         createMockResetToken({
           userId,
           token,
@@ -715,13 +750,13 @@ describe('auth/resetPassword', () => {
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
     });
 
-    test('deletes reset token after successful password reset', async () => {
+    test('consumes the reset token atomically (single-use) on success', async () => {
       const token = 'onetimetoken';
       const password = 'NewP@ssw0rd!';
       const userId = new ObjectId();
 
       mockValidatePassword.mockReturnValue(password);
-      mockResetTokensFindOne.mockResolvedValue(
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
         createMockResetToken({
           userId,
           token,
@@ -739,8 +774,139 @@ describe('auth/resetPassword', () => {
 
       await handleResetPassword({ token, password }, createContext());
 
-      expect(mockResetTokensDeleteOne).toHaveBeenCalledWith({ token });
-      expect(mockResetTokensDeleteOne).toHaveBeenCalledTimes(1);
+      // findOneAndDelete is the single point of consumption; no separate deleteOne.
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledTimes(1);
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ token: sha256(token) });
+      expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
+    });
+
+    test('reads the token from the httpOnly cookie when present, ignoring args', async () => {
+      const cookieToken = 'cookie-token';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(
+        createMockResetToken({ userId, token: cookieToken, expiresAt: new Date(Date.now() + 1e6) })
+      );
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+      mockBcryptHash.mockResolvedValue('hashedPassword');
+
+      const clearCookie = vi.fn();
+      const httpContext = {
+        ...createContext(),
+        req: { cookies: { resetPasswordToken: cookieToken } },
+        res: { clearCookie },
+      };
+
+      // args.token is a decoy — the cookie value must win.
+      await handleResetPassword({ token: 'decoy-arg-token', password }, httpContext as never);
+
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ token: sha256(cookieToken) });
+      expect(mockResetTokensFindOneAndDelete).not.toHaveBeenCalledWith({
+        token: sha256('decoy-arg-token'),
+      });
+      // Cookie is cleared after a successful reset.
+      expect(clearCookie).toHaveBeenCalledWith('resetPasswordToken', { path: '/api/_internal/' });
+    });
+
+    test('falls back to a legacy plaintext token when no hashed match exists', async () => {
+      const token = 'legacy-plaintext-token';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+      const legacyDoc = createMockResetToken({
+        userId,
+        token, // stored as plaintext (pre-hashing)
+        expiresAt: new Date(Date.now() + 1e6),
+      });
+
+      mockValidatePassword.mockReturnValue(password);
+      // First atomic claim (hashed) misses, second (plaintext) hits.
+      mockResetTokensFindOneAndDelete.mockResolvedValueOnce(null).mockResolvedValueOnce(legacyDoc);
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+      mockBcryptHash.mockResolvedValue('hashedPassword');
+
+      const result = await handleResetPassword({ token, password }, createContext());
+
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenNthCalledWith(1, { token: sha256(token) });
+      expect(mockResetTokensFindOneAndDelete).toHaveBeenNthCalledWith(2, { token });
+      expect(result).toEqual({ success: true, message: 'Password has been reset successfully' });
+    });
+  });
+
+  describe('handleResetPasswordLanding', () => {
+    const makeParams = (token: string | undefined, cookie = vi.fn()) => ({
+      query: token === undefined ? {} : { token },
+      res: { cookie },
+      req: { protocol: 'https', get: () => 'app.example.com' },
+    });
+
+    test('sets an httpOnly cookie and redirects to the tokenless SPA page when valid', async () => {
+      mockGetConfig.mockReturnValue('https://example.com');
+      mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
+      const token = 'valid-landing-token';
+      mockResetTokensFindOne.mockResolvedValue(
+        createMockResetToken({ token, expiresAt: new Date(Date.now() + 1e6) })
+      );
+
+      const cookie = vi.fn();
+      const result = await handleResetPasswordLanding(makeParams(token, cookie) as never);
+
+      expect(cookie).toHaveBeenCalledWith(
+        'resetPasswordToken',
+        token,
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'strict',
+          path: '/api/_internal/',
+        })
+      );
+      // No token in the redirect target — it lives only in the cookie.
+      expect(result).toEqual({
+        status: 302,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: 'https://example.com/new-password',
+      });
+      expect(result?.redirect).not.toContain(token);
+    });
+
+    test('redirects with an error and sets no cookie when the token is invalid', async () => {
+      mockGetConfig.mockReturnValue('https://example.com');
+      mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
+      mockResetTokensFindOne.mockResolvedValue(null);
+
+      const cookie = vi.fn();
+      const result = await handleResetPasswordLanding(makeParams('bad-token', cookie) as never);
+
+      expect(cookie).not.toHaveBeenCalled();
+      expect(result?.status).toBe(302);
+      expect(result?.redirect).toContain('status=error');
+      expect(result?.redirect).not.toContain('bad-token');
+    });
+
+    test('redirects with an error when the token is expired', async () => {
+      mockGetConfig.mockReturnValue('https://example.com');
+      mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
+      mockResetTokensFindOne.mockResolvedValue(
+        createMockResetToken({ token: 'expired', expiresAt: new Date(Date.now() - 1000) })
+      );
+
+      const cookie = vi.fn();
+      const result = await handleResetPasswordLanding(makeParams('expired', cookie) as never);
+
+      expect(cookie).not.toHaveBeenCalled();
+      expect(result?.redirect).toContain('status=error');
+    });
+
+    test('redirects with an error when the token query param is missing', async () => {
+      mockGetConfig.mockReturnValue('https://example.com');
+      mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
+
+      const cookie = vi.fn();
+      const result = await handleResetPasswordLanding(makeParams(undefined, cookie) as never);
+
+      expect(cookie).not.toHaveBeenCalled();
+      expect(result?.redirect).toContain('status=error');
     });
   });
 });

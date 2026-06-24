@@ -16,7 +16,11 @@ import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
-import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
+import {
+  handleResetPassword,
+  handleResetPasswordLanding,
+  handleSendResetPasswordToken,
+} from './resetPassword';
 
 function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
   return `${rule.bucket}\n${rule.type}\n${rule.window}`;
@@ -199,6 +203,15 @@ export default new Module('_system.user', {
       path: '/api/_internal/auth/verify-email',
       handlers: {
         get: handleVerifyEmail,
+      },
+    },
+    {
+      // Server-side landing for password reset: validates the token, stores it
+      // in an httpOnly cookie, and redirects to the tokenless SPA page so the
+      // token never reaches a client-rendered URL. Runs before the SPA catch-all.
+      path: '/api/_internal/auth/reset-password',
+      handlers: {
+        get: handleResetPasswordLanding,
       },
     },
   ],

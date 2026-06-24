@@ -209,6 +209,7 @@ describe('auth/verification', () => {
       });
       expect(result).toEqual({
         status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=verified',
       });
     });
@@ -237,6 +238,7 @@ describe('auth/verification', () => {
       });
       expect(result).toEqual({
         status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
       });
     });
@@ -273,6 +275,7 @@ describe('auth/verification', () => {
       });
       expect(result).toEqual({
         status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=User%20not%20found',
       });
     });

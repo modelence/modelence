@@ -88,6 +88,38 @@ describe('routes/handler', () => {
     expect(transactionEnd).toHaveBeenCalledWith();
   });
 
+  test('applies custom headers before redirecting and does not send a body', async () => {
+    const handler = createRouteHandler('GET', '/landing', async () => ({
+      status: 302,
+      headers: { 'Referrer-Policy': 'no-referrer' },
+      redirect: '/destination',
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(302);
+    // Header must be set before redirect flushes the response, otherwise it is lost.
+    const setHeaderOrder = (res.setHeader as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const redirectOrder = (res.redirect as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(res.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
+    expect(setHeaderOrder).toBeLessThan(redirectOrder);
+    expect(res.redirect).toHaveBeenCalledWith('/destination');
+    expect(res.send).not.toHaveBeenCalled();
+  });
+
+  test('applies custom headers on a non-redirect response', async () => {
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      headers: { 'X-Custom': 'value' },
+      data: { ok: true },
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.setHeader).toHaveBeenCalledWith('X-Custom', 'value');
+    expect(res.send).toHaveBeenCalledWith({ ok: true });
+  });
+
   test('handles ModelenceError gracefully', async () => {
     const handler = createRouteHandler('GET', '/test', async () => {
       throw new ValidationError('fail');

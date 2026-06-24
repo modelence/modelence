@@ -51,17 +51,19 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
       if (response) {
         res.status(response.status || 200);
 
-        if (response.redirect) {
-          res.redirect(response.redirect);
-        }
-
+        // Apply custom headers before sending the body/redirect, otherwise
+        // res.redirect()/res.send() flush the response and the headers are lost.
         if (response.headers) {
           Object.entries(response.headers).forEach(([key, value]) => {
             res.setHeader(key, value);
           });
         }
 
-        res.send(response.data);
+        if (response.redirect) {
+          res.redirect(response.redirect);
+        } else {
+          res.send(response.data);
+        }
       }
     } catch (error) {
       transaction.end('error');
