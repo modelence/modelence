@@ -213,10 +213,12 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
       redirect: resetPasswordUrl,
     };
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'This password reset link is invalid or has expired.';
+    // Always surface a single fixed, friendly message to the user. The raw error
+    // (a ZodError for a missing/non-string token, or an internal DB error) must
+    // not be forwarded into the redirect URL — it would be unfriendly at best and
+    // leak internals at worst. Log the real cause server-side instead.
+    console.error('Error handling password reset landing:', error);
+    const message = 'This password reset link is invalid or has expired.';
     return {
       status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },

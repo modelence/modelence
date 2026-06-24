@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { MockedFunction } from 'vitest';
 import { ObjectId } from 'mongodb';
 import { createHash as actualCreateHash } from 'crypto';
@@ -931,7 +931,16 @@ describe('auth/resetPassword', () => {
       expect(result?.redirect).not.toContain(token);
     });
 
-    test('redirects with an error and sets no cookie when the token is invalid', async () => {
+    // The single user-facing message every error case must surface.
+    const FRIENDLY_MESSAGE = 'This password reset link is invalid or has expired.';
+    const friendlyParam = `message=${encodeURIComponent(FRIENDLY_MESSAGE)}`;
+
+    // The catch logs the real cause server-side; silence it in these tests.
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    afterEach(() => consoleErrorSpy.mockClear());
+    afterAll(() => consoleErrorSpy.mockRestore());
+
+    test('redirects with the friendly error and sets no cookie when the token is invalid', async () => {
       mockGetConfig.mockReturnValue('https://example.com');
       mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
       mockResetTokensFindOne.mockResolvedValue(null);
@@ -942,10 +951,11 @@ describe('auth/resetPassword', () => {
       expect(cookie).not.toHaveBeenCalled();
       expect(result?.status).toBe(302);
       expect(result?.redirect).toContain('status=error');
+      expect(result?.redirect).toContain(friendlyParam);
       expect(result?.redirect).not.toContain('bad-token');
     });
 
-    test('redirects with an error when the token is expired', async () => {
+    test('redirects with the friendly error when the token is expired', async () => {
       mockGetConfig.mockReturnValue('https://example.com');
       mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
       mockResetTokensFindOne.mockResolvedValue(
@@ -957,9 +967,10 @@ describe('auth/resetPassword', () => {
 
       expect(cookie).not.toHaveBeenCalled();
       expect(result?.redirect).toContain('status=error');
+      expect(result?.redirect).toContain(friendlyParam);
     });
 
-    test('redirects with an error when the token query param is missing', async () => {
+    test('redirects with the friendly error (not a ZodError) when the token is missing', async () => {
       mockGetConfig.mockReturnValue('https://example.com');
       mockGetEmailConfig.mockReturnValue({ passwordReset: { redirectUrl: '/new-password' } });
 
@@ -968,6 +979,10 @@ describe('auth/resetPassword', () => {
 
       expect(cookie).not.toHaveBeenCalled();
       expect(result?.redirect).toContain('status=error');
+      // The friendly message — NOT the raw ZodError issues array.
+      expect(result?.redirect).toContain(friendlyParam);
+      expect(result?.redirect).not.toContain('Required');
+      expect(result?.redirect).not.toContain('invalid_type');
     });
   });
 });
