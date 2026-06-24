@@ -172,13 +172,11 @@ export async function sendResetPasswordToken(options: { email: string }) {
 /**
  * Reset password.
  *
- * The reset token is normally exchanged server-side: the password reset email
- * links to a server route that stores the token in an httpOnly cookie, so the
- * client only needs to submit the new password. Pass `token` explicitly only for
- * legacy flows that still carry it in the client (deprecated).
+ * The token is normally exchanged server-side via an httpOnly cookie, so the
+ * client only submits the new password. Pass `token` only for legacy flows
+ * that still carry it client-side (deprecated).
  *
- * @param options.token - The password reset token (optional; read from the
- *   httpOnly cookie when omitted).
+ * @param options.token - Reset token (optional; read from the httpOnly cookie when omitted).
  * @param options.password - The new password.
  */
 export async function resetPassword(options: { token?: string; password: string }) {

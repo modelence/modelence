@@ -3,19 +3,13 @@ import { isTelemetryEnabled } from '@/app/state';
 
 type LogLevel = 'error' | 'info' | 'debug' | '';
 
-/**
- * Keys whose values are secrets and must never be recorded in telemetry/APM
- * context. Matched case-insensitively as a substring (e.g. `linkNonce` matches
- * `nonce`, `authToken` matches `token`). Used to scrub request args/query/body
- * before they are sent to the APM sink, where they would otherwise persist in
- * plaintext — the same "readable secret at rest" risk hashing-at-rest avoids.
- */
+// Secret-bearing keys to scrub before request args/query/body reach the APM sink.
+// Matched case-insensitively as a substring (`authToken` matches `token`).
 const SENSITIVE_KEYS = ['token', 'password', 'secret', 'nonce', 'code'];
 
 /**
- * Returns a deep copy of `value` with any sensitive keys (see
- * {@link SENSITIVE_KEYS}) replaced by `'[redacted]'`. Non-object values pass
- * through unchanged.
+ * Deep-copies `value`, replacing any {@link SENSITIVE_KEYS} match with
+ * `'[redacted]'`. Non-object values pass through unchanged.
  */
 export function redactSensitive(value: unknown): unknown {
   if (!value || typeof value !== 'object') {

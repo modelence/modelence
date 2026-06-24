@@ -918,7 +918,7 @@ describe('auth/resetPassword', () => {
         token,
         expect.objectContaining({
           httpOnly: true,
-          sameSite: 'strict',
+          sameSite: 'lax',
           path: '/api/_internal/',
         })
       );

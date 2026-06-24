@@ -206,9 +206,8 @@ export default new Module('_system.user', {
       },
     },
     {
-      // Server-side landing for password reset: validates the token, stores it
-      // in an httpOnly cookie, and redirects to the tokenless SPA page so the
-      // token never reaches a client-rendered URL. Runs before the SPA catch-all.
+      // Server landing for password reset (see handleResetPasswordLanding).
+      // Runs before the SPA catch-all.
       path: '/api/_internal/auth/reset-password',
       handlers: {
         get: handleResetPasswordLanding,

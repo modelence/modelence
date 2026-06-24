@@ -24,8 +24,7 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
     const transaction = startTransaction('route', `route:${method.toLowerCase()}:${path}`, {
       method,
       path,
-      // Redact secrets before they reach telemetry/APM — token-bearing links put
-      // these in the URL, which would otherwise persist in plaintext at the sink.
+      // Redact secrets (e.g. tokens in the URL) before they reach the APM sink.
       query: redactSensitive(req.query),
       body: redactSensitive(req.body),
       params: redactSensitive(req.params),
