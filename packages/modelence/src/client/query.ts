@@ -56,6 +56,15 @@ export function connectModelenceQueryClient(queryClient: QueryClient) {
   });
 }
 
+/**
+ * Whether a `QueryClient` is already connected to the live-query layer.
+ * `renderApp` uses this to avoid injecting its own `<ModelenceQueryProvider>`
+ * when the app already mounts its own provider and connects it beforehand.
+ */
+export function hasConnectedQueryClient(): boolean {
+  return queryClientRef !== null;
+}
+
 export function disconnectModelenceQueryClient() {
   if (cacheUnsubscribe) {
     cacheUnsubscribe();

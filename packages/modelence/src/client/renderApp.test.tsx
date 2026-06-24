@@ -31,8 +31,16 @@ vi.doMock('./session', () => ({
   startSessionHeartbeat: mockStartSessionHeartbeat,
 }));
 
+const mockQueryProvider = vi.fn(({ children }: { children: React.ReactNode }) => <>{children}</>);
+
 vi.doMock('./queryProvider', () => ({
-  ModelenceQueryProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ModelenceQueryProvider: mockQueryProvider,
+}));
+
+const mockHasConnectedQueryClient = vi.fn(() => false);
+
+vi.doMock('./query', () => ({
+  hasConnectedQueryClient: mockHasConnectedQueryClient,
 }));
 
 vi.doMock('../client', () => ({
@@ -61,6 +69,7 @@ describe('client/renderApp', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHasConnectedQueryClient.mockReturnValue(false);
     linkElement = null;
     ssrStateNode = null;
     const rootElement = {};
@@ -91,6 +100,7 @@ describe('client/renderApp', () => {
     globalThis.window = {
       addEventListener: addEventListenerMock,
       document: globalThis.document,
+      location: { pathname: '/dashboard', search: '?tab=overview', hash: '#section' },
     } as unknown as Window & typeof globalThis;
   });
 
@@ -165,6 +175,64 @@ describe('client/renderApp', () => {
     expect(mockCreateRoot).not.toHaveBeenCalled();
     expect(mockHydrateSession).toHaveBeenCalledWith(session);
     expect(mockStartSessionHeartbeat).toHaveBeenCalledTimes(1);
+  });
+
+  test('passes browser location (path + search, no hash) to the router', () => {
+    const router = vi.fn(({ children }: { children: React.ReactNode }) => <>{children}</>);
+
+    renderApp({
+      loadingElement: null,
+      routesElement: <div>Routes</div>,
+      router,
+    });
+
+    // Must match the server's req.originalUrl (path + search; hash is never
+    // sent to the server) so a location-driven router hydrates the same route.
+    expect(router).toHaveBeenCalledWith(
+      expect.objectContaining({ location: '/dashboard?tab=overview' })
+    );
+  });
+
+  function getRenderedTree(): React.ReactElement {
+    const rootResult = (mockCreateRoot as Mock).mock.results[0];
+    const renderFn = (rootResult?.value as { render: Mock }).render;
+    return renderFn.mock.calls[0]?.[0] as React.ReactElement;
+  }
+
+  function treeContainsType(node: unknown, type: unknown): boolean {
+    if (!React.isValidElement(node)) {
+      return false;
+    }
+    if (node.type === type) {
+      return true;
+    }
+    const children = (node.props as { children?: React.ReactNode }).children;
+    return React.Children.toArray(children).some((child) => treeContainsType(child, type));
+  }
+
+  test('wraps routes in ModelenceQueryProvider when no client is connected', () => {
+    mockHasConnectedQueryClient.mockReturnValue(false);
+
+    renderApp({
+      loadingElement: null,
+      routesElement: <div>Routes</div>,
+    });
+
+    expect(treeContainsType(getRenderedTree(), mockQueryProvider)).toBe(true);
+  });
+
+  test('does not inject ModelenceQueryProvider when the app already connected a client', () => {
+    // Bring-your-own-provider apps connect their QueryClient before renderApp.
+    // Injecting a second provider would shadow their client so live-query
+    // updates land on the wrong one.
+    mockHasConnectedQueryClient.mockReturnValue(true);
+
+    renderApp({
+      loadingElement: null,
+      routesElement: <div>Routes</div>,
+    });
+
+    expect(treeContainsType(getRenderedTree(), mockQueryProvider)).toBe(false);
   });
 
   test('calls hydrateRoot when SSR marker exists but JSON is malformed', () => {

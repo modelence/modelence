@@ -4,6 +4,7 @@ import { AppProvider } from '../client';
 import { setErrorHandler, ErrorHandler } from './errorHandler';
 import { hydrateSession, startSessionHeartbeat, type SessionInitPayload } from './session';
 import { ModelenceQueryProvider } from './queryProvider';
+import { hasConnectedQueryClient } from './query';
 
 const SSR_STATE_SCRIPT_ID = '__MODELENCE_STATE__';
 
@@ -90,16 +91,32 @@ export function renderApp(options: RenderAppOptions) {
   const ssrState = readSsrState();
   if (ssrState?.session) {
     hydrateSession(ssrState.session);
-    startSessionHeartbeat();
+    // Fire-and-forget: the heartbeat loop runs in the background.
+    void startSessionHeartbeat();
   }
 
   const container = document.getElementById('root')!;
-  const routedTree = router ? router({ children: routesElement }) : routesElement;
+  // Pass the same location the server used (req.originalUrl == path + search;
+  // the hash is never sent to the server) so a location-driven router (e.g. a
+  // static router) resolves the same route on hydration as it did during SSR,
+  // avoiding hydration mismatches.
+  const location = window.location.pathname + window.location.search;
+  const routedTree = router ? router({ children: routesElement, location }) : routesElement;
+
+  // If the app already connected its own QueryClient (the documented
+  // bring-your-own-provider pattern connects before calling renderApp), don't
+  // inject ours. A second provider would shadow the user's client: useQuery
+  // would read the inner client while live-query updates write to the outer
+  // one, so real-time queries would never update.
+  const appTree = hasConnectedQueryClient() ? (
+    routedTree
+  ) : (
+    <ModelenceQueryProvider>{routedTree}</ModelenceQueryProvider>
+  );
+
   const tree = (
     <React.StrictMode>
-      <AppProvider loadingElement={loadingElement}>
-        <ModelenceQueryProvider>{routedTree}</ModelenceQueryProvider>
-      </AppProvider>
+      <AppProvider loadingElement={loadingElement}>{appTree}</AppProvider>
     </React.StrictMode>
   );
 
