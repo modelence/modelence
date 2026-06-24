@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 
 import { Args, Context, HttpContext } from '@/methods/types';
-import { RouteParams, RouteResponse } from '@/server';
+import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { usersCollection, resetPasswordTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
@@ -46,19 +46,17 @@ async function findResetTokenDoc(rawToken: string) {
 }
 
 /**
- * Atomically claims (finds and deletes) a reset token so that concurrent
- * requests with the same token cannot both succeed. Returns the consumed doc, or
- * null if no matching token exists. Tries the hashed form first, then the legacy
- * plaintext form. This is the single-use enforcement point for password reset.
+ * Atomically claims a previously-found reset token by `_id`. This is the
+ * single-use enforcement point: of any concurrent requests holding the same
+ * token, exactly one `findOneAndDelete` returns the doc and the rest get null.
+ *
+ * It is called only AFTER the token has been validated and the new password
+ * hashed, so a failure earlier in the flow never consumes the token (the user
+ * can retry the same link). Returns the deleted doc, or null if another request
+ * already claimed it.
  */
-async function consumeResetTokenDoc(rawToken: string) {
-  const hashedDoc = await resetPasswordTokensCollection.findOneAndDelete({
-    token: hashToken(rawToken),
-  });
-  if (hashedDoc) {
-    return hashedDoc;
-  }
-  return resetPasswordTokensCollection.findOneAndDelete({ token: rawToken });
+async function claimResetTokenById(id: ObjectId) {
+  return resetPasswordTokensCollection.findOneAndDelete({ _id: id });
 }
 
 function resolveUrl(baseUrl: string, configuredUrl?: string): string {
@@ -246,17 +244,18 @@ export async function handleResetPassword(args: Args, context: Context | HttpCon
     }
   };
 
-  // Atomically claim the token (single-use): even under concurrent requests with
-  // the same token, only one caller gets the doc; the rest see null.
-  const resetTokenDoc = await consumeResetTokenDoc(token);
+  // Look up the token WITHOUT consuming it. Validation and password hashing must
+  // not burn the token: if any of them fail (or the user is missing), the link
+  // stays valid so the user can simply retry instead of requesting a new email.
+  const resetTokenDoc = await findResetTokenDoc(token);
   if (!resetTokenDoc) {
     clearCookie();
     throw new Error('Invalid or expired reset token');
   }
 
-  // Check if token is expired (it has already been consumed above, so an expired
-  // token is simply rejected without leaving a reusable record behind).
   if (resetTokenDoc.expiresAt < new Date()) {
+    // Expired: remove it and reject.
+    await claimResetTokenById(resetTokenDoc._id as ObjectId);
     clearCookie();
     throw new Error('Reset token has expired');
   }
@@ -269,6 +268,14 @@ export async function handleResetPassword(args: Args, context: Context | HttpCon
 
   // Hash the new password
   const hash = await bcrypt.hash(password, 10);
+
+  // Commit point: atomically claim the token. If a concurrent request already
+  // consumed it, abort WITHOUT touching the password (single-use, no double-spend).
+  const claimedToken = await claimResetTokenById(resetTokenDoc._id as ObjectId);
+  if (!claimedToken) {
+    clearCookie();
+    throw new Error('Invalid or expired reset token');
+  }
 
   // Update user's password
   await usersCollection.updateOne(
@@ -288,8 +295,8 @@ export async function handleResetPassword(args: Args, context: Context | HttpCon
   // are forced to re-authenticate with the new password
   await invalidateAllUserSessions(userDoc._id);
 
-  // The token was already consumed atomically at the start (single-use). Drop the
-  // short-lived reset cookie now that the flow has completed.
+  // The token was consumed atomically at the commit point above (single-use).
+  // Drop the short-lived reset cookie now that the flow has completed.
   clearCookie();
 
   return { success: true, message: 'Password has been reset successfully' };
