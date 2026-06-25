@@ -26,6 +26,8 @@ vi.doMock('./db', () => ({
 vi.doMock('./session', () => ({
   setSessionUser: mockSetSessionUser,
   clearSessionUser: mockClearSessionUser,
+  setAuthTokenCookie: vi.fn(),
+  clearAuthTokenCookie: vi.fn(),
 }));
 
 vi.doMock('./verification', () => ({
@@ -66,6 +68,7 @@ describe('auth/login', () => {
     user: null,
     roles: [],
     connectionInfo: { ip: '203.0.113.1', baseUrl: 'https://app.example.com' },
+    res: null,
   };
 
   let authConfig: {

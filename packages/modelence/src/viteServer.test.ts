@@ -42,7 +42,7 @@ vi.doMock('fs', () => ({
 }));
 
 // Import after mocking
-await import('./viteServer');
+const { splitTemplateAtRoot } = await import('./viteServer');
 
 const createResponse = (): Response => {
   const response = {
@@ -380,5 +380,45 @@ describe('viteServer singleton', () => {
   test('exports a ViteServer instance', async () => {
     const module = await import('./viteServer');
     expect(module.viteServer).toBeDefined();
+  });
+});
+
+describe('splitTemplateAtRoot', () => {
+  test('splits on the canonical empty root div', () => {
+    const { prelude, rootOpenTag, epilogue } = splitTemplateAtRoot(
+      '<head></head><body><div id="root"></div></body>'
+    );
+    expect(prelude).toBe('<head></head><body>');
+    expect(rootOpenTag).toBe('<div id="root">');
+    expect(epilogue).toBe('</body>');
+  });
+
+  test('preserves extra attributes on the root div', () => {
+    const { rootOpenTag, epilogue } = splitTemplateAtRoot(
+      '<body><div id="root" class="app" data-theme="dark"></div></body>'
+    );
+    expect(rootOpenTag).toBe('<div id="root" class="app" data-theme="dark">');
+    expect(epilogue).toBe('</body>');
+  });
+
+  test('matches attributes declared before id', () => {
+    const { rootOpenTag } = splitTemplateAtRoot('<div class="app" id="root"></div>');
+    expect(rootOpenTag).toBe('<div class="app" id="root">');
+  });
+
+  test('matches single-quoted id', () => {
+    const { rootOpenTag } = splitTemplateAtRoot("<div id='root'></div>");
+    expect(rootOpenTag).toBe("<div id='root'>");
+  });
+
+  test('tolerates whitespace and newlines inside the empty root', () => {
+    const { rootOpenTag } = splitTemplateAtRoot('<div id="root">\n  \n</div>');
+    expect(rootOpenTag).toBe('<div id="root">');
+  });
+
+  test('throws when no root placeholder is present', () => {
+    expect(() => splitTemplateAtRoot('<body><div id="app"></div></body>')).toThrow(
+      /missing the expected/
+    );
   });
 });

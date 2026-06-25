@@ -18,9 +18,14 @@ vi.doMock('@/time', () => ({
   },
 }));
 
+vi.doMock('@/config/server', () => ({
+  getPublicConfigs: vi.fn(() => ({})),
+}));
+
 const sessionModule = await import('./session');
 const { createSession, obtainSession, setSessionUser, clearSessionUser, sessionsCollection } =
   sessionModule;
+const sessionSystemModule = sessionModule.default;
 
 describe('auth/session', () => {
   const insertOneMock: Mock = vi.fn();
@@ -107,5 +112,79 @@ describe('auth/session', () => {
         $set: { userId: null },
       }
     );
+  });
+
+  describe('_system.session.init cookie refresh', () => {
+    function makeRes() {
+      return {
+        cookie: vi.fn(),
+        clearCookie: vi.fn(),
+      } as unknown as import('express').Response;
+    }
+
+    test('refreshes the cookie for a logged-in session', async () => {
+      const res = makeRes();
+      const session = { authToken: 'real-token', expiresAt: new Date(), userId: new ObjectId() };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: { id: 'u', email: 'a@b' },
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res,
+        }
+      );
+
+      expect(res.cookie as Mock).toHaveBeenCalledWith(
+        'authToken',
+        'real-token',
+        expect.objectContaining({ httpOnly: true })
+      );
+    });
+
+    test('does NOT write a cookie for an anonymous session', async () => {
+      // Regression: an anonymous Set-Cookie would shadow the localStorage
+      // token sent in the body of the reconciliation request, causing the
+      // server to authenticate as anonymous and the client to overwrite
+      // its real token — permanently logging the user out.
+      const res = makeRes();
+      const session = { authToken: 'fresh-anon-token', expiresAt: new Date(), userId: null };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res,
+        }
+      );
+
+      expect(res.cookie as Mock).not.toHaveBeenCalled();
+    });
+
+    test('does not throw when res is null (in-process invocations)', async () => {
+      const session = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: { id: 'u', email: 'a@b' },
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res: null,
+        }
+      );
+    });
   });
 });

@@ -1,9 +1,8 @@
-import { createJiti } from 'jiti';
 import { parse as parseDotenv } from 'dotenv';
 import { join } from 'path';
 import fs from 'fs/promises';
 import type { ModelenceConfig } from '../types';
-import { z } from 'zod';
+import { loadModelenceConfig } from '../app/modelenceConfig';
 
 let env: Record<string, string> | null = null;
 let config: ModelenceConfig | null = null;
@@ -65,24 +64,7 @@ export function getModelencePath(subPath?: string) {
 
 export async function loadEnv() {
   try {
-    const configPath = join(process.cwd(), 'modelence.config.ts');
-
-    const jiti = createJiti(import.meta.url, {
-      interopDefault: true,
-      requireCache: false,
-    });
-
-    const configModule = await jiti.import(configPath);
-    if (typeof configModule !== 'object') {
-      throw new Error('modelence.config.ts should export an object');
-    }
-    config = z
-      .object({
-        serverDir: z.string(),
-        serverEntry: z.string(),
-        postBuildCommand: z.string().optional(),
-      })
-      .parse(configModule);
+    config = await loadModelenceConfig();
   } catch (error) {
     console.error(error);
     throw new Error('Unable to load modelence.config.ts');

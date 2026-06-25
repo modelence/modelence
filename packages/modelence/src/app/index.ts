@@ -70,6 +70,8 @@ export type AppOptions = {
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
   websocket?: WebsocketConfig;
+  /** Enable server-side rendering of the user's React tree. */
+  ssr?: boolean;
 };
 
 export async function startApp({
@@ -82,7 +84,11 @@ export async function startApp({
   auth = {},
   security = {},
   websocket = {},
+  ssr = false,
 }: AppOptions) {
+  if (ssr && server === viteServer) {
+    viteServer.enableSsr();
+  }
   dotenv.config();
 
   dotenv.config({ path: '.modelence.env' });

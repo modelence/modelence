@@ -36,6 +36,42 @@ export type CallMethodOptions = {
   errorHandler?: (error: Error, methodName: string) => void;
 };
 
+// Default: fetch HTTP. SSR swaps in an in-process transport via globalThis
+// so Vite's ssrLoadModule (separate module graph) shares the same instance.
+export type CallMethodTransport = <T = unknown>(methodName: string, args: MethodArgs) => Promise<T>;
+
+/**
+ * The default HTTP transport. Exported so alternative transports (e.g. the SSR
+ * in-process transport) can delegate to it when they don't apply.
+ * @internal
+ */
+export const defaultCallMethodTransport: CallMethodTransport = async <T>(
+  methodName: string,
+  args: MethodArgs
+) => {
+  const baseUrl = getClientConfig()?.baseUrl ?? '';
+  return call<T>(`${baseUrl}/api/_internal/method/${methodName}`, args);
+};
+
+const TRANSPORT_KEY = '__modelence_call_method_transport__';
+
+type GlobalWithTransport = typeof globalThis & {
+  [TRANSPORT_KEY]?: CallMethodTransport;
+};
+
+function getTransport(): CallMethodTransport {
+  return (globalThis as GlobalWithTransport)[TRANSPORT_KEY] ?? defaultCallMethodTransport;
+}
+
+/** Returns a disposer that restores the previous transport. */
+export function setCallMethodTransport(next: CallMethodTransport): () => void {
+  const previous = (globalThis as GlobalWithTransport)[TRANSPORT_KEY];
+  (globalThis as GlobalWithTransport)[TRANSPORT_KEY] = next;
+  return () => {
+    (globalThis as GlobalWithTransport)[TRANSPORT_KEY] = previous;
+  };
+}
+
 /**
  * Calls a server-side method (query or mutation) defined on a Modelence module.
  *
@@ -72,8 +108,7 @@ export async function callMethod<T = unknown>(
   args = args ?? {};
   options = options ?? {};
   try {
-    const baseUrl = getClientConfig()?.baseUrl ?? '';
-    return await call<T>(`${baseUrl}/api/_internal/method/${methodName}`, args);
+    return await getTransport()<T>(methodName, args);
   } catch (error) {
     const handler = options.errorHandler ?? handleError;
     handler(error as Error, methodName);

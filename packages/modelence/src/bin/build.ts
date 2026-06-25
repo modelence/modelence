@@ -13,7 +13,9 @@ async function buildClient() {
     return;
   }
 
+  // Always emit SSR artifacts; `startApp({ ssr: true })` decides if they're used.
   await buildVite();
+  await buildViteSsr();
 }
 
 async function buildVite() {
@@ -28,6 +30,34 @@ async function buildVite() {
     build: {
       outDir: path.resolve(process.cwd(), '.modelence/build/client').replace(/\\/g, '/'),
       emptyOutDir: true,
+      // Emit `.vite/ssr-manifest.json` for ssr/collectCss.ts.
+      ssrManifest: true,
+    },
+  };
+
+  await viteBuild(mergeConfig(userConfig?.config || {}, modelenceConfig, true));
+}
+
+async function buildViteSsr() {
+  console.log('Building SSR bundle with Vite...');
+
+  const userConfig = await loadConfigFromFile({
+    command: 'build',
+    mode: process.env.NODE_ENV || 'production',
+  });
+
+  const ssrEntry = path.resolve(process.cwd(), 'src/client/index.tsx').replace(/\\/g, '/');
+  const modelenceConfig = {
+    build: {
+      ssr: ssrEntry,
+      outDir: path.resolve(process.cwd(), '.modelence/build/ssr').replace(/\\/g, '/'),
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          format: 'esm' as const,
+          entryFileNames: 'index.mjs',
+        },
+      },
     },
   };
 
