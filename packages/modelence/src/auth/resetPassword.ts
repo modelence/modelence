@@ -21,6 +21,18 @@ const RESET_PASSWORD_COOKIE = 'resetPasswordToken';
 // Scope the cookie to the API surface so it's only sent on the resetPassword request.
 const RESET_PASSWORD_COOKIE_PATH = '/api/_internal/';
 
+// Attributes shared by the set and clear calls. Browsers only remove a cookie
+// when the clearing Set-Cookie matches the same path/secure/sameSite/httpOnly,
+// so both sites must use these identical flags or the httpOnly cookie can linger.
+const RESET_PASSWORD_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  // `lax` so the cookie survives the email-link navigation; `strict` can drop
+  // it when the SPA is reached cross-site (some webviews).
+  sameSite: 'lax',
+  path: RESET_PASSWORD_COOKIE_PATH,
+} as const;
+
 /**
  * Looks up a reset token without consuming it. Only matches the hashed form:
  * tokens are stored as `hashToken(rawToken)`, and the caller must present the
@@ -173,12 +185,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
     }
 
     params.res.cookie(RESET_PASSWORD_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      // `lax` so the cookie survives the email-link navigation; `strict` can drop
-      // it when the SPA is reached cross-site (some webviews).
-      sameSite: 'lax',
-      path: RESET_PASSWORD_COOKIE_PATH,
+      ...RESET_PASSWORD_COOKIE_OPTIONS,
       maxAge: time.hours(1),
     });
 
@@ -222,7 +229,9 @@ export async function handleResetPassword(args: Args, context: Context) {
 
   const clearCookie = () => {
     // `res` is null for in-process invocations (no response to mutate).
-    context.res?.clearCookie(RESET_PASSWORD_COOKIE, { path: RESET_PASSWORD_COOKIE_PATH });
+    // Clear with the same flags used to set it; browsers ignore a clear whose
+    // attributes don't match, which would leave the httpOnly cookie behind.
+    context.res?.clearCookie(RESET_PASSWORD_COOKIE, RESET_PASSWORD_COOKIE_OPTIONS);
   };
 
   // Look up WITHOUT consuming: if validation/hashing fails (or the user is

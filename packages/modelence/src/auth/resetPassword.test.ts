@@ -866,8 +866,14 @@ describe('auth/resetPassword', () => {
       expect(mockResetTokensFindOne).not.toHaveBeenCalledWith({
         token: sha256('decoy-arg-token'),
       });
-      // Cookie is cleared after a successful reset.
-      expect(clearCookie).toHaveBeenCalledWith('resetPasswordToken', { path: '/api/_internal/' });
+      // Cookie is cleared after a successful reset, with the same flags it was
+      // set with so the browser actually removes the httpOnly cookie.
+      expect(clearCookie).toHaveBeenCalledWith('resetPasswordToken', {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/api/_internal/',
+      });
     });
 
     test('looks up the token only by its hash (no plaintext fallback)', async () => {
