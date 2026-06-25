@@ -9,7 +9,7 @@ import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import z from 'zod';
-import type { AppServer, HttpContext } from '../types';
+import type { AppServer } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
@@ -157,8 +157,8 @@ export async function startServer(
     app.use(server.middlewares());
   }
 
-  app.all('*', (req: Request, res: Response) => {
-    return server.handler(req, res);
+  app.all('*', (req: Request, res: Response, next) => {
+    Promise.resolve(server.handler(req, res)).catch(next);
   });
 
   process.on('unhandledRejection', (reason, promise) => {
@@ -190,10 +190,12 @@ export async function startServer(
   });
 }
 
-export async function getCallContext(req: Request, res: Response): Promise<HttpContext> {
+export async function getCallContext(req: Request, res: Response | null = null) {
   const path = (req.path ?? req.url ?? '').split('?')[0];
 
   const isOAuthCallback = path.startsWith('/api/_internal/auth/') && path.endsWith('/callback');
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
 
   const authToken = z
     .string()
@@ -202,7 +204,7 @@ export async function getCallContext(req: Request, res: Response): Promise<HttpC
     .parse(
       req.cookies.authToken ||
         (isOAuthCallback ? req.cookies.oauthLinkToken : null) ||
-        req.body.authToken
+        body.authToken
     );
 
   const clientInfo = z
@@ -215,7 +217,7 @@ export async function getCallContext(req: Request, res: Response): Promise<HttpC
       orientation: z.string().nullable(),
     })
     .nullish()
-    .parse(req.body.clientInfo) ?? {
+    .parse(body.clientInfo) ?? {
     screenWidth: 0,
     screenHeight: 0,
     windowWidth: 0,

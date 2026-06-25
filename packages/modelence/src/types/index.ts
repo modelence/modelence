@@ -19,7 +19,7 @@ export interface AppServerInitOptions {
 
 export interface AppServer {
   init: (options: AppServerInitOptions) => Promise<void>;
-  handler: (req: Request, res: Response) => void;
+  handler: (req: Request, res: Response) => void | Promise<void>;
   middlewares?: () => ExpressMiddleware[];
 }
 

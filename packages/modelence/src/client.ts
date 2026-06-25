@@ -15,6 +15,17 @@ export const AppProvider =
     : OriginalAppProvider;
 
 export { renderApp } from './client/renderApp';
+export { ModelenceQueryProvider } from './client/queryProvider';
+export {
+  modelenceQuery,
+  modelenceLiveQuery,
+  modelenceMutation,
+  createQueryKey,
+  connectModelenceQueryClient,
+  disconnectModelenceQueryClient,
+  ModelenceQueryClient,
+  type ModelenceQueryKey,
+} from './client/query';
 export { callMethod, MethodError, type MethodArgs, type CallMethodOptions } from './client/method';
 export { useSession } from './client/session';
 export {

@@ -126,7 +126,17 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
   res.cookie('authToken', authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: time.days(7),
+  });
+}
+
+export function clearAuthTokenCookie(res: Response) {
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
     path: '/',
   });
 }
@@ -134,8 +144,15 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
 export default new Module('_system.session', {
   stores: [sessionsCollection, linkNoncesCollection],
   mutations: {
-    init: async function (args, { session, user }) {
-      // TODO: mark or track app load somewhere
+    init: async function (args, { session, user, res }) {
+      // Only refresh the cookie for logged-in sessions. Writing one for a
+      // freshly-minted anonymous session creates a Set-Cookie that the
+      // browser then attaches to the client's reconciliation request,
+      // shadowing the localStorage token sent in the body — see
+      // getCallContext's `cookie || body.authToken` precedence.
+      if (res && session?.userId) {
+        setAuthTokenCookie(res, session.authToken);
+      }
 
       return {
         session,

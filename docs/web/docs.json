@@ -174,7 +174,8 @@
                     "group": "Classes",
                     "pages": [
                       "api-reference/modelence/client/classes/ClientChannel",
-                      "api-reference/modelence/client/classes/MethodError"
+                      "api-reference/modelence/client/classes/MethodError",
+                      "api-reference/modelence/client/classes/ModelenceQueryClient"
                     ]
                   },
                   {
@@ -188,8 +189,11 @@
                     "pages": [
                       "api-reference/modelence/client/functions/callMethod",
                       "api-reference/modelence/client/functions/configureClient",
+                      "api-reference/modelence/client/functions/connectModelenceQueryClient",
                       "api-reference/modelence/client/functions/createClientModule",
+                      "api-reference/modelence/client/functions/createQueryKey",
                       "api-reference/modelence/client/functions/deleteFile",
+                      "api-reference/modelence/client/functions/disconnectModelenceQueryClient",
                       "api-reference/modelence/client/functions/downloadFile",
                       "api-reference/modelence/client/functions/getConfig",
                       "api-reference/modelence/client/functions/getFileUrl",
@@ -198,6 +202,10 @@
                       "api-reference/modelence/client/functions/linkOAuthProvider",
                       "api-reference/modelence/client/functions/loginWithPassword",
                       "api-reference/modelence/client/functions/logout",
+                      "api-reference/modelence/client/functions/modelenceLiveQuery",
+                      "api-reference/modelence/client/functions/modelenceMutation",
+                      "api-reference/modelence/client/functions/modelenceQuery",
+                      "api-reference/modelence/client/functions/ModelenceQueryProvider",
                       "api-reference/modelence/client/functions/renderApp",
                       "api-reference/modelence/client/functions/resendEmailVerification",
                       "api-reference/modelence/client/functions/resetPassword",
@@ -225,6 +233,7 @@
                     "pages": [
                       "api-reference/modelence/client/type-aliases/CallMethodOptions",
                       "api-reference/modelence/client/type-aliases/MethodArgs",
+                      "api-reference/modelence/client/type-aliases/ModelenceQueryKey",
                       "api-reference/modelence/client/type-aliases/UserInfo"
                     ]
                   }
