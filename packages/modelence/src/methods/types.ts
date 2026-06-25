@@ -24,9 +24,9 @@ export type Context = {
   roles: string[];
   clientInfo: ClientInfo;
   connectionInfo: ConnectionInfo;
-  /** Express request. `null` for in-process invocations (e.g. background jobs). */
-  req?: Request | null;
-  /** Express response. Used by auth handlers to set/clear cookies. */
+  /** Express request. `null` for in-process invocations (e.g. background jobs, SSR). */
+  req: Request | null;
+  /** Express response. `null` for in-process invocations. Used by auth handlers to set/clear cookies. */
   res: Response | null;
 };
 

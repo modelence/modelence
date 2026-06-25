@@ -76,6 +76,7 @@ describe('auth/signup', () => {
       pixelRatio: 1,
       orientation: null,
     },
+    req: null,
     res: null,
   };
 

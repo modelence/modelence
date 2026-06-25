@@ -26,6 +26,7 @@ describe('auth/profile', () => {
               userAgent: 'test',
               ip: '127.0.0.1',
             },
+            req: null,
             res: null,
           }
         )
