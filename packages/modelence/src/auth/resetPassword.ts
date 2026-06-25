@@ -2,7 +2,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 
-import { Args, Context, HttpContext } from '@/methods/types';
+import { Args, Context } from '@/methods/types';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { usersCollection, resetPasswordTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
@@ -201,9 +201,10 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
   }
 }
 
-export async function handleResetPassword(args: Args, context: Context | HttpContext) {
+export async function handleResetPassword(args: Args, context: Context) {
   // Prefer the token from the httpOnly cookie set by the landing route.
-  const cookieToken = 'req' in context ? context.req?.cookies?.[RESET_PASSWORD_COOKIE] : undefined;
+  // `req` is null for in-process invocations (no cookie to read).
+  const cookieToken = context.req?.cookies?.[RESET_PASSWORD_COOKIE];
 
   // DEPRECATED fallback: token from request args, for older clients that submit it
   // directly. Reintroduces the leak risk the cookie exchange closes — rollout only.
@@ -220,9 +221,8 @@ export async function handleResetPassword(args: Args, context: Context | HttpCon
   const password = validatePassword(args.password as string);
 
   const clearCookie = () => {
-    if ('res' in context) {
-      context.res?.clearCookie(RESET_PASSWORD_COOKIE, { path: RESET_PASSWORD_COOKIE_PATH });
-    }
+    // `res` is null for in-process invocations (no response to mutate).
+    context.res?.clearCookie(RESET_PASSWORD_COOKIE, { path: RESET_PASSWORD_COOKIE_PATH });
   };
 
   // Look up WITHOUT consuming: if validation/hashing fails (or the user is
