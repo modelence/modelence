@@ -22,16 +22,16 @@ const RESET_PASSWORD_COOKIE = 'resetPasswordToken';
 const RESET_PASSWORD_COOKIE_PATH = '/api/_internal/';
 
 /**
- * Looks up a reset token without consuming it, accepting either the hashed form
- * (new tokens) or a legacy plaintext match. The plaintext fallback can be removed
- * one max-TTL window (1 hour) after deploying token hashing.
+ * Looks up a reset token without consuming it. Only matches the hashed form:
+ * tokens are stored as `hashToken(rawToken)`, and the caller must present the
+ * raw token. There is deliberately no plaintext fallback — matching the raw
+ * value against the stored column would let a leaked SHA-256 digest be replayed
+ * as a bearer token (submit the digest, it equals the stored value), defeating
+ * the point of hashing at rest. Tokens expire within 1 hour (TTL index), so no
+ * migration fallback is needed for tokens issued before hashing was deployed.
  */
 async function findResetTokenDoc(rawToken: string) {
-  const hashedDoc = await resetPasswordTokensCollection.findOne({ token: hashToken(rawToken) });
-  if (hashedDoc) {
-    return hashedDoc;
-  }
-  return resetPasswordTokensCollection.findOne({ token: rawToken });
+  return resetPasswordTokensCollection.findOne({ token: hashToken(rawToken) });
 }
 
 /**

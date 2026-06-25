@@ -870,30 +870,48 @@ describe('auth/resetPassword', () => {
       expect(clearCookie).toHaveBeenCalledWith('resetPasswordToken', { path: '/api/_internal/' });
     });
 
-    test('falls back to a legacy plaintext token when no hashed match exists', async () => {
-      const token = 'legacy-plaintext-token';
+    test('looks up the token only by its hash (no plaintext fallback)', async () => {
+      const token = 'a'.repeat(64);
       const password = 'NewP@ssw0rd!';
       const userId = new ObjectId();
-      const legacyDoc = createMockResetToken({
+      const tokenDoc = createMockResetToken({
         userId,
-        token, // stored as plaintext (pre-hashing)
+        token: sha256(token),
         expiresAt: new Date(Date.now() + 1e6),
       });
 
       mockValidatePassword.mockReturnValue(password);
-      // First lookup (hashed) misses, second (plaintext) hits; claim succeeds.
-      mockResetTokensFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(legacyDoc);
-      mockResetTokensFindOneAndDelete.mockResolvedValue(legacyDoc);
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
       mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
       mockBcryptHash.mockResolvedValue('hashedPassword');
 
-      const result = await handleResetPassword({ token, password }, createContext());
+      await handleResetPassword({ token, password }, createContext());
 
-      expect(mockResetTokensFindOne).toHaveBeenNthCalledWith(1, { token: sha256(token) });
-      expect(mockResetTokensFindOne).toHaveBeenNthCalledWith(2, { token });
-      // Consumed by _id at the commit point.
-      expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: legacyDoc!._id });
-      expect(result).toEqual({ success: true, message: 'Password has been reset successfully' });
+      // Exactly one lookup, by hash — never a plaintext match against the column.
+      expect(mockResetTokensFindOne).toHaveBeenCalledTimes(1);
+      expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token: sha256(token) });
+    });
+
+    test('rejects a leaked stored hash replayed as the bearer token', async () => {
+      // An attacker who leaks the DB knows the stored value (the SHA-256 digest).
+      // Submitting that digest as the token must NOT match: the lookup hashes it
+      // again, so it can never equal the stored hash. This is the regression the
+      // removed plaintext fallback would have allowed.
+      const rawToken = 'b'.repeat(64);
+      const storedHash = sha256(rawToken);
+      const password = 'NewP@ssw0rd!';
+
+      mockValidatePassword.mockReturnValue(password);
+      // The DB only contains the stored hash; no doc has token === sha256(storedHash).
+      mockResetTokensFindOne.mockResolvedValue(null);
+
+      await expect(
+        handleResetPassword({ token: storedHash, password }, createContext())
+      ).rejects.toThrow('Invalid or expired reset token');
+
+      expect(mockResetTokensFindOne).toHaveBeenCalledWith({ token: sha256(storedHash) });
+      expect(mockResetTokensFindOneAndDelete).not.toHaveBeenCalled();
     });
   });
 
