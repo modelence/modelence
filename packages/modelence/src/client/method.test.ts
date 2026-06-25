@@ -59,6 +59,9 @@ describe('client/method', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/_internal/method/test.method', expect.any(Object));
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
     expect(requestInit?.method).toBe('POST');
+    // Cookies (e.g. the password-reset httpOnly cookie) must ride along even
+    // when the SPA and API are on different origins.
+    expect(requestInit?.credentials).toBe('include');
     const payload = JSON.parse(requestInit?.body as string);
     expect(payload.args).toEqual({ foo: 'bar' });
     expect(payload.authToken).toBe('token');
