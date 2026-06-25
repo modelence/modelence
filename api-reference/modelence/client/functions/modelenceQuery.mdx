@@ -1,0 +1,38 @@
+---
+sidebar_position: 1
+title: modelenceQuery
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / modelenceQuery
+
+> **modelenceQuery**\<`T`\>(`methodName`, `args`): `object`
+
+Defined in: [packages/modelence/src/client/query.ts:92](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L92)
+
+## Example
+
+```tsx
+const { data } = useQuery(modelenceQuery('todo.getAll'));
+```
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `methodName` | `string` |
+| `args` | `Args` |
+
+## Returns
+
+`object`
+
+| Name | Type | Defined in |
+| ------ | ------ | ------ |
+| `queryFn()` | () => `Promise`\<`T`\> | [packages/modelence/src/client/query.ts:95](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L95) |
+| `queryKey` | (`string` \| `Args`)[] | [packages/modelence/src/client/query.ts:94](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L94) |

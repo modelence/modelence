@@ -1,0 +1,41 @@
+---
+sidebar_position: 1
+title: modelenceLiveQuery
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / modelenceLiveQuery
+
+> **modelenceLiveQuery**\<`T`\>(`methodName`, `args`): `object`
+
+Defined in: [packages/modelence/src/client/query.ts:104](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L104)
+
+Live query — data updates in real time as the underlying collection changes.
+Requires a `QueryClient` connected via `<ModelenceQueryProvider>` or
+`connectModelenceQueryClient(...)`.
+
+## Type Parameters
+
+| Type Parameter | Default type |
+| ------ | ------ |
+| `T` | `unknown` |
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `methodName` | `string` |
+| `args` | `Args` |
+
+## Returns
+
+`object`
+
+| Name | Type | Default value | Defined in |
+| ------ | ------ | ------ | ------ |
+| `gcTime` | `number` | `0` | [packages/modelence/src/client/query.ts:177](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L177) |
+| `queryFn()` | () => `Promise`\<`T`\> | - | [packages/modelence/src/client/query.ts:110](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L110) |
+| `queryKey` | readonly \[`"live"`, `string`, `Args`\] | - | [packages/modelence/src/client/query.ts:109](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L109) |
+| `refetchOnMount` | `boolean` | `false` | [packages/modelence/src/client/query.ts:175](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L175) |
+| `refetchOnReconnect` | `boolean` | `false` | [packages/modelence/src/client/query.ts:176](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L176) |
+| `refetchOnWindowFocus` | `boolean` | `false` | [packages/modelence/src/client/query.ts:174](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L174) |
+| `staleTime` | `number` | `Infinity` | [packages/modelence/src/client/query.ts:173](https://github.com/modelence/modelence/blob/ce2c1c020019136823d6fcebc2162cf2fc2aa51a/packages/modelence/src/client/query.ts#L173) |
