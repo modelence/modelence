@@ -19,7 +19,11 @@ const CLIENT_BUILD_DIR = './.modelence/build/client'.replace(/\\/g, '/');
 const SSR_BUILD_DIR = './.modelence/build/ssr'.replace(/\\/g, '/');
 // Resolved relative to Vite's `root` (./src/client).
 const SSR_ENTRY_VIRTUAL_PATH = '/index.tsx';
-const ROOT_PLACEHOLDER_REGEX = /<div id="root">\s*<\/div>/;
+// Match the empty root container regardless of attribute order/quoting/extra
+// attributes (e.g. `<div id='root' class="app">`) and whitespace variants Vite
+// may emit. Capture group 1 is the opening tag so its attributes are preserved
+// when we stream our own content into it.
+const ROOT_PLACEHOLDER_REGEX = /(<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>)\s*<\/div>/i;
 const HEAD_CLOSE_TAG = '</head>';
 
 class ViteServer implements AppServer {
@@ -155,7 +159,11 @@ class ViteServer implements AppServer {
       location: req.originalUrl,
     });
 
-    const [rawPrelude, rawEpilogue] = splitTemplateAtRoot(template);
+    const {
+      prelude: rawPrelude,
+      rootOpenTag,
+      epilogue: rawEpilogue,
+    } = splitTemplateAtRoot(template);
     const prelude = injectStylesheets(rawPrelude, cssModule.renderStylesheetLinks(cssAssets));
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -169,7 +177,7 @@ class ViteServer implements AppServer {
         sessionState
       )}</script>`
     );
-    res.write('<div id="root">');
+    res.write(rootOpenTag);
 
     await pipe(res as unknown as import('node:stream').Writable);
 
@@ -295,14 +303,21 @@ function isDocumentRequest(req: express.Request): boolean {
   return true;
 }
 
-function splitTemplateAtRoot(template: string): [string, string] {
+/** @internal Exported for testing. */
+export function splitTemplateAtRoot(template: string): {
+  prelude: string;
+  rootOpenTag: string;
+  epilogue: string;
+} {
   const match = template.match(ROOT_PLACEHOLDER_REGEX);
   if (!match || match.index === undefined) {
     throw new Error('SSR template is missing the expected `<div id="root"></div>` placeholder.');
   }
   const prelude = template.slice(0, match.index);
   const epilogue = template.slice(match.index + match[0].length);
-  return [prelude, epilogue];
+  // Preserve the template's own opening tag (with any attributes) so the
+  // streamed root matches what the client hydrates against.
+  return { prelude, rootOpenTag: match[1], epilogue };
 }
 
 // Insert CSS <link>s before </head> so styles ship with the first chunk.
