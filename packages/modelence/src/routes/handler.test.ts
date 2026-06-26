@@ -15,8 +15,24 @@ vi.doMock('../db/client', () => ({
   connect: vi.fn(),
 }));
 
+// Faithful copy of the real redactSensitive (kept in sync with telemetry/index.ts)
+// so the redaction test exercises the same logic without pulling APM deps.
+const SENSITIVE_KEYS = ['token', 'password', 'secret', 'nonce', 'code'];
+function redactSensitive(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    result[key] = SENSITIVE_KEYS.some((k) => key.toLowerCase().includes(k))
+      ? '[redacted]'
+      : redactSensitive(val);
+  }
+  return result;
+}
+
 vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
+  redactSensitive,
 }));
 
 const { ValidationError } = await import('../error');
@@ -86,6 +102,62 @@ describe('routes/handler', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith({ ok: true });
     expect(transactionEnd).toHaveBeenCalledWith();
+  });
+
+  test('redacts secrets from the telemetry transaction context', async () => {
+    const handler = createRouteHandler('GET', '/landing', async () => ({ status: 200 }));
+    const req = createRequest({
+      query: { token: 'raw-secret', status: 'ok' } as never,
+      body: { password: 'hunter2', email: 'a@b.com' } as never,
+      params: { linkNonce: 'nonce-value' } as never,
+    });
+
+    await handler(req, res, next);
+
+    const ctx = mockStartTransaction.mock.calls[0][2] as {
+      query: Record<string, unknown>;
+      body: Record<string, unknown>;
+      params: Record<string, unknown>;
+    };
+    // Sensitive keys redacted...
+    expect(ctx.query.token).toBe('[redacted]');
+    expect(ctx.body.password).toBe('[redacted]');
+    expect(ctx.params.linkNonce).toBe('[redacted]');
+    // ...non-sensitive values preserved.
+    expect(ctx.query.status).toBe('ok');
+    expect(ctx.body.email).toBe('a@b.com');
+  });
+
+  test('applies custom headers before redirecting and does not send a body', async () => {
+    const handler = createRouteHandler('GET', '/landing', async () => ({
+      status: 302,
+      headers: { 'Referrer-Policy': 'no-referrer' },
+      redirect: '/destination',
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(302);
+    // Header must be set before redirect flushes the response, otherwise it is lost.
+    const setHeaderOrder = (res.setHeader as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const redirectOrder = (res.redirect as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(res.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
+    expect(setHeaderOrder).toBeLessThan(redirectOrder);
+    expect(res.redirect).toHaveBeenCalledWith('/destination');
+    expect(res.send).not.toHaveBeenCalled();
+  });
+
+  test('applies custom headers on a non-redirect response', async () => {
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      headers: { 'X-Custom': 'value' },
+      data: { ok: true },
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.setHeader).toHaveBeenCalledWith('X-Custom', 'value');
+    expect(res.send).toHaveBeenCalledWith({ ok: true });
   });
 
   test('handles ModelenceError gracefully', async () => {

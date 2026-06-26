@@ -14,6 +14,7 @@ const mockHandleVerifyEmail = vi.fn();
 const mockHandleResendEmailVerification = vi.fn();
 const mockHandleSendResetPasswordToken = vi.fn();
 const mockHandleResetPassword = vi.fn();
+const mockHandleResetPasswordLanding = vi.fn();
 const mockGetOwnProfile = vi.fn();
 const mockHandleUpdateProfile = vi.fn();
 
@@ -58,6 +59,7 @@ vi.doMock('./verification', () => ({
 vi.doMock('./resetPassword', () => ({
   handleSendResetPasswordToken: mockHandleSendResetPasswordToken,
   handleResetPassword: mockHandleResetPassword,
+  handleResetPasswordLanding: mockHandleResetPasswordLanding,
 }));
 
 const mockTime = {
@@ -151,6 +153,12 @@ describe('auth/user', () => {
             path: '/api/_internal/auth/verify-email',
             handlers: {
               get: mockHandleVerifyEmail,
+            },
+          },
+          {
+            path: '/api/_internal/auth/reset-password',
+            handlers: {
+              get: mockHandleResetPasswordLanding,
             },
           },
         ],

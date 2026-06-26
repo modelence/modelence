@@ -119,6 +119,13 @@ export async function callMethod<T = unknown>(
 async function call<T = unknown>(endpoint: string, args: MethodArgs): Promise<T> {
   const response = await fetch(endpoint, {
     method: 'POST',
+    // Send cookies even when the SPA and API are on different origins. The
+    // password-reset flow relies on the httpOnly `resetPasswordToken` cookie
+    // set by the server landing route; with the default `same-origin` policy
+    // the cookie would be dropped on cross-origin POSTs and the reset would
+    // fail. (Cross-origin use also requires the server to emit
+    // `Access-Control-Allow-Credentials: true` and a non-wildcard origin.)
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },

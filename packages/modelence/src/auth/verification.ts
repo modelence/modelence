@@ -102,6 +102,8 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     return {
       status: 301,
+      // Suppress the Referer so the token-bearing verification URL never leaks.
+      headers: { 'Referrer-Policy': 'no-referrer' },
       redirect: `${emailVerifiedRedirectUrl}?status=verified`,
     };
   } catch (error) {
@@ -125,6 +127,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     return {
       status: 301,
+      headers: { 'Referrer-Policy': 'no-referrer' },
       redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(message)}`,
     };
   }

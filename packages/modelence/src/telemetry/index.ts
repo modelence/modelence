@@ -3,6 +3,29 @@ import { isTelemetryEnabled } from '@/app/state';
 
 type LogLevel = 'error' | 'info' | 'debug' | '';
 
+// Secret-bearing keys to scrub before request args/query/body reach the APM sink.
+// Matched case-insensitively as a substring (`authToken` matches `token`).
+const SENSITIVE_KEYS = ['token', 'password', 'secret', 'nonce', 'code'];
+
+/**
+ * Deep-copies `value`, replacing any {@link SENSITIVE_KEYS} match with
+ * `'[redacted]'`. Non-object values pass through unchanged.
+ */
+export function redactSensitive(value: unknown): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(redactSensitive);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    const isSensitive = SENSITIVE_KEYS.some((k) => key.toLowerCase().includes(k));
+    result[key] = isSensitive ? '[redacted]' : redactSensitive(val);
+  }
+  return result;
+}
+
 /**
  * Gets the logging level for console logs based on the MODELENCE_LOG_LEVEL environment variable.
  *
