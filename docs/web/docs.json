@@ -109,8 +109,10 @@
                     "group": "Functions",
                     "pages": [
                       "api-reference/modelence/server/functions/authenticate",
+                      "api-reference/modelence/server/functions/clearSessionUser",
                       "api-reference/modelence/server/functions/consumeRateLimit",
                       "api-reference/modelence/server/functions/createQuery",
+                      "api-reference/modelence/server/functions/createSession",
                       "api-reference/modelence/server/functions/deleteFile",
                       "api-reference/modelence/server/functions/deleteUser",
                       "api-reference/modelence/server/functions/disableUser",
@@ -118,13 +120,18 @@
                       "api-reference/modelence/server/functions/getConfig",
                       "api-reference/modelence/server/functions/getFileUrl",
                       "api-reference/modelence/server/functions/getUploadUrl",
+                      "api-reference/modelence/server/functions/invalidateAllUserSessions",
+                      "api-reference/modelence/server/functions/obtainSession",
                       "api-reference/modelence/server/functions/sendEmail",
+                      "api-reference/modelence/server/functions/setAuthTokenCookie",
+                      "api-reference/modelence/server/functions/setSessionUser",
                       "api-reference/modelence/server/functions/startApp"
                     ]
                   },
                   {
                     "group": "Variables",
                     "pages": [
+                      "api-reference/modelence/server/variables/dbSessions",
                       "api-reference/modelence/server/variables/dbUsers",
                       "api-reference/modelence/server/variables/schema"
                     ]
