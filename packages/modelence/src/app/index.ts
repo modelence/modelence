@@ -103,7 +103,15 @@ export async function startApp({
       // Silently ignore tracking errors to not disrupt app startup
     });
 
-  // TODO: verify that user modules don't start with `_system.` prefix
+  for (const module of modules) {
+    if (module.name.toLowerCase().startsWith('_system.')) {
+      throw new Error(
+        `Invalid module name: '${module.name}'\n\n` +
+          `The '_system.' prefix is reserved for internal use and cannot be used in user-defined modules.\n\n` +
+          `Rename your module to something that does not start with '_system.'`
+      );
+    }
+  }
   const systemModules = [
     userModule,
     sessionModule,
