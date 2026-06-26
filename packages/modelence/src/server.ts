@@ -23,6 +23,17 @@ export { usersCollection as dbUsers } from './auth/db';
 export type { UserInfo, RoleDefinition } from './auth/types';
 export { deleteUser, disableUser } from './auth/deleteUser';
 
+//Auth Session
+export {
+  sessionsCollection as dbSessions,
+  createSession,
+  clearSessionUser,
+  obtainSession,
+  setSessionUser,
+  invalidateAllUserSessions,
+  setAuthTokenCookie,
+} from './auth/session';
+
 // Database
 export { schema } from './data/types';
 export { Store } from './data/store';
