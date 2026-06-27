@@ -13,7 +13,12 @@ import { getLocalConfigs } from '../config/local';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
-import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
+import cronModule, {
+  defineCronJob,
+  registerNewCronJobs,
+  getCronJobsMetadata,
+  startCronJobs,
+} from '../cron/jobs';
 import { type IndexReconcileMode, Store } from '../data/store';
 import { resolveStores } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -266,6 +271,9 @@ async function createIndexesAndMigrationsWithLock(
     for (const store of blockingStores) {
       await createStoreIndexes(store, 'full');
     }
+    // registerNewCronJobs runs here — after the unique alias index is guaranteed
+    // to exist (cronJobsCollection is now blocking!)
+    await registerNewCronJobs();
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'drop-only');
     }

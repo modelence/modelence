@@ -16,7 +16,8 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
   },
-  indexes: [{ key: { alias: 1 }, unique: true, background: true }],
+  indexes: [{ key: { alias: 1 }, unique: true }],
+  indexCreationMode: 'blocking',
 });
 
 // TODO: allow changing interval and timeout with cron jobconfigs
@@ -57,6 +58,54 @@ export function defineCronJob(
   };
 }
 
+/**
+ * Registers newly defined cron jobs in the database (If MongoDB Client Connected).
+ *
+ * This function initializes the database registry for all cron jobs defined
+ * in the application. It compares the application's cron job definitions against
+ * the database records and inserts only those that haven't been registered yet.
+ * This prevents duplicate entries and maintains an audit trail of when each
+ * cron job was first scheduled.
+ */
+export async function registerNewCronJobs() {
+  const aliasList = Object.keys(cronJobs);
+  if (aliasList.length === 0) {
+    return;
+  }
+
+  try {
+    const aliasSelector = { alias: { $in: aliasList } };
+    const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+    const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+
+    const insertItems = Object.values(cronJobs)
+      .filter((job) => !existingCronJobAliases.has(job.alias))
+      .map((job) => ({
+        alias: job.alias,
+      }));
+
+    if (insertItems.length > 0) {
+      await cronJobsCollection.insertMany(insertItems);
+    }
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function waitForCronJobsRegistered(aliasList: string[], timeout: number): Promise<void> {
+  const deadline = Date.now() + timeout;
+  const pollInterval = time.seconds(1);
+
+  while (Date.now() < deadline) {
+    const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
+    const registeredAliases = new Set(records.map((r) => r.alias));
+    if (aliasList.every((alias) => registeredAliases.has(alias))) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+}
+
 export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
@@ -64,6 +113,7 @@ export async function startCronJobs() {
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
+    await waitForCronJobsRegistered(aliasList, time.seconds(30));
     const aliasSelector = { alias: { $in: aliasList } };
 
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
@@ -122,12 +172,11 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   state.startTs = Date.now();
 
-  await cronJobsCollection.updateOne(
+  await cronJobsCollection.upsertOne(
     { alias },
     {
-      $set: {
-        lastStartDate: new Date(state.startTs),
-      },
+      $set: { lastStartDate: new Date(state.startTs) },
+      $setOnInsert: { alias },
     }
   );
 
