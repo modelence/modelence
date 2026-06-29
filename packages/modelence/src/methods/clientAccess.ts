@@ -31,6 +31,13 @@ export const CLIENT_CALLABLE_SYSTEM_METHODS: ReadonlySet<string> = new Set([
   // Session lifecycle (bootstrapped from the browser / SSR)
   '_system.session.init',
   '_system.session.heartbeat',
+  // Owner-aware file operations (these enforce ownership; the raw
+  // getUploadUrl/getFileUrl/downloadFile/deleteFile passthroughs stay OFF this
+  // list and remain server-only).
+  '_system.files.requestUpload',
+  '_system.files.getUrl',
+  '_system.files.download',
+  '_system.files.remove',
   // Authentication + account flows (the browser is the only caller)
   '_system.user.signupWithPassword',
   '_system.user.loginWithPassword',

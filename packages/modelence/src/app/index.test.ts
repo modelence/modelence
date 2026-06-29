@@ -236,6 +236,19 @@ vi.doMock('../lock', () => ({
   releaseLock: mockReleaseLock,
 }));
 
+vi.doMock('../files', () => ({
+  default: {
+    name: '_system.files',
+    queries: {},
+    mutations: {},
+    stores: [],
+    channels: [],
+    rateLimits: [],
+    cronJobs: {},
+    configSchema: {},
+  },
+}));
+
 vi.doMock('../viteServer', () => ({
   viteServer: { listen: vi.fn() },
 }));

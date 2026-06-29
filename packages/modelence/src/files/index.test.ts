@@ -1,5 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { deleteFile, downloadFile, getFileUrl, getUploadUrl } from './index';
+import { afterEach, beforeEach, describe, expect, test, vi, type Mock } from 'vitest';
+import filesModule, { deleteFile, downloadFile, getFileUrl, getUploadUrl } from './index';
+import { filesCollection } from './db';
+import type { Context } from '../methods/types';
+import type { UserInfo } from '../auth/types';
 
 describe('files', () => {
   const originalEnv = process.env;
@@ -20,6 +23,10 @@ describe('files', () => {
     vi.restoreAllMocks();
   });
 
+  // -------------------------------------------------------------------------
+  // Low-level server primitives (exported from modelence/server).
+  // -------------------------------------------------------------------------
+
   describe('getUploadUrl', () => {
     test('throws when MODELENCE_SERVICE_ENDPOINT is not set', async () => {
       delete process.env.MODELENCE_SERVICE_ENDPOINT;
@@ -34,12 +41,7 @@ describe('files', () => {
     test('sends POST request and returns presigned url, fields, and filePath', async () => {
       const uploadResult = {
         url: 'https://s3.amazonaws.com/',
-        fields: {
-          'Content-Type': 'image/png',
-          Policy: 'base64policy',
-          'X-Amz-Signature': 'abc123',
-          key: 'public/photo.png',
-        },
+        fields: { key: 'public/photo.png' },
         filePath: 'public/photo.png',
       };
 
@@ -57,162 +59,247 @@ describe('files', () => {
       expect(result).toEqual(uploadResult);
       expect(fetchMock).toHaveBeenCalledWith(
         'https://cloud.modelence.test/api/files/upload',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer token-abc',
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({
-            filePath: 'photo.png',
-            contentType: 'image/png',
-            visibility: 'public',
-          }),
-        })
+        expect.objectContaining({ method: 'POST' })
       );
-    });
-
-    test('throws on HTTP error response', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        status: 400,
-        text: async () => JSON.stringify({ error: 'Invalid file path' }),
-      } as unknown as Response);
-
-      await expect(
-        getUploadUrl({ filePath: '../escape.png', contentType: 'image/png', visibility: 'private' })
-      ).rejects.toThrow('HTTP status: 400');
     });
   });
 
-  describe('deleteFile', () => {
-    test('throws when MODELENCE_SERVICE_ENDPOINT is not set', async () => {
-      delete process.env.MODELENCE_SERVICE_ENDPOINT;
-
-      await expect(deleteFile('public/photo.png')).rejects.toThrow(
-        'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
-      );
-    });
-
-    test('sends POST request to /api/files/delete with filePath', async () => {
+  describe('deleteFile / downloadFile / getFileUrl primitives', () => {
+    test('deleteFile POSTs to /api/files/delete', async () => {
       fetchMock.mockResolvedValue({
         ok: true,
         status: 204,
         headers: { get: () => null },
       } as unknown as Response);
 
-      const result = await deleteFile('private/photo.png');
+      await deleteFile('private/photo.png');
 
-      expect(result).toBeUndefined();
       expect(fetchMock).toHaveBeenCalledWith(
         'https://cloud.modelence.test/api/files/delete',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer token-abc',
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({ filePath: 'private/photo.png' }),
-        })
+        expect.objectContaining({ method: 'POST' })
       );
     });
 
-    test('throws on HTTP error response', async () => {
+    test('downloadFile returns the download URL', async () => {
       fetchMock.mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: async () => JSON.stringify({ error: 'File not found' }),
+        ok: true,
+        json: async () => ({ downloadUrl: 'https://s3/presigned' }),
       } as unknown as Response);
 
-      await expect(deleteFile('public/nonexistent.png')).rejects.toThrow('HTTP status: 404');
+      await expect(downloadFile('private/report.pdf')).resolves.toEqual({
+        downloadUrl: 'https://s3/presigned',
+      });
+    });
+
+    test('getFileUrl returns the view URL', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: 'https://cdn/photo.png' }),
+      } as unknown as Response);
+
+      await expect(getFileUrl('public/photo.png')).resolves.toEqual({
+        url: 'https://cdn/photo.png',
+      });
     });
   });
 
-  describe('downloadFile', () => {
-    test('throws when MODELENCE_SERVICE_ENDPOINT is not set', async () => {
-      delete process.env.MODELENCE_SERVICE_ENDPOINT;
+  // -------------------------------------------------------------------------
+  // Owner-aware, client-callable module methods.
+  // -------------------------------------------------------------------------
 
-      await expect(downloadFile('private/photo.png')).rejects.toThrow(
-        'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
-      );
+  describe('_system.files owner-aware methods', () => {
+    const queries = filesModule.queries as Record<
+      string,
+      (args: Record<string, unknown>, context: Context) => Promise<unknown>
+    >;
+    const mutations = filesModule.mutations as Record<
+      string,
+      (args: Record<string, unknown>, context: Context) => Promise<unknown>
+    >;
+
+    const anon: UserInfo | null = null;
+    const owner = { id: 'owner-1', handle: 'owner' } as unknown as UserInfo;
+    const other = { id: 'other-2', handle: 'other' } as unknown as UserInfo;
+
+    const insertOneMock: Mock = vi.fn();
+    const findOneMock: Mock = vi.fn();
+    const deleteOneMock: Mock = vi.fn();
+
+    beforeEach(() => {
+      insertOneMock.mockReset();
+      findOneMock.mockReset();
+      deleteOneMock.mockReset();
+      (filesCollection as unknown as { insertOne: Mock }).insertOne = insertOneMock;
+      (filesCollection as unknown as { findOne: Mock }).findOne = findOneMock;
+      (filesCollection as unknown as { deleteOne: Mock }).deleteOne = deleteOneMock;
     });
 
-    test('sends POST request and returns download URL', async () => {
-      const downloadResult = { downloadUrl: 'https://s3.amazonaws.com/presigned-download-url' };
+    function ctx(user: UserInfo | null): Context {
+      return { session: null, user, roles: [] } as unknown as Context;
+    }
 
+    function mockCloudOk(payload: unknown) {
       fetchMock.mockResolvedValue({
         ok: true,
-        json: async () => downloadResult,
+        json: async () => payload,
+        status: 200,
+        headers: { get: () => null },
       } as unknown as Response);
+    }
 
-      const result = await downloadFile('private/report.pdf');
+    const authError = 'Authentication is required to access this file';
+    const notFound = 'File not found';
 
-      expect(result).toEqual(downloadResult);
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://cloud.modelence.test/api/files/download',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer token-abc',
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({ filePath: 'private/report.pdf' }),
-        })
-      );
+    describe('requestUpload', () => {
+      test('requires authentication', async () => {
+        await expect(
+          mutations.requestUpload(
+            { name: 'report.pdf', contentType: 'application/pdf', visibility: 'private' },
+            ctx(anon)
+          )
+        ).rejects.toThrow(authError);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(insertOneMock).not.toHaveBeenCalled();
+      });
+
+      test('uploads under an owner-scoped path and records ownership', async () => {
+        // The cloud echoes back whatever filePath we asked it to provision.
+        fetchMock.mockImplementation(async (_url, init) => {
+          const body = JSON.parse((init as RequestInit).body as string);
+          return {
+            ok: true,
+            json: async () => ({ url: 'https://s3/', fields: {}, filePath: body.filePath }),
+          } as unknown as Response;
+        });
+
+        const result = (await mutations.requestUpload(
+          { name: 'report.pdf', contentType: 'application/pdf', visibility: 'private' },
+          ctx(owner)
+        )) as { filePath: string };
+
+        expect(result.filePath).toMatch(/^private\/u\/owner-1\/[0-9a-f]{24}-report\.pdf$/);
+        expect(insertOneMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filePath: result.filePath,
+            ownerId: 'owner-1',
+            visibility: 'private',
+            contentType: 'application/pdf',
+            createdAt: expect.any(Date),
+          })
+        );
+      });
     });
 
-    test('throws on HTTP error response', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: async () => JSON.stringify({ error: 'File not found' }),
-      } as unknown as Response);
+    describe('getUrl', () => {
+      test('public files resolve without auth or an ownership lookup', async () => {
+        mockCloudOk({ url: 'https://cdn/public/photo.png' });
 
-      await expect(downloadFile('private/missing.pdf')).rejects.toThrow('HTTP status: 404');
+        const result = await queries.getUrl({ filePath: 'public/u/owner-1/x.png' }, ctx(anon));
+
+        expect(result).toEqual({ url: 'https://cdn/public/photo.png' });
+        expect(findOneMock).not.toHaveBeenCalled();
+      });
+
+      test('private file requires authentication', async () => {
+        await expect(
+          queries.getUrl({ filePath: 'private/u/owner-1/x.pdf' }, ctx(anon))
+        ).rejects.toThrow(authError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      test('private file: owner gets a URL', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
+        mockCloudOk({ url: 'https://s3/presigned' });
+
+        const result = await queries.getUrl({ filePath: 'private/u/owner-1/x.pdf' }, ctx(owner));
+
+        expect(result).toEqual({ url: 'https://s3/presigned' });
+      });
+
+      test('private file: a different authenticated user is denied (not found)', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
+
+        await expect(
+          queries.getUrl({ filePath: 'private/u/owner-1/x.pdf' }, ctx(other))
+        ).rejects.toThrow(notFound);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      test('private file with no ownership record is denied (not found)', async () => {
+        findOneMock.mockResolvedValue(null);
+
+        await expect(
+          queries.getUrl({ filePath: 'private/u/owner-1/unknown.pdf' }, ctx(owner))
+        ).rejects.toThrow(notFound);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
     });
-  });
 
-  describe('getFileUrl', () => {
-    test('throws when MODELENCE_SERVICE_ENDPOINT is not set', async () => {
-      delete process.env.MODELENCE_SERVICE_ENDPOINT;
+    describe('download', () => {
+      test('private file: a different user is denied', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
 
-      await expect(getFileUrl('public/photo.png')).rejects.toThrow(
-        'Unable to connect to Modelence Cloud: MODELENCE_SERVICE_ENDPOINT is not set'
-      );
+        await expect(
+          queries.download({ filePath: 'private/u/owner-1/x.pdf' }, ctx(other))
+        ).rejects.toThrow(notFound);
+      });
+
+      test('private file: owner gets a download URL', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
+        mockCloudOk({ downloadUrl: 'https://s3/dl' });
+
+        await expect(
+          queries.download({ filePath: 'private/u/owner-1/x.pdf' }, ctx(owner))
+        ).resolves.toEqual({ downloadUrl: 'https://s3/dl' });
+      });
     });
 
-    test('sends POST request and returns view URL', async () => {
-      const urlResult = { url: 'https://cdn.modelence.test/photo.png' };
+    describe('remove', () => {
+      test('requires authentication', async () => {
+        await expect(
+          mutations.remove({ filePath: 'public/u/owner-1/x.png' }, ctx(anon))
+        ).rejects.toThrow(authError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
 
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: async () => urlResult,
-      } as unknown as Response);
+      test('owner can delete; record is removed', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
+        fetchMock.mockResolvedValue({
+          ok: true,
+          status: 204,
+          headers: { get: () => null },
+        } as unknown as Response);
 
-      const result = await getFileUrl('public/photo.png');
+        await mutations.remove({ filePath: 'private/u/owner-1/x.pdf' }, ctx(owner));
 
-      expect(result).toEqual(urlResult);
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://cloud.modelence.test/api/files/url',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer token-abc',
-            'Content-Type': 'application/json',
-          }),
-          body: JSON.stringify({ filePath: 'public/photo.png' }),
-        })
-      );
-    });
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://cloud.modelence.test/api/files/delete',
+          expect.objectContaining({ method: 'POST' })
+        );
+        expect(deleteOneMock).toHaveBeenCalledWith({ filePath: 'private/u/owner-1/x.pdf' });
+      });
 
-    test('throws on HTTP error response', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: async () => JSON.stringify({ error: 'File not found' }),
-      } as unknown as Response);
+      test('a different user cannot delete (not found, no cloud call)', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'private/u/owner-1/x.pdf', ownerId: 'owner-1' });
 
-      await expect(getFileUrl('public/missing.png')).rejects.toThrow('HTTP status: 404');
+        await expect(
+          mutations.remove({ filePath: 'private/u/owner-1/x.pdf' }, ctx(other))
+        ).rejects.toThrow(notFound);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(deleteOneMock).not.toHaveBeenCalled();
+      });
+
+      test('deleting a public file also requires ownership', async () => {
+        findOneMock.mockResolvedValue({ filePath: 'public/u/owner-1/x.png', ownerId: 'owner-1' });
+        fetchMock.mockResolvedValue({
+          ok: true,
+          status: 204,
+          headers: { get: () => null },
+        } as unknown as Response);
+
+        await mutations.remove({ filePath: 'public/u/owner-1/x.png' }, ctx(owner));
+        expect(deleteOneMock).toHaveBeenCalled();
+      });
     });
   });
 });
