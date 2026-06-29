@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { AuthError, ValidationError } from '../error';
 import { deleteFile, downloadFile, getFileUrl, getUploadUrl } from './index';
+import filesModule from './index';
 
 describe('files', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
   const fetchMock = vi.fn<typeof fetch>();
+  const authenticatedUser = {
+    id: 'user-123',
+    handle: 'demo',
+    roles: [],
+    hasRole: () => false,
+    requireRole: () => {
+      throw new Error('unused');
+    },
+  };
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -83,6 +94,77 @@ describe('files', () => {
         getUploadUrl({ filePath: '../escape.png', contentType: 'image/png', visibility: 'private' })
       ).rejects.toThrow('HTTP status: 400');
     });
+
+    test('built-in mutation requires an authenticated user', async () => {
+      await expect(
+        filesModule.mutations.getUploadUrl.call(
+          filesModule,
+          {
+            filePath: 'photo.png',
+            contentType: 'image/png',
+            visibility: 'public',
+          },
+          {
+            user: null,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    test('built-in mutation scopes uploads to the authenticated user path', async () => {
+      const uploadResult = {
+        url: 'https://s3.amazonaws.com/',
+        fields: {
+          key: 'public/users/user-123/photo.png',
+        },
+        filePath: 'public/users/user-123/photo.png',
+      };
+
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => uploadResult,
+      } as unknown as Response);
+
+      const result = await filesModule.mutations.getUploadUrl.call(
+        filesModule,
+        {
+          filePath: 'photo.png',
+          contentType: 'image/png',
+          visibility: 'public',
+        },
+        {
+          user: authenticatedUser,
+        } as never
+      );
+
+      expect(result).toEqual(uploadResult);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://cloud.modelence.test/api/files/upload',
+        expect.objectContaining({
+          body: JSON.stringify({
+            filePath: 'public/users/user-123/photo.png',
+            contentType: 'image/png',
+            visibility: 'public',
+          }),
+        })
+      );
+    });
+
+    test('built-in mutation rejects prefixed upload paths', async () => {
+      await expect(
+        filesModule.mutations.getUploadUrl.call(
+          filesModule,
+          {
+            filePath: 'private/report.pdf',
+            contentType: 'application/pdf',
+            visibility: 'private',
+          },
+          {
+            user: authenticatedUser,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
   });
 
   describe('deleteFile', () => {
@@ -125,6 +207,18 @@ describe('files', () => {
       } as unknown as Response);
 
       await expect(deleteFile('public/nonexistent.png')).rejects.toThrow('HTTP status: 404');
+    });
+
+    test('built-in mutation only allows deleting files owned by the authenticated user', async () => {
+      await expect(
+        filesModule.mutations.deleteFile.call(
+          filesModule,
+          { filePath: 'private/users/other-user/report.pdf' },
+          {
+            user: authenticatedUser,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(AuthError);
     });
   });
 
@@ -170,6 +264,30 @@ describe('files', () => {
 
       await expect(downloadFile('private/missing.pdf')).rejects.toThrow('HTTP status: 404');
     });
+
+    test('built-in query requires auth for private downloads and enforces ownership', async () => {
+      await expect(
+        filesModule.queries.downloadFile.call(
+          filesModule,
+          { filePath: 'private/users/other-user/report.pdf' },
+          {
+            user: authenticatedUser,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(AuthError);
+    });
+
+    test('built-in query rejects public download requests', async () => {
+      await expect(
+        filesModule.queries.downloadFile.call(
+          filesModule,
+          { filePath: 'public/users/user-123/report.pdf' },
+          {
+            user: authenticatedUser,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
   });
 
   describe('getFileUrl', () => {
@@ -213,6 +331,37 @@ describe('files', () => {
       } as unknown as Response);
 
       await expect(getFileUrl('public/missing.png')).rejects.toThrow('HTTP status: 404');
+    });
+
+    test('built-in query allows anonymous access to public file URLs', async () => {
+      const urlResult = { url: 'https://cdn.modelence.test/public/users/user-123/photo.png' };
+
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => urlResult,
+      } as unknown as Response);
+
+      const result = await filesModule.queries.getFileUrl.call(
+        filesModule,
+        { filePath: 'public/users/user-123/photo.png' },
+        {
+          user: null,
+        } as never
+      );
+
+      expect(result).toEqual(urlResult);
+    });
+
+    test('built-in query requires ownership for private file URLs', async () => {
+      await expect(
+        filesModule.queries.getFileUrl.call(
+          filesModule,
+          { filePath: 'private/users/other-user/report.pdf' },
+          {
+            user: authenticatedUser,
+          } as never
+        )
+      ).rejects.toBeInstanceOf(AuthError);
     });
   });
 });
