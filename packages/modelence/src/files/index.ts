@@ -39,25 +39,10 @@ export async function getFileUrl(filePath: string): Promise<GetFileUrlResult> {
   return await callCloudApi<GetFileUrlResult>('/api/files/url', 'POST', { filePath });
 }
 
-export default new Module('_system.files', {
-  queries: {
-    async downloadFile({ filePath }) {
-      return downloadFile(filePath as string);
-    },
-    async getFileUrl({ filePath }) {
-      return getFileUrl(filePath as string);
-    },
-  },
-  mutations: {
-    async getUploadUrl({ filePath, contentType, visibility }) {
-      return getUploadUrl({
-        filePath: filePath as string,
-        contentType: contentType as string,
-        visibility: visibility as FileVisibility,
-      });
-    },
-    async deleteFile({ filePath }) {
-      return deleteFile(filePath as string);
-    },
-  },
-});
+// The file operations above are server-only. They proxy to Modelence Cloud
+// using the app's service token and accept any `filePath`, so they must NOT be
+// callable directly from an untrusted client — exposing them would let any
+// caller mint signed URLs for, download, or delete arbitrary paths. Apps reach
+// these through their own queries/mutations, which enforce authorization. The
+// module therefore registers no client-callable methods.
+export default new Module('_system.files', {});

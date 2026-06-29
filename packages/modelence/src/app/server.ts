@@ -1,6 +1,7 @@
 import googleAuthRouter from '@/auth/providers/google';
 import githubAuthRouter from '@/auth/providers/github';
 import { runMethod } from '@/methods';
+import { isClientCallableMethod } from '@/methods/clientAccess';
 import { getResponseTypeMap, sanitizeResult } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
@@ -136,6 +137,15 @@ export async function startServer(
 
   app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
     const methodName = req.params.methodName as string;
+
+    // Deny-by-default boundary: reserved `_system.*` methods are not dispatchable
+    // from an untrusted client unless explicitly allowlisted. Respond with 404
+    // (not 403) so the endpoint does not confirm which internal methods exist.
+    if (!isClientCallableMethod(methodName)) {
+      res.status(404).json({ error: `Method with name '${methodName}' is not defined.` });
+      return;
+    }
+
     const context = await getCallContext(req, res);
 
     try {
