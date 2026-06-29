@@ -10,6 +10,10 @@ Each file operation is available in two forms:
 - **Client (`modelence/client`)** — call directly from the browser via built-in methods
 - **Server (`modelence/server`)** — call from your server-side code (e.g. inside a mutation or cron job)
 
+<Warning>
+The browser-facing built-in methods are authenticated, managed file APIs. Uploads are automatically namespaced under `users/<user-id>/...`, and private file reads/deletes are restricted to the authenticated user's own managed paths.
+</Warning>
+
 ## Uploading a File
 
 <Tabs>
@@ -26,11 +30,13 @@ Each file operation is available in two forms:
       visibility: 'public',
     });
 
-    console.log(filePath); // e.g. 'public/photo.png'
+    console.log(filePath); // e.g. 'public/users/<user-id>/photo.png'
     ```
   </Tab>
   <Tab title="Server">
-    `getUploadUrl` returns a presigned URL and form fields. POST these together as `FormData` to upload the file directly to storage:
+    `getUploadUrl` returns a presigned URL and form fields. POST these together as `FormData` to upload the file directly to storage.
+
+    Since the server helper is low-level, apply your own auth/authorization rules before calling it:
 
     ```ts
     import { getUploadUrl } from 'modelence/server';
@@ -64,15 +70,19 @@ The `visibility` field controls access:
 
 Returns a URL for displaying or linking to a file. For public files this is a permanent URL; for private files it is a time-limited presigned URL.
 
+For the built-in browser methods:
+- public file URLs can be resolved by path
+- private file URLs require an authenticated user and only work for that user's own managed `private/users/<user-id>/...` paths
+
 <Tabs>
   <Tab title="Client">
     ```ts
     import { getFileUrl } from 'modelence/client';
 
-    const { url } = await getFileUrl('public/photo.png');
+    const { url } = await getFileUrl('public/users/<user-id>/photo.png');
     console.log(url); // Permanent public URL
 
-    const { url: privateUrl } = await getFileUrl('private/report.pdf');
+    const { url: privateUrl } = await getFileUrl('private/users/<user-id>/report.pdf');
     console.log(privateUrl); // Time-limited presigned URL
     ```
   </Tab>
@@ -93,12 +103,14 @@ Returns a URL for displaying or linking to a file. For public files this is a pe
 
 Returns a presigned download URL for a private file.
 
+For the built-in browser methods, downloads are only supported for the authenticated user's own managed private paths.
+
 <Tabs>
   <Tab title="Client">
     ```ts
     import { downloadFile } from 'modelence/client';
 
-    const { downloadUrl } = await downloadFile('private/report.pdf');
+    const { downloadUrl } = await downloadFile('private/users/<user-id>/report.pdf');
     // Redirect the user to downloadUrl or fetch it client-side
     ```
   </Tab>
@@ -114,13 +126,15 @@ Returns a presigned download URL for a private file.
 
 ## Deleting a File
 
+For the built-in browser methods, deletes require an authenticated user and are limited to that user's own managed paths.
+
 <Tabs>
   <Tab title="Client">
     ```ts
     import { deleteFile } from 'modelence/client';
 
-    await deleteFile('public/photo.png');
-    await deleteFile('private/report.pdf');
+    await deleteFile('public/users/<user-id>/photo.png');
+    await deleteFile('private/users/<user-id>/report.pdf');
     ```
   </Tab>
   <Tab title="Server">
@@ -145,7 +159,14 @@ const { filePath } = await uploadFile(file, {
   contentType: 'image/png',
   visibility: 'private',
 });
-// filePath === 'private/avatars/user-123.png'
+// filePath === 'private/users/<user-id>/avatars/user-123.png'
 
 const { url } = await getFileUrl(filePath);
 ```
+
+For browser-side built-in methods, `filePath` is always passed as a **relative** path on upload and returned as a **managed stored path**:
+
+- upload input: `'avatars/user-123.png'`
+- upload result: `'private/users/<user-id>/avatars/user-123.png'`
+
+If you need a different storage layout or custom authorization policy, use the server helpers inside your own authenticated query/mutation and enforce your policy there.
