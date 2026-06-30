@@ -6,55 +6,37 @@ icon: 'file'
 
 Modelence provides built-in file storage through Modelence Cloud. Files are organized by visibility — either `public` (accessible via a permanent URL) or `private` (accessible only via a time-limited signed URL).
 
-Each file operation is available in two forms:
-- **Client (`modelence/client`)** — call directly from the browser via built-in methods
-- **Server (`modelence/server`)** — call from your server-side code (e.g. inside a mutation or cron job)
+<Warning>
+  **File operations are server-only.** `getUploadUrl`, `getFileUrl`, `downloadFile`, and `deleteFile` are imported from `modelence/server` and can only be called from your server-side code (queries, mutations, cron jobs). They are **not** callable directly from the browser.
+
+  This is deliberate. Each operation issues a signed URL or performs a delete against Modelence Cloud using your app's credentials, for whatever `filePath` it is given. The framework has no way to know which user owns which file, so exposing these to the client would let any caller act on any path. **You** decide who can touch which file by wrapping these calls in your own queries/mutations and enforcing ownership there — see [Exposing file operations to the client](#exposing-file-operations-to-the-client).
+</Warning>
 
 ## Uploading a File
 
-<Tabs>
-  <Tab title="Client">
-    `uploadFile` takes a `File` or `Blob`, requests a presigned upload URL from the backend, then POSTs the file directly to storage using a signed form:
+`getUploadUrl` returns a presigned URL and form fields. POST these together as `FormData` to upload the file directly to storage:
 
-    ```ts
-    import { uploadFile } from 'modelence/client';
+```ts
+import { getUploadUrl } from 'modelence/server';
+import fs from 'fs/promises';
 
-    const file = event.target.files[0]; // File from an <input type="file">
-    const { filePath } = await uploadFile(file, {
-      filePath: 'photo.png',
-      contentType: 'image/png',
-      visibility: 'public',
-    });
+const { url, fields, filePath } = await getUploadUrl({
+  filePath: 'photo.png',
+  contentType: 'image/png',
+  visibility: 'public',
+});
 
-    console.log(filePath); // e.g. 'public/photo.png'
-    ```
-  </Tab>
-  <Tab title="Server">
-    `getUploadUrl` returns a presigned URL and form fields. POST these together as `FormData` to upload the file directly to storage:
+const data = await fs.readFile('./photo.png');
+const formData = new FormData();
+for (const [key, value] of Object.entries(fields)) {
+  formData.append(key, value);
+}
+formData.append('file', new Blob([data], { type: 'image/png' }));
 
-    ```ts
-    import { getUploadUrl } from 'modelence/server';
-    import fs from 'fs/promises';
+await fetch(url, { method: 'POST', body: formData });
 
-    const { url, fields, filePath } = await getUploadUrl({
-      filePath: 'photo.png',
-      contentType: 'image/png',
-      visibility: 'public',
-    });
-
-    const data = await fs.readFile('./photo.png');
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(fields)) {
-      formData.append(key, value);
-    }
-    formData.append('file', new Blob([data], { type: 'image/png' }));
-
-    await fetch(url, { method: 'POST', body: formData });
-
-    console.log(filePath); // e.g. 'public/photo.png'
-    ```
-  </Tab>
-</Tabs>
+console.log(filePath); // e.g. 'public/photo.png'
+```
 
 The `visibility` field controls access:
 - `"public"` — the file is accessible via a permanent URL
@@ -64,83 +46,44 @@ The `visibility` field controls access:
 
 Returns a URL for displaying or linking to a file. For public files this is a permanent URL; for private files it is a time-limited presigned URL.
 
-<Tabs>
-  <Tab title="Client">
-    ```ts
-    import { getFileUrl } from 'modelence/client';
+```ts
+import { getFileUrl } from 'modelence/server';
 
-    const { url } = await getFileUrl('public/photo.png');
-    console.log(url); // Permanent public URL
+const { url } = await getFileUrl('public/photo.png');
+console.log(url); // Permanent public URL
 
-    const { url: privateUrl } = await getFileUrl('private/report.pdf');
-    console.log(privateUrl); // Time-limited presigned URL
-    ```
-  </Tab>
-  <Tab title="Server">
-    ```ts
-    import { getFileUrl } from 'modelence/server';
-
-    const { url } = await getFileUrl('public/photo.png');
-    console.log(url); // Permanent public URL
-
-    const { url: privateUrl } = await getFileUrl('private/report.pdf');
-    console.log(privateUrl); // Time-limited presigned URL
-    ```
-  </Tab>
-</Tabs>
+const { url: privateUrl } = await getFileUrl('private/report.pdf');
+console.log(privateUrl); // Time-limited presigned URL
+```
 
 ## Downloading a File
 
 Returns a presigned download URL for a private file.
 
-<Tabs>
-  <Tab title="Client">
-    ```ts
-    import { downloadFile } from 'modelence/client';
+```ts
+import { downloadFile } from 'modelence/server';
 
-    const { downloadUrl } = await downloadFile('private/report.pdf');
-    // Redirect the user to downloadUrl or fetch it client-side
-    ```
-  </Tab>
-  <Tab title="Server">
-    ```ts
-    import { downloadFile } from 'modelence/server';
-
-    const { downloadUrl } = await downloadFile('private/report.pdf');
-    // Redirect the user to downloadUrl or fetch it server-side
-    ```
-  </Tab>
-</Tabs>
+const { downloadUrl } = await downloadFile('private/report.pdf');
+// Redirect the user to downloadUrl or fetch it server-side
+```
 
 ## Deleting a File
 
-<Tabs>
-  <Tab title="Client">
-    ```ts
-    import { deleteFile } from 'modelence/client';
+```ts
+import { deleteFile } from 'modelence/server';
 
-    await deleteFile('public/photo.png');
-    await deleteFile('private/report.pdf');
-    ```
-  </Tab>
-  <Tab title="Server">
-    ```ts
-    import { deleteFile } from 'modelence/server';
-
-    await deleteFile('public/photo.png');
-    await deleteFile('private/report.pdf');
-    ```
-  </Tab>
-</Tabs>
+await deleteFile('public/photo.png');
+await deleteFile('private/report.pdf');
+```
 
 ## File Paths
 
 File paths always include the visibility prefix: `public/<path>` or `private/<path>`. The upload functions return the full `filePath` (including prefix) in their result, which you can store and pass to the other functions.
 
 ```ts
-import { uploadFile } from 'modelence/client';
+import { getUploadUrl } from 'modelence/server';
 
-const { filePath } = await uploadFile(file, {
+const { filePath } = await getUploadUrl({
   filePath: 'avatars/user-123.png',
   contentType: 'image/png',
   visibility: 'private',
@@ -149,3 +92,74 @@ const { filePath } = await uploadFile(file, {
 
 const { url } = await getFileUrl(filePath);
 ```
+
+## Exposing file operations to the client
+
+Because the file functions are server-only, the browser reaches them through **your own** queries and mutations. This is where you enforce authorization: never accept a raw client-supplied `filePath` and forward it blindly — derive the path from your own data and verify the current user is allowed to act on it.
+
+The pattern below stores file ownership in a Store and checks it on every operation. Uploading returns the presigned URL to the client, which performs the actual upload directly to storage.
+
+```ts
+import { Module, Store, schema, getUploadUrl, getFileUrl, deleteFile } from 'modelence/server';
+import { ObjectId } from 'mongodb';
+
+const dbDocuments = new Store('documents', {
+  schema: {
+    userId: schema.userId(),
+    filePath: schema.string(),
+    createdAt: schema.date(),
+  },
+});
+
+export default new Module('documents', {
+  stores: [dbDocuments],
+  queries: {
+    // Hand out a time-limited URL only for a document the caller owns.
+    async getUrl({ documentId }, { user }) {
+      if (!user) {
+        throw new Error('Authentication required');
+      }
+      const doc = await dbDocuments.requireOne({
+        _id: new ObjectId(documentId as string),
+        userId: new ObjectId(user.id),
+      });
+      return getFileUrl(doc.filePath);
+    },
+  },
+  mutations: {
+    // Issue an upload URL for a path scoped to the caller, then record ownership.
+    async requestUpload({ contentType }, { user }) {
+      if (!user) {
+        throw new Error('Authentication required');
+      }
+      const filePath = `private/users/${user.id}/${new ObjectId().toString()}`;
+      const upload = await getUploadUrl({
+        filePath,
+        contentType: contentType as string,
+        visibility: 'private',
+      });
+      await dbDocuments.insertOne({
+        userId: new ObjectId(user.id),
+        filePath,
+        createdAt: new Date(),
+      });
+      return upload; // { url, fields, filePath } — the client POSTs the file to `url`
+    },
+
+    // Only the owner can delete.
+    async remove({ documentId }, { user }) {
+      if (!user) {
+        throw new Error('Authentication required');
+      }
+      const doc = await dbDocuments.requireOne({
+        _id: new ObjectId(documentId as string),
+        userId: new ObjectId(user.id),
+      });
+      await deleteFile(doc.filePath);
+      await dbDocuments.deleteOne({ _id: doc._id });
+    },
+  },
+});
+```
+
+The client then calls your guarded methods — e.g. `callMethod('documents.requestUpload', { contentType })` — instead of the file functions directly. Public assets that are safe for anyone to read can be served straight from their permanent `public/...` URL without a query.
