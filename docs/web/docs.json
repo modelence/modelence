@@ -199,11 +199,8 @@
                       "api-reference/modelence/client/functions/connectModelenceQueryClient",
                       "api-reference/modelence/client/functions/createClientModule",
                       "api-reference/modelence/client/functions/createQueryKey",
-                      "api-reference/modelence/client/functions/deleteFile",
                       "api-reference/modelence/client/functions/disconnectModelenceQueryClient",
-                      "api-reference/modelence/client/functions/downloadFile",
                       "api-reference/modelence/client/functions/getConfig",
-                      "api-reference/modelence/client/functions/getFileUrl",
                       "api-reference/modelence/client/functions/getLocalStorageSession",
                       "api-reference/modelence/client/functions/getWebsocketClientProvider",
                       "api-reference/modelence/client/functions/linkOAuthProvider",
@@ -223,7 +220,6 @@
                       "api-reference/modelence/client/functions/subscribeLiveQuery",
                       "api-reference/modelence/client/functions/unlinkOAuthProvider",
                       "api-reference/modelence/client/functions/updateProfile",
-                      "api-reference/modelence/client/functions/uploadFile",
                       "api-reference/modelence/client/functions/useSession",
                       "api-reference/modelence/client/functions/verifyEmail"
                     ]
