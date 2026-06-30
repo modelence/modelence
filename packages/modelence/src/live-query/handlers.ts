@@ -2,7 +2,6 @@ import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { authenticate } from '../auth';
 import { runLiveMethod } from '../methods';
-import { isClientCallableMethod } from '../methods/clientAccess';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
@@ -50,17 +49,6 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     return;
   }
   const { subscriptionId, method, args, authToken, clientInfo } = parsed.data;
-
-  // Deny-by-default boundary: reserved `_system.*` methods are not dispatchable
-  // from an untrusted client unless explicitly allowlisted. Keep this in sync
-  // with the HTTP method route so live queries can't bypass the boundary.
-  if (!isClientCallableMethod(method)) {
-    socket.emit('liveQueryError', {
-      subscriptionId,
-      error: `Method with name '${method}' is not defined.`,
-    });
-    return;
-  }
 
   const subs = getSocketSubs(socket);
 
