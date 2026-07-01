@@ -27,6 +27,40 @@ describe('telemetry/index', () => {
     delete process.env.MODELENCE_LOG_LEVEL;
   });
 
+  describe('redactSensitive', () => {
+    test('redacts sensitive keys (substring, case-insensitive) and preserves others', () => {
+      const input = {
+        token: 'raw',
+        Password: 'pw',
+        linkNonce: 'n',
+        verificationCode: 'c',
+        apiSecret: 's',
+        email: 'a@b.com',
+        nested: { authToken: 't', label: 'keep' },
+      };
+
+      expect(telemetry.redactSensitive(input)).toEqual({
+        token: '[redacted]',
+        Password: '[redacted]',
+        linkNonce: '[redacted]',
+        verificationCode: '[redacted]',
+        apiSecret: '[redacted]',
+        email: 'a@b.com',
+        nested: { authToken: '[redacted]', label: 'keep' },
+      });
+    });
+
+    test('redacts inside arrays and passes through primitives', () => {
+      expect(telemetry.redactSensitive([{ token: 'x' }, { ok: 1 }])).toEqual([
+        { token: '[redacted]' },
+        { ok: 1 },
+      ]);
+      expect(telemetry.redactSensitive('plain')).toBe('plain');
+      expect(telemetry.redactSensitive(null)).toBe(null);
+      expect(telemetry.redactSensitive(42)).toBe(42);
+    });
+  });
+
   afterEach(() => {
     consoleDebug.mockClear();
     consoleInfo.mockClear();

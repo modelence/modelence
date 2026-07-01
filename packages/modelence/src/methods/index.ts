@@ -1,5 +1,5 @@
 import { requireServer } from '../utils';
-import { startTransaction } from '@/telemetry';
+import { startTransaction, redactSensitive } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 import { LiveData } from '../live-query';
@@ -73,7 +73,10 @@ export async function runMethod(name: string, args: Args, context: Context) {
   }
   const { type, handler } = method;
 
-  const transaction = startTransaction('method', `method:${name}`, { type, args });
+  const transaction = startTransaction('method', `method:${name}`, {
+    type,
+    args: redactSensitive(args),
+  });
 
   let response;
   try {
@@ -107,7 +110,10 @@ export async function runLiveMethod(name: string, args: Args, context: Context):
     throw new Error(`Live methods are only supported for queries`);
   }
 
-  const transaction = startTransaction('method', `method:${name}:live`, { type, args });
+  const transaction = startTransaction('method', `method:${name}:live`, {
+    type,
+    args: redactSensitive(args),
+  });
 
   let result;
   try {

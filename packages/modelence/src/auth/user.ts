@@ -16,7 +16,11 @@ import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
 import { handleVerifyEmail, handleResendEmailVerification } from './verification';
-import { handleResetPassword, handleSendResetPasswordToken } from './resetPassword';
+import {
+  handleResetPassword,
+  handleResetPasswordLanding,
+  handleSendResetPasswordToken,
+} from './resetPassword';
 
 function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
   return `${rule.bucket}\n${rule.type}\n${rule.window}`;
@@ -199,6 +203,14 @@ export default new Module('_system.user', {
       path: '/api/_internal/auth/verify-email',
       handlers: {
         get: handleVerifyEmail,
+      },
+    },
+    {
+      // Server landing for password reset (see handleResetPasswordLanding).
+      // Runs before the SPA catch-all.
+      path: '/api/_internal/auth/reset-password',
+      handlers: {
+        get: handleResetPasswordLanding,
       },
     },
   ],
