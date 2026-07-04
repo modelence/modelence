@@ -9,6 +9,7 @@ const mockStartTransaction = vi.fn(() => ({
 }));
 const mockCaptureError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
+const mockGetMongodbUri: Mock = vi.fn();
 
 const cronStoreMocks: { fetch: Mock; updateOne: Mock; upsertOne: Mock; insertMany: Mock } = {
   fetch: vi.fn(),
@@ -38,6 +39,10 @@ function registerMocks() {
   vi.doMock('../lock/helpers', () => ({
     acquireLock: mockAcquireLock,
   }));
+
+  vi.doMock('@/db/client', () => ({
+    getMongodbUri: mockGetMongodbUri,
+  }));
 }
 
 describe('cron/jobs', () => {
@@ -59,6 +64,7 @@ describe('cron/jobs', () => {
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
       insertMany: vi.fn().mockResolvedValue(undefined as never),
     });
+    mockGetMongodbUri.mockReturnValue('');
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
@@ -111,6 +117,7 @@ describe('cron/jobs', () => {
   test('startCronJobs initializes schedule, fetches last run, and sets interval', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
       const now = Date.now();
       vi.spyOn(Date, 'now').mockReturnValue(now);
       cronStoreMocks.fetch
@@ -138,6 +145,32 @@ describe('cron/jobs', () => {
     }
   });
 
+  test('startCronJobs skips DB wait and schedules immediately when no MongoDB URI', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      mockGetMongodbUri.mockReturnValue('');
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      defineCronJob('noDbJob', {
+        description: 'no db',
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+
+      await startCronJobs();
+
+      // Should not call fetch (no DB available)
+      expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
+      // Should still set up the interval
+      expect(intervalDelay).toBe(mockSeconds(1));
+      expect(intervalCallback).toBeTruthy();
+      (Date.now as Mock).mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('startCronJobs no-ops when no cron jobs defined', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
@@ -152,6 +185,7 @@ describe('cron/jobs', () => {
   test('cron loop executes job handler and records completion', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
       const handler = vi.fn(async () => {});
       cronStoreMocks.fetch
         .mockResolvedValueOnce([{ alias: 'hourly' }] as never)
@@ -187,6 +221,7 @@ describe('cron/jobs', () => {
   test('cron loop captures errors and continues schedule', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
       const handler = vi.fn(async () => {
         throw new Error('boom');
       });

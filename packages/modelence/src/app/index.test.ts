@@ -877,18 +877,27 @@ describe('app/index', () => {
     );
   });
 
-  test('registerNewCronJobs failure propagates and crashes startApp', async () => {
+  test('registerNewCronJobs failure warns and continues startup', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: vi.fn() });
 
     const cronError = new Error('cron registration failed');
     mockRegisterNewCronJobs.mockRejectedValue(cronError);
 
-    // registerNewCronJobs now runs synchronously inside the try block of
-    // createIndexesAndMigrationsWithLock, so its rejection propagates through startApp.
-    await expect(startApp({})).rejects.toThrow('cron registration failed');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
+    // registerNewCronJobs failure is now caught — startApp should NOT reject.
+    await expect(startApp({})).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to register cron jobs. Continuing startup.',
+      cronError
+    );
+    // The lock should NOT be prematurely released by the error path.
+    // It gets released later by the finally block after migrations complete.
+    expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
   });
 
   test('starts server with combined modules and channels', async () => {

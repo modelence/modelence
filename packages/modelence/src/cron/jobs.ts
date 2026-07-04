@@ -7,6 +7,7 @@ import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
+import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -73,22 +74,22 @@ export async function registerNewCronJobs() {
     return;
   }
 
-  try {
-    const aliasSelector = { alias: { $in: aliasList } };
-    const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
-    const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+  // This read-then-insert pattern is safe because it
+  // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
+  // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
+  // duplicate-key error from the unique alias index.
+  const aliasSelector = { alias: { $in: aliasList } };
+  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
 
-    const insertItems = Object.values(cronJobs)
-      .filter((job) => !existingCronJobAliases.has(job.alias))
-      .map((job) => ({
-        alias: job.alias,
-      }));
+  const insertItems = Object.values(cronJobs)
+    .filter((job) => !existingCronJobAliases.has(job.alias))
+    .map((job) => ({
+      alias: job.alias,
+    }));
 
-    if (insertItems.length > 0) {
-      await cronJobsCollection.insertMany(insertItems);
-    }
-  } catch (error) {
-    throw error;
+  if (insertItems.length > 0) {
+    await cronJobsCollection.insertMany(insertItems);
   }
 }
 
@@ -104,6 +105,15 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
+
+  // Timeout expired — some jobs were never registered by the lock-holder.
+  const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
+  const registeredAliases = new Set(records.map((r) => r.alias));
+  const missingAliases = aliasList.filter((alias) => !registeredAliases.has(alias));
+  console.warn(
+    `Timed out waiting for cron job registration. Missing aliases: [${missingAliases.join(', ')}]. ` +
+      `These jobs will fall back to immediate scheduling.`
+  );
 }
 
 export async function startCronJobs() {
@@ -113,20 +123,27 @@ export async function startCronJobs() {
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
-    await waitForCronJobsRegistered(aliasList, time.seconds(30));
-    const aliasSelector = { alias: { $in: aliasList } };
-
-    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
     const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : now;
-    });
+
+    if (getMongodbUri()) {
+      // Wait for the lock-holder to finish registerNewCronJobs() so every
+      // instance sees the DB records before scheduling.
+      await waitForCronJobsRegistered(aliasList, time.seconds(30));
+      const aliasSelector = { alias: { $in: aliasList } };
+
+      const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+      cronJobRecords.forEach((record) => {
+        const job = cronJobs[record.alias];
+        if (!job) {
+          return;
+        }
+        job.state.scheduledRunTs = record.lastStartDate
+          ? record.lastStartDate.getTime() + job.params.interval
+          : now;
+      });
+    }
+
+    // Any jobs not yet scheduled (either no Mongo, or no DB record) run immediately.
     Object.values(cronJobs).forEach((job) => {
       if (!job.state.scheduledRunTs) {
         job.state.scheduledRunTs = now;

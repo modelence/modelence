@@ -259,7 +259,11 @@ async function createIndexesAndMigrationsWithLock(
     }
     // registerNewCronJobs runs here — after the unique alias index is guaranteed
     // to exist (cronJobsCollection is now blocking!)
-    await registerNewCronJobs();
+    try {
+      await registerNewCronJobs();
+    } catch (error) {
+      console.warn('Failed to register cron jobs. Continuing startup.', error);
+    }
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'drop-only');
     }
