@@ -8,6 +8,7 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
+import { locksCollection } from '../lock';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -17,6 +18,7 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
     status: schema.string().optional(),
+    sessionToken: schema.string().optional(),
   },
   indexes: [{ key: { alias: 1 }, unique: true }],
   indexCreationMode: 'blocking',
@@ -75,10 +77,14 @@ export async function registerNewCronJobs() {
     return;
   }
 
+  // Get the session token from the current migrations lock
+  const lockDoc = await locksCollection.findOne({ _id: 'migrations' });
+  const sessionToken = lockDoc ? lockDoc.acquiredAt.getTime().toString() : 'unknown';
+
   try {
     await cronJobsCollection.upsertOne(
       { alias: '_registration_status' },
-      { $set: { status: 'running' } }
+      { $set: { status: 'running', sessionToken } }
     );
 
     // This read-then-insert pattern is safe because it
@@ -121,14 +127,29 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
   const pollInterval = time.seconds(1);
 
   while (Date.now() < deadline) {
+    const lockDoc = await locksCollection.findOne({ _id: 'migrations' });
+    const currentSessionToken = lockDoc ? lockDoc.acquiredAt.getTime().toString() : null;
+
     const records = await cronJobsCollection.fetch({
       alias: { $in: [...aliasList, '_registration_status'] },
     });
     const registeredAliases = new Set(records.map((r) => r.alias));
 
     const statusRecord = records.find((r) => r.alias === '_registration_status');
-    if (statusRecord?.status === 'success' || statusRecord?.status === 'failed') {
-      return; // If status is "success", proceeds with no issues. If status is "failed", it may not register new cron jobs, but the fallback in startCronJobs() schedules cron jobs to run immediately.
+    if (currentSessionToken) {
+      // If there is an active migration session, we only respect the status doc
+      // if it matches the current session token.
+      if (
+        statusRecord?.sessionToken === currentSessionToken &&
+        (statusRecord.status === 'success' || statusRecord.status === 'failed')
+      ) {
+        return;
+      }
+    } else {
+      // If the migrations lock is already released, registration has completed.
+      if (statusRecord?.status === 'success' || statusRecord?.status === 'failed') {
+        return;
+      }
     }
 
     if (aliasList.every((alias) => registeredAliases.has(alias))) {
