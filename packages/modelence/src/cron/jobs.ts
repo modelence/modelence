@@ -16,6 +16,7 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
+    status: schema.string().optional(),
   },
   indexes: [{ key: { alias: 1 }, unique: true }],
   indexCreationMode: 'blocking',
@@ -74,22 +75,44 @@ export async function registerNewCronJobs() {
     return;
   }
 
-  // This read-then-insert pattern is safe because it
-  // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
-  // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
-  // duplicate-key error from the unique alias index.
-  const aliasSelector = { alias: { $in: aliasList } };
-  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
-  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+  try {
+    await cronJobsCollection.upsertOne(
+      { alias: '_registration_status' },
+      { $set: { status: 'running' } }
+    );
 
-  const insertItems = Object.values(cronJobs)
-    .filter((job) => !existingCronJobAliases.has(job.alias))
-    .map((job) => ({
-      alias: job.alias,
-    }));
+    // This read-then-insert pattern is safe because it
+    // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
+    // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
+    // duplicate-key error from the unique alias index.
+    const aliasSelector = { alias: { $in: aliasList } };
+    const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+    const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
 
-  if (insertItems.length > 0) {
-    await cronJobsCollection.insertMany(insertItems);
+    const insertItems = Object.values(cronJobs)
+      .filter((job) => !existingCronJobAliases.has(job.alias))
+      .map((job) => ({
+        alias: job.alias,
+      }));
+
+    if (insertItems.length > 0) {
+      await cronJobsCollection.insertMany(insertItems);
+    }
+
+    await cronJobsCollection.updateOne(
+      { alias: '_registration_status' },
+      { $set: { status: 'success' } }
+    );
+  } catch (error) {
+    try {
+      await cronJobsCollection.updateOne(
+        { alias: '_registration_status' },
+        { $set: { status: 'failed' } }
+      );
+    } catch {
+      // Swallowed to prevent hiding original error
+    }
+    throw error;
   }
 }
 
@@ -98,8 +121,16 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
   const pollInterval = time.seconds(1);
 
   while (Date.now() < deadline) {
-    const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
+    const records = await cronJobsCollection.fetch({
+      alias: { $in: [...aliasList, '_registration_status'] },
+    });
     const registeredAliases = new Set(records.map((r) => r.alias));
+
+    const statusRecord = records.find((r) => r.alias === '_registration_status');
+    if (statusRecord?.status === 'success' || statusRecord?.status === 'failed') {
+      return; // If status is "success", proceeds with no issues. If status is "failed", it may not register new cron jobs, but the fallback in startCronJobs() schedules cron jobs to run immediately.
+    }
+
     if (aliasList.every((alias) => registeredAliases.has(alias))) {
       return;
     }

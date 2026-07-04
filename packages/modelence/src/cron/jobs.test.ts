@@ -286,6 +286,44 @@ describe('cron/jobs', () => {
       expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
     });
 
+    test('updates registration status document to running then success', async () => {
+      defineCronJob('myJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([] as never);
+
+      await registerNewCronJobs();
+
+      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
+        { alias: '_registration_status' },
+        { $set: { status: 'running' } }
+      );
+      expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
+        { alias: '_registration_status' },
+        { $set: { status: 'success' } }
+      );
+    });
+
+    test('updates registration status document to failed when operation throws', async () => {
+      defineCronJob('myJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockRejectedValue(new Error('fetch failed') as never);
+
+      await expect(registerNewCronJobs()).rejects.toThrow('fetch failed');
+
+      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
+        { alias: '_registration_status' },
+        { $set: { status: 'running' } }
+      );
+      expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
+        { alias: '_registration_status' },
+        { $set: { status: 'failed' } }
+      );
+    });
+
     test('rethrows when fetch throws', async () => {
       defineCronJob('myJob', {
         interval: mockSeconds(10),
@@ -307,6 +345,62 @@ describe('cron/jobs', () => {
       cronStoreMocks.insertMany.mockRejectedValue(insertError as never);
 
       await expect(registerNewCronJobs()).rejects.toThrow('DB insert failed');
+    });
+  });
+
+  describe('startCronJobs early termination', () => {
+    test('stops polling early when status is success', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+
+        defineCronJob('myJob', {
+          interval: mockSeconds(10),
+          handler: async () => {},
+        });
+
+        // First poll: return success status
+        cronStoreMocks.fetch
+          .mockResolvedValueOnce([{ alias: '_registration_status', status: 'success' }] as never)
+          // Next fetch: for actual job scheduling
+          .mockResolvedValueOnce([] as never);
+
+        await startCronJobs();
+
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+        (Date.now as Mock).mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('stops polling early when status is failed', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+
+        defineCronJob('myJob', {
+          interval: mockSeconds(10),
+          handler: async () => {},
+        });
+
+        // First poll: return failed status
+        cronStoreMocks.fetch
+          .mockResolvedValueOnce([{ alias: '_registration_status', status: 'failed' }] as never)
+          // Next fetch: for actual job scheduling
+          .mockResolvedValueOnce([] as never);
+
+        await startCronJobs();
+
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+        (Date.now as Mock).mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
