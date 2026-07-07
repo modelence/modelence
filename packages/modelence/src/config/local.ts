@@ -13,7 +13,6 @@ const localConfigMap = {
     MODELENCE_AUTH_GITHUB_CLIENT_ID: '_system.user.auth.github.clientId',
     MODELENCE_AUTH_GITHUB_CLIENT_SECRET: '_system.user.auth.github.clientSecret',
     MODELENCE_AUTH_GITHUB_CLIENT_SCOPES: '_system.user.auth.github.scopes',
-    MODELENCE_AUTH_MAGIC_LINK_ENABLED: '_system.user.auth.magicLink.enabled',
     MODELENCE_EMAIL_RESEND_API_KEY: '_system.email.resend.apiKey',
     MODELENCE_EMAIL_AWS_SES_REGION: '_system.email.awsSes.region',
     MODELENCE_EMAIL_AWS_SES_ACCESS_KEY_ID: '_system.email.awsSes.accessKeyId',

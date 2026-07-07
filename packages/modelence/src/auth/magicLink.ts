@@ -41,7 +41,7 @@ const MAGIC_LINK_COOKIE_OPTIONS = {
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
 
 function isMagicLinkEnabled(): boolean {
-  return Boolean(getConfig('_system.user.auth.magicLink.enabled'));
+  return Boolean(getAuthConfig().magicLink?.enabled);
 }
 
 /**

@@ -177,11 +177,6 @@ export default new Module('_system.user', {
       isPublic: true,
       default: true,
     },
-    'auth.magicLink.enabled': {
-      type: 'boolean',
-      isPublic: true,
-      default: false,
-    },
     'auth.google.enabled': {
       type: 'boolean',
       isPublic: true,

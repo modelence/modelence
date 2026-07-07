@@ -260,6 +260,27 @@ export type AuthConfig = {
   signup?: AuthOption;
 
   /**
+   * Enables passwordless magic link authentication. Disabled by default —
+   * magic link doubles as sign-up (an unknown email gets an account created
+   * when the link is used), so it must be opted into explicitly.
+   *
+   * Requires an email provider and delivery settings under the `email` option
+   * (see `EmailConfig.magicLink`).
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   auth: {
+   *     magicLink: { enabled: true },
+   *   },
+   * });
+   * ```
+   */
+  magicLink?: {
+    enabled?: boolean;
+  };
+
+  /**
    * Controls how OAuth providers handle existing accounts with matching email.
    * - 'manual' (default): Returns an error when an OAuth login matches an existing email.
    * - 'auto': Automatically links the OAuth provider to the existing account

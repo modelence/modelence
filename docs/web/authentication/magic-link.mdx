@@ -10,27 +10,18 @@ Magic link works as a combined sign-in and sign-up: if the email is not register
 
 ## Configuration
 
-Magic link authentication is disabled by default. Enable it via config:
-
-### Option 1: Modelence Cloud
-
-Enable magic link authentication in your project settings at [https://cloud.modelence.com/](https://cloud.modelence.com/) by setting the `_system.user.auth.magicLink.enabled` config.
-
-### Option 2: Environment Variables
-
-Add to your `.env` file:
-
-```bash
-MODELENCE_AUTH_MAGIC_LINK_ENABLED=true
-```
-
-Then configure the magic link emails in your server setup:
+Magic link authentication is disabled by default. Enable it under the `auth:` key of `startApp` and configure the email delivery under the `email:` key:
 
 ```typescript
 import { startApp } from 'modelence/server';
 import resendProvider from '@modelence/resend';
 
 startApp({
+  auth: {
+    magicLink: {
+      enabled: true,
+    },
+  },
   email: {
     provider: resendProvider,
     from: 'noreply@yourdomain.com',
