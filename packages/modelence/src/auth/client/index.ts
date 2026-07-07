@@ -215,6 +215,35 @@ export async function loginWithMagicLink() {
 }
 
 /**
+ * Complete a magic link sign-in by typing the one-time code from the email.
+ *
+ * Alternative to `loginWithMagicLink()` for contexts where clicking the link
+ * can't reach the app — native apps without deep links, or when the email is
+ * read on a different device. Signs the user in — creating the account first
+ * when the email is not registered yet — and returns the logged-in user.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithOneTimeCode({ email: 'user@example.com', code: '482193' });
+ * ```
+ * @param options.email - The email the magic link was sent to.
+ * @param options.code - The one-time code from the email.
+ */
+export async function loginWithOneTimeCode(options: { email: string; code: string }) {
+  const { email, code } = options;
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOneTimeCode',
+    { email, code }
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
  * Reset password.
  *
  * The token is normally exchanged server-side via an httpOnly cookie, so the

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 
 import { Args, ConnectionInfo, Context } from '@/methods/types';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
@@ -39,6 +39,12 @@ const MAGIC_LINK_COOKIE_OPTIONS = {
 } as const;
 
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
+
+const ONE_TIME_CODE_LENGTH = 6;
+
+// A 6-digit code is guessable in a way a 32-byte token is not, so each doc
+// tolerates only a few wrong guesses before it can no longer be used.
+const MAX_CODE_ATTEMPTS = 5;
 
 function isMagicLinkEnabled(): boolean {
   return Boolean(getAuthConfig().magicLink?.enabled);
@@ -117,16 +123,25 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
     return magicLinkSent;
   }
 
-  // Generate magic link token
+  // Generate the two credentials backed by the same doc: a long token for the
+  // clickable link and a short code the user can type (e.g. on mobile, or when
+  // reading the email on a different device).
   const magicLinkToken = randomBytes(32).toString('hex');
+  const oneTimeCode = randomInt(0, 10 ** ONE_TIME_CODE_LENGTH)
+    .toString()
+    .padStart(ONE_TIME_CODE_LENGTH, '0');
   const now = Date.now();
   const createdAt = new Date(now);
   const expiresAt = new Date(now + time.minutes(MAGIC_LINK_EXPIRY_MINUTES));
 
-  // Store only the hash, never the raw token (defense against db leaks).
+  // Store only the hashes, never the raw values (defense against db leaks;
+  // for the short code the attempt cap and expiry are the primary defense,
+  // since its keyspace is small enough to brute-force a leaked hash offline).
   await magicLinkTokensCollection.insertOne({
     email,
     token: hashToken(magicLinkToken),
+    code: hashToken(oneTimeCode),
+    attempts: 0,
     createdAt,
     expiresAt,
   });
@@ -142,7 +157,7 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
 
   // Send email
   const template = getEmailConfig()?.magicLink?.template || magicLinkTemplate;
-  const htmlTemplate = template({ email, magicLinkUrl, name: '' });
+  const htmlTemplate = template({ email, magicLinkUrl, code: oneTimeCode, name: '' });
   const textContent = htmlToText(htmlTemplate);
 
   await emailProvider.sendEmail({
@@ -433,6 +448,91 @@ export async function handleLoginWithMagicLink(args: Args, context: Context) {
     connectionInfo,
     res,
     clearCookie,
+  };
+
+  if (userDoc) {
+    return loginExistingUser(userDoc, authParams);
+  }
+
+  return signupNewUser(authParams);
+}
+
+/**
+ * Consumes the one-time code from the magic link email, logging in the
+ * matching user — or creating the account first when the email is unknown.
+ * Same semantics as the link: the code proves possession of the address.
+ *
+ * The typed-code path exists for contexts where the link chain breaks: native
+ * apps without deep links set up, or reading the email on a different device
+ * than the one signing in.
+ */
+export async function handleLoginWithOneTimeCode(args: Args, context: Context) {
+  const { session, connectionInfo, res } = context;
+
+  if (!session) {
+    throw new Error('Session is not initialized');
+  }
+
+  if (!isMagicLinkEnabled()) {
+    throw new Error('Magic link authentication is not enabled');
+  }
+
+  const email = validateEmail(args.email as string);
+  // Tolerate the formatting users copy from the email ("482 193", "482-193").
+  const code = z.string().parse(args.code).replace(/[\s-]/g, '');
+
+  const ip = connectionInfo?.ip;
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'oneTimeCode',
+      type: 'ip',
+      value: ip,
+    });
+  }
+
+  await consumeRateLimit({
+    bucket: 'oneTimeCode',
+    type: 'email',
+    value: email,
+  });
+
+  // Look up WITHOUT consuming, keyed by email + hashed code. Docs that already
+  // burned their guess allowance are excluded, so a capped code can never be
+  // used even if eventually guessed right.
+  const tokenDoc = await magicLinkTokensCollection.findOne({
+    email,
+    code: hashToken(code),
+    attempts: { $lt: MAX_CODE_ATTEMPTS },
+  });
+
+  if (!tokenDoc) {
+    // Count the failed guess against every outstanding code for this email —
+    // attempts are tracked on the docs themselves so concurrent guesses are
+    // counted atomically.
+    await magicLinkTokensCollection.updateMany({ email }, { $inc: { attempts: 1 } });
+    // Same message whether the code is wrong, capped, or the email unknown —
+    // never reveal account existence.
+    throw new Error('Invalid or expired code');
+  }
+
+  if (tokenDoc.expiresAt < new Date()) {
+    // Expired: remove it and reject.
+    await claimMagicLinkTokenById(tokenDoc._id as ObjectId);
+    throw new Error('Code has expired');
+  }
+
+  const userDoc = await usersCollection.findOne(
+    { 'emails.address': email },
+    { collation: { locale: 'en', strength: 2 } }
+  );
+
+  const authParams: MagicLinkAuthParams = {
+    tokenDoc: { _id: tokenDoc._id as ObjectId, email: tokenDoc.email },
+    session,
+    connectionInfo,
+    res,
+    // The code travels as a mutation argument — there is no cookie to clear.
+    clearCookie: () => {},
   };
 
   if (userDoc) {

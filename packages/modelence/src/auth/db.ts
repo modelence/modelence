@@ -130,10 +130,17 @@ export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordT
 // No userId field: the login mutation re-resolves the user by email to support
 // find-or-create (magic link signs up unknown emails), and a userId captured at
 // send time could go stale before the link is clicked.
+//
+// Each doc backs two credentials for the same sign-in: the long `token` (link)
+// and the short `code` (typed one-time code). Consuming either deletes the doc,
+// invalidating both.
 export const magicLinkTokensCollection = new Store('_modelenceMagicLinkTokens', {
   schema: {
     email: schema.string(),
     token: schema.string(),
+    code: schema.string(),
+    // Failed code guesses; docs at the attempt cap can no longer be used.
+    attempts: schema.number(),
     createdAt: schema.date(),
     expiresAt: schema.date(),
   },

@@ -18,6 +18,7 @@ const mockHandleResetPassword = vi.fn();
 const mockHandleResetPasswordLanding = vi.fn();
 const mockHandleSendMagicLink = vi.fn();
 const mockHandleLoginWithMagicLink = vi.fn();
+const mockHandleLoginWithOneTimeCode = vi.fn();
 const mockHandleMagicLinkLanding = vi.fn();
 const mockGetOwnProfile = vi.fn();
 const mockHandleUpdateProfile = vi.fn();
@@ -70,6 +71,7 @@ vi.doMock('./resetPassword', () => ({
 vi.doMock('./magicLink', () => ({
   handleSendMagicLink: mockHandleSendMagicLink,
   handleLoginWithMagicLink: mockHandleLoginWithMagicLink,
+  handleLoginWithOneTimeCode: mockHandleLoginWithOneTimeCode,
   handleMagicLinkLanding: mockHandleMagicLinkLanding,
 }));
 
@@ -150,6 +152,7 @@ describe('auth/user', () => {
           resetPassword: mockHandleResetPassword,
           sendMagicLink: mockHandleSendMagicLink,
           loginWithMagicLink: mockHandleLoginWithMagicLink,
+          loginWithOneTimeCode: mockHandleLoginWithOneTimeCode,
           updateProfile: mockHandleUpdateProfile,
         }),
         cronJobs: {
@@ -220,13 +223,21 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 16 rules covering all auth buckets', () => {
+    test('produces exactly 20 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(16);
+      expect(rules).toHaveLength(20);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
-        new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset', 'magicLink'])
+        new Set([
+          'signup',
+          'signupAttempt',
+          'signin',
+          'verification',
+          'passwordReset',
+          'magicLink',
+          'oneTimeCode',
+        ])
       );
     });
 

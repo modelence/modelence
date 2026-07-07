@@ -18,11 +18,13 @@ const mockTokensInsertOne: MockedFunction<MagicLinkTokensCollection['insertOne']
 const mockTokensFindOne: MockedFunction<MagicLinkTokensCollection['findOne']> = vi.fn();
 const mockTokensFindOneAndDelete: MockedFunction<MagicLinkTokensCollection['findOneAndDelete']> =
   vi.fn();
+const mockTokensUpdateMany: MockedFunction<MagicLinkTokensCollection['updateMany']> = vi.fn();
 const mockGetEmailConfig = vi.fn();
 const mockGetAuthConfig = vi.fn();
 const mockHtmlToText: MockedFunction<(html: string) => string> = vi.fn();
 const mockValidateEmail: MockedFunction<(email: string) => string> = vi.fn();
 const mockRandomBytes = vi.fn();
+const mockRandomInt = vi.fn();
 const mockTime = { minutes: vi.fn() };
 const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
@@ -56,6 +58,7 @@ vi.doMock('./db', () => ({
     insertOne: mockTokensInsertOne,
     findOne: mockTokensFindOne,
     findOneAndDelete: mockTokensFindOneAndDelete,
+    updateMany: mockTokensUpdateMany,
   },
 }));
 
@@ -93,6 +96,7 @@ vi.doMock('./utils', () => ({
 
 vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
+  randomInt: mockRandomInt,
   // tokenHash.ts (imported transitively) needs the real createHash.
   createHash: actualCreateHash,
 }));
@@ -102,7 +106,12 @@ vi.doMock('@/time', () => ({
 }));
 
 const magicLinkModule = await import('./magicLink');
-const { handleSendMagicLink, handleMagicLinkLanding, handleLoginWithMagicLink } = magicLinkModule;
+const {
+  handleSendMagicLink,
+  handleMagicLinkLanding,
+  handleLoginWithMagicLink,
+  handleLoginWithOneTimeCode,
+} = magicLinkModule;
 
 const createSession = (overrides: Partial<Session> = {}): Session => ({
   authToken: 'session-auth-token',
@@ -178,6 +187,8 @@ const createMockToken = (
     _id: ObjectId;
     email: string;
     token: string;
+    code: string;
+    attempts: number;
     expiresAt: Date;
     createdAt: Date;
   }> = {}
@@ -186,6 +197,8 @@ const createMockToken = (
     _id: overrides._id ?? new ObjectId(),
     email: overrides.email ?? 'user@example.com',
     token: overrides.token ?? 'token123',
+    code: overrides.code ?? sha256('482193'),
+    attempts: overrides.attempts ?? 0,
     expiresAt: overrides.expiresAt ?? new Date(Date.now() + 1000000),
     createdAt: overrides.createdAt ?? new Date(),
   }) as Awaited<ReturnType<MagicLinkTokensCollection['findOne']>>;
@@ -216,6 +229,7 @@ describe('auth/magicLink', () => {
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.minutes.mockReturnValue(900000); // 15 minutes in ms
     mockIsDisposableEmail.mockResolvedValue(false as never);
+    mockRandomInt.mockReturnValue(482193);
     mockSerializeUserForClient.mockImplementation((userDoc: { _id: unknown; handle: string }) => ({
       id: userDoc._id,
       handle: userDoc.handle,
@@ -268,10 +282,12 @@ describe('auth/magicLink', () => {
 
       const result = await handleSendMagicLink({ email }, createContext());
 
-      // Token is stored hashed at rest, never as the raw value.
+      // Token and code are stored hashed at rest, never as the raw values.
       expect(mockTokensInsertOne).toHaveBeenCalledWith({
         email,
         token: sha256(rawToken),
+        code: sha256('482193'),
+        attempts: 0,
         createdAt: expect.any(Date),
         expiresAt: expect.any(Date),
       });
@@ -285,6 +301,10 @@ describe('auth/magicLink', () => {
           `https://example.com/api/_internal/auth/magic-link?token=${rawToken}`
         ),
       });
+      // The default template renders the typed one-time code alongside the link.
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('482193') })
+      );
       expect(result).toEqual(GENERIC_RESPONSE);
     });
 
@@ -387,9 +407,10 @@ describe('auth/magicLink', () => {
     test('uses custom email template when provided', async () => {
       const email = 'user@example.com';
       const rawToken = 'customtoken';
-      type TemplateProps = { email: string; magicLinkUrl: string; name: string };
-      const customTemplate = ({ email: templateEmail, magicLinkUrl }: TemplateProps) =>
-        `<p>Custom: ${templateEmail} - ${magicLinkUrl}</p>`;
+      type TemplateProps = { email: string; magicLinkUrl: string; code: string; name: string };
+      // Custom templates receive both credentials and can render either or both.
+      const customTemplate = ({ email: templateEmail, magicLinkUrl, code }: TemplateProps) =>
+        `<p>Custom: ${templateEmail} - ${magicLinkUrl} - ${code}</p>`;
 
       mockValidateEmail.mockReturnValue(email);
       mockGetEmailConfig.mockReturnValue({
@@ -408,7 +429,7 @@ describe('auth/magicLink', () => {
 
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: `<p>Custom: ${email} - https://example.com/api/_internal/auth/magic-link?token=${rawToken}</p>`,
+          html: `<p>Custom: ${email} - https://example.com/api/_internal/auth/magic-link?token=${rawToken} - 482193</p>`,
         })
       );
     });
@@ -834,6 +855,175 @@ describe('auth/magicLink', () => {
 
         expect(mockUsersInsertOne).not.toHaveBeenCalled();
         expect(mockSetSessionUser).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('handleLoginWithOneTimeCode', () => {
+    const email = 'user@example.com';
+    const CODE = '482193';
+
+    const codeContext = (connectionInfo: Context['connectionInfo'] = {}) => {
+      const session = createSession();
+      return {
+        session,
+        context: createContext({ session, connectionInfo }),
+      };
+    };
+
+    beforeEach(() => {
+      mockValidateEmail.mockReturnValue(email);
+    });
+
+    test('throws when magic link auth is not enabled', async () => {
+      mockGetAuthConfig.mockReturnValue({});
+      const { context } = codeContext();
+
+      await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
+        'Magic link authentication is not enabled'
+      );
+    });
+
+    test('checks rate limits (ip and email) before looking up the code', async () => {
+      const ip = '127.0.0.1';
+      const tokenDoc = createMockToken({ email });
+      mockTokensFindOne.mockResolvedValue(tokenDoc);
+      mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ emails: [{ address: email, verified: true }] })
+      );
+      const { context } = codeContext({ ip });
+
+      await handleLoginWithOneTimeCode({ email, code: CODE }, context);
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'oneTimeCode',
+        type: 'ip',
+        value: ip,
+      });
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'oneTimeCode',
+        type: 'email',
+        value: email,
+      });
+    });
+
+    test('logs in an existing user with a valid code and consumes the doc', async () => {
+      const userId = new ObjectId();
+      const onAfterLogin = vi.fn();
+      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterLogin });
+
+      const tokenDoc = createMockToken({ email });
+      mockTokensFindOne.mockResolvedValue(tokenDoc);
+      mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ _id: userId, emails: [{ address: email, verified: true }] })
+      );
+
+      const { context, session } = codeContext();
+      const result = await handleLoginWithOneTimeCode({ email, code: CODE }, context);
+
+      // Lookup is keyed by email + hashed code and excludes capped docs.
+      expect(mockTokensFindOne).toHaveBeenCalledWith({
+        email,
+        code: sha256(CODE),
+        attempts: { $lt: 5 },
+      });
+      expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
+      expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+      expect(onAfterLogin).toHaveBeenCalledWith(expect.objectContaining({ provider: 'magicLink' }));
+      expect(result).toEqual({
+        user: { id: userId, handle: 'testuser' },
+        session: { authToken: session.authToken },
+      });
+    });
+
+    test('normalizes whitespace and dashes in the typed code', async () => {
+      const tokenDoc = createMockToken({ email });
+      mockTokensFindOne.mockResolvedValue(tokenDoc);
+      mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ emails: [{ address: email, verified: true }] })
+      );
+
+      const { context } = codeContext();
+      await handleLoginWithOneTimeCode({ email, code: ' 482 - 193 ' }, context);
+
+      expect(mockTokensFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({ code: sha256(CODE) })
+      );
+    });
+
+    test('counts a wrong guess against all outstanding codes and throws generically', async () => {
+      mockTokensFindOne.mockResolvedValue(null);
+
+      const { context } = codeContext();
+      await expect(handleLoginWithOneTimeCode({ email, code: '000000' }, context)).rejects.toThrow(
+        'Invalid or expired code'
+      );
+
+      expect(mockTokensUpdateMany).toHaveBeenCalledWith({ email }, { $inc: { attempts: 1 } });
+      expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
+      expect(mockSetSessionUser).not.toHaveBeenCalled();
+    });
+
+    test('throws the same generic error for an unknown email (no enumeration)', async () => {
+      mockTokensFindOne.mockResolvedValue(null);
+
+      const { context } = codeContext();
+      await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
+        'Invalid or expired code'
+      );
+    });
+
+    test('deletes the doc and throws when the code is expired', async () => {
+      const expiredDoc = createMockToken({ email, expiresAt: new Date(Date.now() - 1000) });
+      mockTokensFindOne.mockResolvedValue(expiredDoc);
+      mockTokensFindOneAndDelete.mockResolvedValue(expiredDoc);
+
+      const { context } = codeContext();
+      await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
+        'Code has expired'
+      );
+
+      expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: expiredDoc!._id });
+      expect(mockSetSessionUser).not.toHaveBeenCalled();
+    });
+
+    test('creates an account when the email is unknown (signup branch)', async () => {
+      const userId = new ObjectId();
+      const onAfterSignup = vi.fn();
+      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterSignup });
+
+      const tokenDoc = createMockToken({ email });
+      mockTokensFindOne.mockResolvedValue(tokenDoc);
+      mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      const newUser = createMockUser({
+        _id: userId,
+        handle: 'user',
+        emails: [{ address: email, verified: true }],
+        authMethods: {},
+      });
+      mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(newUser);
+      mockUsersInsertOne.mockResolvedValue({ insertedId: userId } as never);
+      mockResolveUniqueHandle.mockResolvedValue('user' as never);
+
+      const { context, session } = codeContext();
+      const result = await handleLoginWithOneTimeCode({ email, code: CODE }, context);
+
+      expect(mockUsersInsertOne).toHaveBeenCalledWith({
+        handle: 'user',
+        status: 'active',
+        emails: [{ address: email, verified: true }],
+        createdAt: expect.any(Date),
+        authMethods: {},
+      });
+      expect(onAfterSignup).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'magicLink', user: newUser })
+      );
+      expect(result).toEqual({
+        user: { id: userId, handle: 'user' },
+        session: { authToken: session.authToken },
       });
     });
   });

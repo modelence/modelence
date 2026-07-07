@@ -39,6 +39,7 @@ export {
   resetPassword,
   sendMagicLink,
   loginWithMagicLink,
+  loginWithOneTimeCode,
   linkOAuthProvider,
   unlinkOAuthProvider,
   type UserInfo,

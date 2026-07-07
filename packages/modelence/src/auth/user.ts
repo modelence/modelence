@@ -22,7 +22,12 @@ import {
   handleResetPasswordLanding,
   handleSendResetPasswordToken,
 } from './resetPassword';
-import { handleLoginWithMagicLink, handleMagicLinkLanding, handleSendMagicLink } from './magicLink';
+import {
+  handleLoginWithMagicLink,
+  handleLoginWithOneTimeCode,
+  handleMagicLinkLanding,
+  handleSendMagicLink,
+} from './magicLink';
 
 function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
   return `${rule.bucket}\n${rule.type}\n${rule.window}`;
@@ -46,6 +51,10 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'magicLink', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'magicLink', type: 'email', window: time.hours(1), limit: 5 },
     { bucket: 'magicLink', type: 'email', window: time.days(1), limit: 10 },
+    { bucket: 'oneTimeCode', type: 'ip', window: time.minutes(15), limit: 20 },
+    { bucket: 'oneTimeCode', type: 'ip', window: time.days(1), limit: 100 },
+    { bucket: 'oneTimeCode', type: 'email', window: time.hours(1), limit: 10 },
+    { bucket: 'oneTimeCode', type: 'email', window: time.days(1), limit: 20 },
   ];
 }
 
@@ -59,6 +68,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'verification',
     'passwordReset',
     'magicLink',
+    'oneTimeCode',
   ];
 
   for (const bucket of buckets) {
@@ -154,6 +164,7 @@ export default new Module('_system.user', {
     resetPassword: handleResetPassword,
     sendMagicLink: handleSendMagicLink,
     loginWithMagicLink: handleLoginWithMagicLink,
+    loginWithOneTimeCode: handleLoginWithOneTimeCode,
     updateProfile: handleUpdateProfile,
     unlinkOAuthProvider: handleUnlinkOAuthProvider,
   },

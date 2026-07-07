@@ -83,6 +83,8 @@ export type AuthRateLimitsConfig = {
   passwordReset?: AuthRateLimitOverride[];
   /** Rate limits for magic link requests. */
   magicLink?: AuthRateLimitOverride[];
+  /** Rate limits for one-time code sign-in attempts. */
+  oneTimeCode?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {
