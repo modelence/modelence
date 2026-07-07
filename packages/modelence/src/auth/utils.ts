@@ -3,6 +3,24 @@ import { usersCollection } from './db';
 import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
 
+/**
+ * Resolves a configured redirect URL against the site base URL: absolute URLs
+ * are used as-is, relative ones are appended to the base, and a missing value
+ * falls back to the base URL itself.
+ */
+export function resolveUrl(baseUrl: string, configuredUrl?: string): string {
+  if (!configuredUrl) {
+    return baseUrl;
+  }
+
+  if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
+    return configuredUrl;
+  }
+
+  // Handle relative URL
+  return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
+}
+
 export function serializeUserForClient(userDoc: User) {
   return {
     id: userDoc._id,

@@ -126,3 +126,25 @@ export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordT
     },
   ],
 });
+
+// No userId field: the login mutation re-resolves the user by email to support
+// find-or-create (magic link signs up unknown emails), and a userId captured at
+// send time could go stale before the link is clicked.
+export const magicLinkTokensCollection = new Store('_modelenceMagicLinkTokens', {
+  schema: {
+    email: schema.string(),
+    token: schema.string(),
+    createdAt: schema.date(),
+    expiresAt: schema.date(),
+  },
+  indexes: [
+    {
+      key: { token: 1 },
+      unique: true,
+    },
+    {
+      key: { expiresAt: 1 },
+      expireAfterSeconds: 0,
+    },
+  ],
+});

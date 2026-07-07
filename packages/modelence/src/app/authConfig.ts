@@ -81,6 +81,8 @@ export type AuthRateLimitsConfig = {
   verification?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
   passwordReset?: AuthRateLimitOverride[];
+  /** Rate limits for magic link requests. */
+  magicLink?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {
@@ -102,8 +104,8 @@ export type BeforeSignupProps = {
   firstName?: string;
   lastName?: string;
   handle?: string;
-  /** Provider that initiated the signup. Currently only `'email'`. */
-  provider: 'email';
+  /** Provider that initiated the signup: `'email'` or `'magicLink'`. */
+  provider: 'email' | 'magicLink';
   connectionInfo?: ConnectionInfo;
 };
 
@@ -198,8 +200,8 @@ export type AuthConfig = {
    * email-domain verification service) without having to disable the built-in
    * disposable-email check.
    *
-   * Currently only invoked for `'email'` provider signups. OAuth signups are
-   * not gated because OAuth providers (Google, GitHub, etc.) do not issue
+   * Invoked for `'email'` and `'magicLink'` provider signups. OAuth signups
+   * are not gated because OAuth providers (Google, GitHub, etc.) do not issue
    * disposable accounts.
    */
   onBeforeSignup?: (props: BeforeSignupProps) => void | Promise<void>;

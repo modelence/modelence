@@ -170,6 +170,51 @@ export async function sendResetPasswordToken(options: { email: string }) {
 }
 
 /**
+ * Send a magic sign-in link to the given email address.
+ *
+ * Works for both existing and new users: clicking the emailed link signs the
+ * user in, creating the account first if the email is unknown. A generic
+ * response is always returned to avoid leaking account information.
+ *
+ * @example
+ * ```ts
+ * await sendMagicLink({ email: 'user@example.com' });
+ * ```
+ * @param options.email - The email address to send the magic link to.
+ */
+export async function sendMagicLink(options: { email: string }) {
+  const { email } = options;
+  await callMethod('_system.user.sendMagicLink', {
+    email,
+  });
+}
+
+/**
+ * Complete a magic link sign-in.
+ *
+ * Call this from the page the magic link landing route redirects to. The
+ * token is exchanged server-side via an httpOnly cookie, so no arguments are
+ * needed. Signs the user in — creating the account first when the email is
+ * not registered yet — and returns the logged-in user.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithMagicLink();
+ * ```
+ */
+export async function loginWithMagicLink() {
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithMagicLink'
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
  * Reset password.
  *
  * The token is normally exchanged server-side via an httpOnly cookie, so the

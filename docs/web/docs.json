@@ -44,6 +44,7 @@
                   "authentication/user-management",
                   "authentication/email-verification",
                   "authentication/password-reset",
+                  "authentication/magic-link",
                   "authentication/hooks",
                   "authentication/rate-limiting",
                   "authentication/google-sign-in",

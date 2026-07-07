@@ -13,6 +13,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { hashToken } from './tokenHash';
+import { resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
@@ -53,19 +54,6 @@ async function findResetTokenDoc(rawToken: string) {
  */
 async function claimResetTokenById(id: ObjectId) {
   return resetPasswordTokensCollection.findOneAndDelete({ _id: id });
-}
-
-function resolveUrl(baseUrl: string, configuredUrl?: string): string {
-  if (!configuredUrl) {
-    return baseUrl;
-  }
-
-  if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
-    return configuredUrl;
-  }
-
-  // Handle relative URL
-  return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
 }
 
 function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; resetUrl: string }) {

@@ -13,6 +13,12 @@ export type EmailConfig = {
     template?: (props: { name: string; email: string; resetUrl: string }) => string;
     redirectUrl?: string;
   };
+  magicLink?: {
+    subject?: string;
+    template?: (props: { name: string; email: string; magicLinkUrl: string }) => string;
+    /** SPA page the landing route redirects to; it must call `loginWithMagicLink()`. */
+    redirectUrl?: string;
+  };
   // @deprecated use verification.redirectUrl instead
   emailVerifiedRedirectUrl?: string;
 };

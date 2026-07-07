@@ -37,6 +37,8 @@ export {
   logout,
   sendResetPasswordToken,
   resetPassword,
+  sendMagicLink,
+  loginWithMagicLink,
   linkOAuthProvider,
   unlinkOAuthProvider,
   type UserInfo,
