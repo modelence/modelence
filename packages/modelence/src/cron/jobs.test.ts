@@ -377,10 +377,10 @@ describe('cron/jobs', () => {
           handler: async () => {},
         });
 
-        const acquiredAt = new Date();
-        const sessionToken = acquiredAt.getTime().toString();
+        const instanceId = 'test-instance';
+        const sessionToken = instanceId;
         // Mock current lock doc
-        cronStoreMocks.findOne.mockResolvedValue({ acquiredAt } as never);
+        cronStoreMocks.findOne.mockResolvedValue({ instanceId } as never);
 
         // First poll: return success status with matching sessionToken
         cronStoreMocks.fetch
@@ -411,13 +411,13 @@ describe('cron/jobs', () => {
           handler: async () => {},
         });
 
-        const currentAcquiredAt = new Date(now);
+        const instanceId = 'test-instance';
         // Mock current lock doc
-        cronStoreMocks.findOne.mockResolvedValue({ acquiredAt: currentAcquiredAt } as never);
+        cronStoreMocks.findOne.mockResolvedValue({ instanceId } as never);
 
         // First poll: returns stale status (non-matching sessionToken)
         // Second poll: returns success status with matching sessionToken
-        const correctSessionToken = currentAcquiredAt.getTime().toString();
+        const correctSessionToken = instanceId;
         cronStoreMocks.fetch
           .mockResolvedValueOnce([
             { alias: '_registration_status', status: 'success', sessionToken: 'stale-token' },

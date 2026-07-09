@@ -83,7 +83,7 @@ export async function registerNewCronJobs() {
 
   // Get the session token from the current migrations lock
   const lockDoc = await locksCollection.findOne({ _id: 'migrations' });
-  const sessionToken = lockDoc ? lockDoc.acquiredAt.getTime().toString() : 'unknown';
+  const sessionToken = lockDoc ? lockDoc.instanceId : 'unknown';
 
   try {
     await cronJobsCollection.upsertOne(
@@ -132,7 +132,7 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
 
   while (Date.now() < deadline) {
     const lockDoc = await locksCollection.findOne({ _id: 'migrations' });
-    const currentSessionToken = lockDoc ? lockDoc.acquiredAt.getTime().toString() : null;
+    const currentSessionToken = lockDoc ? lockDoc.instanceId : null;
 
     const records = await cronJobsCollection.fetch({
       alias: { $in: [...aliasList, '_registration_status'] },
