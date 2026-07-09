@@ -120,6 +120,14 @@ describe('cron/jobs', () => {
         handler: async () => {},
       })
     ).toThrow("Duplicate cron job declaration: 'nightlyCleanup' already exists");
+
+    expect(() =>
+      defineCronJob('_registration_status', {
+        description: 'system',
+        interval: mockSeconds(10),
+        handler: async () => {},
+      })
+    ).toThrow("Reserved cron job alias: '_registration_status' is reserved for system use");
   });
 
   test('startCronJobs initializes schedule, fetches last run, and sets interval', async () => {

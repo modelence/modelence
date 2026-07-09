@@ -34,6 +34,10 @@ export function defineCronJob(
     handler,
   }: CronJobInputParams
 ) {
+  if (alias === '_registration_status') {
+    throw new Error(`Reserved cron job alias: '${alias}' is reserved for system use`);
+  }
+
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
   }
