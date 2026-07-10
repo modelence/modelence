@@ -6,7 +6,7 @@ import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
-import { resolveUniqueHandle } from './utils';
+import { resolveUniqueHandle, isDuplicateEmailError } from './utils';
 
 export async function handleSignupWithPassword(
   props: Args,
@@ -108,25 +108,36 @@ export async function handleSignupWithPassword(
     // Hash password with bcrypt (salt is automatically generated)
     const hash = await bcrypt.hash(password, 10);
 
-    const result = await usersCollection.insertOne({
-      handle: resolvedHandle,
-      status: 'active',
-      emails: [
-        {
-          address: email,
-          verified: false,
+    let result;
+    try {
+      result = await usersCollection.insertOne({
+        handle: resolvedHandle,
+        status: 'active',
+        emails: [
+          {
+            address: email,
+            verified: false,
+          },
+        ],
+        createdAt: new Date(),
+        authMethods: {
+          password: {
+            hash,
+          },
         },
-      ],
-      createdAt: new Date(),
-      authMethods: {
-        password: {
-          hash,
-        },
-      },
-      ...(profileFields.firstName !== undefined && { firstName: profileFields.firstName }),
-      ...(profileFields.lastName !== undefined && { lastName: profileFields.lastName }),
-      ...(profileFields.avatarUrl !== undefined && { avatarUrl: profileFields.avatarUrl }),
-    });
+        ...(profileFields.firstName !== undefined && { firstName: profileFields.firstName }),
+        ...(profileFields.lastName !== undefined && { lastName: profileFields.lastName }),
+        ...(profileFields.avatarUrl !== undefined && { avatarUrl: profileFields.avatarUrl }),
+      });
+    } catch (error) {
+      if (isDuplicateEmailError(error)) {
+        // A concurrent signup won the race between the findOne check above and
+        // this insert; the unique emails.address index rejected the duplicate.
+        // Surface the same message the pre-check would have.
+        throw new Error(`User with email already exists: ${email}`);
+      }
+      throw error;
+    }
 
     const userDocument = await usersCollection.findOne(
       { _id: result.insertedId },

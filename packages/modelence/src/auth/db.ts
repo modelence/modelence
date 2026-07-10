@@ -1,5 +1,7 @@
+import { MongoServerError } from 'mongodb';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
+import { findDuplicateEmails, formatDuplicateEmailReport } from './duplicateEmails';
 
 /**
  * Database collection for storing user accounts with authentication methods and profile information.
@@ -62,6 +64,17 @@ export const usersCollection = new Store('_modelenceUsers', {
       key: { 'emails.address': 1, status: 1 },
     },
     {
+      // Race-proof guard against two accounts sharing an email: the check-then-
+      // insert in the signup paths (password + magic link) can interleave, so
+      // the DB must enforce uniqueness. Case-insensitive collation matches the
+      // `handle` index and the emails.address lookups. Partial so the many
+      // legacy/optional docs without an `emails` array don't all collide on null.
+      key: { 'emails.address': 1 },
+      unique: true,
+      collation: { locale: 'en', strength: 2 },
+      partialFilterExpression: { 'emails.address': { $exists: true } },
+    },
+    {
       key: { 'authMethods.google.id': 1 },
       sparse: true,
       unique: true,
@@ -72,6 +85,27 @@ export const usersCollection = new Store('_modelenceUsers', {
       unique: true,
     },
   ],
+  // When the unique emails.address index cannot build because the collection
+  // already has duplicate-email accounts (possible on apps that ran before the
+  // constraint existed), don't fail silently: report exactly which emails block
+  // it so an operator can resolve them. Startup still continues.
+  onIndexError: async (error) => {
+    const isEmailUniquenessViolation =
+      error instanceof MongoServerError &&
+      // 11000 = duplicate key surfaced while building a unique index.
+      error.code === 11000 &&
+      typeof error.message === 'string' &&
+      error.message.includes('emails.address');
+
+    if (!isEmailUniquenessViolation) {
+      return;
+    }
+
+    const duplicates = await findDuplicateEmails();
+    if (duplicates.length > 0) {
+      console.error(formatDuplicateEmailReport(duplicates));
+    }
+  },
 });
 
 export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDomains', {

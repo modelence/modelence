@@ -264,7 +264,7 @@ function createTestModule(overrides: Partial<Module> = {}): Module {
 
 type MinimalStore = Pick<
   Store<ModelSchema, Record<string, never>>,
-  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode'
+  'init' | 'createIndexes' | 'getName' | 'getIndexCreationMode' | 'reportIndexError'
 >;
 
 const createStoreMock = (
@@ -275,6 +275,7 @@ const createStoreMock = (
   createIndexes: vi.fn() as MinimalStore['createIndexes'],
   getName: vi.fn(() => name) as MinimalStore['getName'],
   getIndexCreationMode: vi.fn(() => indexCreationMode) as MinimalStore['getIndexCreationMode'],
+  reportIndexError: vi.fn() as MinimalStore['reportIndexError'],
 });
 
 describe('app/index', () => {
@@ -680,6 +681,7 @@ describe('app/index', () => {
       createIndexes: vi.fn(async () => blockingIndexesPromise) as MinimalStore['createIndexes'],
       getName: vi.fn(() => '_modelenceLocks') as MinimalStore['getName'],
       getIndexCreationMode: vi.fn(() => 'blocking') as MinimalStore['getIndexCreationMode'],
+      reportIndexError: vi.fn() as MinimalStore['reportIndexError'],
     };
     const otherStore: MinimalStore = {
       init: vi.fn() as MinimalStore['init'],
@@ -694,6 +696,7 @@ describe('app/index', () => {
       }) as MinimalStore['createIndexes'],
       getName: vi.fn(() => 'testCollection') as MinimalStore['getName'],
       getIndexCreationMode: vi.fn(() => 'background') as MinimalStore['getIndexCreationMode'],
+      reportIndexError: vi.fn() as MinimalStore['reportIndexError'],
     };
 
     // resolveStores: lockStore is blocking effective, otherStore is background effective
@@ -838,6 +841,8 @@ describe('app/index', () => {
       "Failed to create indexes for store '_modelenceLocks'. Continuing startup.",
       criticalError
     );
+    // The failing store gets a chance to log an actionable, store-specific diagnosis.
+    expect(criticalStore.reportIndexError).toHaveBeenCalledWith(criticalError);
     expect(mockRunMigrations).toHaveBeenCalledWith(migrations, { lockMode: 'skip' });
     expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
 

@@ -15,7 +15,12 @@ import { isDisposableEmail } from './disposableEmails';
 import { setAuthTokenCookie, setSessionUser } from './session';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
-import { resolveUrl, resolveUniqueHandle, serializeUserForClient } from './utils';
+import {
+  resolveUrl,
+  resolveUniqueHandle,
+  serializeUserForClient,
+  isDuplicateEmailError,
+} from './utils';
 import { Session, User } from './types';
 
 // Short-lived httpOnly cookie carrying the magic link token from the landing
@@ -338,26 +343,42 @@ async function signupNewUser(params: MagicLinkAuthParams) {
       throw new Error('Invalid or expired magic link');
     }
 
-    const result = await usersCollection.insertOne({
-      handle: resolvedHandle,
-      status: 'active',
-      emails: [
-        {
-          address: email,
-          // Clicking the emailed link proves ownership of the address.
-          verified: true,
-        },
-      ],
-      createdAt: new Date(),
-      // Magic link is proof of email possession — there is no per-user
-      // credential to store, so no authMethods entry is added.
-      authMethods: {},
-    });
+    let userDocument: User | null;
+    try {
+      const result = await usersCollection.insertOne({
+        handle: resolvedHandle,
+        status: 'active',
+        emails: [
+          {
+            address: email,
+            // Clicking the emailed link proves ownership of the address.
+            verified: true,
+          },
+        ],
+        createdAt: new Date(),
+        // Magic link is proof of email possession — there is no per-user
+        // credential to store, so no authMethods entry is added.
+        authMethods: {},
+      });
 
-    const userDocument = await usersCollection.findOne(
-      { _id: result.insertedId },
-      { readPreference: 'primary' }
-    );
+      userDocument = await usersCollection.findOne(
+        { _id: result.insertedId },
+        { readPreference: 'primary' }
+      );
+    } catch (error) {
+      if (!isDuplicateEmailError(error)) {
+        throw error;
+      }
+      // A concurrent request (another link, the code path, or password signup)
+      // won the race and created this email's account first. The unique index
+      // rejected our insert. This request already legitimately claimed its own
+      // token above, proving email ownership — so recover by logging the caller
+      // into the account that now exists instead of erroring them out.
+      userDocument = await usersCollection.findOne(
+        { 'emails.address': email },
+        { collation: { locale: 'en', strength: 2 }, readPreference: 'primary' }
+      );
+    }
 
     if (!userDocument) {
       throw new Error('User not found');

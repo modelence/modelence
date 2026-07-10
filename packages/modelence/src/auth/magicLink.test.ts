@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { MockedFunction } from 'vitest';
-import { ObjectId } from 'mongodb';
+import { ObjectId, MongoServerError } from 'mongodb';
 import { createHash as actualCreateHash } from 'crypto';
 import type { Context } from '@/methods/types';
 import type { Session } from './types';
@@ -92,6 +92,12 @@ vi.doMock('./utils', () => ({
   },
   resolveUniqueHandle: mockResolveUniqueHandle,
   serializeUserForClient: mockSerializeUserForClient,
+  isDuplicateEmailError: (error: unknown) =>
+    error instanceof MongoServerError &&
+    error.code === 11000 &&
+    typeof error.keyPattern === 'object' &&
+    error.keyPattern !== null &&
+    'emails.address' in error.keyPattern,
 }));
 
 vi.doMock('crypto', () => ({
@@ -854,6 +860,61 @@ describe('auth/magicLink', () => {
         );
 
         expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(mockSetSessionUser).not.toHaveBeenCalled();
+      });
+
+      test('recovers by logging into the winner when a concurrent request created the account first', async () => {
+        const onAfterSignup = vi.fn();
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterSignup });
+
+        const userId = new ObjectId();
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+
+        // The account the concurrent winner just created.
+        const winnerUser = createMockUser({
+          _id: userId,
+          handle: 'newuser',
+          emails: [{ address: email, verified: true }],
+          authMethods: {},
+        });
+        // First findOne (initial by-email lookup) → nothing; after the duplicate
+        // insert, the recovery re-fetch by email returns the winner's account.
+        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(winnerUser);
+
+        // The unique emails.address index rejects our insert.
+        const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
+        dupError.code = 11000;
+        dupError.keyPattern = { 'emails.address': 1 };
+        mockUsersInsertOne.mockRejectedValue(dupError);
+
+        const session = createSession();
+        const { context } = createLoginContext({ cookieToken: 'raw-token', session });
+
+        const result = await handleLoginWithMagicLink({}, context);
+
+        // Recovered: the caller is logged into the existing account rather than errored out.
+        expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+        expect(result).toEqual({
+          user: { id: userId, handle: 'newuser' },
+          session: { authToken: session.authToken },
+        });
+      });
+
+      test('rethrows a non-duplicate insert error instead of recovering', async () => {
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        mockUsersFindOne.mockResolvedValue(null);
+        mockUsersInsertOne.mockRejectedValue(new Error('disk full'));
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
         expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
     });

@@ -1,7 +1,25 @@
 import { randomBytes } from 'crypto';
+import { MongoServerError } from 'mongodb';
 import { usersCollection } from './db';
 import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
+
+/**
+ * Detects the duplicate-key error thrown when the unique `emails.address` index
+ * rejects a concurrent second insert for the same email. The check-then-insert
+ * in the signup paths can interleave, so this is the last line of defense that
+ * turns a lost race into a clean "already exists" instead of an unhandled 500.
+ */
+export function isDuplicateEmailError(error: unknown): boolean {
+  return (
+    error instanceof MongoServerError &&
+    error.code === 11000 &&
+    // keyPattern is present on write errors and names the violated index's keys.
+    typeof error.keyPattern === 'object' &&
+    error.keyPattern !== null &&
+    'emails.address' in error.keyPattern
+  );
+}
 
 /**
  * Resolves a configured redirect URL against the site base URL: absolute URLs

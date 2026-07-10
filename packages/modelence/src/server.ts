@@ -22,6 +22,8 @@ export { createQuery } from './methods';
 export { usersCollection as dbUsers } from './auth/db';
 export type { UserInfo, RoleDefinition } from './auth/types';
 export { deleteUser, disableUser } from './auth/deleteUser';
+export { findDuplicateEmails } from './auth/duplicateEmails';
+export type { DuplicateEmailGroup } from './auth/duplicateEmails';
 
 //Auth Session
 export {
