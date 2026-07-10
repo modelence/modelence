@@ -320,7 +320,7 @@ Create a React component to interact with your semantic search backend:
 ```tsx title="src/client/pages/VoyageSearchPage.tsx"
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { modelenceMutation, modelenceQuery } from '@modelence/react-query';
+import { modelenceMutation, modelenceQuery } from 'modelence/client';
 
 interface Document {
   _id: string;
