@@ -231,8 +231,59 @@ type MagicLinkAuthParams = {
   clearCookie: () => void;
 };
 
-async function loginExistingUser(userDoc: User, params: MagicLinkAuthParams) {
+/**
+ * Runs the login side effects for an already-resolved, already-token-claimed
+ * user: marks the clicked email verified, binds the session, and fires the
+ * verification/login hooks. Deliberately does NOT claim the token — callers own
+ * that commit point — so it can be reused both by the normal login branch and
+ * by the signup path's duplicate-recovery (where the token was already claimed).
+ */
+async function completeLoginForUser(userDoc: User, params: MagicLinkAuthParams) {
   const { tokenDoc, session, connectionInfo, res, clearCookie } = params;
+  const authConfig = getAuthConfig();
+
+  // Clicking the emailed link proves ownership of the address. A concurrent
+  // password signup may have created the account as unverified — this link is
+  // the proof that verifies it.
+  const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === tokenDoc.email);
+  const wasUnverified = !emailDoc?.verified;
+  await usersCollection.updateOne(
+    { _id: userDoc._id, 'emails.address': tokenDoc.email },
+    { $set: { 'emails.$.verified': true } }
+  );
+
+  await setSessionUser(session.authToken, userDoc._id);
+
+  if (res) {
+    setAuthTokenCookie(res, session.authToken);
+  }
+
+  if (wasUnverified) {
+    authConfig.onAfterEmailVerification?.({
+      provider: 'magicLink',
+      user: userDoc,
+      session,
+      connectionInfo,
+    });
+  }
+
+  authConfig.onAfterLogin?.({
+    provider: 'magicLink',
+    user: userDoc,
+    session,
+    connectionInfo,
+  });
+
+  clearCookie();
+
+  return {
+    user: serializeUserForClient(userDoc),
+    session: { authToken: session.authToken },
+  };
+}
+
+async function loginExistingUser(userDoc: User, params: MagicLinkAuthParams) {
+  const { tokenDoc, session, connectionInfo, clearCookie } = params;
   const authConfig = getAuthConfig();
 
   try {
@@ -252,42 +303,7 @@ async function loginExistingUser(userDoc: User, params: MagicLinkAuthParams) {
       throw new Error('Invalid or expired magic link');
     }
 
-    // Clicking the emailed link proves ownership of the address.
-    const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === tokenDoc.email);
-    const wasUnverified = !emailDoc?.verified;
-    await usersCollection.updateOne(
-      { _id: userDoc._id, 'emails.address': tokenDoc.email },
-      { $set: { 'emails.$.verified': true } }
-    );
-
-    await setSessionUser(session.authToken, userDoc._id);
-
-    if (res) {
-      setAuthTokenCookie(res, session.authToken);
-    }
-
-    if (wasUnverified) {
-      authConfig.onAfterEmailVerification?.({
-        provider: 'magicLink',
-        user: userDoc,
-        session,
-        connectionInfo,
-      });
-    }
-
-    authConfig.onAfterLogin?.({
-      provider: 'magicLink',
-      user: userDoc,
-      session,
-      connectionInfo,
-    });
-
-    clearCookie();
-
-    return {
-      user: serializeUserForClient(userDoc),
-      session: { authToken: session.authToken },
-    };
+    return await completeLoginForUser(userDoc, params);
   } catch (error) {
     if (error instanceof Error) {
       authConfig.onLoginError?.({
@@ -343,9 +359,9 @@ async function signupNewUser(params: MagicLinkAuthParams) {
       throw new Error('Invalid or expired magic link');
     }
 
-    let userDocument: User | null;
+    let insertResult;
     try {
-      const result = await usersCollection.insertOne({
+      insertResult = await usersCollection.insertOne({
         handle: resolvedHandle,
         status: 'active',
         emails: [
@@ -360,25 +376,39 @@ async function signupNewUser(params: MagicLinkAuthParams) {
         // credential to store, so no authMethods entry is added.
         authMethods: {},
       });
-
-      userDocument = await usersCollection.findOne(
-        { _id: result.insertedId },
-        { readPreference: 'primary' }
-      );
     } catch (error) {
       if (!isDuplicateEmailError(error)) {
         throw error;
       }
       // A concurrent request (another link, the code path, or password signup)
       // won the race and created this email's account first. The unique index
-      // rejected our insert. This request already legitimately claimed its own
-      // token above, proving email ownership — so recover by logging the caller
-      // into the account that now exists instead of erroring them out.
-      userDocument = await usersCollection.findOne(
+      // rejected our insert, so this is no longer a signup — it's a login into
+      // the account that now exists. This request already legitimately claimed
+      // its own token above, proving email ownership, so recover by running the
+      // LOGIN path (verify the email, fire onAfterLogin/onAfterEmailVerification)
+      // rather than the signup tail — otherwise we would double-fire
+      // onAfterSignup and leave a password-created account unverified.
+      const existingUser = await usersCollection.findOne(
         { 'emails.address': email },
         { collation: { locale: 'en', strength: 2 }, readPreference: 'primary' }
       );
+
+      if (!existingUser) {
+        throw new Error('User not found');
+      }
+
+      if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
+        clearCookie();
+        throw new Error('User account is not active');
+      }
+
+      return await completeLoginForUser(existingUser, params);
     }
+
+    const userDocument = await usersCollection.findOne(
+      { _id: insertResult.insertedId },
+      { readPreference: 'primary' }
+    );
 
     if (!userDocument) {
       throw new Error('User not found');

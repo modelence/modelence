@@ -863,9 +863,21 @@ describe('auth/magicLink', () => {
         expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
 
-      test('recovers by logging into the winner when a concurrent request created the account first', async () => {
+      const makeDuplicateError = () => {
+        const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
+        dupError.code = 11000;
+        dupError.keyPattern = { 'emails.address': 1 };
+        return dupError;
+      };
+
+      test('recovers via the LOGIN path (not signup) when a concurrent request created the account first', async () => {
         const onAfterSignup = vi.fn();
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterSignup });
+        const onAfterLogin = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true },
+          onAfterSignup,
+          onAfterLogin,
+        });
 
         const userId = new ObjectId();
         const tokenDoc = createMockToken({ email });
@@ -873,7 +885,7 @@ describe('auth/magicLink', () => {
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
         mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
-        // The account the concurrent winner just created.
+        // The account the concurrent winner just created (already verified).
         const winnerUser = createMockUser({
           _id: userId,
           handle: 'newuser',
@@ -883,24 +895,91 @@ describe('auth/magicLink', () => {
         // First findOne (initial by-email lookup) → nothing; after the duplicate
         // insert, the recovery re-fetch by email returns the winner's account.
         mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(winnerUser);
-
-        // The unique emails.address index rejects our insert.
-        const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
-        dupError.code = 11000;
-        dupError.keyPattern = { 'emails.address': 1 };
-        mockUsersInsertOne.mockRejectedValue(dupError);
+        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
 
         const session = createSession();
         const { context } = createLoginContext({ cookieToken: 'raw-token', session });
 
         const result = await handleLoginWithMagicLink({}, context);
 
-        // Recovered: the caller is logged into the existing account rather than errored out.
+        // Logged in, not signed up: session bound, login hook fired, signup hook NOT.
         expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+        expect(onAfterLogin).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'magicLink', user: winnerUser, session })
+        );
+        expect(onAfterSignup).not.toHaveBeenCalled();
         expect(result).toEqual({
           user: { id: userId, handle: 'newuser' },
           session: { authToken: session.authToken },
         });
+      });
+
+      test('recovery verifies the email and fires onAfterEmailVerification when the winner was an unverified password signup', async () => {
+        const onAfterEmailVerification = vi.fn();
+        const onAfterLogin = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true },
+          onAfterEmailVerification,
+          onAfterLogin,
+        });
+
+        const userId = new ObjectId();
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+
+        // A concurrent PASSWORD signup created the account as UNVERIFIED.
+        const winnerUser = createMockUser({
+          _id: userId,
+          handle: 'newuser',
+          emails: [{ address: email, verified: false }],
+          authMethods: { password: { hash: 'x' } },
+        });
+        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(winnerUser);
+        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await handleLoginWithMagicLink({}, context);
+
+        // The magic link proves ownership → the email is marked verified...
+        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+          { _id: userId, 'emails.address': email },
+          { $set: { 'emails.$.verified': true } }
+        );
+        // ...and the verification hook fires (it would not on the signup tail).
+        expect(onAfterEmailVerification).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'magicLink', user: winnerUser })
+        );
+        expect(onAfterLogin).toHaveBeenCalled();
+      });
+
+      test('recovery rejects when the winning account is disabled', async () => {
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+
+        const userId = new ObjectId();
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+
+        const disabledWinner = createMockUser({
+          _id: userId,
+          handle: 'newuser',
+          status: 'disabled',
+          emails: [{ address: email, verified: true }],
+          authMethods: {},
+        });
+        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(disabledWinner);
+        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
+          'User account is not active'
+        );
+        expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
 
       test('rethrows a non-duplicate insert error instead of recovering', async () => {
