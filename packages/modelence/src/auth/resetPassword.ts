@@ -14,6 +14,7 @@ import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { hashToken } from './tokenHash';
 import { resolveUrl } from './utils';
+import { logError } from '@/telemetry';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
@@ -189,7 +190,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    console.error('Error handling password reset landing:', error);
+    logError('Password reset landing failed', { error });
     const message = 'This password reset link is invalid or has expired.';
     return {
       status: 302,

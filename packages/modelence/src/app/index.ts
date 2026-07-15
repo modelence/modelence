@@ -42,6 +42,7 @@ import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 import { buildAuthRateLimits } from '../auth/user';
+import { logError } from '../telemetry';
 
 export type AppOptions = {
   modules?: Module[];
@@ -197,7 +198,7 @@ export async function startApp({
     startConfigSync();
   }
 
-  startCronJobs().catch(console.error);
+  startCronJobs().catch((err) => logError('Cron job startup failed', { err }));
 
   await startServer(server, { combinedModules, channels });
 }
@@ -284,11 +285,15 @@ async function createIndexesAndMigrationsWithLock(
   void Promise.allSettled([backgroundIndexCreationPromise, migrationPromise])
     .then(([backgroundIndexesResult, migrationResult]) => {
       if (backgroundIndexesResult.status === 'rejected') {
-        console.error('Error creating background indexes:', backgroundIndexesResult.reason);
+        logError('Background index creation failed', {
+          error: backgroundIndexesResult.reason,
+        });
       }
 
       if (migrationResult.status === 'rejected') {
-        console.error('Error running migrations:', migrationResult.reason);
+        logError('Migration execution failed', {
+          error: migrationResult.reason,
+        });
       }
     })
     .finally(async () => {

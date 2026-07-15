@@ -14,6 +14,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { createSession, setAuthTokenCookie } from './session';
+import { logError } from '@/telemetry';
 
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
@@ -122,7 +123,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
           referrer: params.headers['referer'],
         },
       });
-      console.error('Error verifying email:', error);
+      logError('Email verification failed', { error });
     }
 
     return {

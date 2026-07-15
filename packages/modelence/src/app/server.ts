@@ -4,7 +4,7 @@ import { runMethod } from '@/methods';
 import { getResponseTypeMap, sanitizeResult } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
-import { logInfo } from '@/telemetry';
+import { logInfo, logError } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
@@ -162,16 +162,15 @@ export async function startServer(
   });
 
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Promise Rejection:');
-    console.error(reason instanceof Error ? reason.stack : reason);
-    console.error('Promise:', promise);
+    logError('Unhandled Promise Rejection', {
+      reason: reason instanceof Error ? reason.stack : reason,
+      promise,
+    });
   });
 
   // Global uncaught exceptions
   process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:');
-    console.error(error.stack); // This gives you the full stack trace
-    console.trace('Full application stack:'); // Additional context
+    logError('Uncaught Exception', { error });
   });
 
   const websocketProvider = getWebsocketConfig()?.provider;
@@ -264,7 +263,7 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
 
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
-      console.error(`Error calling ${methodName}:`, error);
+      logError('Error calling method', { methodName, error });
     }
     // Surface a machine-readable code (when present) via a header so clients can
     // branch on the error kind without parsing the human-readable message. The
@@ -281,14 +280,14 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     try {
       errorMessage = parseZodError(error as z.ZodError);
     } catch (parsingError) {
-      console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+      logError('Error parsing Zod error', { methodName, parsingError });
       errorMessage = 'Validation failed';
     }
     res.status(400).send(errorMessage);
     return;
   }
 
-  console.error(`Error calling ${methodName}:`, error);
+  logError('Error calling method', { methodName, error });
   res.status(500).send(error instanceof Error ? error.message : String(error));
 }
 

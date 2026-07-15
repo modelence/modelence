@@ -11,6 +11,7 @@ import {
   handleUnsubscribeLiveQuery,
   handleLiveQueryDisconnect,
 } from '@/live-query';
+import { logError } from '@/telemetry';
 import type { Collection, Document } from 'mongodb';
 
 let socketServer: SocketServer | null = null;
@@ -49,13 +50,12 @@ export async function init({
             { expireAfterSeconds: ADAPTER_TTL_SECONDS, background: true }
           );
         } catch (retryError: unknown) {
-          console.error(
-            'Failed to recreate index on MongoDB collection for Socket.IO:',
-            retryError
-          );
+          logError('Failed to recreate Socket.IO MongoDB index', {
+            error: retryError,
+          });
         }
       } else {
-        console.error('Failed to create index on MongoDB collection for Socket.IO:', error);
+        logError('Failed to create Socket.IO MongoDB index', { error });
       }
     }
   }
@@ -71,7 +71,7 @@ export async function init({
   });
 
   socketServer.on('error', (error) => {
-    console.error('Socket.IO error:', error);
+    logError('Socket.IO error', { error });
   });
 
   socketServer.use(async (socket, next) => {
