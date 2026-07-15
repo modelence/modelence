@@ -51,8 +51,6 @@ export function formatUniqueIndexViolationReport(
     (aggregateOptions ? `, ${JSON.stringify(aggregateOptions)}` : '') +
     ')';
 
-  const hasArrayCaveat = Object.keys(index.key).some((field) => field.includes('.'));
-
   return [
     `${INDEX_ERROR_LOG_PREFIX} Unique index '${index.name ?? JSON.stringify(index.key)}' on ` +
       `collection '${collectionName}' could not be created because existing documents already ` +
@@ -61,34 +59,51 @@ export function formatUniqueIndexViolationReport(
     `Details: ${JSON.stringify(details)}`,
     'Find the conflicting documents with:',
     `  ${aggregateCall}`,
-    hasArrayCaveat
-      ? 'Note: if an indexed field path goes through an array, add an { $unwind: "$<field>" } ' +
-        'stage before $group so individual array values are compared.'
-      : null,
     'Fix: merge, delete, or update the conflicting documents so each indexed value is unique, ' +
       'then restart the app — the index build is retried on startup.',
-  ]
-    .filter((line): line is string => line !== null)
-    .join('\n');
+  ].join('\n');
 }
 
 /**
  * Aggregation that groups documents by the indexed fields and keeps groups
- * with more than one document — i.e. exactly the rows blocking the unique
- * index. Mirrors the index's partial filter so non-indexed documents are not
- * reported. Capped so a badly corrupted collection cannot produce an
+ * claimed by more than one document — i.e. exactly the rows blocking the
+ * unique index. Mirrors the index's partial filter so non-indexed documents
+ * are not reported. Capped so a badly corrupted collection cannot produce an
  * unbounded result.
  */
 function buildDuplicateLookupPipeline(index: IndexDescription): Document[] {
+  const fields = Object.keys(index.key);
+
+  // Unique indexes can be multikey (any path segment may be an array), and the
+  // index spec alone cannot tell which. $unwind every prefix of every indexed
+  // path so individual array values are compared: it passes non-array values
+  // through unchanged, so this is also correct for plain scalar fields.
+  // preserveNullAndEmptyArrays keeps documents missing the field — under a
+  // non-partial unique index those collide on null and must be reported too.
+  const unwindStages = fields.flatMap((field) =>
+    pathPrefixes(field).map((path) => ({
+      $unwind: { path: `$${path}`, preserveNullAndEmptyArrays: true },
+    }))
+  );
+
   const groupId = Object.fromEntries(
     // $group _id field names cannot contain dots; the value keeps the real path.
-    Object.keys(index.key).map((field) => [field.replace(/\./g, '_'), `$${field}`])
+    fields.map((field) => [field.replace(/\./g, '_'), `$${field}`])
   );
 
   return [
     ...(index.partialFilterExpression ? [{ $match: index.partialFilterExpression }] : []),
-    { $group: { _id: groupId, ids: { $addToSet: '$_id' }, count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
+    ...unwindStages,
+    // Distinct ids, not a row count: after $unwind one document repeating a
+    // value in its own array yields several rows, but that is not a
+    // cross-document conflict.
+    { $group: { _id: groupId, ids: { $addToSet: '$_id' } } },
+    { $match: { $expr: { $gt: [{ $size: '$ids' }, 1] } } },
     { $limit: 100 },
   ];
+}
+
+function pathPrefixes(field: string): string[] {
+  const segments = field.split('.');
+  return segments.map((_, index) => segments.slice(0, index + 1).join('.'));
 }

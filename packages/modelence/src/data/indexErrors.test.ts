@@ -102,6 +102,27 @@ describe('formatUniqueIndexViolationReport', () => {
     expect(report).toContain('"collation":{"locale":"en","strength":2}');
   });
 
+  test('unwinds every path prefix so multikey (array) duplicates are found', () => {
+    const report = formatUniqueIndexViolationReport('users', index, createDuplicateKeyError());
+
+    // The index spec alone cannot tell which segments are arrays, so both the
+    // container and the leaf are unwound; $unwind is a no-op for non-arrays.
+    expect(report).toContain('{"$unwind":{"path":"$emails","preserveNullAndEmptyArrays":true}}');
+    expect(report).toContain(
+      '{"$unwind":{"path":"$emails.address","preserveNullAndEmptyArrays":true}}'
+    );
+  });
+
+  test('reports only cross-document duplicates, counting distinct document ids', () => {
+    const report = formatUniqueIndexViolationReport('users', index, createDuplicateKeyError());
+
+    // A single document repeating a value in its own array must not be
+    // flagged, so grouping collects distinct ids and compares their count.
+    expect(report).toContain('"ids":{"$addToSet":"$_id"}');
+    expect(report).toContain('{"$gt":[{"$size":"$ids"},1]}');
+    expect(report).not.toContain('"$sum"');
+  });
+
   test('omits partial filter and collation stages when the index has neither', () => {
     const plainIndex = { name: 'handleIdx', key: { handle: 1 as const }, unique: true };
     const report = formatUniqueIndexViolationReport('users', plainIndex, createDuplicateKeyError());
@@ -111,6 +132,10 @@ describe('formatUniqueIndexViolationReport', () => {
     expect(aggregateLine).not.toContain('$exists');
     expect(aggregateLine).not.toContain('collation');
     expect(aggregateLine).toContain('"$handle"');
+    // Undotted fields can still be arrays (multikey), so the leaf is unwound too.
+    expect(aggregateLine).toContain(
+      '{"$unwind":{"path":"$handle","preserveNullAndEmptyArrays":true}}'
+    );
   });
 
   test('sanitizes dotted field paths in the $group id', () => {
