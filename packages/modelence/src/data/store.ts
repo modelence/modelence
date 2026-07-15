@@ -36,6 +36,7 @@ import {
 import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
+import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
 
 /**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
@@ -700,7 +701,17 @@ export class Store<
         const hasAlignedIndex = !!alignedIndex && isSameIndexDefinition(alignedIndex, index);
 
         if (!hasAlignedIndex && shouldCreateIndexes && !requiresDropBeforeCreate) {
-          await collection.createIndexes([index]);
+          try {
+            await collection.createIndexes([index]);
+          } catch (error) {
+            // A unique index failing on existing duplicates is silently dangerous
+            // (the constraint stays unenforced), so log an actionable report an
+            // operator or AI agent can resolve, then let the error propagate.
+            if (index.unique && isUniqueIndexViolation(error)) {
+              console.error(formatUniqueIndexViolationReport(this.name, index, error));
+            }
+            throw error;
+          }
           addIndexToLookup({
             name: index.name,
             key: index.key,
