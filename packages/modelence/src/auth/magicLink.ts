@@ -55,6 +55,10 @@ function isMagicLinkEnabled(): boolean {
   return Boolean(getAuthConfig().magicLink?.enabled);
 }
 
+function isMagicLinkSignupEnabled(): boolean {
+  return Boolean(getAuthConfig().magicLink?.allowSignup);
+}
+
 /**
  * Looks up a magic link token without consuming it. Only matches the hashed
  * form: tokens are stored as `hashToken(rawToken)`, and the caller must present
@@ -104,8 +108,8 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
     value: email,
   });
 
-  // Checked up front (unlike password reset): unknown emails also get a real
-  // email since magic link doubles as signup, so there is no early-out path
+  // Checked up front (unlike password reset): with `allowSignup` on, unknown
+  // emails also get a real email, so there is no guaranteed early-out path
   // that could otherwise skip this.
   const emailProvider = getEmailConfig().provider;
   if (!emailProvider) {
@@ -125,6 +129,13 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
 
   if (userDoc && (userDoc.status === 'disabled' || userDoc.status === 'deleted')) {
     // For security, don't reveal the account state — skip the email silently.
+    return magicLinkSent;
+  }
+
+  if (!userDoc && !isMagicLinkSignupEnabled()) {
+    // Signup is not allowed, so a link for an unknown email could never be
+    // used — skip it silently (same generic response) so account existence
+    // is not revealed.
     return magicLinkSent;
   }
 
@@ -323,6 +334,15 @@ async function signupNewUser(params: MagicLinkAuthParams) {
   const authConfig = getAuthConfig();
 
   try {
+    // Defense in depth: the send path already refuses unknown emails when
+    // signup is off, but a token can outlive its account (e.g. the account is
+    // deleted after the email was sent) or the flag can be toggled off between
+    // send and click — never auto-create an account without the opt-in.
+    if (!isMagicLinkSignupEnabled()) {
+      clearCookie();
+      throw new Error('Sign up with magic link is not enabled');
+    }
+
     await authConfig.onBeforeSignup?.({
       email,
       provider: 'magicLink',
@@ -448,8 +468,9 @@ async function signupNewUser(params: MagicLinkAuthParams) {
 
 /**
  * Consumes the magic link token stashed in the httpOnly cookie by the landing
- * route, logging in the matching user — or creating the account first when the
- * email is unknown (combined sign-in/sign-up, like OAuth).
+ * route, logging in the matching user — or, when `magicLink.allowSignup` is
+ * enabled, creating the account first when the email is unknown (combined
+ * sign-in/sign-up, like OAuth).
  */
 export async function handleLoginWithMagicLink(args: Args, context: Context) {
   const { session, connectionInfo, res, req } = context;
@@ -510,8 +531,9 @@ export async function handleLoginWithMagicLink(args: Args, context: Context) {
 
 /**
  * Consumes the one-time code from the magic link email, logging in the
- * matching user — or creating the account first when the email is unknown.
- * Same semantics as the link: the code proves possession of the address.
+ * matching user — or, when `magicLink.allowSignup` is enabled, creating the
+ * account first when the email is unknown. Same semantics as the link: the
+ * code proves possession of the address.
  *
  * The typed-code path exists for contexts where the link chain breaks: native
  * apps without deep links set up, or reading the email on a different device

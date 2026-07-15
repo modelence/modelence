@@ -229,8 +229,9 @@ describe('auth/magicLink', () => {
         redirectUrl: '/auth/magic-link',
       },
     });
-    // magicLink enabled by default
-    mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+    // magicLink enabled with signup allowed by default; individual tests
+    // override this to exercise the allowSignup=false default.
+    mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.minutes.mockReturnValue(900000); // 15 minutes in ms
@@ -311,6 +312,35 @@ describe('auth/magicLink', () => {
       expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
         expect.objectContaining({ html: expect.stringContaining('482193') })
       );
+      expect(result).toEqual(GENERIC_RESPONSE);
+    });
+
+    test('skips sending for an unknown email when signup is not allowed (generic response)', async () => {
+      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+      mockValidateEmail.mockReturnValue('newuser@example.com');
+      mockUsersFindOne.mockResolvedValue(null);
+
+      const result = await handleSendMagicLink({ email: 'newuser@example.com' }, createContext());
+
+      // Anti-enumeration: same response as the known-email case, but no token
+      // is created and no email is sent for the unknown address.
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
+      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+      expect(result).toEqual(GENERIC_RESPONSE);
+    });
+
+    test('still sends a link for an existing user when signup is not allowed', async () => {
+      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+      const email = 'user@example.com';
+      mockValidateEmail.mockReturnValue(email);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ emails: [{ address: email, verified: true }], status: 'active' })
+      );
+      mockRandomBytes.mockReturnValue({ toString: () => 'token' });
+
+      const result = await handleSendMagicLink({ email }, createContext());
+
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalled();
       expect(result).toEqual(GENERIC_RESPONSE);
     });
 
@@ -758,7 +788,7 @@ describe('auth/magicLink', () => {
         const onBeforeSignup = vi.fn();
         const onAfterSignup = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onBeforeSignup,
           onAfterSignup,
         });
@@ -807,7 +837,10 @@ describe('auth/magicLink', () => {
 
       test('uses the generateHandle hook when configured', async () => {
         const generateHandle = vi.fn().mockResolvedValue('custom-handle');
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, generateHandle });
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          generateHandle,
+        });
         setupSignup();
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
@@ -819,11 +852,42 @@ describe('auth/magicLink', () => {
         });
       });
 
+      test('rejects the signup when allowSignup is not enabled and fires onSignupError', async () => {
+        const onBeforeSignup = vi.fn();
+        const onSignupError = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true },
+          onBeforeSignup,
+          onSignupError,
+        });
+
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockUsersFindOne.mockResolvedValue(null);
+
+        const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
+          'Sign up with magic link is not enabled'
+        );
+
+        // Rejected before any signup work: no hooks-driven side effects, no
+        // account, and the token is not consumed.
+        expect(onBeforeSignup).not.toHaveBeenCalled();
+        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
+        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(clearCookie).toHaveBeenCalled();
+        expect(onSignupError).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
+        );
+      });
+
       test('a throwing onBeforeSignup aborts before any account is created and fires onSignupError', async () => {
         const onBeforeSignup = vi.fn().mockRejectedValue(new Error('Domain not allowed'));
         const onSignupError = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onBeforeSignup,
           onSignupError,
         });
@@ -846,7 +910,7 @@ describe('auth/magicLink', () => {
       });
 
       test('aborts without creating an account when the token was already claimed', async () => {
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(null); // lost the race
@@ -874,7 +938,7 @@ describe('auth/magicLink', () => {
         const onAfterSignup = vi.fn();
         const onAfterLogin = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onAfterSignup,
           onAfterLogin,
         });
@@ -918,7 +982,7 @@ describe('auth/magicLink', () => {
         const onAfterEmailVerification = vi.fn();
         const onAfterLogin = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onAfterEmailVerification,
           onAfterLogin,
         });
@@ -956,7 +1020,7 @@ describe('auth/magicLink', () => {
       });
 
       test('recovery rejects when the winning account is disabled', async () => {
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
 
         const userId = new ObjectId();
         const tokenDoc = createMockToken({ email });
@@ -983,7 +1047,7 @@ describe('auth/magicLink', () => {
       });
 
       test('rethrows a non-duplicate insert error instead of recovering', async () => {
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
@@ -1130,10 +1194,28 @@ describe('auth/magicLink', () => {
       expect(mockSetSessionUser).not.toHaveBeenCalled();
     });
 
+    test('rejects an unknown email when allowSignup is not enabled', async () => {
+      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
+      const tokenDoc = createMockToken({ email });
+      mockTokensFindOne.mockResolvedValue(tokenDoc);
+      mockUsersFindOne.mockResolvedValue(null);
+
+      const { context } = codeContext();
+
+      await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
+        'Sign up with magic link is not enabled'
+      );
+      expect(mockUsersInsertOne).not.toHaveBeenCalled();
+      expect(mockSetSessionUser).not.toHaveBeenCalled();
+    });
+
     test('creates an account when the email is unknown (signup branch)', async () => {
       const userId = new ObjectId();
       const onAfterSignup = vi.fn();
-      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterSignup });
+      mockGetAuthConfig.mockReturnValue({
+        magicLink: { enabled: true, allowSignup: true },
+        onAfterSignup,
+      });
 
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);

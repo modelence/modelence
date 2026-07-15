@@ -172,9 +172,10 @@ export async function sendResetPasswordToken(options: { email: string }) {
 /**
  * Send a magic sign-in link to the given email address.
  *
- * Works for both existing and new users: clicking the emailed link signs the
- * user in, creating the account first if the email is unknown. A generic
- * response is always returned to avoid leaking account information.
+ * Clicking the emailed link signs the user in. When the server enables
+ * `auth.magicLink.allowSignup`, this also works for new users — the account is
+ * created when the link is used; otherwise unknown emails receive no email.
+ * A generic response is always returned to avoid leaking account information.
  *
  * @example
  * ```ts
@@ -195,7 +196,8 @@ export async function sendMagicLink(options: { email: string }) {
  * Call this from the page the magic link landing route redirects to. The
  * token is exchanged server-side via an httpOnly cookie, so no arguments are
  * needed. Signs the user in — creating the account first when the email is
- * not registered yet — and returns the logged-in user.
+ * not registered yet and the server enables `auth.magicLink.allowSignup` —
+ * and returns the logged-in user.
  *
  * @example
  * ```ts
@@ -220,7 +222,8 @@ export async function loginWithMagicLink() {
  * Alternative to `loginWithMagicLink()` for contexts where clicking the link
  * can't reach the app — native apps without deep links, or when the email is
  * read on a different device. Signs the user in — creating the account first
- * when the email is not registered yet — and returns the logged-in user.
+ * when the email is not registered yet and the server enables
+ * `auth.magicLink.allowSignup` — and returns the logged-in user.
  *
  * @example
  * ```ts
