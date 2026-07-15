@@ -116,6 +116,14 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
     throw new Error('Email provider is not configured');
   }
 
+  // Also a preflight: resolved before the token is stored, so a misconfigured
+  // server fails loudly without leaving behind an orphaned (unsendable) token.
+  // Without a base URL we'd email a broken `undefined/...` link.
+  const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
+  if (!baseUrl) {
+    throw new Error('Unable to build magic link: set _system.site.url (MODELENCE_SITE_URL)');
+  }
+
   // Runs identically for known and unknown emails, so the thrown error reveals
   // only a property of the email domain, never account existence.
   if (!getAuthConfig().allowDisposableEmails && (await isDisposableEmail(email))) {
@@ -164,11 +172,6 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
 
   // Point the email at the server landing route, not the SPA page, so the raw
   // token never reaches a client-rendered URL.
-  const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
-  if (!baseUrl) {
-    // Without a base URL we'd email a broken `undefined/...` link — fail loudly.
-    throw new Error('Unable to build magic link: set _system.site.url (MODELENCE_SITE_URL)');
-  }
   const magicLinkUrl = `${baseUrl}/api/_internal/auth/magic-link?token=${magicLinkToken}`;
 
   // Send email

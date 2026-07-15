@@ -415,6 +415,9 @@ describe('auth/magicLink', () => {
 
       // A broken link must never be emailed.
       expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+      // The misconfiguration is caught before the token is generated, so no
+      // orphaned (unsendable) token doc is left behind.
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
     });
 
     test('uses connection info baseUrl as fallback', async () => {
