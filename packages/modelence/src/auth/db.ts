@@ -1,7 +1,5 @@
-import { MongoServerError } from 'mongodb';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
-import { findDuplicateEmails, formatDuplicateEmailReport } from './duplicateEmails';
 
 /**
  * Database collection for storing user accounts with authentication methods and profile information.
@@ -85,27 +83,6 @@ export const usersCollection = new Store('_modelenceUsers', {
       unique: true,
     },
   ],
-  // When the unique emails.address index cannot build because the collection
-  // already has duplicate-email accounts (possible on apps that ran before the
-  // constraint existed), don't fail silently: report exactly which emails block
-  // it so an operator can resolve them. Startup still continues.
-  onIndexError: async (error) => {
-    const isEmailUniquenessViolation =
-      error instanceof MongoServerError &&
-      // 11000 = duplicate key surfaced while building a unique index.
-      error.code === 11000 &&
-      typeof error.message === 'string' &&
-      error.message.includes('emails.address');
-
-    if (!isEmailUniquenessViolation) {
-      return;
-    }
-
-    const duplicates = await findDuplicateEmails();
-    if (duplicates.length > 0) {
-      console.error(formatDuplicateEmailReport(duplicates));
-    }
-  },
 });
 
 export const dbDisposableEmailDomains = new Store('_modelenceDisposableEmailDomains', {

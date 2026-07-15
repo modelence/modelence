@@ -387,7 +387,6 @@ export class Store<
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
   private readonly indexCreationMode: IndexCreationMode;
-  private readonly onIndexError?: (error: unknown) => void | Promise<void>;
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -414,13 +413,6 @@ export class Store<
       searchIndexes?: SearchIndexDescription[];
       /** Whether index creation should block startup or run in background (default: 'background') */
       indexCreationMode?: IndexCreationMode;
-      /**
-       * Called when reconciling this store's indexes throws (e.g. a unique index
-       * cannot build because the collection already violates it). Startup does
-       * not abort — the hook is a chance to log an actionable, store-specific
-       * diagnosis instead of a generic warning. Any error it throws is swallowed.
-       */
-      onIndexError?: (error: unknown) => void | Promise<void>;
     }
   ) {
     this.name = name;
@@ -430,7 +422,6 @@ export class Store<
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
     this.indexCreationMode = options.indexCreationMode ?? 'background';
-    this.onIndexError = options.onIndexError;
   }
 
   getName() {
@@ -439,22 +430,6 @@ export class Store<
 
   getIndexCreationMode() {
     return this.indexCreationMode;
-  }
-
-  /** @internal – invoked by startup orchestration when index reconciliation fails. */
-  async reportIndexError(error: unknown): Promise<void> {
-    if (!this.onIndexError) {
-      return;
-    }
-    try {
-      await this.onIndexError(error);
-    } catch (hookError) {
-      // The diagnostic hook must never itself break startup.
-      console.error(
-        `Index-error hook for store '${this.name}' failed while diagnosing an index error.`,
-        hookError
-      );
-    }
   }
 
   /** @internal */

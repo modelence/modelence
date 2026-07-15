@@ -12,14 +12,12 @@ function createStore(options?: {
   indexes?: IndexDescription[];
   searchIndexes?: SearchIndexDescription[];
   indexCreationMode?: 'blocking' | 'background';
-  onIndexError?: (error: unknown) => void | Promise<void>;
 }) {
   return new Store<ModelSchema, Record<string, never>>('testCollection', {
     schema: baseSchema,
     indexes: options?.indexes || [],
     searchIndexes: options?.searchIndexes,
     indexCreationMode: options?.indexCreationMode,
-    onIndexError: options?.onIndexError,
     methods: undefined,
   });
 }
@@ -1294,34 +1292,6 @@ describe('data/store', () => {
       expect(calledFilter?.$and).toBeDefined();
       expect(calledFilter?.$comment).toBe('Complex query');
       expect(calledFilter?.$expr).toEqual({ $gt: ['$value', 10] });
-    });
-  });
-
-  describe('reportIndexError', () => {
-    test('invokes the configured hook with the index error', async () => {
-      const onIndexError = vi.fn();
-      const store = createStore({ onIndexError });
-      const error = new Error('E11000 duplicate key');
-
-      await store.reportIndexError(error);
-
-      expect(onIndexError).toHaveBeenCalledWith(error);
-    });
-
-    test('is a no-op when no hook is configured', async () => {
-      const store = createStore();
-      await expect(store.reportIndexError(new Error('boom'))).resolves.toBeUndefined();
-    });
-
-    test('swallows errors thrown by the hook so startup is never broken', async () => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const onIndexError = vi.fn().mockRejectedValue(new Error('hook exploded'));
-      const store = createStore({ onIndexError });
-
-      await expect(store.reportIndexError(new Error('original'))).resolves.toBeUndefined();
-      expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
     });
   });
 });

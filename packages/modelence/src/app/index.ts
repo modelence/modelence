@@ -306,9 +306,6 @@ async function createStoreIndexes(
     await store.createIndexes(reconcileMode);
   } catch (error) {
     warnIndexCreationFailure(storeName, error);
-    // Give the store a chance to log an actionable, store-specific diagnosis
-    // (e.g. the users store lists the duplicate emails blocking its unique index).
-    await store.reportIndexError(error);
   }
 }
 
