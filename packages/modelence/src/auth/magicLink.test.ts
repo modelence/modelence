@@ -1049,7 +1049,7 @@ describe('auth/magicLink', () => {
         expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
 
-      test('rethrows a non-duplicate insert error instead of recovering', async () => {
+      test('rethrows a non-duplicate insert error and restores the claimed token', async () => {
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
@@ -1062,6 +1062,50 @@ describe('auth/magicLink', () => {
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
         expect(mockSetSessionUser).not.toHaveBeenCalled();
+        // No account was created, so the single-use token must not stay
+        // burned — the claimed doc is re-inserted and the link works on retry.
+        expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
+      });
+
+      test('restores the claimed token when a concurrent handle collision fails the insert', async () => {
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        mockUsersFindOne.mockResolvedValue(null);
+
+        // Duplicate key on `handle`, not on the email — must NOT trigger the
+        // login recovery, and must not burn the token.
+        const handleCollision = new MongoServerError({ message: 'E11000 duplicate key' });
+        handleCollision.code = 11000;
+        handleCollision.keyPattern = { handle: 1 };
+        mockUsersInsertOne.mockRejectedValue(handleCollision);
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow();
+        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
+      });
+
+      test('a failing token restore does not mask the original insert error', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        mockUsersFindOne.mockResolvedValue(null);
+        mockUsersInsertOne.mockRejectedValue(new Error('disk full'));
+        mockTokensInsertOne.mockRejectedValue(new Error('db down'));
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
+        expect(consoleError).toHaveBeenCalled();
+
+        consoleError.mockRestore();
       });
     });
   });

@@ -79,6 +79,24 @@ async function claimMagicLinkTokenById(id: ObjectId) {
   return magicLinkTokensCollection.findOneAndDelete({ _id: id });
 }
 
+/**
+ * Best-effort undo of a token claim: re-inserts the exact claimed doc (same
+ * `_id`, hashes, and expiry) so the single-use link/code works again on retry.
+ * Used when the work the claim was committing to (the account insert) failed
+ * without producing an account — otherwise the failure would permanently burn
+ * the user's link. Never throws: the caller is already propagating the real
+ * error, and a failed restore must not mask it.
+ */
+async function restoreClaimedMagicLinkToken(
+  claimedToken: NonNullable<Awaited<ReturnType<typeof claimMagicLinkTokenById>>>
+) {
+  try {
+    await magicLinkTokensCollection.insertOne(claimedToken);
+  } catch (restoreError) {
+    console.error('Failed to restore a magic link token after a failed signup:', restoreError);
+  }
+}
+
 // The same generic response is returned whether or not an account exists for
 // the email, to prevent user enumeration.
 const magicLinkSent = {
@@ -401,6 +419,11 @@ async function signupNewUser(params: MagicLinkAuthParams) {
       });
     } catch (error) {
       if (!isDuplicateEmailError(error)) {
+        // The insert failed without creating an account (e.g. a concurrent
+        // handle collision or a transient DB error). The token was already
+        // claimed above — put it back so the user's link/code isn't burned
+        // by a failure that wasn't its use.
+        await restoreClaimedMagicLinkToken(claimedToken);
         throw error;
       }
       // A concurrent request (another link, the code path, or password signup)
