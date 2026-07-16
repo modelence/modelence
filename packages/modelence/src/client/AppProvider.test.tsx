@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import React from 'react';
 import { renderToString } from 'react-dom/server';
 
 vi.doMock('./session', () => ({
