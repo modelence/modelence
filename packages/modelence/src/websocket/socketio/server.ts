@@ -79,8 +79,9 @@ export async function init({
 
     try {
       socket.data = await authenticate(token);
-    } finally {
       next();
+    } catch (error) {
+      next(error instanceof Error ? error : new Error(String(error)));
     }
   });
 
