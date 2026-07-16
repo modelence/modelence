@@ -59,7 +59,10 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
     : null;
 
   // Legacy fallback: try raw token lookup (pre-hash sessions)
-  if (!existingSession && authToken) {
+  // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
+  // replay attacks using leaked hashed tokens.
+  const isHex64 = authToken && /^[0-9a-f]{64}$/i.test(authToken);
+  if (!existingSession && authToken && !isHex64) {
     existingSession = await sessionsCollection.findOne({ authToken });
     if (existingSession) {
       await sessionsCollection.updateOne(

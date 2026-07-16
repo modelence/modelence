@@ -127,6 +127,26 @@ describe('auth/session', () => {
     expect(result.authToken).toBe('auth-token');
   });
 
+  test('obtainSession does not fall back to raw token lookup if input is a 64-char hex string (hash replay protection)', async () => {
+    const leakedHash = 'a'.repeat(64);
+
+    findOneMock.mockResolvedValue(null as never);
+    insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+
+    const result = await obtainSession(leakedHash);
+
+    // Should only look up by hashed token (which is the mock hashed token in tests)
+    expect(findOneMock).toHaveBeenCalledTimes(1);
+    expect(findOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
+
+    // Should NOT look up by the raw leakedHash string via legacy fallback
+    expect(findOneMock).not.toHaveBeenCalledWith({ authToken: leakedHash });
+
+    // Should result in a newly created session instead
+    expect(insertOneMock).toHaveBeenCalled();
+    expect(result.authToken).toBe('auth-token');
+  });
+
   test('setSessionUser stores user id for session', async () => {
     updateOneMock.mockResolvedValue({ acknowledged: true } as never);
     const userId = new ObjectId();
