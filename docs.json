@@ -63,6 +63,7 @@
               "stores",
               "indexes",
               "live-queries",
+              "ssr",
               "configuration",
               "websockets",
               "telemetry",

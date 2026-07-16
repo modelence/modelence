@@ -1,0 +1,88 @@
+---
+title: 'Server-Side Rendering'
+description: 'Render your React tree on the server for faster first paint and hydrate on the client. Available since modelence@0.15.0.'
+icon: 'server'
+---
+
+Server-side rendering (SSR) renders your React application to HTML on the server,
+sends that HTML to the browser, and then hydrates it on the client. This improves
+first-paint performance and lets crawlers see fully rendered markup.
+
+SSR in Modelence is **opt-in**. Existing client-only apps keep working unchanged —
+you only get SSR after you explicitly enable it.
+
+## Enabling SSR
+
+Set `ssr: true` in `startApp`:
+
+```typescript title="src/server/app.ts"
+import { startApp } from 'modelence/server';
+import todoModule from './todo';
+
+startApp({
+  modules: [todoModule],
+  ssr: true,
+});
+```
+
+That's the only required change. The Modelence build always emits SSR artifacts,
+so there is no separate build flag — `startApp({ ssr: true })` decides whether they
+are used at runtime.
+
+<Note>
+When `ssr` is omitted or `false`, Modelence renders on the client only, exactly as
+before. Nothing about your existing app changes until you opt in.
+</Note>
+
+## Routing with SSR
+
+For the server and client to resolve the same route, a location-driven router must
+be told which URL to render. Pass a `router` function to `renderApp`. Modelence
+calls it with the current `location` on the server and again on the client during
+hydration, so both produce the same tree:
+
+```tsx title="src/client/index.tsx"
+import { renderApp } from 'modelence/client';
+import { StaticRouter } from 'react-router-dom/server';
+import { BrowserRouter } from 'react-router-dom';
+import routes from './routes';
+
+renderApp({
+  loadingElement: <div>Loading…</div>,
+  routesElement: routes,
+  router: ({ children, location }) =>
+    typeof window === 'undefined'
+      ? <StaticRouter location={location ?? '/'}>{children}</StaticRouter>
+      : <BrowserRouter>{children}</BrowserRouter>,
+});
+```
+
+The `location` passed to the router is `path + search` (the hash is never sent to
+the server), matching what the browser sees on hydration. This avoids hydration
+mismatches.
+
+<Warning>
+Without a `router`, a location-driven router (like React Router) will render its
+default route on the server and a different route on the client, producing a
+hydration mismatch. Only pass `router` when your routing depends on the current
+URL.
+</Warning>
+
+## Data fetching and hydration
+
+- **Session** is rendered on the server and hydrated on the client, so
+  `useSession()` returns the correct value on the very first render with no flash
+  of logged-out UI.
+- **Queries** (`modelenceQuery`) run on the server and their results are serialized
+  into the HTML, so cached data is available immediately after hydration.
+- **Live queries** (`modelenceLiveQuery`) are WebSocket subscriptions with no server
+  snapshot — they stay pending during SSR and connect after hydration on the client.
+
+See [Queries](/core-concepts/queries) and [Live Queries](/live-queries) for how to
+call methods from the client.
+
+## Related
+
+- [Queries](/core-concepts/queries)
+- [Live Queries](/live-queries)
+- [Project Structure](/core-concepts/project-structure)

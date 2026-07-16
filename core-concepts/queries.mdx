@@ -69,13 +69,22 @@ const todo = await callMethod('todo.getOne', { id: '123' });
 
 ```typescript
 import { useQuery } from '@tanstack/react-query';
-import { modelenceQuery } from '@modelence/react-query';
+import { modelenceQuery } from 'modelence/client';
 
 function TodoList() {
   const { data: todos } = useQuery(modelenceQuery('todo.getAll'));
   return <div>{/* render todos */}</div>;
 }
 ```
+
+<Note>
+Since `modelence@0.15.0`, the query helpers (`modelenceQuery`,
+`modelenceLiveQuery`, `modelenceMutation`, `createQueryKey`) are available
+directly from `modelence/client` — this is the recommended import. The
+`@modelence/react-query` package still exports the same helpers and continues to
+work, but new code should import from `modelence/client`. See
+[Migrating from @modelence/react-query](/live-queries#migrating-from-modelence-react-query).
+</Note>
 
 ### `createClientModule(...).query()` (typed client modules)
 
