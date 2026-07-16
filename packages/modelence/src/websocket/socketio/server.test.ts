@@ -144,6 +144,31 @@ describe('websocket/socketio/server', () => {
     expect(socket.emit).toHaveBeenCalledWith('leftChannel', 'chat:room1');
   });
 
+  test('auth middleware rejects connection when authenticate throws an error', async () => {
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [],
+    });
+
+    const middleware = socketMiddlewares[0];
+    expect(middleware).toBeDefined();
+
+    const authError = new Error('Authentication failed');
+    mockAuthenticate.mockRejectedValueOnce(authError);
+
+    const next = vi.fn();
+    const authSocket = {
+      handshake: { auth: { token: 'invalid' } },
+      data: null,
+    } as unknown as Socket;
+
+    await middleware?.(authSocket, next);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('invalid');
+    expect(authSocket.data).toBeNull();
+    expect(next).toHaveBeenCalledWith(authError);
+  });
+
   test('init skips mongo adapter when multiInstance is disabled', async () => {
     await websocketProvider.init({
       httpServer: {} as Server,
