@@ -68,7 +68,7 @@ const todoId = await callMethod('todo.create', {
 
 ```typescript
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { modelenceMutation } from '@modelence/react-query';
+import { modelenceMutation } from 'modelence/client';
 
 function CreateTodo() {
   const queryClient = useQueryClient();
