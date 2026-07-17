@@ -51,6 +51,25 @@ const ONE_TIME_CODE_LENGTH = 6;
 // tolerates only a few wrong guesses before it can no longer be used.
 const MAX_CODE_ATTEMPTS = 5;
 
+/**
+ * Invokes a notify-only auth hook (onAfterLogin, onLoginError, ...) without
+ * letting it affect the auth flow. These hooks are typed `() => void`, but a
+ * user can still pass an async function — a rejection from it, never awaited,
+ * would be an unhandled promise rejection (which can crash the process). A sync
+ * throw is contained the same way. Deliberately NOT awaited: a failing
+ * analytics hook must not fail an otherwise-successful login, and in error
+ * paths it must not mask the real error being propagated.
+ */
+function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
+  try {
+    Promise.resolve(invoke?.()).catch((hookError: unknown) => {
+      console.error(`Error in ${name} hook:`, hookError);
+    });
+  } catch (hookError) {
+    console.error(`Error in ${name} hook:`, hookError);
+  }
+}
+
 function isMagicLinkEnabled(): boolean {
   return Boolean(getAuthConfig().magicLink?.enabled);
 }
@@ -134,10 +153,20 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
     throw new Error('Email provider is not configured');
   }
 
+  // Same preflight reasoning: no fallback sender. A default like
+  // `noreply@modelence.com` would send customer auth email from our domain —
+  // and fail SPF/DKIM on their provider anyway — so fail loudly instead.
+  const fromAddress = getEmailConfig().from;
+  if (!fromAddress) {
+    throw new Error('Email `from` address is not configured');
+  }
+
   // Also a preflight: resolved before the token is stored, so a misconfigured
   // server fails loudly without leaving behind an orphaned (unsendable) token.
-  // Without a base URL we'd email a broken `undefined/...` link.
-  const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
+  // Config ONLY — no fallback to the request's Host-derived base URL: the
+  // emailed link IS the credential, and a request-derived base would let a
+  // spoofed Host header poison the link's destination (login-link poisoning).
+  const baseUrl = getConfig('_system.site.url') as string | undefined;
   if (!baseUrl) {
     throw new Error('Unable to build magic link: set _system.site.url (MODELENCE_SITE_URL)');
   }
@@ -199,7 +228,7 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
 
   await emailProvider.sendEmail({
     to: email,
-    from: getEmailConfig()?.from || 'noreply@modelence.com',
+    from: fromAddress,
     subject: getEmailConfig()?.magicLink?.subject || 'Your sign-in link',
     text: textContent,
     html: htmlTemplate,
@@ -218,10 +247,13 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
  * `loginWithMagicLink` mutation triggered by the user's browser.
  */
 export async function handleMagicLinkLanding(params: RouteParams): Promise<RouteResponse> {
-  const baseUrl =
-    (getConfig('_system.site.url') as string | undefined) ||
-    `${params.req.protocol}://${params.req.get('host')}`;
-  const magicLinkPageUrl = resolveUrl(baseUrl, getEmailConfig().magicLink?.redirectUrl);
+  // Config ONLY — no fallback to the request's Host header, which is
+  // attacker-controlled and must never decide where an auth flow redirects.
+  // A link can only have been emailed with `_system.site.url` set, so this is
+  // normally present; if it was unset since, fall back to a same-origin
+  // relative redirect rather than trusting the request.
+  const baseUrl = (getConfig('_system.site.url') as string | undefined) || '';
+  const magicLinkPageUrl = resolveUrl(baseUrl, getEmailConfig().magicLink?.redirectUrl) || '/';
 
   try {
     const token = z.string().parse(params.query.token);
@@ -263,232 +295,234 @@ type MagicLinkAuthParams = {
   clearCookie: () => void;
 };
 
+// A magic link / one-time code proves ownership of the email, so authentication
+// is a find-or-create: an existing account logs in, an unknown email signs up
+// (when enabled). Mongo does both in one atomic upsert, so there is no
+// claim→insert→catch-duplicate→recover saga to compensate — see the retry note
+// on the E11000 branch for the one race the atomic op can't rule out by itself.
+
+const USER_COLLATION = { locale: 'en', strength: 2 } as const;
+
 /**
- * Runs the login side effects for an already-resolved, already-token-claimed
- * user: marks the clicked email verified, binds the session, and fires the
- * verification/login hooks. Deliberately does NOT claim the token — callers own
- * that commit point — so it can be reused both by the normal login branch and
- * by the signup path's duplicate-recovery (where the token was already claimed).
+ * The account-touching core of both entrypoints, given an already-validated
+ * token doc. Claims the token (single-use commit point), then find-or-creates
+ * the user atomically, verifies the clicked email if it wasn't already, binds
+ * the session, and fires the create-path or login-path hooks accordingly.
  */
-async function completeLoginForUser(userDoc: User, params: MagicLinkAuthParams) {
+async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
   const { tokenDoc, session, connectionInfo, res, clearCookie } = params;
+  const email = tokenDoc.email;
   const authConfig = getAuthConfig();
+  const signupEnabled = isMagicLinkSignupEnabled();
 
-  // Clicking the emailed link proves ownership of the address. A concurrent
-  // password signup may have created the account as unverified — this link is
-  // the proof that verifies it.
-  const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === tokenDoc.email);
-  const wasUnverified = !emailDoc?.verified;
-  await usersCollection.updateOne(
-    { _id: userDoc._id, 'emails.address': tokenDoc.email },
-    { $set: { 'emails.$.verified': true } }
-  );
-
-  await setSessionUser(session.authToken, userDoc._id);
-
-  if (res) {
-    setAuthTokenCookie(res, session.authToken);
-  }
-
-  if (wasUnverified) {
-    authConfig.onAfterEmailVerification?.({
-      provider: 'magicLink',
-      user: userDoc,
-      session,
-      connectionInfo,
-    });
-  }
-
-  authConfig.onAfterLogin?.({
-    provider: 'magicLink',
-    user: userDoc,
-    session,
-    connectionInfo,
-  });
-
-  clearCookie();
-
-  return {
-    user: serializeUserForClient(userDoc),
-    session: { authToken: session.authToken },
-  };
-}
-
-async function loginExistingUser(userDoc: User, params: MagicLinkAuthParams) {
-  const { tokenDoc, session, connectionInfo, clearCookie } = params;
-  const authConfig = getAuthConfig();
+  // Tracks whether this request is creating a new account, so a failure routes
+  // to onSignupError vs onLoginError. Set in the pre-gate below the moment we
+  // know the email is unknown (a signup), and kept in sync if the atomic
+  // find-or-create later reveals a concurrent account (demoting to a login).
+  let isSignupAttempt = false;
 
   try {
-    if (userDoc.status === 'disabled' || userDoc.status === 'deleted') {
-      // The link proved email possession but the account cannot be used — burn
-      // the token so it can't be retried against a re-enabled account.
-      await claimMagicLinkTokenById(tokenDoc._id);
-      clearCookie();
-      throw new Error('User account is not active');
+    // Signup-only side effects run BEFORE the account can exist, preserving
+    // onBeforeSignup's veto contract and the pre-insert signup rate limit. The
+    // upsert can't tell us "is this a signup?" until after it inserts, so we
+    // detect the unknown-email case with a lookup here. A concurrent request
+    // may still create the account between this read and the upsert — that race
+    // resolves as a login (isNew=false) below, which is the correct outcome.
+    let resolvedHandle: string | undefined;
+    if (signupEnabled) {
+      const existing = await usersCollection.findOne(
+        { 'emails.address': email },
+        { collation: USER_COLLATION }
+      );
+      if (!existing) {
+        isSignupAttempt = true;
+        await authConfig.onBeforeSignup?.({ email, provider: 'magicLink', connectionInfo });
+
+        const ip = connectionInfo?.ip;
+        if (ip) {
+          await consumeRateLimit({ bucket: 'signup', type: 'ip', value: ip });
+        }
+
+        resolvedHandle = authConfig.generateHandle
+          ? await resolveUniqueHandle(await authConfig.generateHandle({ email }), email, {
+              throwOnConflict: false,
+            })
+          : await resolveUniqueHandle(undefined, email);
+      }
     }
 
-    // Commit point: atomically claim the token. If a concurrent request already
-    // consumed it, abort WITHOUT logging in (single-use, no double-spend).
+    // Commit point: atomically claim the single-use token. If a concurrent
+    // request already consumed it, abort WITHOUT authenticating (no double-spend).
     const claimedToken = await claimMagicLinkTokenById(tokenDoc._id);
     if (!claimedToken) {
       clearCookie();
       throw new Error('Invalid or expired magic link');
     }
 
-    return await completeLoginForUser(userDoc, params);
-  } catch (error) {
-    if (error instanceof Error) {
-      authConfig.onLoginError?.({
-        provider: 'magicLink',
-        error,
-        session,
-        connectionInfo,
-      });
+    let upsertResult;
+    try {
+      upsertResult = await upsertMagicLinkUser(email, resolvedHandle, signupEnabled);
+    } catch (error) {
+      // The find-or-create failed transiently (e.g. a DB error) without
+      // authenticating anyone. The token was claimed above — put it back so a
+      // failure that wasn't the link's use doesn't permanently burn it.
+      await restoreClaimedMagicLinkToken(claimedToken);
+      throw error;
     }
-    throw error;
-  }
-}
+    const { userDoc, isNew } = upsertResult;
 
-async function signupNewUser(params: MagicLinkAuthParams) {
-  const { tokenDoc, session, connectionInfo, res, clearCookie } = params;
-  const email = tokenDoc.email;
-  const authConfig = getAuthConfig();
-
-  try {
-    // Defense in depth: the send path already refuses unknown emails when
-    // signup is off, but a token can outlive its account (e.g. the account is
-    // deleted after the email was sent) or the flag can be toggled off between
-    // send and click — never auto-create an account without the opt-in.
-    if (!isMagicLinkSignupEnabled()) {
+    if (!userDoc) {
+      // Only reachable with upsert:false, i.e. signup disabled and no account
+      // exists (with upsert:true the op always returns a doc). Defense in depth:
+      // the send path already refuses unknown emails when signup is off, but a
+      // token can outlive its account or the flag can flip between send and
+      // click. Nothing was created, so restore the token rather than burning a
+      // link on a state the user can't act on. This is a signup attempt the
+      // config forbids, so it routes to onSignupError (as the old signup path).
+      isSignupAttempt = true;
+      await restoreClaimedMagicLinkToken(claimedToken);
       clearCookie();
       throw new Error('Sign up with magic link is not enabled');
     }
 
-    await authConfig.onBeforeSignup?.({
-      email,
-      provider: 'magicLink',
-      connectionInfo,
-    });
+    // The upsert is authoritative: a concurrent account means this was a login,
+    // not the signup the pre-gate anticipated (demotes onSignupError→onLoginError).
+    isSignupAttempt = isNew;
 
-    const ip = connectionInfo?.ip;
-    if (ip) {
-      await consumeRateLimit({
-        bucket: 'signup',
-        type: 'ip',
-        value: ip,
-      });
-    }
-
-    // Resolve unique handle
-    let resolvedHandle: string;
-
-    if (authConfig.generateHandle) {
-      const generated = await authConfig.generateHandle({ email });
-
-      resolvedHandle = await resolveUniqueHandle(generated, email, {
-        throwOnConflict: false,
-      });
-    } else {
-      resolvedHandle = await resolveUniqueHandle(undefined, email);
-    }
-
-    // Commit point: claim the token BEFORE the insert so a double-submitted
-    // mutation cannot create two accounts from the same link.
-    const claimedToken = await claimMagicLinkTokenById(tokenDoc._id);
-    if (!claimedToken) {
+    if (userDoc.status === 'disabled' || userDoc.status === 'deleted') {
+      // The link proved email possession but the account cannot be used. Leave
+      // the token burned so it can't be retried against a re-enabled account.
       clearCookie();
-      throw new Error('Invalid or expired magic link');
+      throw new Error('User account is not active');
     }
 
-    let insertResult;
-    try {
-      insertResult = await usersCollection.insertOne({
-        handle: resolvedHandle,
-        status: 'active',
-        emails: [
-          {
-            address: email,
-            // Clicking the emailed link proves ownership of the address.
-            verified: true,
-          },
-        ],
-        createdAt: new Date(),
-        // Magic link is proof of email possession — there is no per-user
-        // credential to store, so no authMethods entry is added.
-        authMethods: {},
-      });
-    } catch (error) {
-      if (!isDuplicateEmailError(error)) {
-        // The insert failed without creating an account (e.g. a concurrent
-        // handle collision or a transient DB error). The token was already
-        // claimed above — put it back so the user's link/code isn't burned
-        // by a failure that wasn't its use.
-        await restoreClaimedMagicLinkToken(claimedToken);
-        throw error;
-      }
-      // A concurrent request (another link, the code path, or password signup)
-      // won the race and created this email's account first. The unique index
-      // rejected our insert, so this is no longer a signup — it's a login into
-      // the account that now exists. This request already legitimately claimed
-      // its own token above, proving email ownership, so recover by running the
-      // LOGIN path (verify the email, fire onAfterLogin/onAfterEmailVerification)
-      // rather than the signup tail — otherwise we would double-fire
-      // onAfterSignup and leave a password-created account unverified.
-      const existingUser = await usersCollection.findOne(
-        { 'emails.address': email },
-        { collation: { locale: 'en', strength: 2 }, readPreference: 'primary' }
+    let currentUserDoc = userDoc;
+    // Clicking the emailed link proves ownership. On the insert path the email
+    // is already stored verified; on the login path a concurrent password
+    // signup may have left it unverified — this link is the proof that verifies
+    // it. Skip the redundant write when already verified.
+    const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
+    const wasUnverified = !isNew && !emailDoc?.verified;
+    if (wasUnverified) {
+      // Same strength-2 collation as the lookups: the stored address may keep
+      // its original casing (e.g. OAuth-created accounts) while `email` is
+      // lowercased, or the positional update silently matches nothing. Return
+      // the updated doc so hooks and the response see `verified: true`.
+      const verifiedDoc = await usersCollection.findOneAndUpdate(
+        { _id: userDoc._id, 'emails.address': email },
+        { $set: { 'emails.$.verified': true } },
+        { collation: USER_COLLATION, returnDocument: 'after' }
       );
-
-      if (!existingUser) {
-        throw new Error('User not found');
-      }
-
-      if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
-        clearCookie();
-        throw new Error('User account is not active');
-      }
-
-      return await completeLoginForUser(existingUser, params);
+      currentUserDoc = verifiedDoc ?? userDoc;
     }
 
-    const userDocument = await usersCollection.findOne(
-      { _id: insertResult.insertedId },
-      { readPreference: 'primary' }
-    );
-
-    if (!userDocument) {
-      throw new Error('User not found');
-    }
-
-    await setSessionUser(session.authToken, userDocument._id);
+    await setSessionUser(session.authToken, currentUserDoc._id);
 
     if (res) {
       setAuthTokenCookie(res, session.authToken);
     }
 
-    authConfig.onAfterSignup?.({
-      provider: 'magicLink',
-      user: userDocument,
-      session,
-      connectionInfo,
-    });
+    if (isNew) {
+      fireAuthHook('onAfterSignup', () =>
+        authConfig.onAfterSignup?.({
+          provider: 'magicLink',
+          user: currentUserDoc,
+          session,
+          connectionInfo,
+        })
+      );
+    } else {
+      if (wasUnverified) {
+        fireAuthHook('onAfterEmailVerification', () =>
+          authConfig.onAfterEmailVerification?.({
+            provider: 'magicLink',
+            user: currentUserDoc,
+            session,
+            connectionInfo,
+          })
+        );
+      }
+
+      fireAuthHook('onAfterLogin', () =>
+        authConfig.onAfterLogin?.({
+          provider: 'magicLink',
+          user: currentUserDoc,
+          session,
+          connectionInfo,
+        })
+      );
+    }
 
     clearCookie();
 
     return {
-      user: serializeUserForClient(userDocument),
+      user: serializeUserForClient(currentUserDoc),
       session: { authToken: session.authToken },
     };
   } catch (error) {
+    // Route the failure to the hook matching what this request was attempting.
+    // `isSignupAttempt` is true once the pre-gate sees an unknown email (so a
+    // vetoing onBeforeSignup or a signup rate-limit rejection fires
+    // onSignupError, matching the old signup path), and stays true only if the
+    // account was actually created — the unknown→login race demotes it.
     if (error instanceof Error) {
-      authConfig.onSignupError?.({
-        provider: 'magicLink',
-        error,
-        session,
-        connectionInfo,
-      });
+      const hookName = isSignupAttempt ? 'onSignupError' : 'onLoginError';
+      const hook = isSignupAttempt ? authConfig.onSignupError : authConfig.onLoginError;
+      fireAuthHook(hookName, () =>
+        hook?.({ provider: 'magicLink', error, session, connectionInfo })
+      );
     }
     throw error;
+  }
+}
+
+/**
+ * Atomic find-or-create for the magic-link user. Returns the user (post-op)
+ * and whether this call created it. `upsert` is gated on `signupEnabled`: when
+ * signup is off this is a pure find (unknown email → `{ userDoc: null }`), so
+ * no account is ever created for an email that could never sign up — no
+ * insert-then-delete compensation.
+ *
+ * The `$elemMatch` selector (rather than `'emails.address'`) avoids the upsert
+ * field-path conflict with `$setOnInsert: { emails: [...] }`. Concurrent upserts
+ * can still race to insert the same email (a known Mongo caveat the unique
+ * index turns into an E11000); a single retry re-runs the op, which now finds
+ * the winner's doc and returns it as a login (`isNew: false`).
+ */
+async function upsertMagicLinkUser(
+  email: string,
+  resolvedHandle: string | undefined,
+  signupEnabled: boolean
+): Promise<{ userDoc: User | null; isNew: boolean }> {
+  const runUpsert = () =>
+    usersCollection.findOneAndUpsert(
+      { emails: { $elemMatch: { address: email } } },
+      {
+        $setOnInsert: {
+          handle: resolvedHandle as string,
+          status: 'active',
+          // Clicking the emailed link proves ownership of the address.
+          emails: [{ address: email, verified: true }],
+          createdAt: new Date(),
+          // Magic link is proof of email possession — there is no per-user
+          // credential to store, so no authMethods entry is added.
+          authMethods: {},
+        },
+      },
+      { upsert: signupEnabled, collation: USER_COLLATION }
+    );
+
+  try {
+    const { doc, isNew } = await runUpsert();
+    return { userDoc: doc as User | null, isNew };
+  } catch (error) {
+    if (!isDuplicateEmailError(error)) {
+      throw error;
+    }
+    // Concurrent insert won the race; re-run to read the winner's doc. This can
+    // only resolve as a match now (the account exists), so isNew is false.
+    const { doc } = await runUpsert();
+    return { userDoc: doc as User | null, isNew: false };
   }
 }
 
@@ -535,24 +569,13 @@ export async function handleLoginWithMagicLink(args: Args, context: Context) {
     throw new Error('Magic link has expired');
   }
 
-  const userDoc = await usersCollection.findOne(
-    { 'emails.address': tokenDoc.email },
-    { collation: { locale: 'en', strength: 2 } }
-  );
-
-  const authParams: MagicLinkAuthParams = {
+  return authenticateMagicLinkUser({
     tokenDoc: { _id: tokenDoc._id as ObjectId, email: tokenDoc.email },
     session,
     connectionInfo,
     res,
     clearCookie,
-  };
-
-  if (userDoc) {
-    return loginExistingUser(userDoc, authParams);
-  }
-
-  return signupNewUser(authParams);
+  });
 }
 
 /**
@@ -620,23 +643,12 @@ export async function handleLoginWithOneTimeCode(args: Args, context: Context) {
     throw new Error('Code has expired');
   }
 
-  const userDoc = await usersCollection.findOne(
-    { 'emails.address': email },
-    { collation: { locale: 'en', strength: 2 } }
-  );
-
-  const authParams: MagicLinkAuthParams = {
+  return authenticateMagicLinkUser({
     tokenDoc: { _id: tokenDoc._id as ObjectId, email: tokenDoc.email },
     session,
     connectionInfo,
     res,
     // The code travels as a mutation argument — there is no cookie to clear.
     clearCookie: () => {},
-  };
-
-  if (userDoc) {
-    return loginExistingUser(userDoc, authParams);
-  }
-
-  return signupNewUser(authParams);
+  });
 }

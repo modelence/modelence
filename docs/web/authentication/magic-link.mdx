@@ -55,6 +55,10 @@ The magic link token never reaches your client code or appears in a browser URL 
 
 The magic link is built from your site's base URL, so you must set it via the `_system.site.url` config (or the `MODELENCE_SITE_URL` environment variable). If it isn't set, sending a magic link fails with a clear error rather than emailing a broken link.
 
+### Sender address requirement
+
+`email.from` must be set to an address on your own domain. There is no default sender — if it isn't configured, sending a magic link fails with a clear error rather than sending from an address your email provider can't authenticate (SPF/DKIM).
+
 ## Client Implementation
 
 ### Request a Magic Link

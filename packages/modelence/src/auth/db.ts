@@ -161,6 +161,13 @@ export const magicLinkTokensCollection = new Store('_modelenceMagicLinkTokens', 
       unique: true,
     },
     {
+      // The one-time-code path is keyed by email: the login looks up
+      // { email, code, attempts } and every wrong guess runs
+      // updateMany({ email }). Both are attacker-reachable (rate-limited,
+      // but still a hot path) and would be collection scans without this.
+      key: { email: 1 },
+    },
+    {
       key: { expiresAt: 1 },
       expireAfterSeconds: 0,
     },

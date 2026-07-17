@@ -12,8 +12,8 @@ type UsersCollection = typeof usersCollection;
 type MagicLinkTokensCollection = typeof magicLinkTokensCollection;
 
 const mockUsersFindOne: MockedFunction<UsersCollection['findOne']> = vi.fn();
-const mockUsersUpdateOne: MockedFunction<UsersCollection['updateOne']> = vi.fn();
-const mockUsersInsertOne: MockedFunction<UsersCollection['insertOne']> = vi.fn();
+const mockUsersFindOneAndUpdate: MockedFunction<UsersCollection['findOneAndUpdate']> = vi.fn();
+const mockUsersFindOneAndUpsert: MockedFunction<UsersCollection['findOneAndUpsert']> = vi.fn();
 const mockTokensInsertOne: MockedFunction<MagicLinkTokensCollection['insertOne']> = vi.fn();
 const mockTokensFindOne: MockedFunction<MagicLinkTokensCollection['findOne']> = vi.fn();
 const mockTokensFindOneAndDelete: MockedFunction<MagicLinkTokensCollection['findOneAndDelete']> =
@@ -51,8 +51,8 @@ vi.doMock('@/config/server', () => ({
 vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
-    updateOne: mockUsersUpdateOne,
-    insertOne: mockUsersInsertOne,
+    findOneAndUpdate: mockUsersFindOneAndUpdate,
+    findOneAndUpsert: mockUsersFindOneAndUpsert,
   },
   magicLinkTokensCollection: {
     insertOne: mockTokensInsertOne,
@@ -243,6 +243,15 @@ describe('auth/magicLink', () => {
     }));
     // _system.site.url configured by default
     mockGetConfig.mockReturnValue('https://example.com');
+    // Individual tests that care about the post-update doc override this;
+    // null exercises the defensive fallback to the pre-update doc.
+    mockUsersFindOneAndUpdate.mockResolvedValue(null);
+    // Default the atomic find-or-create to a plain existing-user login; the
+    // login/signup tests override it per case.
+    mockUsersFindOneAndUpsert.mockResolvedValue({
+      doc: createMockUser(),
+      isNew: false,
+    } as never);
   });
 
   describe('handleSendMagicLink', () => {
@@ -386,6 +395,23 @@ describe('auth/magicLink', () => {
       );
     });
 
+    test('throws (no token stored) when the from address is not configured', async () => {
+      const email = 'user@example.com';
+
+      mockValidateEmail.mockReturnValue(email);
+      // Provider present but no `from` — must fail loudly rather than fall
+      // back to a Modelence-domain sender (wrong branding, fails SPF/DKIM).
+      mockGetEmailConfig.mockReturnValue({ provider: mockEmailProvider });
+
+      await expect(handleSendMagicLink({ email }, createContext())).rejects.toThrow(
+        'Email `from` address is not configured'
+      );
+
+      // Preflight: caught before the token is stored or any email attempted.
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
+      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+    });
+
     test('rejects disposable email addresses', async () => {
       const email = 'user@disposable.example';
 
@@ -400,7 +426,7 @@ describe('auth/magicLink', () => {
       expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
     });
 
-    test('throws (no email sent) when no base URL can be resolved', async () => {
+    test('throws (no email sent) when _system.site.url is not configured', async () => {
       const email = 'user@example.com';
 
       mockGetConfig.mockReturnValue(undefined); // no _system.site.url
@@ -409,8 +435,13 @@ describe('auth/magicLink', () => {
       mockRandomBytes.mockReturnValue({ toString: () => 'tok' });
 
       await expect(
-        // connectionInfo.baseUrl also absent
-        handleSendMagicLink({ email }, createContext({ connectionInfo: {} }))
+        // A request-derived base URL is present but must NOT be used as a
+        // fallback: it comes from the Host header, which an attacker controls,
+        // and the emailed link is a login credential (link poisoning).
+        handleSendMagicLink(
+          { email },
+          createContext({ connectionInfo: { baseUrl: 'https://attacker.example' } })
+        )
       ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
 
       // A broken link must never be emailed.
@@ -418,29 +449,6 @@ describe('auth/magicLink', () => {
       // The misconfiguration is caught before the token is generated, so no
       // orphaned (unsendable) token doc is left behind.
       expect(mockTokensInsertOne).not.toHaveBeenCalled();
-    });
-
-    test('uses connection info baseUrl as fallback', async () => {
-      const email = 'user@example.com';
-      const rawToken = 'fallbacktoken';
-
-      mockGetConfig.mockReturnValue(undefined); // no _system.site.url
-      mockValidateEmail.mockReturnValue(email);
-      mockUsersFindOne.mockResolvedValue(null);
-      mockRandomBytes.mockReturnValue({ toString: () => rawToken });
-
-      await handleSendMagicLink(
-        { email },
-        createContext({ connectionInfo: { baseUrl: 'https://connection.com' } })
-      );
-
-      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          html: expect.stringContaining(
-            `https://connection.com/api/_internal/auth/magic-link?token=${rawToken}`
-          ),
-        })
-      );
     });
 
     test('uses custom email template when provided', async () => {
@@ -492,10 +500,13 @@ describe('auth/magicLink', () => {
   });
 
   describe('handleMagicLinkLanding', () => {
+    // `req` carries a Host header on purpose: the handler must never read it
+    // (Host is attacker-controlled), so the redirect assertions below double
+    // as proof that the request-derived base URL is ignored.
     const makeParams = (token: string | undefined, cookie = vi.fn()) => ({
       query: token === undefined ? {} : { token },
       res: { cookie },
-      req: { protocol: 'https', get: () => 'app.example.com' },
+      req: { protocol: 'https', get: () => 'attacker.example' },
     });
 
     // The catch logs the real cause server-side; silence it in these tests.
@@ -573,6 +584,21 @@ describe('auth/magicLink', () => {
       expect(result?.redirect).toContain(friendlyParam);
       expect(result?.redirect).not.toContain('invalid_type');
     });
+
+    test('never derives the redirect from the Host header when _system.site.url is unset', async () => {
+      const token = 'valid-landing-token';
+      mockGetConfig.mockReturnValue(undefined); // no _system.site.url
+      mockTokensFindOne.mockResolvedValue(
+        createMockToken({ token, expiresAt: new Date(Date.now() + 1e6) })
+      );
+
+      const result = await handleMagicLinkLanding(makeParams(token) as never);
+
+      // Same-origin relative redirect — the attacker-controlled Host header
+      // from `makeParams` must not appear.
+      expect(result?.redirect).toBe('/auth/magic-link');
+      expect(result?.redirect).not.toContain('attacker.example');
+    });
   });
 
   describe('handleLoginWithMagicLink', () => {
@@ -638,17 +664,34 @@ describe('auth/magicLink', () => {
         const email = 'user@example.com';
         const userId = new ObjectId();
         const onAfterLogin = vi.fn();
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterLogin });
+        const onAfterSignup = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onAfterLogin,
+          onAfterSignup,
+        });
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        const userDoc = createMockUser({
+        // An existing account whose email is not yet verified (e.g. a prior
+        // password signup) — clicking the link verifies it.
+        const unverifiedDoc = createMockUser({
+          _id: userId,
+          emails: [{ address: email, verified: false }],
+          authMethods: { password: { hash: 'hash' } },
+        });
+        const verifiedDoc = createMockUser({
           _id: userId,
           emails: [{ address: email, verified: true }],
           authMethods: { password: { hash: 'hash' } },
         });
-        mockUsersFindOne.mockResolvedValue(userDoc);
+        // Pre-gate lookup (signup enabled) finds the existing user, so the
+        // signup side effects are skipped.
+        mockUsersFindOne.mockResolvedValue(unverifiedDoc);
+        // Atomic find-or-create returns the existing account as a login.
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: unverifiedDoc, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(verifiedDoc);
 
         const session = createSession();
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token', session });
@@ -657,39 +700,54 @@ describe('auth/magicLink', () => {
 
         // Single-use claim by _id at the commit point.
         expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
-        // Clicking the link proves address ownership.
-        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        // Find-or-create keyed on the email via $elemMatch (avoids the upsert
+        // field-path conflict) with signup enabled and the shared collation.
+        expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
+          { emails: { $elemMatch: { address: email } } },
+          expect.any(Object),
+          { upsert: true, collation: { locale: 'en', strength: 2 } }
+        );
+        // Clicking the link proves address ownership. The write uses the same
+        // strength-2 collation as the lookups: the stored address may keep its
+        // original casing (e.g. OAuth-created accounts) while tokenDoc.email
+        // is lowercased, and without the collation the positional update
+        // would silently match nothing.
+        expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
           { _id: userId, 'emails.address': email },
-          { $set: { 'emails.$.verified': true } }
+          { $set: { 'emails.$.verified': true } },
+          { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
         expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
         expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(context.res, session.authToken);
         expect(onAfterLogin).toHaveBeenCalledWith(
-          expect.objectContaining({ provider: 'magicLink', user: userDoc, session })
+          expect.objectContaining({ provider: 'magicLink', user: verifiedDoc, session })
         );
         expect(clearCookie).toHaveBeenCalled();
         expect(result).toEqual({
           user: { id: userId, handle: 'testuser' },
           session: { authToken: session.authToken },
         });
-        // No account creation on the login branch.
-        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        // A pre-existing account is a login, never a signup.
+        expect(onAfterSignup).not.toHaveBeenCalled();
       });
 
       test('fires onAfterEmailVerification only when the email was unverified', async () => {
         const email = 'user@example.com';
         const onAfterEmailVerification = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onAfterEmailVerification,
         });
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockUsersFindOne.mockResolvedValue(
-          createMockUser({ emails: [{ address: email, verified: false }] })
-        );
+        const unverifiedDoc = createMockUser({ emails: [{ address: email, verified: false }] });
+        const verifiedDoc = createMockUser({ emails: [{ address: email, verified: true }] });
+        // Pre-gate finds the existing (unverified) user.
+        mockUsersFindOne.mockResolvedValue(unverifiedDoc);
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: unverifiedDoc, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(verifiedDoc);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
         await handleLoginWithMagicLink({}, context);
@@ -699,38 +757,137 @@ describe('auth/magicLink', () => {
         );
       });
 
+      test('hooks receive the post-verification doc, not the stale pre-update snapshot', async () => {
+        const email = 'user@example.com';
+        const userId = new ObjectId();
+        const onAfterEmailVerification = vi.fn();
+        const onAfterLogin = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onAfterEmailVerification,
+          onAfterLogin,
+        });
+
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        // The stored address differs in casing from the lowercased token email —
+        // the collated write must still match, and the hooks must see the
+        // returned (verified) doc rather than this stale one.
+        const staleUserDoc = createMockUser({
+          _id: userId,
+          emails: [{ address: 'User@Example.com', verified: false }],
+        });
+        const verifiedUserDoc = createMockUser({
+          _id: userId,
+          emails: [{ address: 'User@Example.com', verified: true }],
+        });
+        mockUsersFindOne.mockResolvedValue(staleUserDoc);
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: staleUserDoc, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(verifiedUserDoc);
+
+        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+        await handleLoginWithMagicLink({}, context);
+
+        expect(onAfterEmailVerification).toHaveBeenCalledWith(
+          expect.objectContaining({ user: verifiedUserDoc })
+        );
+        expect(onAfterLogin).toHaveBeenCalledWith(
+          expect.objectContaining({ user: verifiedUserDoc })
+        );
+      });
+
+      test('a failing notify-only hook does not fail the login or leak an unhandled rejection', async () => {
+        const email = 'user@example.com';
+        // An async hook that rejects (would be an unhandled promise rejection
+        // if fired without .catch) and a sync hook that throws.
+        const onAfterEmailVerification = vi.fn().mockRejectedValue(new Error('async hook boom'));
+        const onAfterLogin = vi.fn(() => {
+          throw new Error('sync hook boom');
+        });
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onAfterEmailVerification,
+          onAfterLogin,
+        });
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        const unverifiedDoc = createMockUser({ emails: [{ address: email, verified: false }] });
+        mockUsersFindOne.mockResolvedValue(unverifiedDoc);
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: unverifiedDoc, isNew: false } as never);
+
+        const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
+
+        try {
+          // The login itself must succeed despite both hooks failing.
+          const result = await handleLoginWithMagicLink({}, context);
+          expect(result.session).toBeDefined();
+          expect(clearCookie).toHaveBeenCalled();
+
+          // Drain the microtask queue so the rejected hook promise settles
+          // through fireAuthHook's .catch — vitest would fail the run on a
+          // genuinely unhandled rejection.
+          await new Promise((resolve) => setImmediate(resolve));
+
+          expect(onAfterEmailVerification).toHaveBeenCalled();
+          expect(onAfterLogin).toHaveBeenCalled();
+          // Both failures are logged, not swallowed silently.
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in onAfterEmailVerification hook:',
+            expect.any(Error)
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in onAfterLogin hook:',
+            expect.any(Error)
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
+      });
+
       test('does not fire onAfterEmailVerification when the email was already verified', async () => {
         const email = 'user@example.com';
         const onAfterEmailVerification = vi.fn();
         mockGetAuthConfig.mockReturnValue({
-          magicLink: { enabled: true },
+          magicLink: { enabled: true, allowSignup: true },
           onAfterEmailVerification,
         });
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockUsersFindOne.mockResolvedValue(
-          createMockUser({ emails: [{ address: email, verified: true }] })
-        );
+        const verifiedDoc = createMockUser({ emails: [{ address: email, verified: true }] });
+        mockUsersFindOne.mockResolvedValue(verifiedDoc);
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: verifiedDoc, isNew: false } as never);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
         await handleLoginWithMagicLink({}, context);
 
         expect(onAfterEmailVerification).not.toHaveBeenCalled();
+        // Already verified → no redundant positional write.
+        expect(mockUsersFindOneAndUpdate).not.toHaveBeenCalled();
       });
 
       test('rejects disabled users, burns the token, and fires onLoginError', async () => {
         const email = 'disabled@example.com';
         const onLoginError = vi.fn();
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onLoginError });
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onLoginError,
+        });
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockUsersFindOne.mockResolvedValue(
-          createMockUser({ emails: [{ address: email, verified: true }], status: 'disabled' })
-        );
+        const disabledDoc = createMockUser({
+          emails: [{ address: email, verified: true }],
+          status: 'disabled',
+        });
+        mockUsersFindOne.mockResolvedValue(disabledDoc);
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: disabledDoc, isNew: false } as never);
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -762,29 +919,20 @@ describe('auth/magicLink', () => {
         );
 
         expect(mockSetSessionUser).not.toHaveBeenCalled();
-        expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+        // The token claim failed, so the find-or-create must never run.
+        expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
+        expect(mockUsersFindOneAndUpdate).not.toHaveBeenCalled();
       });
     });
 
     describe('unknown email (signup branch)', () => {
       const email = 'newuser@example.com';
 
-      const setupSignup = () => {
-        const userId = new ObjectId();
-        const tokenDoc = createMockToken({ email });
-        mockTokensFindOne.mockResolvedValue(tokenDoc);
-        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        // First lookup (by email) finds nothing; second (by insertedId) returns the new user.
-        const newUser = createMockUser({
-          _id: userId,
-          handle: 'newuser',
-          emails: [{ address: email, verified: true }],
-          authMethods: {},
-        });
-        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(newUser);
-        mockUsersInsertOne.mockResolvedValue({ insertedId: userId } as never);
-        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
-        return { userId, tokenDoc, newUser };
+      const makeDuplicateError = () => {
+        const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
+        dupError.code = 11000;
+        dupError.keyPattern = { 'emails.address': 1 };
+        return dupError;
       };
 
       test('creates the account with a verified email and no authMethods entry', async () => {
@@ -795,7 +943,21 @@ describe('auth/magicLink', () => {
           onBeforeSignup,
           onAfterSignup,
         });
-        const { userId, tokenDoc, newUser } = setupSignup();
+
+        const userId = new ObjectId();
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        // Pre-gate lookup returns null → unknown email → signup side effects run.
+        mockUsersFindOne.mockResolvedValue(null);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        const newUser = createMockUser({
+          _id: userId,
+          handle: 'newuser',
+          emails: [{ address: email, verified: true }],
+          authMethods: {},
+        });
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: newUser, isNew: true } as never);
 
         const session = createSession();
         const { context, clearCookie } = createLoginContext({
@@ -815,18 +977,25 @@ describe('auth/magicLink', () => {
           type: 'ip',
           value: '127.0.0.1',
         });
-        // Token claimed BEFORE the insert so a double-submit cannot create two accounts.
+        // Token claimed BEFORE the upsert so a double-submit cannot create two accounts.
         const claimOrder = mockTokensFindOneAndDelete.mock.invocationCallOrder[0];
-        const insertOrder = mockUsersInsertOne.mock.invocationCallOrder[0];
-        expect(claimOrder).toBeLessThan(insertOrder);
+        const upsertOrder = mockUsersFindOneAndUpsert.mock.invocationCallOrder[0];
+        expect(claimOrder).toBeLessThan(upsertOrder);
         expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
-        expect(mockUsersInsertOne).toHaveBeenCalledWith({
-          handle: 'newuser',
-          status: 'active',
-          emails: [{ address: email, verified: true }],
-          createdAt: expect.any(Date),
-          authMethods: {},
-        });
+        // The insert-only document sets a verified email and no authMethods entry.
+        expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
+          { emails: { $elemMatch: { address: email } } },
+          {
+            $setOnInsert: expect.objectContaining({
+              handle: 'newuser',
+              status: 'active',
+              emails: [{ address: email, verified: true }],
+              createdAt: expect.any(Date),
+              authMethods: {},
+            }),
+          },
+          { upsert: true, collation: { locale: 'en', strength: 2 } }
+        );
         expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
         expect(onAfterSignup).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', user: newUser, session })
@@ -844,7 +1013,19 @@ describe('auth/magicLink', () => {
           magicLink: { enabled: true, allowSignup: true },
           generateHandle,
         });
-        setupSignup();
+
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockUsersFindOne.mockResolvedValue(null);
+        mockResolveUniqueHandle.mockResolvedValue('custom-handle' as never);
+        mockUsersFindOneAndUpsert.mockResolvedValue({
+          doc: createMockUser({
+            handle: 'custom-handle',
+            emails: [{ address: email, verified: true }],
+          }),
+          isNew: true,
+        } as never);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
         await handleLoginWithMagicLink({}, context);
@@ -857,16 +1038,21 @@ describe('auth/magicLink', () => {
 
       test('rejects the signup when allowSignup is not enabled and fires onSignupError', async () => {
         const onBeforeSignup = vi.fn();
+        const onLoginError = vi.fn();
         const onSignupError = vi.fn();
         mockGetAuthConfig.mockReturnValue({
           magicLink: { enabled: true },
           onBeforeSignup,
+          onLoginError,
           onSignupError,
         });
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
-        mockUsersFindOne.mockResolvedValue(null);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        // Signup disabled → the upsert runs with upsert:false, which returns
+        // no doc for an unknown email.
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: null, isNew: false } as never);
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -874,25 +1060,36 @@ describe('auth/magicLink', () => {
           'Sign up with magic link is not enabled'
         );
 
-        // Rejected before any signup work: no hooks-driven side effects, no
-        // account, and the token is not consumed.
+        // Signup disabled → the pre-gate (onBeforeSignup, signup rate limit,
+        // handle resolution) is skipped entirely.
         expect(onBeforeSignup).not.toHaveBeenCalled();
-        expect(mockUsersInsertOne).not.toHaveBeenCalled();
-        expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
         expect(mockSetSessionUser).not.toHaveBeenCalled();
         expect(clearCookie).toHaveBeenCalled();
+        // The token IS claimed at the commit point, then restored because no
+        // account was created and the link must stay usable.
+        expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
+        expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
+        // A forbidden signup attempt routes to onSignupError (as the old signup
+        // path did), never onLoginError.
         expect(onSignupError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
         );
+        expect(onLoginError).not.toHaveBeenCalled();
       });
 
-      test('a throwing onBeforeSignup aborts before any account is created and fires onSignupError', async () => {
+      test('a throwing onBeforeSignup aborts before the token is claimed and fires onSignupError', async () => {
+        // onBeforeSignup runs in the pre-gate — before the token claim — but now
+        // inside the error-hook try/catch. Its rejection aborts without claiming
+        // the token, and (because the unknown email marked this a signup attempt)
+        // routes to onSignupError, preserving the hook's veto contract.
         const onBeforeSignup = vi.fn().mockRejectedValue(new Error('Domain not allowed'));
         const onSignupError = vi.fn();
+        const onLoginError = vi.fn();
         mockGetAuthConfig.mockReturnValue({
           magicLink: { enabled: true, allowSignup: true },
           onBeforeSignup,
           onSignupError,
+          onLoginError,
         });
 
         const tokenDoc = createMockToken({ email });
@@ -903,13 +1100,14 @@ describe('auth/magicLink', () => {
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('Domain not allowed');
 
-        expect(mockUsersInsertOne).not.toHaveBeenCalled();
-        // Token not consumed — the (real) user can retry after fixing the issue.
+        expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
+        // Token not claimed — the (real) user can retry after fixing the issue.
         expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
         expect(mockSetSessionUser).not.toHaveBeenCalled();
         expect(onSignupError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
         );
+        expect(onLoginError).not.toHaveBeenCalled();
       });
 
       test('aborts without creating an account when the token was already claimed', async () => {
@@ -926,16 +1124,9 @@ describe('auth/magicLink', () => {
           'Invalid or expired magic link'
         );
 
-        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
         expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
-
-      const makeDuplicateError = () => {
-        const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
-        dupError.code = 11000;
-        dupError.keyPattern = { 'emails.address': 1 };
-        return dupError;
-      };
 
       test('recovers via the LOGIN path (not signup) when a concurrent request created the account first', async () => {
         const onAfterSignup = vi.fn();
@@ -950,6 +1141,7 @@ describe('auth/magicLink', () => {
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockUsersFindOne.mockResolvedValue(null);
         mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
         // The account the concurrent winner just created (already verified).
@@ -959,10 +1151,11 @@ describe('auth/magicLink', () => {
           emails: [{ address: email, verified: true }],
           authMethods: {},
         });
-        // First findOne (initial by-email lookup) → nothing; after the duplicate
-        // insert, the recovery re-fetch by email returns the winner's account.
-        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(winnerUser);
-        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
+        // The upsert loses the insert race (duplicate email), retries, and finds
+        // the winner's doc as a login (isNew:false).
+        mockUsersFindOneAndUpsert
+          .mockRejectedValueOnce(makeDuplicateError())
+          .mockResolvedValueOnce({ doc: winnerUser, isNew: false } as never);
 
         const session = createSession();
         const { context } = createLoginContext({ cookieToken: 'raw-token', session });
@@ -994,6 +1187,7 @@ describe('auth/magicLink', () => {
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockUsersFindOne.mockResolvedValue(null);
         mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
         // A concurrent PASSWORD signup created the account as UNVERIFIED.
@@ -1003,21 +1197,30 @@ describe('auth/magicLink', () => {
           emails: [{ address: email, verified: false }],
           authMethods: { password: { hash: 'x' } },
         });
-        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(winnerUser);
-        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
+        const verifiedWinner = createMockUser({
+          _id: userId,
+          handle: 'newuser',
+          emails: [{ address: email, verified: true }],
+          authMethods: { password: { hash: 'x' } },
+        });
+        mockUsersFindOneAndUpsert
+          .mockRejectedValueOnce(makeDuplicateError())
+          .mockResolvedValueOnce({ doc: winnerUser, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(verifiedWinner);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await handleLoginWithMagicLink({}, context);
 
         // The magic link proves ownership → the email is marked verified...
-        expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
           { _id: userId, 'emails.address': email },
-          { $set: { 'emails.$.verified': true } }
+          { $set: { 'emails.$.verified': true } },
+          { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
         // ...and the verification hook fires (it would not on the signup tail).
         expect(onAfterEmailVerification).toHaveBeenCalledWith(
-          expect.objectContaining({ provider: 'magicLink', user: winnerUser })
+          expect.objectContaining({ provider: 'magicLink', user: verifiedWinner })
         );
         expect(onAfterLogin).toHaveBeenCalled();
       });
@@ -1029,6 +1232,7 @@ describe('auth/magicLink', () => {
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        mockUsersFindOne.mockResolvedValue(null);
         mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
         const disabledWinner = createMockUser({
@@ -1038,8 +1242,9 @@ describe('auth/magicLink', () => {
           emails: [{ address: email, verified: true }],
           authMethods: {},
         });
-        mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(disabledWinner);
-        mockUsersInsertOne.mockRejectedValue(makeDuplicateError());
+        mockUsersFindOneAndUpsert
+          .mockRejectedValueOnce(makeDuplicateError())
+          .mockResolvedValueOnce({ doc: disabledWinner, isNew: false } as never);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -1049,14 +1254,14 @@ describe('auth/magicLink', () => {
         expect(mockSetSessionUser).not.toHaveBeenCalled();
       });
 
-      test('rethrows a non-duplicate insert error and restores the claimed token', async () => {
+      test('rethrows a non-duplicate upsert error and restores the claimed token', async () => {
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
         mockUsersFindOne.mockResolvedValue(null);
-        mockUsersInsertOne.mockRejectedValue(new Error('disk full'));
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        mockUsersFindOneAndUpsert.mockRejectedValue(new Error('disk full'));
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -1067,20 +1272,21 @@ describe('auth/magicLink', () => {
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
       });
 
-      test('restores the claimed token when a concurrent handle collision fails the insert', async () => {
+      test('treats a handle-keyPattern duplicate as a non-email duplicate and restores the token', async () => {
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
         mockUsersFindOne.mockResolvedValue(null);
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
-        // Duplicate key on `handle`, not on the email — must NOT trigger the
-        // login recovery, and must not burn the token.
+        // Duplicate key on `handle`, not on the email — isDuplicateEmailError is
+        // false, so it is NOT retried as a login; it surfaces and the token is
+        // restored.
         const handleCollision = new MongoServerError({ message: 'E11000 duplicate key' });
         handleCollision.code = 11000;
         handleCollision.keyPattern = { handle: 1 };
-        mockUsersInsertOne.mockRejectedValue(handleCollision);
+        mockUsersFindOneAndUpsert.mockRejectedValue(handleCollision);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -1089,15 +1295,15 @@ describe('auth/magicLink', () => {
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
       });
 
-      test('a failing token restore does not mask the original insert error', async () => {
+      test('a failing token restore does not mask the original upsert error', async () => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
         mockUsersFindOne.mockResolvedValue(null);
-        mockUsersInsertOne.mockRejectedValue(new Error('disk full'));
+        mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
+        mockUsersFindOneAndUpsert.mockRejectedValue(new Error('disk full'));
         mockTokensInsertOne.mockRejectedValue(new Error('db down'));
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
@@ -1140,9 +1346,9 @@ describe('auth/magicLink', () => {
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);
       mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-      mockUsersFindOne.mockResolvedValue(
-        createMockUser({ emails: [{ address: email, verified: true }] })
-      );
+      const userDoc = createMockUser({ emails: [{ address: email, verified: true }] });
+      mockUsersFindOne.mockResolvedValue(userDoc);
+      mockUsersFindOneAndUpsert.mockResolvedValue({ doc: userDoc, isNew: false } as never);
       const { context } = codeContext({ ip });
 
       await handleLoginWithOneTimeCode({ email, code: CODE }, context);
@@ -1162,14 +1368,20 @@ describe('auth/magicLink', () => {
     test('logs in an existing user with a valid code and consumes the doc', async () => {
       const userId = new ObjectId();
       const onAfterLogin = vi.fn();
-      mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true }, onAfterLogin });
+      mockGetAuthConfig.mockReturnValue({
+        magicLink: { enabled: true, allowSignup: true },
+        onAfterLogin,
+      });
 
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);
       mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-      mockUsersFindOne.mockResolvedValue(
-        createMockUser({ _id: userId, emails: [{ address: email, verified: true }] })
-      );
+      const userDoc = createMockUser({
+        _id: userId,
+        emails: [{ address: email, verified: true }],
+      });
+      mockUsersFindOne.mockResolvedValue(userDoc);
+      mockUsersFindOneAndUpsert.mockResolvedValue({ doc: userDoc, isNew: false } as never);
 
       const { context, session } = codeContext();
       const result = await handleLoginWithOneTimeCode({ email, code: CODE }, context);
@@ -1193,9 +1405,9 @@ describe('auth/magicLink', () => {
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);
       mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
-      mockUsersFindOne.mockResolvedValue(
-        createMockUser({ emails: [{ address: email, verified: true }] })
-      );
+      const userDoc = createMockUser({ emails: [{ address: email, verified: true }] });
+      mockUsersFindOne.mockResolvedValue(userDoc);
+      mockUsersFindOneAndUpsert.mockResolvedValue({ doc: userDoc, isNew: false } as never);
 
       const { context } = codeContext();
       await handleLoginWithOneTimeCode({ email, code: ' 482 - 193 ' }, context);
@@ -1245,14 +1457,15 @@ describe('auth/magicLink', () => {
       mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true } });
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);
-      mockUsersFindOne.mockResolvedValue(null);
+      mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      // Signup disabled → upsert:false returns no doc for an unknown email.
+      mockUsersFindOneAndUpsert.mockResolvedValue({ doc: null, isNew: false } as never);
 
       const { context } = codeContext();
 
       await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
         'Sign up with magic link is not enabled'
       );
-      expect(mockUsersInsertOne).not.toHaveBeenCalled();
       expect(mockSetSessionUser).not.toHaveBeenCalled();
     });
 
@@ -1267,26 +1480,33 @@ describe('auth/magicLink', () => {
       const tokenDoc = createMockToken({ email });
       mockTokensFindOne.mockResolvedValue(tokenDoc);
       mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+      // Pre-gate lookup returns null → unknown email → signup.
+      mockUsersFindOne.mockResolvedValue(null);
+      mockResolveUniqueHandle.mockResolvedValue('user' as never);
       const newUser = createMockUser({
         _id: userId,
         handle: 'user',
         emails: [{ address: email, verified: true }],
         authMethods: {},
       });
-      mockUsersFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(newUser);
-      mockUsersInsertOne.mockResolvedValue({ insertedId: userId } as never);
-      mockResolveUniqueHandle.mockResolvedValue('user' as never);
+      mockUsersFindOneAndUpsert.mockResolvedValue({ doc: newUser, isNew: true } as never);
 
       const { context, session } = codeContext();
       const result = await handleLoginWithOneTimeCode({ email, code: CODE }, context);
 
-      expect(mockUsersInsertOne).toHaveBeenCalledWith({
-        handle: 'user',
-        status: 'active',
-        emails: [{ address: email, verified: true }],
-        createdAt: expect.any(Date),
-        authMethods: {},
-      });
+      expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
+        { emails: { $elemMatch: { address: email } } },
+        {
+          $setOnInsert: expect.objectContaining({
+            handle: 'user',
+            status: 'active',
+            emails: [{ address: email, verified: true }],
+            createdAt: expect.any(Date),
+            authMethods: {},
+          }),
+        },
+        { upsert: true, collation: { locale: 'en', strength: 2 } }
+      );
       expect(onAfterSignup).toHaveBeenCalledWith(
         expect.objectContaining({ provider: 'magicLink', user: newUser })
       );

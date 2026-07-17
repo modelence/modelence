@@ -39,6 +39,19 @@ import { applyDefaultsToModelSchema } from './schemaDefaults';
 import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
 
 /**
+ * Result of {@link Store.findOneAndUpsert}: the post-op document plus whether
+ * this call inserted it. Declared at module scope (not inline) so the `this`
+ * polymorphic document type can be passed in as a type parameter — TS forbids
+ * a `this` type inside an inline object-type literal in a return position.
+ */
+export type UpsertResult<TDoc> = {
+  /** The document after the op; null only when `upsert: false` and nothing matched. */
+  doc: TDoc | null;
+  /** True exactly when this call inserted the document. */
+  isNew: boolean;
+};
+
+/**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
  * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
  * @internal
@@ -1088,6 +1101,52 @@ export class Store<
       options ?? {}
     );
     return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+  }
+
+  /**
+   * Atomic find-or-create: runs `findOneAndUpdate` with `upsert` and reports,
+   * as `isNew`, whether the returned document was newly inserted.
+   *
+   * The plain {@link findOneAndUpdate} deliberately hides result metadata and
+   * returns only the document, so it can't distinguish an insert from a match.
+   * This method surfaces the driver's `lastErrorObject.upserted` flag as
+   * `isNew`, so callers can branch on create-vs-match without a separate
+   * pre-existence read that would race with concurrent upserts.
+   *
+   * `upsert` defaults to `true` but is overridable — pass `upsert: false` to
+   * make this a pure find-and-report (unknown selector → `{ doc: null, isNew:
+   * false }`). `returnDocument` is always `'after'` and cannot be overridden.
+   *
+   * @example
+   * ```ts
+   * const { doc, isNew } = await dbUsers.findOneAndUpsert(
+   *   { email },
+   *   { $setOnInsert: { email, createdAt: new Date() } }
+   * );
+   * if (isNew) onSignup(doc); else onLogin(doc);
+   * ```
+   *
+   * @returns `{ doc, isNew }` — `doc` is null only when `upsert: false` and
+   *   nothing matched; `isNew` is `true` exactly when this call inserted the doc.
+   */
+  async findOneAndUpsert(
+    selector: TypedFilter<this['_type']> | string | ObjectId,
+    update: UpdateFilter<this['_type']>,
+    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata' | 'returnDocument'>
+  ): Promise<UpsertResult<this['_doc']>> {
+    const result = await this.requireCollection().findOneAndUpdate(
+      this.getSelector(selector),
+      update,
+      {
+        upsert: true,
+        ...options,
+        // Always request the post-op doc and the metadata carrying `upserted`.
+        returnDocument: 'after',
+        includeResultMetadata: true,
+      }
+    );
+    const doc = result.value ? this.wrapDocument(result.value as this['_rawDoc']) : null;
+    return { doc, isNew: Boolean(result.lastErrorObject?.upserted) };
   }
 
   /**
