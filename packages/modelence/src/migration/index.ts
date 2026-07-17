@@ -109,7 +109,7 @@ export async function runMigrations(
 export function startMigrations(migrations: MigrationScript[]) {
   setTimeout(() => {
     runMigrations(migrations).catch((err) => {
-      logError('Migration startup failed', { err });
+      logError('Migration startup failed', { error: err });
     });
   }, 0);
 }

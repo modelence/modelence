@@ -198,7 +198,7 @@ export async function startApp({
     startConfigSync();
   }
 
-  startCronJobs().catch((err) => logError('Cron job startup failed', { err }));
+  startCronJobs().catch((error) => logError('Cron job startup failed', { error }));
 
   await startServer(server, { combinedModules, channels });
 }

@@ -166,7 +166,7 @@ describe('db/client', () => {
 
       await expect(connect()).rejects.toThrow('Failed to connect');
       expect(console.error).toHaveBeenCalledWith('MongoDB connection failed', {
-        err: connectionError,
+        error: connectionError,
       });
     });
 
@@ -189,7 +189,7 @@ describe('db/client', () => {
       mockCommand.mockRejectedValue(pingError);
 
       await expect(connect()).rejects.toThrow('Ping failed');
-      expect(console.error).toHaveBeenCalledWith('MongoDB connection failed', { err: pingError });
+      expect(console.error).toHaveBeenCalledWith('MongoDB connection failed', { error: pingError });
     });
 
     test('connects to admin database for ping command', async () => {

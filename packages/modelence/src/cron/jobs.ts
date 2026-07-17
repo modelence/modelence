@@ -142,7 +142,7 @@ async function runCronJob(job: CronJob) {
     const error = err instanceof Error ? err : new Error(String(err));
     captureError(error);
     transaction.end('error');
-    logError('Cron job failed', { alias, err });
+    logError('Cron job failed', { alias, error: err });
   }
 }
 

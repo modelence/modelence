@@ -148,7 +148,7 @@ describe('migration/index', () => {
 
     expect(mockAcquireLock).toHaveBeenCalledWith('migrations');
     expect(mockLogInfo).toHaveBeenCalledWith('Migration startup failed', {
-      err: expect.any(Error),
+      error: expect.any(Error),
     });
 
     consoleError.mockRestore();

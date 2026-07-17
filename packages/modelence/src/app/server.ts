@@ -280,7 +280,7 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     try {
       errorMessage = parseZodError(error as z.ZodError);
     } catch (parsingError) {
-      logError('Error parsing Zod error', { methodName, parsingError });
+      logError('Error parsing Zod error', { methodName, error: parsingError });
       errorMessage = 'Validation failed';
     }
     res.status(400).send(errorMessage);

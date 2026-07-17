@@ -40,7 +40,7 @@ export function sendOAuthError(res: Response, statusCode: number, errorMessage: 
       const html = authConfig.errorComponent({ error: errorMessage, statusCode });
       if (html) return response.send(html);
     } catch (err) {
-      logError('Unhandled error in authConfig.errorComponent', { err });
+      logError('Unhandled error in authConfig.errorComponent', { error: err });
     }
   }
   return response.json({ error: errorMessage });
@@ -376,7 +376,7 @@ function safelyCallHook(hook?: () => void) {
   try {
     hook();
   } catch (err) {
-    logError('Error executing OAuth hook', { err });
+    logError('Error executing OAuth hook', { error: err });
   }
 }
 

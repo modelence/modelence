@@ -32,7 +32,7 @@ export async function connect() {
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
     return client;
   } catch (err) {
-    logError('MongoDB connection failed', { err });
+    logError('MongoDB connection failed', { error: err });
     client = null;
     throw err;
   }

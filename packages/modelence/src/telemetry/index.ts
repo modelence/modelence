@@ -49,7 +49,7 @@ export function logDebug(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().debug(message, args);
   }
-  if (getLogLevel() === 'debug') {
+  if (getLogLevel() === 'debug' || (isTelemetryEnabled() && !isLoggerReady())) {
     console.debug(message, args);
   }
 }
@@ -58,7 +58,7 @@ export function logInfo(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().info(message, args);
   }
-  if (['debug', 'info'].includes(getLogLevel())) {
+  if (['debug', 'info'].includes(getLogLevel()) || (isTelemetryEnabled() && !isLoggerReady())) {
     console.info(message, args);
   }
 }
@@ -67,7 +67,10 @@ export function logError(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().error(message, args);
   }
-  if (['debug', 'info', 'error'].includes(getLogLevel())) {
+  if (
+    ['debug', 'info', 'error'].includes(getLogLevel()) ||
+    (isTelemetryEnabled() && !isLoggerReady())
+  ) {
     console.error(message, args);
   }
 }

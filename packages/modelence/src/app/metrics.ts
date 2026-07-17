@@ -4,7 +4,6 @@ import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
 import { startLoggerProcess } from './loggerProcess';
-import { logError } from '../telemetry';
 import {
   getAppAlias,
   getEnvironmentAlias,
@@ -76,7 +75,7 @@ async function initElasticApm() {
   });
 
   esTransport.on('error', (error) => {
-    logError('Elasticsearch Transport Error', { error });
+    console.error('Elasticsearch Transport Error:', error);
   });
 
   logger = winston.createLogger({
@@ -84,7 +83,7 @@ async function initElasticApm() {
     defaultMeta: {
       serviceName,
     },
-    format: winston.format.combine(winston.format.json()),
+    format: winston.format.combine(winston.format.errors({ stack: true }), winston.format.json()),
     transports: [esTransport],
   });
 
