@@ -154,7 +154,10 @@ export async function renderSsrTreeStream(options: SsrStreamOptions): Promise<Ss
         },
       });
 
-      passthrough.on('error', reject);
+      passthrough.on('error', (err) => {
+        destination.destroy(err);
+        reject(err);
+      });
       destination.on('error', reject);
 
       streamRef.pipe(passthrough);
