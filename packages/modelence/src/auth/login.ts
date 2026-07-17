@@ -35,6 +35,8 @@ function isEmailVerificationRequired(): boolean {
   return Boolean(getConfig('_system.user.auth.email.verification'));
 }
 
+const DUMMY_PASSWORD_HASH = '$2b$10$AUM.KxS9LpsdJ5XQ85jQG.zC2y8b375b4pQeO2XoGf29xNn4/WlFm';
+
 export async function handleLoginWithPassword(
   args: Args,
   { user, session, connectionInfo, res }: Context
@@ -69,10 +71,17 @@ export async function handleLoginWithPassword(
     );
 
     const passwordHash = userDoc?.authMethods?.password?.hash;
-    if (!passwordHash) {
+
+    // Always run bcrypt.compare to mitigate timing attacks that could reveal if an email exists.
+    const hashToCompare = passwordHash || DUMMY_PASSWORD_HASH;
+    const isValidPassword = await bcrypt.compare(password, hashToCompare);
+
+    if (!passwordHash || !isValidPassword) {
       throw incorrectCredentialsError();
     }
 
+    // Only check email verification if the user exists and the password is correct,
+    // to prevent email enumeration by observing verification errors before password checks.
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
 
     if (!emailDoc?.verified && isEmailVerificationRequired()) {
@@ -80,11 +89,6 @@ export async function handleLoginWithPassword(
         "Your email address hasn't been verified yet. Please check your inbox for the verification email.",
         'EMAIL_NOT_VERIFIED'
       );
-    }
-
-    const isValidPassword = await bcrypt.compare(password, passwordHash);
-    if (!isValidPassword) {
-      throw incorrectCredentialsError();
     }
 
     await setSessionUser(session.authToken, userDoc._id);
