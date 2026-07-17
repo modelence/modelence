@@ -146,14 +146,6 @@ describe('cron/jobs', () => {
         handler: async () => {},
       })
     ).toThrow("Duplicate cron job declaration: 'nightlyCleanup' already exists");
-
-    expect(() =>
-      defineCronJob('_registration_status', {
-        description: 'system',
-        interval: mockSeconds(10),
-        handler: async () => {},
-      })
-    ).toThrow("Reserved cron job alias: '_registration_status' is reserved for system use");
   });
 
   test('startCronJobs initializes schedule, fetches last run, and sets interval', async () => {
@@ -290,11 +282,15 @@ describe('cron/jobs', () => {
   });
 
   describe('registerNewCronJobs', () => {
-    test('no-ops when no cron jobs are defined', async () => {
+    test('no-ops when no cron jobs are defined but still updates lock status', async () => {
       await registerNewCronJobs();
 
       expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
       expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
+      expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
+        { _id: 'migrations' },
+        { $set: { status: 'cron_registered' } }
+      );
     });
 
     test('inserts only jobs that are not already in the DB', async () => {
@@ -433,13 +429,19 @@ describe('cron/jobs', () => {
           status: 'cron_registration_failed',
         } as never);
 
-        // Next fetch: for actual job scheduling
-        cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+        // Next fetches: for warning check and actual job scheduling
+        cronStoreMocks.fetch.mockResolvedValue([] as never);
+
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         await startCronJobs();
 
         expect(lockStoreMocks.findOne).toHaveBeenCalledWith({ _id: 'migrations' });
-        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Timed out or failed waiting for cron job registration')
+        );
+        warnSpy.mockRestore();
         (Date.now as Mock).mockRestore();
       } finally {
         vi.useRealTimers();

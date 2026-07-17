@@ -109,10 +109,10 @@ const tryAcquireLockById = async ({
         resource,
         instanceId,
         acquiredAt: new Date(),
-        status: 'acquired',
       },
       $setOnInsert: {
         _id: resource,
+        status: 'acquired',
       },
     }
   );

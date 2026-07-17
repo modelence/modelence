@@ -37,10 +37,6 @@ export function defineCronJob(
     handler,
   }: CronJobInputParams
 ) {
-  if (alias === '_registration_status') {
-    throw new Error(`Reserved cron job alias: '${alias}' is reserved for system use`);
-  }
-
   if (cronJobs[alias]) {
     throw new Error(`Duplicate cron job declaration: '${alias}' already exists`);
   }
@@ -81,6 +77,14 @@ export function defineCronJob(
 export async function registerNewCronJobs() {
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length === 0) {
+    try {
+      await locksCollection.updateOne(
+        { _id: 'migrations' },
+        { $set: { status: CRON_REGISTRATION_STATUS.REGISTERED } }
+      );
+    } catch {
+      // Swallowed to prevent startup failure
+    }
     return;
   }
 
@@ -143,6 +147,9 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
       lockDoc.status === CRON_REGISTRATION_STATUS.REGISTERED ||
       lockDoc.status === CRON_REGISTRATION_STATUS.FAILED
     ) {
+      if (lockDoc.status === CRON_REGISTRATION_STATUS.FAILED) {
+        await logMissingAliasesWarning(aliasList);
+      }
       return;
     }
 
@@ -157,13 +164,19 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
   }
 
   // Timeout expired — some jobs were never registered by the lock-holder.
+  await logMissingAliasesWarning(aliasList);
+}
+
+async function logMissingAliasesWarning(aliasList: string[]): Promise<void> {
   const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
   const registeredAliases = new Set(records.map((r) => r.alias));
   const missingAliases = aliasList.filter((alias) => !registeredAliases.has(alias));
-  console.warn(
-    `Timed out waiting for cron job registration. Missing aliases: [${missingAliases.join(', ')}]. ` +
-      `These jobs will fall back to immediate scheduling.`
-  );
+  if (missingAliases.length > 0) {
+    console.warn(
+      `Timed out or failed waiting for cron job registration. Missing aliases: [${missingAliases.join(', ')}]. ` +
+        `These jobs will fall back to immediate scheduling.`
+    );
+  }
 }
 
 export async function startCronJobs() {

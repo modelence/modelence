@@ -64,10 +64,10 @@ describe('lock/helpers', () => {
           resource: 'job',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'job',
+          status: 'acquired',
         },
       }
     );
@@ -125,10 +125,10 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
+          status: 'acquired',
         },
       }
     );
@@ -148,10 +148,10 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
+          status: 'acquired',
         },
       }
     );
