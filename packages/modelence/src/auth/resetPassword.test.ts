@@ -277,10 +277,53 @@ describe('auth/resetPassword', () => {
       });
     });
 
-    test('returns success message if user has no password auth method', async () => {
-      const email = 'oauth@example.com';
+    test('sends a reset email to a passwordless account (set-password flow)', async () => {
+      // Magic-link / OAuth-only accounts have no `authMethods.password`. Reset
+      // is the documented way to ADD a password, so a real email must be sent —
+      // not silently dead-ended.
+      const email = 'magiclink@example.com';
+      const resetToken = 'passwordless-token';
 
       mockValidateEmail.mockReturnValue(email);
+      mockRandomBytes.mockReturnValue({ toString: () => resetToken });
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          emails: [{ address: email, verified: true }],
+          authMethods: {}, // No password (nor any) auth method
+          status: 'active',
+        })
+      );
+
+      const result = await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
+
+      expect(mockResetTokensInsertOne).toHaveBeenCalledWith(
+        expect.objectContaining({ email, token: sha256(resetToken) })
+      );
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: email,
+          html: expect.stringContaining(
+            `https://example.com/api/_internal/auth/reset-password?token=${resetToken}`
+          ),
+        })
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent',
+      });
+    });
+
+    test('sends a reset email to an OAuth-only account (add-password flow)', async () => {
+      // Same set-password path for OAuth-only accounts: dropping the
+      // password-required guard lets these users add a local password too.
+      const email = 'oauth@example.com';
+      const resetToken = 'oauth-token';
+
+      mockValidateEmail.mockReturnValue(email);
+      mockRandomBytes.mockReturnValue({ toString: () => resetToken });
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
           emails: [{ address: email, verified: true }],
@@ -294,8 +337,10 @@ describe('auth/resetPassword', () => {
         createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
       );
 
-      expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
-      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+      expect(mockResetTokensInsertOne).toHaveBeenCalledWith(
+        expect.objectContaining({ email, token: sha256(resetToken) })
+      );
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: 'If an account with that email exists, a password reset link has been sent',

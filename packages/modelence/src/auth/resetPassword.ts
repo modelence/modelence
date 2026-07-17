@@ -101,10 +101,13 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
     return passwordResetSent;
   }
 
-  // Check if user has password auth method
-  if (!userDoc.authMethods?.password) {
-    return passwordResetSent;
-  }
+  // Intentionally NOT gated on an existing password: this is a set-OR-reset
+  // flow. Passwordless accounts (magic link, OAuth-only) are the documented
+  // way to *add* a password — `handleResetPassword` sets the hash whether or
+  // not one existed. Requiring `authMethods.password` here would silently dead-
+  // end those users (generic success, no email) despite the promised flow.
+  // Ownership is still proven by receiving the emailed token, and the response
+  // stays generic either way, so this doesn't enable account enumeration.
 
   const emailProvider = getEmailConfig().provider;
   if (!emailProvider) {
