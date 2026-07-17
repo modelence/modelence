@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { MongoError } from 'mongodb';
 
@@ -64,6 +64,7 @@ describe('lock/helpers', () => {
           resource: 'job',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'job',
@@ -124,6 +125,7 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
@@ -146,6 +148,7 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',

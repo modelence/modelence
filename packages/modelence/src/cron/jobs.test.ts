@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 
 const mockSeconds = vi.fn((value: number) => value * 1000);
@@ -12,6 +12,20 @@ const mockAcquireLock: Mock = vi.fn();
 const mockGetMongodbUri: Mock = vi.fn();
 
 const cronStoreMocks: {
+  fetch: Mock;
+  updateOne: Mock;
+  upsertOne: Mock;
+  insertMany: Mock;
+  findOne: Mock;
+} = {
+  fetch: vi.fn(),
+  updateOne: vi.fn(),
+  upsertOne: vi.fn(),
+  insertMany: vi.fn(),
+  findOne: vi.fn(),
+};
+
+const lockStoreMocks: {
   fetch: Mock;
   updateOne: Mock;
   upsertOne: Mock;
@@ -40,7 +54,12 @@ function registerMocks() {
   }));
 
   vi.doMock('../data/store', () => ({
-    Store: vi.fn().mockImplementation(() => cronStoreMocks),
+    Store: vi.fn().mockImplementation(function (name: string) {
+      if (name === '_modelenceLocks') {
+        return lockStoreMocks;
+      }
+      return cronStoreMocks;
+    }),
   }));
 
   vi.doMock('../lock/helpers', () => ({
@@ -66,6 +85,13 @@ describe('cron/jobs', () => {
   beforeEach(async () => {
     vi.resetModules();
     Object.assign(cronStoreMocks, {
+      fetch: vi.fn(),
+      updateOne: vi.fn().mockResolvedValue(undefined as never),
+      upsertOne: vi.fn().mockResolvedValue(undefined as never),
+      insertMany: vi.fn().mockResolvedValue(undefined as never),
+      findOne: vi.fn().mockResolvedValue(null as never),
+    });
+    Object.assign(lockStoreMocks, {
       fetch: vi.fn(),
       updateOne: vi.fn().mockResolvedValue(undefined as never),
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
@@ -302,7 +328,7 @@ describe('cron/jobs', () => {
       expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
     });
 
-    test('updates registration status document to running then success', async () => {
+    test('updates lock status to cron_registered on success', async () => {
       defineCronJob('myJob', {
         interval: mockSeconds(10),
         handler: async () => {},
@@ -311,17 +337,13 @@ describe('cron/jobs', () => {
 
       await registerNewCronJobs();
 
-      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
-        { alias: '_registration_status' },
-        { $set: { status: 'running', sessionToken: 'unknown' } }
-      );
-      expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
-        { alias: '_registration_status' },
-        { $set: { status: 'success' } }
+      expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
+        { _id: 'migrations' },
+        { $set: { status: 'cron_registered' } }
       );
     });
 
-    test('updates registration status document to failed when operation throws', async () => {
+    test('updates lock status to cron_registration_failed when operation throws', async () => {
       defineCronJob('myJob', {
         interval: mockSeconds(10),
         handler: async () => {},
@@ -330,13 +352,9 @@ describe('cron/jobs', () => {
 
       await expect(registerNewCronJobs()).rejects.toThrow('fetch failed');
 
-      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
-        { alias: '_registration_status' },
-        { $set: { status: 'running', sessionToken: 'unknown' } }
-      );
-      expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
-        { alias: '_registration_status' },
-        { $set: { status: 'failed' } }
+      expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
+        { _id: 'migrations' },
+        { $set: { status: 'cron_registration_failed' } }
       );
     });
 
@@ -365,7 +383,7 @@ describe('cron/jobs', () => {
   });
 
   describe('startCronJobs early termination', () => {
-    test('stops polling early when status is success and session matches lock', async () => {
+    test('stops polling early when lock status is cron_registered', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout'] });
       try {
         mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
@@ -377,29 +395,58 @@ describe('cron/jobs', () => {
           handler: async () => {},
         });
 
-        const instanceId = 'test-instance';
-        const sessionToken = instanceId;
-        // Mock current lock doc
-        cronStoreMocks.findOne.mockResolvedValue({ instanceId } as never);
+        // Lock doc has terminal status — registration is done
+        lockStoreMocks.findOne.mockResolvedValue({
+          _id: 'migrations',
+          status: 'cron_registered',
+        } as never);
 
-        // First poll: return success status with matching sessionToken
-        cronStoreMocks.fetch
-          .mockResolvedValueOnce([
-            { alias: '_registration_status', status: 'success', sessionToken },
-          ] as never)
-          // Next fetch: for actual job scheduling
-          .mockResolvedValueOnce([] as never);
+        // Next fetch: for actual job scheduling
+        cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
 
         await startCronJobs();
 
-        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+        // findOne on locksCollection, then fetch on cronJobsCollection for scheduling
+        expect(lockStoreMocks.findOne).toHaveBeenCalledWith({ _id: 'migrations' });
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
         (Date.now as Mock).mockRestore();
       } finally {
         vi.useRealTimers();
       }
     });
 
-    test('ignores status and keeps polling if session token does not match active lock', async () => {
+    test('stops polling early when lock status is cron_registration_failed', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+
+        defineCronJob('myJob', {
+          interval: mockSeconds(10),
+          handler: async () => {},
+        });
+
+        // Lock doc has failed status — registration failed but we should still stop waiting
+        lockStoreMocks.findOne.mockResolvedValue({
+          _id: 'migrations',
+          status: 'cron_registration_failed',
+        } as never);
+
+        // Next fetch: for actual job scheduling
+        cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+        await startCronJobs();
+
+        expect(lockStoreMocks.findOne).toHaveBeenCalledWith({ _id: 'migrations' });
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+        (Date.now as Mock).mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('keeps polling when lock status is still acquired (in progress)', async () => {
       mockSeconds.mockReturnValue(1);
       try {
         mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
@@ -411,35 +458,27 @@ describe('cron/jobs', () => {
           handler: async () => {},
         });
 
-        const instanceId = 'test-instance';
-        // Mock current lock doc
-        cronStoreMocks.findOne.mockResolvedValue({ instanceId } as never);
+        // First poll: lock is still acquired (registration in progress)
+        // Second poll: lock status is cron_registered
+        lockStoreMocks.findOne
+          .mockResolvedValueOnce({ _id: 'migrations', status: 'acquired' } as never)
+          .mockResolvedValueOnce({ _id: 'migrations', status: 'cron_registered' } as never);
 
-        // First poll: returns stale status (non-matching sessionToken)
-        // Second poll: returns success status with matching sessionToken
-        const correctSessionToken = instanceId;
-        cronStoreMocks.fetch
-          .mockResolvedValueOnce([
-            { alias: '_registration_status', status: 'success', sessionToken: 'stale-token' },
-          ] as never)
-          .mockResolvedValueOnce([
-            { alias: '_registration_status', status: 'success', sessionToken: correctSessionToken },
-          ] as never)
-          .mockResolvedValueOnce([] as never);
+        // First poll: job not yet in DB (triggers next poll)
+        // After exit: fetch for scheduling
+        cronStoreMocks.fetch.mockResolvedValueOnce([] as never).mockResolvedValueOnce([] as never);
 
         await startCronJobs();
 
-        // 1st fetch in loop (stale token, doesn't exit)
-        // 2nd fetch in loop (matching token, exits)
-        // 3rd fetch for cronJobRecords
-        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(3);
+        // 1st findOne (acquired, keeps polling) + 2nd findOne (cron_registered, exits)
+        expect(lockStoreMocks.findOne).toHaveBeenCalledTimes(2);
         (Date.now as Mock).mockRestore();
       } finally {
         mockSeconds.mockImplementation((value: number) => value * 1000);
       }
     });
 
-    test('stops polling early when lock is released (null) and status is success', async () => {
+    test('stops polling early when lock is released (null)', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout'] });
       try {
         mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
@@ -451,17 +490,48 @@ describe('cron/jobs', () => {
           handler: async () => {},
         });
 
-        // Mock no current lock (released)
-        cronStoreMocks.findOne.mockResolvedValue(null as never);
+        // No lock document — lock was already released/deleted
+        lockStoreMocks.findOne.mockResolvedValue(null as never);
 
-        // First poll: return success status
-        cronStoreMocks.fetch
-          .mockResolvedValueOnce([{ alias: '_registration_status', status: 'success' }] as never)
-          // Next fetch: for actual job scheduling
-          .mockResolvedValueOnce([] as never);
+        // Next fetch: for actual job scheduling
+        cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
 
         await startCronJobs();
 
+        expect(lockStoreMocks.findOne).toHaveBeenCalledWith({ _id: 'migrations' });
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+        (Date.now as Mock).mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('stops polling early when all aliases are already in the DB', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      try {
+        mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+
+        defineCronJob('myJob', {
+          interval: mockSeconds(10),
+          handler: async () => {},
+        });
+
+        // Lock is still acquired (registration in progress)
+        lockStoreMocks.findOne.mockResolvedValue({
+          _id: 'migrations',
+          status: 'acquired',
+        } as never);
+
+        // But the alias is already in the DB (fast-path)
+        cronStoreMocks.fetch
+          .mockResolvedValueOnce([{ alias: 'myJob' }] as never)
+          .mockResolvedValueOnce([{ alias: 'myJob' }] as never);
+
+        await startCronJobs();
+
+        expect(lockStoreMocks.findOne).toHaveBeenCalledTimes(1);
         expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
         (Date.now as Mock).mockRestore();
       } finally {
