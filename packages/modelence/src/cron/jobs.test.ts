@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
+import { MongoError } from 'mongodb';
 
 const mockSeconds = vi.fn((value: number) => value * 1000);
 const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
@@ -17,12 +18,14 @@ const cronStoreMocks: {
   upsertOne: Mock;
   insertMany: Mock;
   findOne: Mock;
+  requireCollection: Mock;
 } = {
   fetch: vi.fn(),
   updateOne: vi.fn(),
   upsertOne: vi.fn(),
   insertMany: vi.fn(),
   findOne: vi.fn(),
+  requireCollection: vi.fn(),
 };
 
 const lockStoreMocks: {
@@ -31,12 +34,14 @@ const lockStoreMocks: {
   upsertOne: Mock;
   insertMany: Mock;
   findOne: Mock;
+  requireCollection: Mock;
 } = {
   fetch: vi.fn(),
   updateOne: vi.fn(),
   upsertOne: vi.fn(),
   insertMany: vi.fn(),
   findOne: vi.fn(),
+  requireCollection: vi.fn(),
 };
 
 function registerMocks() {
@@ -65,6 +70,10 @@ function registerMocks() {
   vi.doMock('../lock/helpers', () => ({
     acquireLock: mockAcquireLock,
     INSTANCE_ID: 'instance-1',
+    isDuplicateKeyError: (error: unknown) =>
+      typeof error === 'object' &&
+      error !== null &&
+      (error as Record<string, unknown>).code === 11000,
   }));
 
   vi.doMock('@/db/client', () => ({
@@ -91,6 +100,7 @@ describe('cron/jobs', () => {
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
       insertMany: vi.fn().mockResolvedValue(undefined as never),
       findOne: vi.fn().mockResolvedValue(null as never),
+      requireCollection: vi.fn().mockReturnValue(cronStoreMocks),
     });
     Object.assign(lockStoreMocks, {
       fetch: vi.fn(),
@@ -98,6 +108,7 @@ describe('cron/jobs', () => {
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
       insertMany: vi.fn().mockResolvedValue(undefined as never),
       findOne: vi.fn().mockResolvedValue(null as never),
+      requireCollection: vi.fn().mockReturnValue(lockStoreMocks),
     });
     mockGetMongodbUri.mockReturnValue('');
     mockAcquireLock.mockResolvedValue(true as never);
@@ -310,7 +321,9 @@ describe('cron/jobs', () => {
       expect(cronStoreMocks.fetch).toHaveBeenCalledWith({
         alias: { $in: expect.arrayContaining(['existingJob', 'newJob']) },
       });
-      expect(cronStoreMocks.insertMany).toHaveBeenCalledWith([{ alias: 'newJob' }]);
+      expect(cronStoreMocks.insertMany).toHaveBeenCalledWith([{ alias: 'newJob' }], {
+        ordered: false,
+      });
     });
 
     test('does not call insertMany when all jobs are already registered', async () => {
@@ -376,6 +389,23 @@ describe('cron/jobs', () => {
       cronStoreMocks.insertMany.mockRejectedValue(insertError as never);
 
       await expect(registerNewCronJobs()).rejects.toThrow('DB insert failed');
+    });
+
+    test('ignores duplicate key errors (code 11000) thrown by insertMany', async () => {
+      defineCronJob('myJob', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([] as never);
+      const dupError = new MongoError('duplicate key');
+      dupError.code = 11000;
+      cronStoreMocks.insertMany.mockRejectedValue(dupError as never);
+
+      await expect(registerNewCronJobs()).resolves.toBeUndefined();
+      expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
+        { _id: 'migrations', instanceId: 'instance-1' },
+        { $set: { status: 'cron_registered' } }
+      );
     });
   });
 

@@ -8,7 +8,7 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
-import { locksCollection, INSTANCE_ID } from '../lock';
+import { locksCollection, INSTANCE_ID, isDuplicateKeyError } from '../lock';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -104,7 +104,13 @@ export async function registerNewCronJobs() {
       }));
 
     if (insertItems.length > 0) {
-      await cronJobsCollection.insertMany(insertItems);
+      try {
+        await cronJobsCollection.requireCollection().insertMany(insertItems, { ordered: false });
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) {
+          throw error;
+        }
+      }
     }
 
     // Signal that cron job registration succeeded. Other instances polling in

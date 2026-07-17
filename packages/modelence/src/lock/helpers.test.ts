@@ -68,7 +68,6 @@ describe('lock/helpers', () => {
         },
         $setOnInsert: {
           _id: 'job',
-          status: 'acquired',
         },
       }
     );
@@ -130,7 +129,6 @@ describe('lock/helpers', () => {
         },
         $setOnInsert: {
           _id: 'legacy',
-          status: 'acquired',
         },
       }
     );
@@ -154,7 +152,6 @@ describe('lock/helpers', () => {
         },
         $setOnInsert: {
           _id: 'legacy',
-          status: 'acquired',
         },
       }
     );
