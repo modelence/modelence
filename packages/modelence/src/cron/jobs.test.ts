@@ -64,6 +64,7 @@ function registerMocks() {
 
   vi.doMock('../lock/helpers', () => ({
     acquireLock: mockAcquireLock,
+    INSTANCE_ID: 'instance-1',
   }));
 
   vi.doMock('@/db/client', () => ({
@@ -288,7 +289,7 @@ describe('cron/jobs', () => {
       expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
       expect(cronStoreMocks.insertMany).not.toHaveBeenCalled();
       expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
-        { _id: 'migrations' },
+        { _id: 'migrations', instanceId: 'instance-1' },
         { $set: { status: 'cron_registered' } }
       );
     });
@@ -334,7 +335,7 @@ describe('cron/jobs', () => {
       await registerNewCronJobs();
 
       expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
-        { _id: 'migrations' },
+        { _id: 'migrations', instanceId: 'instance-1' },
         { $set: { status: 'cron_registered' } }
       );
     });
@@ -349,7 +350,7 @@ describe('cron/jobs', () => {
       await expect(registerNewCronJobs()).rejects.toThrow('fetch failed');
 
       expect(lockStoreMocks.updateOne).toHaveBeenCalledWith(
-        { _id: 'migrations' },
+        { _id: 'migrations', instanceId: 'instance-1' },
         { $set: { status: 'cron_registration_failed' } }
       );
     });
@@ -495,13 +496,19 @@ describe('cron/jobs', () => {
         // No lock document — lock was already released/deleted
         lockStoreMocks.findOne.mockResolvedValue(null as never);
 
-        // Next fetch: for actual job scheduling
-        cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+        // Next fetches: for warning check and actual job scheduling
+        cronStoreMocks.fetch.mockResolvedValue([] as never);
+
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         await startCronJobs();
 
         expect(lockStoreMocks.findOne).toHaveBeenCalledWith({ _id: 'migrations' });
-        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Timed out or failed waiting for cron job registration')
+        );
+        warnSpy.mockRestore();
         (Date.now as Mock).mockRestore();
       } finally {
         vi.useRealTimers();

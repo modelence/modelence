@@ -64,6 +64,7 @@ describe('lock/helpers', () => {
           resource: 'job',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'job',
@@ -125,6 +126,7 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
@@ -148,6 +150,7 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
+          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
@@ -234,9 +237,31 @@ describe('lock/helpers', () => {
 
       expect(acquired).toBe(true);
       expect(mockUpsertOne).toHaveBeenCalledTimes(1);
+      // Initial acquire sets status in $setOnInsert
+      expect(mockUpsertOne).toHaveBeenNthCalledWith(
+        1,
+        expect.any(Object),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            status: 'acquired',
+          }),
+        })
+      );
 
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockUpsertOne).toHaveBeenCalledTimes(2);
+      // Heartbeat refresh does NOT set status in $set
+      expect(mockUpsertOne).toHaveBeenNthCalledWith(
+        2,
+        expect.any(Object),
+        expect.objectContaining({
+          $set: {
+            resource: 'heartbeat',
+            instanceId: 'instance-1',
+            acquiredAt: expect.any(Date),
+          },
+        })
+      );
 
       await releaseLock('heartbeat');
       await vi.advanceTimersByTimeAsync(3000);
@@ -249,6 +274,21 @@ describe('lock/helpers', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('takeover of a stale lock sets status to acquired', async () => {
+    mockUpsertOne.mockResolvedValue({ upsertedCount: 0, modifiedCount: 1 } as never);
+
+    const acquired = await acquireLock('stale-lock');
+    expect(acquired).toBe(true);
+    expect(mockUpsertOne).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: 'acquired',
+        }),
+      })
+    );
   });
 
   test('releaseLock falls back to legacy deletion for pre-upgrade lock documents', async () => {

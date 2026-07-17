@@ -8,7 +8,7 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
-import { locksCollection } from '../lock';
+import { locksCollection, INSTANCE_ID } from '../lock';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -79,7 +79,7 @@ export async function registerNewCronJobs() {
   if (aliasList.length === 0) {
     try {
       await locksCollection.updateOne(
-        { _id: 'migrations' },
+        { _id: 'migrations', instanceId: INSTANCE_ID },
         { $set: { status: CRON_REGISTRATION_STATUS.REGISTERED } }
       );
     } catch {
@@ -110,7 +110,7 @@ export async function registerNewCronJobs() {
     // Signal that cron job registration succeeded. Other instances polling in
     // waitForCronJobsRegistered will see this and stop waiting.
     await locksCollection.updateOne(
-      { _id: 'migrations' },
+      { _id: 'migrations', instanceId: INSTANCE_ID },
       { $set: { status: CRON_REGISTRATION_STATUS.REGISTERED } }
     );
   } catch (error) {
@@ -118,7 +118,7 @@ export async function registerNewCronJobs() {
       // Signal that cron job registration failed so waiting instances stop
       // polling immediately rather than blocking until the deadline.
       await locksCollection.updateOne(
-        { _id: 'migrations' },
+        { _id: 'migrations', instanceId: INSTANCE_ID },
         { $set: { status: CRON_REGISTRATION_STATUS.FAILED } }
       );
     } catch {
@@ -138,6 +138,7 @@ async function waitForCronJobsRegistered(aliasList: string[], timeout: number): 
     // If there is no active migrations lock at all, the lock-holder has already
     // finished and released the lock document, so registration is complete.
     if (!lockDoc) {
+      await logMissingAliasesWarning(aliasList);
       return;
     }
 
