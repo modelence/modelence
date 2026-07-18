@@ -97,20 +97,24 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 
 function joinChannel({ category, id }: { category: string; id: string }) {
   activeChannels.add(`${category}:${id}`);
-  emit({
-    eventName: 'joinChannel',
-    category,
-    id,
-  });
+  if (getSocket().connected) {
+    emit({
+      eventName: 'joinChannel',
+      category,
+      id,
+    });
+  }
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
   activeChannels.delete(`${category}:${id}`);
-  emit({
-    eventName: 'leaveChannel',
-    category,
-    id,
-  });
+  if (getSocket().connected) {
+    emit({
+      eventName: 'leaveChannel',
+      category,
+      id,
+    });
+  }
 }
 
 let liveQueryCounter = 0;

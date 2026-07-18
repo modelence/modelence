@@ -14,6 +14,10 @@ export async function handleSignupWithPassword(
 ) {
   const authConfig = getAuthConfig();
   try {
+    if (user) {
+      throw new Error('You are already logged in.');
+    }
+
     // Narrow once at the boundary
     const signupProps = props as SignupProps;
     const { firstName, lastName, avatarUrl, handle } = signupProps;
@@ -35,10 +39,6 @@ export async function handleSignupWithPassword(
     }
 
     // TODO: captcha check
-
-    if (user) {
-      throw new Error('You are already logged in.');
-    }
 
     const existingUser = await usersCollection.findOne(
       { 'emails.address': email },

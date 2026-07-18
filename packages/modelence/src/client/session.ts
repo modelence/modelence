@@ -124,6 +124,24 @@ export async function reconcileSession() {
   }
 }
 
+export async function revalidateSession() {
+  try {
+    const { configs, session, user } = await callMethod<SessionInitPayload>('_system.session.init');
+    _setConfig(configs);
+
+    const config = getClientConfig();
+    if (config) {
+      config.setAuthToken(session.authToken);
+    } else {
+      setLocalStorageSession(session);
+    }
+
+    useSessionStore.getState().setUser(parseUser(user));
+  } catch (error) {
+    console.error('Modelence: session revalidation failed', error);
+  }
+}
+
 /** @internal */
 export function _isReconciliationPending(): boolean {
   return pendingReconciliation;

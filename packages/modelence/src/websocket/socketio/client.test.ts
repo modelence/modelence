@@ -5,12 +5,13 @@ import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
 import type { getLocalStorageSession } from '@/client/localStorage';
 
-type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit'>;
+type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit' | 'connected'>;
 const mockSocket: Mocked<SocketMethods> = {
   on: vi.fn(),
   once: vi.fn(),
   off: vi.fn(),
   emit: vi.fn(),
+  connected: true,
 };
 
 type IoFactory = typeof ioClientFactory;

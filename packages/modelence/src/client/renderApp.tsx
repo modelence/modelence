@@ -2,7 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppProvider } from '../client';
 import { setErrorHandler, ErrorHandler } from './errorHandler';
-import { hydrateSession, startSessionHeartbeat, type SessionInitPayload } from './session';
+import {
+  hydrateSession,
+  startSessionHeartbeat,
+  revalidateSession,
+  type SessionInitPayload,
+} from './session';
 import { ModelenceQueryProvider } from './queryProvider';
 import { hasConnectedQueryClient } from './query';
 
@@ -79,6 +84,13 @@ export function renderApp(options: RenderAppOptions) {
   if (errorHandler) {
     setErrorHandler(errorHandler);
   }
+
+  // Revalidate session when restoring from bfcache
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      void revalidateSession();
+    }
+  });
 
   // Hydrate session BEFORE building the tree so `isSessionInitialized()` is
   // true on the first render and matches the server output. Hydration mode
