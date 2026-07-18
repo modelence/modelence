@@ -37,7 +37,7 @@ export async function handleSignupWithPassword(
     // TODO: captcha check
 
     if (user) {
-      // TODO: handle cases where a user is already logged in
+      throw new Error('You are already logged in.');
     }
 
     const existingUser = await usersCollection.findOne(

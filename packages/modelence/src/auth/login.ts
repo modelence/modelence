@@ -60,7 +60,7 @@ export async function handleLoginWithPassword(
     // TODO: add rate limiting by email (and perhaps IP address overall)
 
     if (user) {
-      // TODO: handle cases where a user is already logged in
+      throw new Error('You are already logged in.');
     }
 
     const userDoc = await usersCollection.findOne(
