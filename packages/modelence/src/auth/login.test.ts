@@ -260,4 +260,22 @@ describe('auth/login', () => {
       'Session is not initialized'
     );
   });
+
+  test('throws AuthError and skips rate limiting when user is already authenticated', async () => {
+    const activeUser = {
+      id: new ObjectId('507f1f77bcf86cd799439099'),
+      handle: 'existinguser',
+      roles: [],
+    };
+
+    const error = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      { ...baseContext, user: activeUser } as never
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('User is already authenticated');
+    expect((error as { code?: string }).code).toBe('ALREADY_AUTHENTICATED');
+    expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+  });
 });
