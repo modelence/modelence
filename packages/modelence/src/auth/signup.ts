@@ -7,7 +7,7 @@ import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { resolveUniqueHandle } from './utils';
-import { AuthError } from '../error';
+import { ValidationError } from '../error';
 
 export async function handleSignupWithPassword(
   props: Args,
@@ -16,7 +16,7 @@ export async function handleSignupWithPassword(
   const authConfig = getAuthConfig();
   try {
     if (user) {
-      throw new AuthError('User is already authenticated', 'ALREADY_AUTHENTICATED');
+      throw new ValidationError('User is already authenticated', 'ALREADY_AUTHENTICATED');
     }
 
     // Narrow once at the boundary

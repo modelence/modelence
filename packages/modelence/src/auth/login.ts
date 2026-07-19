@@ -15,7 +15,7 @@ import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
-import { AuthError } from '../error';
+import { AuthError, ValidationError } from '../error';
 
 /**
  * Whether unverified emails should be blocked from logging in.
@@ -45,7 +45,7 @@ export async function handleLoginWithPassword(
     }
 
     if (user) {
-      throw new AuthError('User is already authenticated', 'ALREADY_AUTHENTICATED');
+      throw new ValidationError('User is already authenticated', 'ALREADY_AUTHENTICATED');
     }
 
     const ip = connectionInfo?.ip;

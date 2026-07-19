@@ -420,7 +420,7 @@ describe('auth/signup', () => {
     expect(mockInsertOne).not.toHaveBeenCalled();
   });
 
-  test('throws AuthError and skips rate limiting and disposable checks when user is already authenticated', async () => {
+  test('throws ValidationError and skips rate limiting and disposable checks when user is already authenticated', async () => {
     const activeUser = {
       id: createObjectId('existing-user-id'),
       handle: 'existinguser',
@@ -433,6 +433,7 @@ describe('auth/signup', () => {
     ).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(Error);
+    expect((error as Error).name).toBe('ValidationError');
     expect((error as Error).message).toBe('User is already authenticated');
     expect((error as { code?: string }).code).toBe('ALREADY_AUTHENTICATED');
     expect(mockConsumeRateLimit).not.toHaveBeenCalled();
