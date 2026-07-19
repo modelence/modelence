@@ -84,10 +84,7 @@ async function initElasticApm() {
       serviceName,
     },
     format: winston.format.combine(winston.format.json()),
-    transports: [
-      // new winston.transports.Console(), // TODO: remove, just for debugging
-      esTransport,
-    ],
+    transports: [esTransport],
   });
 
   startLoggerProcess({
