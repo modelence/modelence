@@ -15,7 +15,7 @@ import { consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
-import { AuthError } from '../error';
+import { AuthError, ValidationError } from '../error';
 
 /**
  * Whether unverified emails should be blocked from logging in.
@@ -44,6 +44,10 @@ export async function handleLoginWithPassword(
       throw new Error('Session is not initialized');
     }
 
+    if (user) {
+      throw new ValidationError('User is already authenticated', 'ALREADY_AUTHENTICATED');
+    }
+
     const ip = connectionInfo?.ip;
     if (ip) {
       await consumeRateLimit({
@@ -58,10 +62,6 @@ export async function handleLoginWithPassword(
     const password = z.string().parse(args.password);
 
     // TODO: add rate limiting by email (and perhaps IP address overall)
-
-    if (user) {
-      // TODO: handle cases where a user is already logged in
-    }
 
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },

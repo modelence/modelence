@@ -20,9 +20,10 @@ export class AuthError extends ModelenceError {
 export class ValidationError extends ModelenceError {
   status = 400;
 
-  constructor(message: string) {
+  constructor(message: string, code?: string) {
     super(message);
     this.name = 'ValidationError';
+    this.code = code;
   }
 }
 

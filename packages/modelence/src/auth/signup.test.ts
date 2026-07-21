@@ -419,4 +419,25 @@ describe('auth/signup', () => {
     expect(authConfig.onBeforeSignup).not.toHaveBeenCalled();
     expect(mockInsertOne).not.toHaveBeenCalled();
   });
+
+  test('throws ValidationError and skips rate limiting and disposable checks when user is already authenticated', async () => {
+    const activeUser = {
+      id: createObjectId('existing-user-id'),
+      handle: 'existinguser',
+      roles: [],
+    };
+
+    const error = await handleSignupWithPassword(
+      { email: 'test@example.com', password: 'Secret123' },
+      { ...baseContext, user: activeUser as never }
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).name).toBe('ValidationError');
+    expect((error as Error).message).toBe('User is already authenticated');
+    expect((error as { code?: string }).code).toBe('ALREADY_AUTHENTICATED');
+    expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    expect(mockIsDisposableEmail).not.toHaveBeenCalled();
+    expect(mockFindOne).not.toHaveBeenCalled();
+  });
 });
