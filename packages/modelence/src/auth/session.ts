@@ -52,32 +52,31 @@ export const sessionsCollection = new Store('_modelenceSessions', {
 });
 
 export async function obtainSession(authToken: string | null): Promise<Session> {
-  const hashedToken = authToken ? hashToken(authToken) : null;
+  if (authToken) {
+    const hashedToken = hashToken(authToken);
+    let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
 
-  let existingSession = hashedToken
-    ? await sessionsCollection.findOne({ authToken: hashedToken })
-    : null;
-
-  // Legacy fallback: try raw token lookup (pre-hash sessions)
-  // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
-  // replay attacks using leaked hashed tokens.
-  const isHex64 = authToken && /^[0-9a-f]{64}$/i.test(authToken);
-  if (!existingSession && authToken && !isHex64) {
-    existingSession = await sessionsCollection.findOne({ authToken });
-    if (existingSession) {
-      await sessionsCollection.updateOne(
-        { _id: existingSession._id as ObjectId },
-        { $set: { authToken: hashedToken } }
-      );
+    // Legacy fallback: try raw token lookup (pre-hash sessions)
+    // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
+    // replay attacks using leaked hashed tokens.
+    const isHex64 = /^[0-9a-f]{64}$/i.test(authToken);
+    if (!existingSession && !isHex64) {
+      existingSession = await sessionsCollection.findOne({ authToken });
+      if (existingSession) {
+        await sessionsCollection.updateOne(
+          { _id: existingSession._id as ObjectId },
+          { $set: { authToken: hashedToken } }
+        );
+      }
     }
-  }
 
-  if (existingSession) {
-    return {
-      authToken,
-      expiresAt: new Date(existingSession.expiresAt),
-      userId: existingSession.userId ?? null,
-    };
+    if (existingSession) {
+      return {
+        authToken,
+        expiresAt: new Date(existingSession.expiresAt),
+        userId: existingSession.userId ?? null,
+      };
+    }
   }
 
   return await createSession();
