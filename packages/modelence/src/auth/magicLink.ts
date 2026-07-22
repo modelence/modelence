@@ -101,8 +101,8 @@ async function claimMagicLinkTokenById(id: ObjectId) {
 /**
  * Best-effort undo of a token claim: re-inserts the exact claimed doc (same
  * `_id`, hashes, and expiry) so the single-use link/code works again on retry.
- * Used when the work the claim was committing to (the account insert) failed
- * without producing an account — otherwise the failure would permanently burn
+ * Used when the work the claim was committing to (the signup pre-gate or the
+ * account insert) failed without producing an account — otherwise the failure would permanently burn
  * the user's link. Never throws: the caller is already propagating the real
  * error, and a failed restore must not mask it.
  */
@@ -322,6 +322,20 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
   let isSignupAttempt = false;
 
   try {
+    // Commit point: atomically claim the single-use token. If a concurrent
+    // request already consumed it, abort WITHOUT authenticating (no double-spend).
+    // Claimed BEFORE the signup pre-gate below so that of concurrent requests
+    // holding the same token doc (link + code used together, or a double-submitted
+    // login) only the winner runs the signup side effects — a loser aborting here
+    // has not re-run onBeforeSignup, burned a signup rate-limit slot, or promoted
+    // itself to a signup attempt, so it routes to onLoginError instead of firing
+    // onSignupError alongside the winner's onAfterSignup.
+    const claimedToken = await claimMagicLinkTokenById(tokenDoc._id);
+    if (!claimedToken) {
+      clearCookie();
+      throw new Error('Invalid or expired magic link');
+    }
+
     // Signup-only side effects run BEFORE the account can exist, preserving
     // onBeforeSignup's veto contract and the pre-insert signup rate limit. The
     // upsert can't tell us "is this a signup?" until after it inserts, so we
@@ -330,33 +344,33 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
     // resolves as a login (isNew=false) below, which is the correct outcome.
     let resolvedHandle: string | undefined;
     if (signupEnabled) {
-      const existing = await usersCollection.findOne(
-        { 'emails.address': email },
-        { collation: USER_COLLATION }
-      );
-      if (!existing) {
-        isSignupAttempt = true;
-        await authConfig.onBeforeSignup?.({ email, provider: 'magicLink', connectionInfo });
+      try {
+        const existing = await usersCollection.findOne(
+          { 'emails.address': email },
+          { collation: USER_COLLATION }
+        );
+        if (!existing) {
+          isSignupAttempt = true;
+          await authConfig.onBeforeSignup?.({ email, provider: 'magicLink', connectionInfo });
 
-        const ip = connectionInfo?.ip;
-        if (ip) {
-          await consumeRateLimit({ bucket: 'signup', type: 'ip', value: ip });
+          const ip = connectionInfo?.ip;
+          if (ip) {
+            await consumeRateLimit({ bucket: 'signup', type: 'ip', value: ip });
+          }
+
+          resolvedHandle = authConfig.generateHandle
+            ? await resolveUniqueHandle(await authConfig.generateHandle({ email }), email, {
+                throwOnConflict: false,
+              })
+            : await resolveUniqueHandle(undefined, email);
         }
-
-        resolvedHandle = authConfig.generateHandle
-          ? await resolveUniqueHandle(await authConfig.generateHandle({ email }), email, {
-              throwOnConflict: false,
-            })
-          : await resolveUniqueHandle(undefined, email);
+      } catch (error) {
+        // The pre-gate rejected (onBeforeSignup veto, rate limit) or failed
+        // transiently — either way no account was created. The token was claimed
+        // above; put it back so the failure doesn't permanently burn the link.
+        await restoreClaimedMagicLinkToken(claimedToken);
+        throw error;
       }
-    }
-
-    // Commit point: atomically claim the single-use token. If a concurrent
-    // request already consumed it, abort WITHOUT authenticating (no double-spend).
-    const claimedToken = await claimMagicLinkTokenById(tokenDoc._id);
-    if (!claimedToken) {
-      clearCookie();
-      throw new Error('Invalid or expired magic link');
     }
 
     let upsertResult;

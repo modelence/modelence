@@ -1077,11 +1077,13 @@ describe('auth/magicLink', () => {
         expect(onLoginError).not.toHaveBeenCalled();
       });
 
-      test('a throwing onBeforeSignup aborts before the token is claimed and fires onSignupError', async () => {
-        // onBeforeSignup runs in the pre-gate — before the token claim — but now
-        // inside the error-hook try/catch. Its rejection aborts without claiming
-        // the token, and (because the unknown email marked this a signup attempt)
-        // routes to onSignupError, preserving the hook's veto contract.
+      test('a throwing onBeforeSignup restores the claimed token and fires onSignupError', async () => {
+        // onBeforeSignup runs in the pre-gate — after the token claim (claiming
+        // first keeps a concurrent double-submit from running the signup side
+        // effects twice) but inside the error-hook try/catch. Its rejection
+        // aborts before the upsert, the claimed token is restored, and (because
+        // the unknown email marked this a signup attempt) the failure routes to
+        // onSignupError, preserving the hook's veto contract.
         const onBeforeSignup = vi.fn().mockRejectedValue(new Error('Domain not allowed'));
         const onSignupError = vi.fn();
         const onLoginError = vi.fn();
@@ -1094,6 +1096,7 @@ describe('auth/magicLink', () => {
 
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
         mockUsersFindOne.mockResolvedValue(null);
 
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
@@ -1101,8 +1104,10 @@ describe('auth/magicLink', () => {
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('Domain not allowed');
 
         expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
-        // Token not claimed — the (real) user can retry after fixing the issue.
-        expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
+        // Token claimed at the commit point, then restored because no account
+        // was created — the (real) user can retry after fixing the issue.
+        expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
+        expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
         expect(mockSetSessionUser).not.toHaveBeenCalled();
         expect(onSignupError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
@@ -1111,14 +1116,25 @@ describe('auth/magicLink', () => {
       });
 
       test('aborts without creating an account when the token was already claimed', async () => {
-        mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
+        const onBeforeSignup = vi.fn();
+        const onSignupError = vi.fn();
+        const onLoginError = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onBeforeSignup,
+          onSignupError,
+          onLoginError,
+        });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(null); // lost the race
         mockUsersFindOne.mockResolvedValue(null);
         mockResolveUniqueHandle.mockResolvedValue('newuser' as never);
 
-        const { context } = createLoginContext({ cookieToken: 'raw-token' });
+        const { context } = createLoginContext({
+          cookieToken: 'raw-token',
+          connectionInfo: { ip: '127.0.0.1' },
+        });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
           'Invalid or expired magic link'
@@ -1126,6 +1142,19 @@ describe('auth/magicLink', () => {
 
         expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
         expect(mockSetSessionUser).not.toHaveBeenCalled();
+        // The claim is the FIRST step, so a request losing the race (e.g. the
+        // link and one-time code used together) runs no signup side effects:
+        // no onBeforeSignup rerun, no signup rate-limit slot burned, and the
+        // failure routes to onLoginError — it never fires onSignupError to
+        // contradict the winner's onAfterSignup.
+        expect(onBeforeSignup).not.toHaveBeenCalled();
+        expect(mockConsumeRateLimit).not.toHaveBeenCalledWith(
+          expect.objectContaining({ bucket: 'signup' })
+        );
+        expect(onSignupError).not.toHaveBeenCalled();
+        expect(onLoginError).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
+        );
       });
 
       test('recovers via the LOGIN path (not signup) when a concurrent request created the account first', async () => {
