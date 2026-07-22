@@ -633,7 +633,7 @@ describe('auth/magicLink', () => {
       const { context, clearCookie } = createLoginContext({ cookieToken: 'unknown-token' });
 
       await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
-        'Invalid or expired magic link'
+        'Invalid or expired code or magic link'
       );
 
       expect(mockTokensFindOne).toHaveBeenCalledWith({ token: sha256('unknown-token') });
@@ -652,7 +652,9 @@ describe('auth/magicLink', () => {
       mockTokensFindOneAndDelete.mockResolvedValue(expiredDoc);
       const { context, clearCookie } = createLoginContext({ cookieToken: 'expired-token' });
 
-      await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('Magic link has expired');
+      await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
+        'Code or magic link has expired'
+      );
 
       expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: expiredDoc!._id });
       expect(clearCookie).toHaveBeenCalled();
@@ -915,7 +917,7 @@ describe('auth/magicLink', () => {
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
-          'Invalid or expired magic link'
+          'Invalid or expired code or magic link'
         );
 
         expect(mockSetSessionUser).not.toHaveBeenCalled();
@@ -1137,7 +1139,7 @@ describe('auth/magicLink', () => {
         });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
-          'Invalid or expired magic link'
+          'Invalid or expired code or magic link'
         );
 
         expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
@@ -1451,7 +1453,7 @@ describe('auth/magicLink', () => {
 
       const { context } = codeContext();
       await expect(handleLoginWithOneTimeCode({ email, code: '000000' }, context)).rejects.toThrow(
-        'Invalid or expired code'
+        'Invalid or expired code or magic link'
       );
 
       expect(mockTokensUpdateMany).toHaveBeenCalledWith({ email }, { $inc: { attempts: 1 } });
@@ -1464,7 +1466,7 @@ describe('auth/magicLink', () => {
 
       const { context } = codeContext();
       await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
-        'Invalid or expired code'
+        'Invalid or expired code or magic link'
       );
     });
 
@@ -1475,7 +1477,7 @@ describe('auth/magicLink', () => {
 
       const { context } = codeContext();
       await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
-        'Code has expired'
+        'Code or magic link has expired'
       );
 
       expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: expiredDoc!._id });

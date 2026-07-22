@@ -333,7 +333,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
     const claimedToken = await claimMagicLinkTokenById(tokenDoc._id);
     if (!claimedToken) {
       clearCookie();
-      throw new Error('Invalid or expired magic link');
+      throw new Error('Invalid or expired code or magic link');
     }
 
     // Signup-only side effects run BEFORE the account can exist, preserving
@@ -573,14 +573,14 @@ export async function handleLoginWithMagicLink(args: Args, context: Context) {
   const tokenDoc = await findMagicLinkTokenDoc(token);
   if (!tokenDoc) {
     clearCookie();
-    throw new Error('Invalid or expired magic link');
+    throw new Error('Invalid or expired code or magic link');
   }
 
   if (tokenDoc.expiresAt < new Date()) {
     // Expired: remove it and reject.
     await claimMagicLinkTokenById(tokenDoc._id as ObjectId);
     clearCookie();
-    throw new Error('Magic link has expired');
+    throw new Error('Code or magic link has expired');
   }
 
   return authenticateMagicLinkUser({
@@ -648,13 +648,13 @@ export async function handleLoginWithOneTimeCode(args: Args, context: Context) {
     await magicLinkTokensCollection.updateMany({ email }, { $inc: { attempts: 1 } });
     // Same message whether the code is wrong, capped, or the email unknown —
     // never reveal account existence.
-    throw new Error('Invalid or expired code');
+    throw new Error('Invalid or expired code or magic link');
   }
 
   if (tokenDoc.expiresAt < new Date()) {
     // Expired: remove it and reject.
     await claimMagicLinkTokenById(tokenDoc._id as ObjectId);
-    throw new Error('Code has expired');
+    throw new Error('Code or magic link has expired');
   }
 
   return authenticateMagicLinkUser({
