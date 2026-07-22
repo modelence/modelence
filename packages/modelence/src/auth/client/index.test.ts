@@ -12,9 +12,18 @@ vi.doMock('../../client/session', () => ({
   setCurrentUser: mockSetCurrentUser,
 }));
 
+const mockGetClientConfig = vi.fn();
+vi.doMock('../../client/clientConfig', () => ({
+  getClientConfig: mockGetClientConfig,
+}));
+
 const mockGetLocalStorageSession = vi.fn();
+const mockClearLocalStorageSession = vi.fn();
+const mockSetLocalStorageSession = vi.fn();
 vi.doMock('../../client/localStorage', () => ({
+  clearLocalStorageSession: mockClearLocalStorageSession,
   getLocalStorageSession: mockGetLocalStorageSession,
+  setLocalStorageSession: mockSetLocalStorageSession,
 }));
 const mockFetch: MockedFunction<typeof fetch> = vi.fn();
 globalThis.fetch = mockFetch;
@@ -30,6 +39,7 @@ describe('auth/client', () => {
   beforeEach(() => {
     window.location.href = '';
     vi.clearAllMocks();
+    mockGetClientConfig.mockReturnValue(null);
     mockFetch.mockResolvedValue(new Response(null, { status: 200 }));
   });
 
@@ -42,10 +52,11 @@ describe('auth/client', () => {
     });
   });
 
-  test('loginWithPassword resolves user and stores in session', async () => {
+  test('loginWithPassword resolves user and stores the browser session', async () => {
     const rawUser = { id: '1', handle: 'demo', roles: [] };
     const enrichedUser = { ...rawUser, hasRole: () => true, requireRole: () => {} };
-    mockCallMethod.mockResolvedValue({ user: rawUser } as never);
+    const session = { authToken: 'password-token' };
+    mockCallMethod.mockResolvedValue({ user: rawUser, session } as never);
     mockSetCurrentUser.mockReturnValue(enrichedUser);
 
     const result = await authClient.loginWithPassword({
@@ -57,8 +68,49 @@ describe('auth/client', () => {
       email: 'user@example.com',
       password: 'secret',
     });
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith(session);
     expect(mockSetCurrentUser).toHaveBeenCalledWith(rawUser);
     expect(result).toBe(enrichedUser);
+  });
+
+  test('loginWithPassword stores the token through custom client configuration', async () => {
+    const setAuthToken = vi.fn();
+    mockGetClientConfig.mockReturnValue({ setAuthToken });
+    const session = { authToken: 'custom-client-token' };
+    mockCallMethod.mockResolvedValue({
+      user: { id: '1', handle: 'demo', roles: [] },
+      session,
+    } as never);
+
+    await authClient.loginWithPassword({ email: 'user@example.com', password: 'secret' });
+
+    expect(setAuthToken).toHaveBeenCalledWith(session.authToken);
+    expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
+  });
+
+  test('loginWithMagicLink stores the browser session', async () => {
+    const user = { id: '1', handle: 'demo', roles: [] };
+    const session = { authToken: 'magic-link-token' };
+    mockCallMethod.mockResolvedValue({ user, session } as never);
+
+    await authClient.loginWithMagicLink();
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithMagicLink');
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith(session);
+  });
+
+  test('loginWithOneTimeCode stores the browser session', async () => {
+    const user = { id: '1', handle: 'demo', roles: [] };
+    const session = { authToken: 'one-time-code-token' };
+    mockCallMethod.mockResolvedValue({ user, session } as never);
+
+    await authClient.loginWithOneTimeCode({ email: 'user@example.com', code: '123456' });
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithOneTimeCode', {
+      email: 'user@example.com',
+      code: '123456',
+    });
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith(session);
   });
 
   test('verifyEmail calls backend method with token', async () => {
@@ -79,6 +131,7 @@ describe('auth/client', () => {
     await authClient.logout();
 
     expect(mockCallMethod).toHaveBeenCalledWith('_system.user.logout');
+    expect(mockClearLocalStorageSession).toHaveBeenCalledTimes(1);
     expect(mockSetCurrentUser).toHaveBeenCalledWith(null);
   });
 

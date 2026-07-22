@@ -1,6 +1,10 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
-import { getLocalStorageSession } from '@/client/localStorage';
+import {
+  clearLocalStorageSession,
+  getLocalStorageSession,
+  setLocalStorageSession,
+} from '@/client/localStorage';
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
@@ -24,6 +28,15 @@ type RawUserData = {
   lastName?: string;
   avatarUrl?: string;
 };
+
+function persistSession(session: { authToken: string }) {
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  } else {
+    setLocalStorageSession(session);
+  }
+}
 
 /**
  * Sign up a new user with an email and password.
@@ -78,10 +91,7 @@ export async function loginWithPassword(options: { email: string; password: stri
       password,
     }
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
+  persistSession(session);
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }
@@ -151,6 +161,7 @@ export async function resendEmailVerification(options: { email: string }) {
  */
 export async function logout() {
   await callMethod('_system.user.logout');
+  clearLocalStorageSession();
   const config = getClientConfig();
   if (config) {
     config.setAuthToken(null);
@@ -208,10 +219,7 @@ export async function loginWithMagicLink() {
   const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithMagicLink'
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
+  persistSession(session);
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }
@@ -238,10 +246,7 @@ export async function loginWithOneTimeCode(options: { email: string; code: strin
     '_system.user.loginWithOneTimeCode',
     { email, code }
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
+  persistSession(session);
   const enrichedUser = setCurrentUser(user);
   return enrichedUser;
 }
