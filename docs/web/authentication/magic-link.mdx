@@ -105,6 +105,22 @@ function MagicLinkForm() {
 }
 ```
 
+### Use the Auth UI Component
+
+`@modelence/auth-ui` includes the same request and generic confirmation flow
+as a reusable component:
+
+```tsx
+import { MagicLinkForm } from '@modelence/auth-ui';
+
+function MagicLinkPage() {
+  return <MagicLinkForm onLogin={() => window.location.assign('/login')} />;
+}
+```
+
+The component never displays whether the submitted email is registered. Set
+`email.magicLink.redirectUrl` to a page that completes the sign-in below.
+
 ### Complete the Sign-In
 
 The user lands on your `redirectUrl` page after clicking the email link. The token is already held in an `httpOnly` cookie, so no arguments are needed:
