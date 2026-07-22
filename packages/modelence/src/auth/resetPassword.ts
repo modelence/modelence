@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 
 import { Args, Context } from '@/methods/types';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
-import { usersCollection, resetPasswordTokensCollection } from './db';
+import { usersCollection, resetPasswordTokensCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
@@ -274,6 +274,25 @@ export async function handleResetPassword(args: Args, context: Context) {
   // Invalidate all existing sessions for this user so that other browsers/devices
   // are forced to re-authenticate with the new password
   await invalidateAllUserSessions(userDoc._id);
+
+  // Revoke every outstanding magic link token and one-time code for this user's
+  // email addresses. A reset is meant to lock out anyone who had access; without
+  // this, a magic link or code issued before the reset (valid for up to 15
+  // minutes) would still log an attacker back in — bypassing the lockout.
+  // Magic link tokens are always stored with a `validateEmail`-lowercased email,
+  // while a user's stored addresses may keep their original casing (e.g. OAuth-
+  // created accounts), so match on the lowercased form to line up with the
+  // stored keys — covering every address, not just the one that was reset.
+  const userEmails = Array.from(
+    new Set(
+      (userDoc.emails ?? [])
+        .map((e) => e.address?.toLowerCase())
+        .filter((address): address is string => Boolean(address))
+    )
+  );
+  if (userEmails.length > 0) {
+    await magicLinkTokensCollection.deleteMany({ email: { $in: userEmails } });
+  }
 
   // Token already consumed at the commit point; just drop the cookie.
   clearCookie();

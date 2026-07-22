@@ -31,6 +31,7 @@ const mockTime = { hours: vi.fn() };
 const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
 const mockInvalidateAllUserSessions = vi.fn();
+const mockMagicLinkTokensDeleteMany = vi.fn();
 
 vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
@@ -55,6 +56,9 @@ vi.doMock('./db', () => ({
     findOne: mockResetTokensFindOne,
     deleteOne: mockResetTokensDeleteOne,
     findOneAndDelete: mockResetTokensFindOneAndDelete,
+  },
+  magicLinkTokensCollection: {
+    deleteMany: mockMagicLinkTokensDeleteMany,
   },
 }));
 
@@ -672,6 +676,65 @@ describe('auth/resetPassword', () => {
         success: true,
         message: 'Password has been reset successfully',
       });
+    });
+
+    test('revokes outstanding magic link tokens for all of the user emails, lowercased', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      // Stored addresses keep their original casing (e.g. OAuth-created accounts),
+      // but magic link tokens are stored under the lowercased email — the revoke
+      // must line up with the stored keys, and cover every address on the user.
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [
+            { address: 'User@Example.com', verified: true },
+            { address: 'ALT@Example.com', verified: true },
+          ],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, email: 'user@example.com', token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      // Sessions are invalidated AND every outstanding magic link/code is deleted,
+      // so a link issued before the reset can't log an attacker back in.
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+      expect(mockMagicLinkTokensDeleteMany).toHaveBeenCalledWith({
+        email: { $in: ['user@example.com', 'alt@example.com'] },
+      });
+    });
+
+    test('does not attempt to revoke magic link tokens when the user has no emails', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(mockMagicLinkTokensDeleteMany).not.toHaveBeenCalled();
     });
 
     test('skips email verification for legacy tokens without email field', async () => {
