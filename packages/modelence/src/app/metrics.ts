@@ -83,7 +83,7 @@ async function initElasticApm() {
     defaultMeta: {
       serviceName,
     },
-    format: winston.format.combine(winston.format.json()),
+    format: winston.format.combine(winston.format.errors({ stack: true }), winston.format.json()),
     transports: [esTransport],
   });
 

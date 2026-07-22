@@ -13,6 +13,7 @@ vi.doMock('@/lock', () => ({
 
 vi.doMock('../telemetry', () => ({
   logInfo: mockLogInfo,
+  logError: mockLogInfo,
 }));
 
 vi.doMock('./db', () => ({
@@ -146,7 +147,9 @@ describe('migration/index', () => {
     await Promise.resolve();
 
     expect(mockAcquireLock).toHaveBeenCalledWith('migrations');
-    expect(consoleError).toHaveBeenCalledWith('Error running migrations:', expect.any(Error));
+    expect(mockLogInfo).toHaveBeenCalledWith('Migration startup failed', {
+      error: expect.any(Error),
+    });
 
     consoleError.mockRestore();
   });

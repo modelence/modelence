@@ -5,6 +5,7 @@ import { createSession, setAuthTokenCookie, consumeLinkNonce } from '@/auth/sess
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { logError } from '@/telemetry';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
@@ -39,7 +40,7 @@ export function sendOAuthError(res: Response, statusCode: number, errorMessage: 
       const html = authConfig.errorComponent({ error: errorMessage, statusCode });
       if (html) return response.send(html);
     } catch (err) {
-      console.error('Unhandled error in authConfig.errorComponent:', err);
+      logError('Unhandled error in authConfig.errorComponent', { error: err });
     }
   }
   return response.json({ error: errorMessage });
@@ -375,7 +376,7 @@ function safelyCallHook(hook?: () => void) {
   try {
     hook();
   } catch (err) {
-    console.error('Error executing OAuth hook:', err);
+    logError('Error executing OAuth hook', { error: err });
   }
 }
 

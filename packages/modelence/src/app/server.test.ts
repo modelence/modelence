@@ -106,6 +106,7 @@ vi.doMock('@/auth/providers/github', () => ({
 
 vi.doMock('@/telemetry', () => ({
   logInfo: mockLogInfo,
+  logError: mockLogInfo,
 }));
 
 vi.doMock('./securityConfig', () => ({

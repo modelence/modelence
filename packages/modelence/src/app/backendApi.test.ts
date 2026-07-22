@@ -130,10 +130,9 @@ describe('app/backendApi', () => {
         })
       ).rejects.toThrow('invalid container');
 
-      expect(consoleError).toHaveBeenCalledWith(
-        'Unable to connect to Modelence Cloud:',
-        expect.any(Error)
-      );
+      expect(consoleError).toHaveBeenCalledWith('Unable to connect to Modelence Cloud', {
+        error: expect.any(Error),
+      });
     });
 
     test('throws when MODELENCE_SERVICE_ENDPOINT is missing', async () => {

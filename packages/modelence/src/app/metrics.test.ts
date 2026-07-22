@@ -69,6 +69,7 @@ async function setupMetrics(options: SetupOptions = {}) {
       format: {
         combine: formatCombine,
         json: formatJson,
+        errors: vi.fn(),
       },
     },
   }));

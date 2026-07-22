@@ -27,6 +27,7 @@ function registerMocks() {
   vi.doMock('@/telemetry', () => ({
     startTransaction: mockStartTransaction,
     captureError: mockCaptureError,
+    logError: vi.fn(),
   }));
 
   vi.doMock('../data/store', () => ({
