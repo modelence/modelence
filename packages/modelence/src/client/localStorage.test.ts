@@ -1,4 +1,8 @@
-import { getLocalStorageSession, setLocalStorageSession } from './localStorage';
+import {
+  clearLocalStorageSession,
+  getLocalStorageSession,
+  setLocalStorageSession,
+} from './localStorage';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -93,6 +97,16 @@ describe('client/localStorage', () => {
       setLocalStorageSession(complexSession);
       const retrieved = getLocalStorageSession();
       expect(retrieved).toEqual(complexSession);
+    });
+  });
+
+  describe('clearLocalStorageSession', () => {
+    test('should remove the stored session', () => {
+      setLocalStorageSession({ authToken: 'token' });
+
+      clearLocalStorageSession();
+
+      expect(getLocalStorageSession()).toBeNull();
     });
   });
 });

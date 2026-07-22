@@ -13,7 +13,9 @@ vi.doMock('../../client/session', () => ({
 }));
 
 const mockGetLocalStorageSession = vi.fn();
+const mockClearLocalStorageSession = vi.fn();
 vi.doMock('../../client/localStorage', () => ({
+  clearLocalStorageSession: mockClearLocalStorageSession,
   getLocalStorageSession: mockGetLocalStorageSession,
 }));
 const mockFetch: MockedFunction<typeof fetch> = vi.fn();
@@ -79,6 +81,7 @@ describe('auth/client', () => {
     await authClient.logout();
 
     expect(mockCallMethod).toHaveBeenCalledWith('_system.user.logout');
+    expect(mockClearLocalStorageSession).toHaveBeenCalledTimes(1);
     expect(mockSetCurrentUser).toHaveBeenCalledWith(null);
   });
 

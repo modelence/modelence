@@ -1,6 +1,6 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
-import { getLocalStorageSession } from '@/client/localStorage';
+import { clearLocalStorageSession, getLocalStorageSession } from '@/client/localStorage';
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
@@ -151,6 +151,7 @@ export async function resendEmailVerification(options: { email: string }) {
  */
 export async function logout() {
   await callMethod('_system.user.logout');
+  clearLocalStorageSession();
   const config = getClientConfig();
   if (config) {
     config.setAuthToken(null);

@@ -25,3 +25,11 @@ export function setLocalStorageSession(session: object) {
 
   globalThis.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
+
+export function clearLocalStorageSession() {
+  if (!hasLocalStorage()) {
+    return;
+  }
+
+  globalThis.localStorage.removeItem(SESSION_KEY);
+}
