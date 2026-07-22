@@ -57,7 +57,6 @@ export function MagicLinkForm({
       try {
         await sendMagicLink({ email });
         setIsSent(true);
-        onSuccess?.();
       } catch (cause) {
         const requestError =
           cause instanceof Error
@@ -65,9 +64,12 @@ export function MagicLinkForm({
             : new Error("Unable to send sign-in link");
         setError(requestError.message);
         onError?.(requestError);
+        return;
       } finally {
         setIsSubmitting(false);
       }
+
+      onSuccess?.();
     },
     [onError, onSuccess],
   );
