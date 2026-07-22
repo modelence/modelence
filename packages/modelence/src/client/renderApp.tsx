@@ -80,9 +80,6 @@ export function renderApp(options: RenderAppOptions) {
     setErrorHandler(errorHandler);
   }
 
-  // Empty 'unload' handler prevents bfcache in most browsers.
-  window.addEventListener('unload', () => {});
-
   // Hydrate session BEFORE building the tree so `isSessionInitialized()` is
   // true on the first render and matches the server output. Hydration mode
   // tracks marker presence (not parse success): a parse failure still leaves

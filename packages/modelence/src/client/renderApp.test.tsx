@@ -109,7 +109,7 @@ describe('client/renderApp', () => {
     globalThis.window = originalWindow;
   });
 
-  test('initializes error handler, attaches unload listener, and renders AppProvider', () => {
+  test('initializes error handler and renders AppProvider', () => {
     renderApp({
       loadingElement: <div>Loading</div>,
       routesElement: <div>Routes</div>,
@@ -122,7 +122,6 @@ describe('client/renderApp', () => {
     const renderFn = rootResult ? (rootResult.value as { render: Mock }).render : undefined;
     expect(renderFn).toBeDefined();
     expect(renderFn).toHaveBeenCalledTimes(1);
-    expect(addEventListenerMock).toHaveBeenCalledWith('unload', expect.any(Function));
   });
 
   test('creates favicon link when none exists', () => {
