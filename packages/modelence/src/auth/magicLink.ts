@@ -386,16 +386,27 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
     const { userDoc, isNew } = upsertResult;
 
     if (!userDoc) {
-      // Only reachable with upsert:false, i.e. signup disabled and no account
-      // exists (with upsert:true the op always returns a doc). Defense in depth:
-      // the send path already refuses unknown emails when signup is off, but a
-      // token can outlive its account or the flag can flip between send and
-      // click. Nothing was created, so restore the token rather than burning a
-      // link on a state the user can't act on. This is a signup attempt the
-      // config forbids, so it routes to onSignupError (as the old signup path).
-      isSignupAttempt = true;
+      // Reachable only when the op ran as a pure find (no insert) yet matched
+      // nothing. Two cases, distinguished by whether the pre-gate resolved a
+      // handle (i.e. whether this request was a signup):
       await restoreClaimedMagicLinkToken(claimedToken);
       clearCookie();
+      if (signupEnabled && !isSignupAttempt) {
+        // Signup is on and the pre-gate saw an existing account, so no handle
+        // was resolved — but that account's emails were cleared (hard-delete)
+        // before the find, so the match missed. Refusing to insert a handle-less
+        // doc left userDoc null. This was a login whose account vanished
+        // mid-flight; nothing was created, so let the user retry.
+        throw new Error('User account is not active');
+      }
+      // Signup disabled and no account exists (with a permitted insert the op
+      // always returns a doc). Defense in depth: the send path already refuses
+      // unknown emails when signup is off, but a token can outlive its account
+      // or the flag can flip between send and click. Nothing was created, so
+      // restore the token rather than burning a link on a state the user can't
+      // act on. This is a signup attempt the config forbids, so it routes to
+      // onSignupError (as the old signup path).
+      isSignupAttempt = true;
       throw new Error('Sign up with magic link is not enabled');
     }
 
@@ -502,12 +513,22 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
  * can still race to insert the same email (a known Mongo caveat the unique
  * index turns into an E11000); a single retry re-runs the op, which now finds
  * the winner's doc and returns it as a login (`isNew: false`).
+ *
+ * The insert branch is additionally gated on a resolved handle: the pre-gate
+ * only computes `resolvedHandle` when it sees an unknown email, so if a
+ * concurrent hard-delete clears the existing account's emails between that read
+ * and this op, the `$elemMatch` would miss and insert a doc with no handle
+ * (violating the non-optional `handle` schema and its unique index). Refusing
+ * the insert without a handle turns that race into a pure find returning
+ * `null`, which the caller handles like signup-disabled — restore the token,
+ * don't burn a link on a handle-less account.
  */
 async function upsertMagicLinkUser(
   email: string,
   resolvedHandle: string | undefined,
   signupEnabled: boolean
 ): Promise<{ userDoc: User | null; isNew: boolean }> {
+  const canInsert = signupEnabled && resolvedHandle !== undefined;
   const runUpsert = () =>
     usersCollection.findOneAndUpsert(
       { emails: { $elemMatch: { address: email } } },
@@ -523,7 +544,7 @@ async function upsertMagicLinkUser(
           authMethods: {},
         },
       },
-      { upsert: signupEnabled, collation: USER_COLLATION }
+      { upsert: canInsert, collation: USER_COLLATION }
     );
 
   try {

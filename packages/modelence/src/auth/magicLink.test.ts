@@ -703,11 +703,14 @@ describe('auth/magicLink', () => {
         // Single-use claim by _id at the commit point.
         expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
         // Find-or-create keyed on the email via $elemMatch (avoids the upsert
-        // field-path conflict) with signup enabled and the shared collation.
+        // field-path conflict) with the shared collation. Upsert is false here:
+        // the pre-gate saw an existing account so no handle was resolved, and
+        // an insert without a handle is refused. The account exists, so the
+        // find matches and upsert being off is irrelevant to the outcome.
         expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
           { emails: { $elemMatch: { address: email } } },
           expect.any(Object),
-          { upsert: true, collation: { locale: 'en', strength: 2 } }
+          { upsert: false, collation: { locale: 'en', strength: 2 } }
         );
         // Clicking the link proves address ownership. The write uses the same
         // strength-2 collation as the lookups: the stored address may keep its
@@ -1077,6 +1080,58 @@ describe('auth/magicLink', () => {
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
         );
         expect(onLoginError).not.toHaveBeenCalled();
+      });
+
+      test('refuses a handle-less insert when a concurrent hard-delete voids the pre-gate match', async () => {
+        // Race: the pre-gate lookup finds an existing account (so no handle is
+        // resolved and this is a login, not a signup), but before the atomic
+        // find-or-create runs, a concurrent hard-delete clears that account's
+        // emails. The $elemMatch now misses. Because no handle was resolved, the
+        // insert is refused (upsert:false), so the op returns null instead of
+        // inserting a doc with a missing handle.
+        const onSignupError = vi.fn();
+        const onLoginError = vi.fn();
+        mockGetAuthConfig.mockReturnValue({
+          magicLink: { enabled: true, allowSignup: true },
+          onSignupError,
+          onLoginError,
+        });
+
+        const tokenDoc = createMockToken({ email });
+        mockTokensFindOne.mockResolvedValue(tokenDoc);
+        mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+        // Pre-gate sees the (about-to-be-deleted) account → skips signup side
+        // effects, leaves resolvedHandle undefined.
+        mockUsersFindOne.mockResolvedValue(
+          createMockUser({ emails: [{ address: email, verified: true }] })
+        );
+        // Atomic op finds nothing (emails cleared) and, with insert refused,
+        // returns no doc.
+        mockUsersFindOneAndUpsert.mockResolvedValue({ doc: null, isNew: false } as never);
+
+        const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
+
+        // Surfaced as a transient "not active" login failure the user can retry,
+        // NOT the misleading "sign up is not enabled" (signup IS enabled here).
+        await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
+          'User account is not active'
+        );
+
+        // Insert was refused, so upsert is false and no handle-less doc is written.
+        expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
+          { emails: { $elemMatch: { address: email } } },
+          expect.any(Object),
+          { upsert: false, collation: { locale: 'en', strength: 2 } }
+        );
+        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(clearCookie).toHaveBeenCalled();
+        // Nothing was created — restore the token so the link stays usable.
+        expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
+        // A login whose account vanished routes to onLoginError, never onSignupError.
+        expect(onLoginError).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
+        );
+        expect(onSignupError).not.toHaveBeenCalled();
       });
 
       test('a throwing onBeforeSignup restores the claimed token and fires onSignupError', async () => {
