@@ -1,4 +1,4 @@
-import { callMethod } from "modelence/client";
+import { sendMagicLink } from "modelence/client";
 import React, { useCallback, useState } from "react";
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
@@ -55,7 +55,7 @@ export function MagicLinkForm({
       setIsSubmitting(true);
 
       try {
-        await callMethod("_system.user.sendMagicLink", { email });
+        await sendMagicLink({ email });
         setIsSent(true);
         onSuccess?.();
       } catch (cause) {
@@ -96,8 +96,7 @@ export function MagicLinkForm({
 
           <CardContent className="text-center space-y-4">
             <p className="text-gray-600 dark:text-gray-400">
-              If an account uses this email address, we&apos;ve sent a sign-in
-              link.
+              If your email is eligible, we&apos;ve sent a sign-in link.
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-500">
               Use the link in the email to finish signing in. Don&apos;t see it?
