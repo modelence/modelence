@@ -6,6 +6,7 @@ import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
 import { time } from '../time';
+import { hashToken } from './tokenHash';
 import { Session } from './types';
 
 export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
@@ -51,14 +52,31 @@ export const sessionsCollection = new Store('_modelenceSessions', {
 });
 
 export async function obtainSession(authToken: string | null): Promise<Session> {
-  const existingSession = authToken ? await sessionsCollection.findOne({ authToken }) : null;
+  if (authToken) {
+    const hashedToken = hashToken(authToken);
+    let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
 
-  if (existingSession) {
-    return {
-      authToken: String(existingSession.authToken),
-      expiresAt: new Date(existingSession.expiresAt),
-      userId: existingSession.userId ?? null,
-    };
+    // Legacy fallback: try raw token lookup (pre-hash sessions)
+    // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
+    // replay attacks using leaked hashed tokens.
+    const isHex64 = /^[0-9a-f]{64}$/i.test(authToken);
+    if (!existingSession && !isHex64) {
+      existingSession = await sessionsCollection.findOne({ authToken });
+      if (existingSession) {
+        await sessionsCollection.updateOne(
+          { _id: existingSession._id as ObjectId },
+          { $set: { authToken: hashedToken } }
+        );
+      }
+    }
+
+    if (existingSession) {
+      return {
+        authToken,
+        expiresAt: new Date(existingSession.expiresAt),
+        userId: existingSession.userId ?? null,
+      };
+    }
   }
 
   return await createSession();
@@ -66,7 +84,7 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
 
 export async function setSessionUser(authToken: string, userId: ObjectId) {
   await sessionsCollection.updateOne(
-    { authToken },
+    { authToken: hashToken(authToken) },
     {
       $set: { userId },
     }
@@ -75,7 +93,7 @@ export async function setSessionUser(authToken: string, userId: ObjectId) {
 
 export async function clearSessionUser(authToken: string) {
   await sessionsCollection.updateOne(
-    { authToken },
+    { authToken: hashToken(authToken) },
     {
       $set: { userId: null },
     }
@@ -94,7 +112,7 @@ export async function createSession(userId: ObjectId | null = null): Promise<Ses
   const expiresAt = new Date(now + time.days(7));
 
   await sessionsCollection.insertOne({
-    authToken,
+    authToken: hashToken(authToken),
     createdAt: new Date(now),
     expiresAt,
     userId,
@@ -112,7 +130,7 @@ async function processSessionHeartbeat(session: Session) {
   const newExpiresAt = new Date(now + time.days(7));
 
   await sessionsCollection.updateOne(
-    { authToken: session.authToken },
+    { authToken: hashToken(session.authToken) },
     {
       $set: {
         lastActiveDate: new Date(now),
