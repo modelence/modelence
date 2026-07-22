@@ -160,6 +160,35 @@ describe('routes/handler', () => {
     expect(res.send).toHaveBeenCalledWith({ ok: true });
   });
 
+  test('applies contentType before sending the response body', async () => {
+    const handler = createRouteHandler('GET', '/report', async () => ({
+      data: 'name,email\nAda,ada@example.com',
+      contentType: 'text/csv; charset=utf-8',
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv; charset=utf-8');
+    const contentTypeOrder = (res.setHeader as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0];
+    const sendOrder = (res.send as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(contentTypeOrder).toBeLessThan(sendOrder);
+    expect(res.send).toHaveBeenCalledWith('name,email\nAda,ada@example.com');
+  });
+
+  test('allows custom Content-Type headers to override contentType', async () => {
+    const handler = createRouteHandler('GET', '/report', async () => ({
+      data: 'report',
+      contentType: 'text/csv',
+      headers: { 'Content-Type': 'application/vnd.ms-excel' },
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.setHeader).toHaveBeenNthCalledWith(1, 'Content-Type', 'text/csv');
+    expect(res.setHeader).toHaveBeenNthCalledWith(2, 'Content-Type', 'application/vnd.ms-excel');
+  });
+
   test('handles ModelenceError gracefully', async () => {
     const handler = createRouteHandler('GET', '/test', async () => {
       throw new ValidationError('fail');

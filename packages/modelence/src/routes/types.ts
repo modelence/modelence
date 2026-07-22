@@ -28,9 +28,12 @@ export type RouteResponse<T = unknown> = {
   data?: T;
   status?: number;
   headers?: Record<string, string>;
+  /**
+   * Sets the response Content-Type before sending `data`. A Content-Type supplied
+   * through `headers` takes precedence when both options are provided.
+   */
+  contentType?: string;
   redirect?: string;
-  // contentType?: string;
-  // filename?: string;
 } | null;
 
 export type RouteHandler<T = unknown> = (

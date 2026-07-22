@@ -52,8 +52,14 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
       if (response) {
         res.status(response.status || 200);
 
-        // Apply custom headers before sending the body/redirect, otherwise
+        // Apply response headers before sending the body/redirect, otherwise
         // res.redirect()/res.send() flush the response and the headers are lost.
+        if (response.contentType) {
+          res.setHeader('Content-Type', response.contentType);
+        }
+
+        // Custom headers are applied after contentType so callers can override
+        // it with headers['Content-Type'] when needed.
         if (response.headers) {
           Object.entries(response.headers).forEach(([key, value]) => {
             res.setHeader(key, value);
