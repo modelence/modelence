@@ -85,6 +85,8 @@ export type AuthRateLimitsConfig = {
   magicLink?: AuthRateLimitOverride[];
   /** Rate limits for one-time code sign-in attempts. */
   oneTimeCode?: AuthRateLimitOverride[];
+  /** Per-user rate limits for profile updates. */
+  updateProfile?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {
