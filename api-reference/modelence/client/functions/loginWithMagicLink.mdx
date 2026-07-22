@@ -1,0 +1,28 @@
+---
+sidebar_position: 1
+title: loginWithMagicLink
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / loginWithMagicLink
+
+> **loginWithMagicLink**(): `Promise`\<`null` \| `User`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:207](https://github.com/modelence/modelence/blob/1e9ff395f60f475313a797050277f80af6a46693/packages/modelence/src/auth/client/index.ts#L207)
+
+Complete a magic link sign-in.
+
+Call this from the page the magic link landing route redirects to. The
+token is exchanged server-side via an httpOnly cookie, so no arguments are
+needed. Signs the user in — creating the account first when the email is
+not registered yet and the server enables `auth.magicLink.allowSignup` —
+and returns the logged-in user.
+
+## Example
+
+```ts
+const user = await loginWithMagicLink();
+```
+
+## Returns
+
+`Promise`\<`null` \| `User`\>

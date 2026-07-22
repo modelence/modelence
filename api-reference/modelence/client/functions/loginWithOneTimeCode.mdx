@@ -1,0 +1,36 @@
+---
+sidebar_position: 1
+title: loginWithOneTimeCode
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / loginWithOneTimeCode
+
+> **loginWithOneTimeCode**(`options`): `Promise`\<`null` \| `User`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:235](https://github.com/modelence/modelence/blob/1e9ff395f60f475313a797050277f80af6a46693/packages/modelence/src/auth/client/index.ts#L235)
+
+Complete a magic link sign-in by typing the one-time code from the email.
+
+Alternative to `loginWithMagicLink()` for contexts where clicking the link
+can't reach the app — native apps without deep links, or when the email is
+read on a different device. Signs the user in — creating the account first
+when the email is not registered yet and the server enables
+`auth.magicLink.allowSignup` — and returns the logged-in user.
+
+## Example
+
+```ts
+const user = await loginWithOneTimeCode({ email: 'user@example.com', code: '482193' });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `code`: `string`; `email`: `string`; \} | - |
+| `options.code` | `string` | The one-time code from the email. |
+| `options.email` | `string` | The email the magic link was sent to. |
+
+## Returns
+
+`Promise`\<`null` \| `User`\>
