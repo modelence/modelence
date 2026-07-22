@@ -170,6 +170,83 @@ export async function sendResetPasswordToken(options: { email: string }) {
 }
 
 /**
+ * Send a magic sign-in link to the given email address.
+ *
+ * Clicking the emailed link signs the user in. When the server enables
+ * `auth.magicLink.allowSignup`, this also works for new users — the account is
+ * created when the link is used; otherwise unknown emails receive no email.
+ * A generic response is always returned to avoid leaking account information.
+ *
+ * @example
+ * ```ts
+ * await sendMagicLink({ email: 'user@example.com' });
+ * ```
+ * @param options.email - The email address to send the magic link to.
+ */
+export async function sendMagicLink(options: { email: string }) {
+  const { email } = options;
+  await callMethod('_system.user.sendMagicLink', {
+    email,
+  });
+}
+
+/**
+ * Complete a magic link sign-in.
+ *
+ * Call this from the page the magic link landing route redirects to. The
+ * token is exchanged server-side via an httpOnly cookie, so no arguments are
+ * needed. Signs the user in — creating the account first when the email is
+ * not registered yet and the server enables `auth.magicLink.allowSignup` —
+ * and returns the logged-in user.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithMagicLink();
+ * ```
+ */
+export async function loginWithMagicLink() {
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithMagicLink'
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
+ * Complete a magic link sign-in by typing the one-time code from the email.
+ *
+ * Alternative to `loginWithMagicLink()` for contexts where clicking the link
+ * can't reach the app — native apps without deep links, or when the email is
+ * read on a different device. Signs the user in — creating the account first
+ * when the email is not registered yet and the server enables
+ * `auth.magicLink.allowSignup` — and returns the logged-in user.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithOneTimeCode({ email: 'user@example.com', code: '482193' });
+ * ```
+ * @param options.email - The email the magic link was sent to.
+ * @param options.code - The one-time code from the email.
+ */
+export async function loginWithOneTimeCode(options: { email: string; code: string }) {
+  const { email, code } = options;
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOneTimeCode',
+    { email, code }
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
  * Reset password.
  *
  * The token is normally exchanged server-side via an httpOnly cookie, so the

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { ObjectId } from 'mongodb';
+import { MongoServerError, type ObjectId } from 'mongodb';
 
 const createObjectId = (value: string): ObjectId =>
   ({
@@ -58,6 +58,12 @@ vi.doMock('./db', () => ({
 
 vi.doMock('./utils', () => ({
   resolveUniqueHandle: mockResolveUniqueHandle,
+  isDuplicateEmailError: (error: unknown) =>
+    error instanceof MongoServerError &&
+    error.code === 11000 &&
+    typeof error.keyPattern === 'object' &&
+    error.keyPattern !== null &&
+    'emails.address' in error.keyPattern,
 }));
 
 const { handleSignupWithPassword } = await import('./signup');
@@ -316,6 +322,32 @@ describe('auth/signup', () => {
 
     expect(authConfig.onSignupError).toHaveBeenCalled();
     expect(authConfig.signup.onError).toHaveBeenCalled();
+  });
+
+  test('throws already-exists when a concurrent signup wins the race and the unique index rejects the insert', async () => {
+    // The findOne pre-check sees nothing (concurrent request has not inserted yet)...
+    mockFindOne.mockResolvedValueOnce(null as never);
+    // ...but by insert time the unique emails.address index rejects the duplicate.
+    const dupError = new MongoServerError({ message: 'E11000 duplicate key' });
+    dupError.code = 11000;
+    dupError.keyPattern = { 'emails.address': 1 };
+    mockInsertOne.mockRejectedValueOnce(dupError as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('User with email already exists: test@example.com');
+
+    expect(authConfig.onSignupError).toHaveBeenCalled();
+    expect(mockSendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  test('rethrows a non-duplicate insert error', async () => {
+    mockFindOne.mockResolvedValueOnce(null as never);
+    mockInsertOne.mockRejectedValueOnce(new Error('disk full') as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('disk full');
   });
 
   test('invokes onBeforeSignup with normalized props before insert', async () => {

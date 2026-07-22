@@ -62,6 +62,17 @@ export const usersCollection = new Store('_modelenceUsers', {
       key: { 'emails.address': 1, status: 1 },
     },
     {
+      // Race-proof guard against two accounts sharing an email: the check-then-
+      // insert in the signup paths (password + magic link) can interleave, so
+      // the DB must enforce uniqueness. Case-insensitive collation matches the
+      // `handle` index and the emails.address lookups. Partial so the many
+      // legacy/optional docs without an `emails` array don't all collide on null.
+      key: { 'emails.address': 1 },
+      unique: true,
+      collation: { locale: 'en', strength: 2 },
+      partialFilterExpression: { 'emails.address': { $exists: true } },
+    },
+    {
       key: { 'authMethods.google.id': 1 },
       sparse: true,
       unique: true,
@@ -119,6 +130,42 @@ export const resetPasswordTokensCollection = new Store('_modelenceResetPasswordT
     {
       key: { token: 1 },
       unique: true,
+    },
+    {
+      key: { expiresAt: 1 },
+      expireAfterSeconds: 0,
+    },
+  ],
+});
+
+// No userId field: the login mutation re-resolves the user by email to support
+// find-or-create (magic link signs up unknown emails), and a userId captured at
+// send time could go stale before the link is clicked.
+//
+// Each doc backs two credentials for the same sign-in: the long `token` (link)
+// and the short `code` (typed one-time code). Consuming either deletes the doc,
+// invalidating both.
+export const magicLinkTokensCollection = new Store('_modelenceMagicLinkTokens', {
+  schema: {
+    email: schema.string(),
+    token: schema.string(),
+    code: schema.string(),
+    // Failed code guesses; docs at the attempt cap can no longer be used.
+    attempts: schema.number(),
+    createdAt: schema.date(),
+    expiresAt: schema.date(),
+  },
+  indexes: [
+    {
+      key: { token: 1 },
+      unique: true,
+    },
+    {
+      // The one-time-code path is keyed by email: the login looks up
+      // { email, code, attempts } and every wrong guess runs
+      // updateMany({ email }). Both are attacker-reachable (rate-limited,
+      // but still a hot path) and would be collection scans without this.
+      key: { email: 1 },
     },
     {
       key: { expiresAt: 1 },

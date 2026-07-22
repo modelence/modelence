@@ -4,10 +4,16 @@ import type { MockedFunction } from 'vitest';
 const mockGetLocalStorageSession = vi.fn();
 const mockHandleError = vi.fn();
 const mockReviveResponseTypes = vi.fn();
+const mockGetClientConfig = vi.fn();
 
 vi.doMock('@/client/localStorage', () => ({
   getLocalStorageSession: mockGetLocalStorageSession,
   setLocalStorageSession: vi.fn(),
+}));
+
+vi.doMock('@/client/clientConfig', () => ({
+  getClientConfig: mockGetClientConfig,
+  configureClient: vi.fn(),
 }));
 
 vi.doMock('./errorHandler', () => ({
@@ -28,6 +34,7 @@ describe('client/method', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = fetchMock as unknown as typeof fetch;
+    mockGetClientConfig.mockReturnValue(null);
     mockGetLocalStorageSession.mockReturnValue({ authToken: 'token' });
     mockReviveResponseTypes.mockImplementation((data) => data);
     fetchMock.mockResolvedValue({
@@ -72,6 +79,50 @@ describe('client/method', () => {
     expect(mockReviveResponseTypes).toHaveBeenCalledWith({ ok: true }, {});
     expect(result).toEqual({ ok: true });
     spyJSON.mockRestore();
+  });
+
+  test('callMethod honors the configured credentials mode', async () => {
+    const clientInfo = {
+      screenWidth: 0,
+      screenHeight: 0,
+      windowWidth: 0,
+      windowHeight: 0,
+      pixelRatio: 1,
+      orientation: null,
+    };
+    // Token-in-body clients (React Native / Expo) never use cookies; on Expo
+    // Web a credentialed cross-origin request is blocked by a wildcard
+    // Access-Control-Allow-Origin, so they opt out via `credentials: 'omit'`.
+    mockGetClientConfig.mockReturnValue({
+      baseUrl: 'https://api.example.com',
+      getAuthToken: () => 'rn-token',
+      setAuthToken: vi.fn(),
+      getClientInfo: () => clientInfo,
+      credentials: 'omit',
+    });
+
+    await callMethod('test.method');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/api/_internal/method/test.method',
+      expect.objectContaining({ credentials: 'omit' })
+    );
+
+    // A config without `credentials` keeps the cookie-friendly default.
+    fetchMock.mockClear();
+    mockGetClientConfig.mockReturnValue({
+      baseUrl: 'https://api.example.com',
+      getAuthToken: () => 'rn-token',
+      setAuthToken: vi.fn(),
+      getClientInfo: () => clientInfo,
+    });
+
+    await callMethod('test.method');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: 'include' })
+    );
   });
 
   test('callMethod throws MethodError with status code and propagates errors with handleError notification', async () => {

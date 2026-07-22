@@ -5,6 +5,7 @@ const mockInsertOne = vi.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
+const mockMagicLinkTokensCollection = { name: 'magicLink' };
 
 const mockUpdateDisposableEmailListCron = vi.fn();
 const mockHandleLoginWithPassword = vi.fn();
@@ -15,6 +16,10 @@ const mockHandleResendEmailVerification = vi.fn();
 const mockHandleSendResetPasswordToken = vi.fn();
 const mockHandleResetPassword = vi.fn();
 const mockHandleResetPasswordLanding = vi.fn();
+const mockHandleSendMagicLink = vi.fn();
+const mockHandleLoginWithMagicLink = vi.fn();
+const mockHandleLoginWithOneTimeCode = vi.fn();
+const mockHandleMagicLinkLanding = vi.fn();
 const mockGetOwnProfile = vi.fn();
 const mockHandleUpdateProfile = vi.fn();
 
@@ -31,6 +36,7 @@ vi.doMock('./db', () => ({
   dbDisposableEmailDomains: mockDbDisposableEmailDomains,
   emailVerificationTokensCollection: mockEmailVerificationTokensCollection,
   resetPasswordTokensCollection: mockResetPasswordTokensCollection,
+  magicLinkTokensCollection: mockMagicLinkTokensCollection,
 }));
 
 vi.doMock('./disposableEmails', () => ({
@@ -60,6 +66,13 @@ vi.doMock('./resetPassword', () => ({
   handleSendResetPasswordToken: mockHandleSendResetPasswordToken,
   handleResetPassword: mockHandleResetPassword,
   handleResetPasswordLanding: mockHandleResetPasswordLanding,
+}));
+
+vi.doMock('./magicLink', () => ({
+  handleSendMagicLink: mockHandleSendMagicLink,
+  handleLoginWithMagicLink: mockHandleLoginWithMagicLink,
+  handleLoginWithOneTimeCode: mockHandleLoginWithOneTimeCode,
+  handleMagicLinkLanding: mockHandleMagicLinkLanding,
 }));
 
 const mockTime = {
@@ -125,6 +138,7 @@ describe('auth/user', () => {
           mockDbDisposableEmailDomains,
           mockEmailVerificationTokensCollection,
           mockResetPasswordTokensCollection,
+          mockMagicLinkTokensCollection,
         ]),
         queries: {
           getOwnProfile: mockGetOwnProfile,
@@ -136,6 +150,9 @@ describe('auth/user', () => {
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,
+          sendMagicLink: mockHandleSendMagicLink,
+          loginWithMagicLink: mockHandleLoginWithMagicLink,
+          loginWithOneTimeCode: mockHandleLoginWithOneTimeCode,
           updateProfile: mockHandleUpdateProfile,
         }),
         cronJobs: {
@@ -147,6 +164,7 @@ describe('auth/user', () => {
           expect.objectContaining({ bucket: 'signin', limit: 50 }),
           expect.objectContaining({ bucket: 'verification', limit: 1 }),
           expect.objectContaining({ bucket: 'passwordReset', limit: 10 }),
+          expect.objectContaining({ bucket: 'magicLink', limit: 10 }),
         ]),
         routes: [
           {
@@ -159,6 +177,12 @@ describe('auth/user', () => {
             path: '/api/_internal/auth/reset-password',
             handlers: {
               get: mockHandleResetPasswordLanding,
+            },
+          },
+          {
+            path: '/api/_internal/auth/magic-link',
+            handlers: {
+              get: mockHandleMagicLinkLanding,
             },
           },
         ],
@@ -199,13 +223,21 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 12 rules covering all auth buckets', () => {
+    test('produces exactly 20 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(12);
+      expect(rules).toHaveLength(20);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
-        new Set(['signup', 'signupAttempt', 'signin', 'verification', 'passwordReset'])
+        new Set([
+          'signup',
+          'signupAttempt',
+          'signin',
+          'verification',
+          'passwordReset',
+          'magicLink',
+          'oneTimeCode',
+        ])
       );
     });
 

@@ -11,6 +11,16 @@ export interface ClientConfig {
    * Defaults to `window.location.href` when not provided.
    */
   openUrl?: (url: string) => void;
+  /**
+   * Credentials mode for method-call requests. Defaults to `'include'`, which
+   * browser apps need for the cookie-based flows (password reset, magic link).
+   *
+   * Clients configured with token-in-body auth (React Native / Expo) never use
+   * cookies, so set `'omit'` there — on Expo Web a credentialed cross-origin
+   * request is otherwise blocked by any server answering
+   * `Access-Control-Allow-Origin: *`, surfacing as "TypeError: Failed to fetch".
+   */
+  credentials?: RequestCredentials;
 }
 
 let config: ClientConfig | null = null;

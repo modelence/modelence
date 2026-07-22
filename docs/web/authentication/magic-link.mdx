@@ -1,0 +1,248 @@
+---
+title: 'Magic Link'
+---
+
+Modelence supports passwordless authentication with magic links: the user enters their email address and receives an email with a single-use sign-in **link** and a matching **one-time code**. Clicking the link signs them in; typing the code does the same — useful on mobile apps or when the email is read on a different device.
+
+Magic link can also work as a combined sign-in and sign-up: with the `allowSignup` option enabled, an account is created automatically when the link or code is used for an email that is not registered yet — just like OAuth sign-in. This is disabled by default (see [Sign-Up Behavior](#sign-up-behavior)).
+
+> The magic link email delivery setup below (provider, sender, template, redirect URL) is configured under the **`email:`** key of `startApp`. To run code on related auth events, register callbacks under **`auth:`** — see [Auth Hooks](/authentication/hooks).
+
+## Configuration
+
+Magic link authentication is disabled by default. Enable it under the `auth:` key of `startApp` and configure the email delivery under the `email:` key:
+
+```typescript
+import { startApp } from 'modelence/server';
+import resendProvider from '@modelence/resend';
+
+startApp({
+  auth: {
+    magicLink: {
+      enabled: true,
+      // Optional: also create accounts for unknown emails (default: false)
+      allowSignup: true,
+    },
+  },
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    magicLink: {
+      subject: 'Your sign-in link',
+      redirectUrl: 'https://yourdomain.com/auth/magic-link',
+    },
+  },
+});
+```
+
+`redirectUrl` is the page in your app that completes the sign-in. Modelence redirects here **after** validating the token and storing it in an `httpOnly` cookie, so this URL never carries the token. This is also where you call [`loginWithMagicLink()`](#complete-the-sign-in).
+
+## How It Works
+
+1. User requests a magic link by providing their email
+2. A secure single-use link token and a 6-digit one-time code are generated, hashed, and stored in the database (only the hashes are stored, never the raw values). Both expire after 15 minutes, and using either one invalidates both
+3. An email with the sign-in link and the code is sent to the address. The response is always the same generic message, so it never reveals whether an email is registered (with `allowSignup` disabled, unknown emails get the same response but no email is sent)
+4. The link points at a Modelence server route, **not** your SPA page. That route validates the token, stores it in a short-lived `httpOnly` cookie, and redirects to your configured `redirectUrl` **without the token in the URL**. The token is **not** consumed at this step, so email security scanners that prefetch links cannot burn it
+5. On that page, you call `loginWithMagicLink()` — the token is read server-side from the cookie, atomically consumed (single-use), and the user is signed in. Alternatively, the user types the code anywhere and you call `loginWithOneTimeCode({ email, code })`
+6. If no account exists for the email and `allowSignup` is enabled, one is created first (see [Sign-Up Behavior](#sign-up-behavior))
+7. The email address is marked as verified — using the emailed link or code proves ownership
+
+<Note>
+The magic link token never reaches your client code or appears in a browser URL — it is exchanged server-side through an `httpOnly` cookie, the same pattern used by [password reset](/authentication/password-reset). This closes the window where a token could leak via the address bar, browser history, or the `Referer` header.
+</Note>
+
+### Base URL requirement
+
+The magic link is built from your site's base URL, so you must set it via the `_system.site.url` config (or the `MODELENCE_SITE_URL` environment variable). If it isn't set, sending a magic link fails with a clear error rather than emailing a broken link.
+
+### Sender address requirement
+
+`email.from` must be set to an address on your own domain. There is no default sender — if it isn't configured, sending a magic link fails with a clear error rather than sending from an address your email provider can't authenticate (SPF/DKIM).
+
+## Client Implementation
+
+### Request a Magic Link
+
+```typescript
+import { sendMagicLink } from 'modelence/client';
+
+async function handleMagicLinkRequest(email: string) {
+  try {
+    await sendMagicLink({ email });
+    console.log('Check your email for a sign-in link');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+```
+
+A typical email form:
+
+```tsx
+import { useState } from 'react';
+import { sendMagicLink } from 'modelence/client';
+
+function MagicLinkForm() {
+  const [isSent, setIsSent] = useState(false);
+
+  if (isSent) {
+    return <p>Check your email — we&apos;ve sent you a sign-in link.</p>;
+  }
+
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const email = new FormData(event.currentTarget).get('email') as string;
+        await sendMagicLink({ email });
+        setIsSent(true);
+      }}
+    >
+      <input name="email" type="email" placeholder="you@example.com" required />
+      <button type="submit">Email me a sign-in link</button>
+    </form>
+  );
+}
+```
+
+### Complete the Sign-In
+
+The user lands on your `redirectUrl` page after clicking the email link. The token is already held in an `httpOnly` cookie, so no arguments are needed:
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import { loginWithMagicLink } from 'modelence/client';
+
+function MagicLinkLoginPage() {
+  const [error, setError] = useState<string | null>(null);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    // Guard against double-invocation (React StrictMode) — the token is
+    // single-use, so the mutation must only run once.
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    // The landing route redirects here with ?status=error when the link is
+    // invalid or expired.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('status') === 'error') {
+      setError(params.get('message') ?? 'This sign-in link is invalid or has expired.');
+      return;
+    }
+
+    loginWithMagicLink()
+      .then(() => {
+        window.location.href = '/';
+      })
+      .catch((err) => setError(err.message));
+  }, []);
+
+  if (error) {
+    return <p>{error}</p>;
+  }
+
+  return <p>Signing you in…</p>;
+}
+```
+
+### Sign In with the One-Time Code
+
+The same email carries a 6-digit code, so users can complete the sign-in without clicking the link — the natural path for native apps (Expo / React Native) where deep links aren't set up, or when the email is opened on a different device than the one signing in:
+
+```tsx
+import { useState } from 'react';
+import { loginWithOneTimeCode } from 'modelence/client';
+
+function OneTimeCodeForm({ email }: { email: string }) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <form
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const code = new FormData(event.currentTarget).get('code') as string;
+        try {
+          await loginWithOneTimeCode({ email, code });
+          // Signed in — navigate to your app's home screen
+        } catch (err) {
+          setError((err as Error).message);
+        }
+      }}
+    >
+      <input name="code" inputMode="numeric" placeholder="6-digit code" required />
+      <button type="submit">Sign in</button>
+      {error && <p>{error}</p>}
+    </form>
+  );
+}
+```
+
+Whitespace and dashes in the typed code are ignored, so `482 193` and `482-193` both work. Each code tolerates only a few wrong guesses before it is invalidated, and using the code invalidates the link (and vice versa).
+
+## Sign-Up Behavior
+
+Automatic account creation is a separate opt-in from enabling magic links, and it is **disabled by default**: unknown emails receive no email (the response stays the same generic message), and a link or code can never create an account. Enable it with `allowSignup`:
+
+```typescript
+startApp({
+  auth: {
+    magicLink: {
+      enabled: true,
+      allowSignup: true,
+    },
+  },
+});
+```
+
+With `allowSignup` enabled, when a magic link is used for an email with no existing account, Modelence creates one automatically:
+
+- The account is created with the email already marked as **verified**
+- The handle is derived from the email local-part (or via your [`generateHandle`](/authentication/hooks) hook)
+- The [`onBeforeSignup`](/authentication/hooks) hook runs first and can reject the signup by throwing; [`onAfterSignup`](/authentication/hooks) fires after the account is created
+- No password is set — the user can keep signing in with magic links, add a password later via password reset, or link an OAuth provider
+
+For existing accounts, magic link works regardless of how the account was originally created (password or OAuth) — [`onAfterLogin`](/authentication/hooks) fires as usual. All magic link hook invocations use `provider: 'magicLink'`.
+
+## Custom Email Template
+
+The template receives both credentials — `magicLinkUrl` (the clickable link) and `code` (the typed one-time code) — so you can render either or both:
+
+```typescript
+startApp({
+  email: {
+    provider: resendProvider,
+    from: 'noreply@yourdomain.com',
+    magicLink: {
+      subject: 'Sign in to YourApp',
+      template: ({ name, email, magicLinkUrl, code }) => `
+        <html>
+          <body>
+            <h1>Sign in to YourApp</h1>
+            <p>Hi ${name || 'there'},</p>
+            <p>Click the button below to sign in as ${email}:</p>
+            <a href="${magicLinkUrl}"
+               style="background-color: #5509D9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              Sign In
+            </a>
+            <p>Or enter this code in the app:</p>
+            <p style="font-size: 28px; font-weight: bold; letter-spacing: 6px;">${code}</p>
+            <p>The link and code can only be used once and will expire in 15 minutes.</p>
+            <p>If you didn't request this, you can safely ignore this email.</p>
+          </body>
+        </html>
+      `,
+      redirectUrl: 'https://yourdomain.com/auth/magic-link',
+    },
+  },
+});
+```
+
+## Security
+
+- **Single-use, short-lived credentials** — the link and code work exactly once (using either invalidates both) and expire after 15 minutes
+- **Hashed at rest** — only SHA-256 hashes are stored, so a database leak does not expose usable links
+- **Scanner-safe** — the emailed link only stashes the token in a cookie; it is consumed by the follow-up client call, so corporate email scanners that prefetch links do not invalidate them
+- **Guess-resistant codes** — each code allows only a handful of wrong guesses before it is invalidated, and code attempts are separately rate limited per IP and per email
+- **No enumeration** — requesting a link always returns the same generic response, whether or not the email is registered; a wrong code returns the same error as an unknown email
+- **Rate limited** — magic link requests and code attempts are limited per IP and per email address; see [Rate Limiting](/authentication/rate-limiting) to customize the `magicLink` and `oneTimeCode` buckets
