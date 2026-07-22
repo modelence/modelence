@@ -147,6 +147,19 @@ describe('auth/login', () => {
     });
   });
 
+  test('runs bcrypt against a dummy hash when the email is unknown', async () => {
+    mockFindOne.mockResolvedValue(null as never);
+
+    await expect(
+      handleLoginWithPassword(
+        { email: 'unknown@example.com', password: 'Secret123' },
+        baseContext as never
+      )
+    ).rejects.toThrow('Incorrect email/password combination');
+
+    expect(mockCompare).toHaveBeenCalledWith('Secret123', expect.stringMatching(/^\$2b\$10\$/));
+  });
+
   test('throws unverified error when email is unverified and provider configured', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439012');
     mockFindOne.mockResolvedValue({
@@ -182,6 +195,25 @@ describe('auth/login', () => {
       connectionInfo: baseContext.connectionInfo,
     });
     expect(authConfig.login.onError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  test('does not reveal an unverified email when the password is incorrect', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439023');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: false }],
+    } as never);
+    mockGetEmailConfig.mockReturnValue({ provider: 'resend' });
+    mockCompare.mockResolvedValue(false as never);
+
+    await expect(
+      handleLoginWithPassword(
+        { email: 'user@example.com', password: 'wrong' },
+        baseContext as never
+      )
+    ).rejects.toThrow('Incorrect email/password combination');
   });
 
   test('allows unverified login when verification flag is disabled', async () => {
