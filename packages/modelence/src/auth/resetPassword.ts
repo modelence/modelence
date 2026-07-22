@@ -263,11 +263,17 @@ export async function handleResetPassword(args: Args, context: Context) {
     { $set: { 'authMethods.password.hash': hash } }
   );
 
-  // Mark the email as verified since the user proved ownership via the reset token
+  // Mark the email as verified since the user proved ownership via the reset token.
+  // Match with strength-2 collation: `resetTokenDoc.email` is lowercased, but the
+  // stored address may keep its original casing (e.g. OAuth-created accounts), and
+  // without the collation the positional `$` update would match nothing — leaving
+  // the email unverified after a successful reset and blocking password login when
+  // verification is required.
   if (resetTokenDoc.email) {
     await usersCollection.updateOne(
       { _id: userDoc._id, 'emails.address': resetTokenDoc.email },
-      { $set: { 'emails.$.verified': true } }
+      { $set: { 'emails.$.verified': true } },
+      { collation: { locale: 'en', strength: 2 } }
     );
   }
 

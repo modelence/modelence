@@ -25,6 +25,7 @@ import {
   MongoError,
   FilterOperators,
   SortDirection,
+  CollationOptions,
   FindOneAndUpdateOptions,
   FindOneAndDeleteOptions,
   FindOneAndReplaceOptions,
@@ -996,7 +997,7 @@ export class Store<
   async updateOne(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: { session?: ClientSession }
+    options?: { session?: ClientSession; collation?: CollationOptions }
   ): Promise<UpdateResult> {
     return await this.requireCollection().updateOne(this.getSelector(selector), update, options);
   }

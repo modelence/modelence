@@ -665,10 +665,13 @@ describe('auth/resetPassword', () => {
         { _id: userId },
         { $set: { 'authMethods.password.hash': hashedPassword } }
       );
+      // The verify write uses strength-2 collation so a lowercased token email
+      // still matches a stored address that kept its original casing.
       expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
         2,
         { _id: userId, 'emails.address': email },
-        { $set: { 'emails.$.verified': true } }
+        { $set: { 'emails.$.verified': true } },
+        { collation: { locale: 'en', strength: 2 } }
       );
       expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
@@ -676,6 +679,38 @@ describe('auth/resetPassword', () => {
         success: true,
         message: 'Password has been reset successfully',
       });
+    });
+
+    test('verifies the email with strength-2 collation so mixed-case stored addresses still match', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+      // Token email is lowercased; the stored address kept its original casing
+      // (e.g. an OAuth-created account). Without collation the positional update
+      // would miss and leave the email unverified after a successful reset.
+      const tokenEmail = 'user@example.com';
+
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [{ address: 'User@Example.com', verified: false }],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, email: tokenEmail, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: userId, 'emails.address': tokenEmail },
+        { $set: { 'emails.$.verified': true } },
+        { collation: { locale: 'en', strength: 2 } }
+      );
     });
 
     test('revokes outstanding magic link tokens for all of the user emails, lowercased', async () => {
