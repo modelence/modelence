@@ -68,20 +68,20 @@ export async function startCronJobs() {
 
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
     const now = Date.now();
-    cronJobRecords.forEach((record) => {
+    for (const record of cronJobRecords) {
       const job = cronJobs[record.alias];
       if (!job) {
-        return;
+        continue;
       }
       job.state.scheduledRunTs = record.lastStartDate
         ? record.lastStartDate.getTime() + job.params.interval
         : now;
-    });
-    Object.values(cronJobs).forEach((job) => {
+    }
+    for (const job of Object.values(cronJobs)) {
       if (!job.state.scheduledRunTs) {
         job.state.scheduledRunTs = now;
       }
-    });
+    }
 
     cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
@@ -99,22 +99,24 @@ async function tickCronJobs() {
     return;
   }
 
-  Object.values(cronJobs).forEach(async (job) => {
-    const { params, state } = job;
-    if (state.isRunning) {
-      if (state.startTs && state.startTs + params.timeout < now) {
-        // TODO: log cron trace timeout error
-        state.isRunning = false;
+  await Promise.all(
+    Object.values(cronJobs).map(async (job) => {
+      const { params, state } = job;
+      if (state.isRunning) {
+        if (state.startTs && state.startTs + params.timeout < now) {
+          // TODO: log cron trace timeout error
+          state.isRunning = false;
+        }
+        return;
       }
-      return;
-    }
 
-    // TODO: limit the number of jobs running concurrently
+      // TODO: limit the number of jobs running concurrently
 
-    if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      await runCronJob(job);
-    }
-  });
+      if (state.scheduledRunTs && state.scheduledRunTs <= now) {
+        await runCronJob(job);
+      }
+    })
+  );
 }
 
 async function runCronJob(job: CronJob) {
