@@ -254,15 +254,25 @@ async function createIndexesAndMigrationsWithLock(
       (store) => store.getIndexCreationMode() === 'background'
     );
 
+    let cronJobsIndexCreated = true;
     for (const store of blockingStores) {
-      await createStoreIndexes(store, 'full');
+      const success = await createStoreIndexes(store, 'full');
+      if (store.getName() === '_modelenceCronJobs' && !success) {
+        cronJobsIndexCreated = false;
+      }
     }
     // registerNewCronJobs runs here — after the unique alias index is guaranteed
     // to exist (cronJobsCollection is now blocking!)
-    try {
-      await registerNewCronJobs();
-    } catch (error) {
-      console.warn('Failed to register cron jobs. Continuing startup.', error);
+    if (cronJobsIndexCreated) {
+      try {
+        await registerNewCronJobs();
+      } catch (error) {
+        console.warn('Failed to register cron jobs. Continuing startup.', error);
+      }
+    } else {
+      console.warn(
+        "Skipping cron job registration because index creation failed for store '_modelenceCronJobs'."
+      );
     }
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'drop-only');
@@ -297,13 +307,15 @@ async function createIndexesAndMigrationsWithLock(
 async function createStoreIndexes(
   store: Store<ModelSchema, never>,
   reconcileMode: IndexReconcileMode = 'full'
-) {
+): Promise<boolean> {
   const storeName = store.getName();
 
   try {
     await store.createIndexes(reconcileMode);
+    return true;
   } catch (error) {
     warnIndexCreationFailure(storeName, error);
+    return false;
   }
 }
 

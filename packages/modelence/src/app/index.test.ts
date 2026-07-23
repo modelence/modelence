@@ -743,6 +743,36 @@ describe('app/index', () => {
     expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
+  test('skips cron job registration when _modelenceCronJobs index creation fails', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
+    mockGetClient.mockReturnValue({ db: vi.fn() });
+
+    const cronStore = createStoreMock('_modelenceCronJobs', 'blocking');
+    (cronStore.createIndexes as Mock).mockRejectedValue(new Error('index failure') as never);
+
+    mockResolveStores.mockReturnValue({
+      storesToInit: [cronStore],
+      effectiveStores: [cronStore],
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await startApp({
+      modules: [
+        createTestModule({
+          stores: [cronStore as unknown as Store<ModelSchema, Record<string, never>>],
+        }),
+      ],
+    });
+
+    expect(mockRegisterNewCronJobs).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Skipping cron job registration because index creation failed for store '_modelenceCronJobs'."
+    );
+
+    warnSpy.mockRestore();
+  });
+
   test('warns and continues startup when blocking index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: vi.fn() });

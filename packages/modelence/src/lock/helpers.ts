@@ -53,10 +53,35 @@ const lockHeartbeats = new Map<string, LockHeartbeat>();
 type DuplicateKeyMongoError = MongoError & {
   code?: number;
   keyPattern?: Record<string, unknown>;
+  writeErrors?: Array<{ code?: number }>;
+  hasWriteErrorWithCode?: (code: number) => boolean;
 };
 
-export const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError =>
-  error instanceof MongoError && error.code === 11000;
+export const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError => {
+  if (!(error instanceof MongoError)) {
+    return false;
+  }
+
+  if (error.code === 11000) {
+    return true;
+  }
+
+  const err = error as unknown as DuplicateKeyMongoError;
+  if (typeof err.hasWriteErrorWithCode === 'function' && err.hasWriteErrorWithCode(11000)) {
+    return true;
+  }
+
+  if (
+    Array.isArray(err.writeErrors) &&
+    err.writeErrors.some(
+      (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: number }).code === 11000
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+};
 
 const hasKeyPatternField = (error: DuplicateKeyMongoError, field: string): boolean =>
   typeof error.keyPattern === 'object' &&
@@ -109,7 +134,6 @@ const tryAcquireLockById = async ({
         resource,
         instanceId,
         acquiredAt: new Date(),
-        status: 'acquired',
       },
       $setOnInsert: {
         _id: resource,

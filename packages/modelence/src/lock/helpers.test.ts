@@ -34,7 +34,7 @@ vi.doMock('crypto', () => ({
 }));
 
 const helpers = await import('./helpers');
-const { acquireLock, releaseLock } = helpers;
+const { acquireLock, releaseLock, isDuplicateKeyError } = helpers;
 
 describe('lock/helpers', () => {
   let dateSpy: MockInstance<typeof Date.now>;
@@ -64,7 +64,6 @@ describe('lock/helpers', () => {
           resource: 'job',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'job',
@@ -125,7 +124,6 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
@@ -148,7 +146,6 @@ describe('lock/helpers', () => {
           resource: 'legacy',
           instanceId: 'instance-1',
           acquiredAt: expect.any(Date),
-          status: 'acquired',
         },
         $setOnInsert: {
           _id: 'legacy',
@@ -234,13 +231,13 @@ describe('lock/helpers', () => {
 
       expect(acquired).toBe(true);
       expect(mockUpsertOne).toHaveBeenCalledTimes(1);
-      // Initial acquire sets status in $setOnInsert
       expect(mockUpsertOne).toHaveBeenNthCalledWith(
         1,
         expect.any(Object),
         expect.objectContaining({
           $set: expect.objectContaining({
-            status: 'acquired',
+            resource: 'heartbeat',
+            instanceId: 'instance-1',
           }),
         })
       );
@@ -255,7 +252,6 @@ describe('lock/helpers', () => {
             resource: 'heartbeat',
             instanceId: 'instance-1',
             acquiredAt: expect.any(Date),
-            status: 'acquired',
           },
         })
       );
@@ -273,7 +269,7 @@ describe('lock/helpers', () => {
     }
   });
 
-  test('takeover of a stale lock sets status to acquired', async () => {
+  test('takeover of a stale lock succeeds', async () => {
     mockUpsertOne.mockResolvedValue({ upsertedCount: 0, modifiedCount: 1 } as never);
 
     const acquired = await acquireLock('stale-lock');
@@ -282,7 +278,8 @@ describe('lock/helpers', () => {
       expect.any(Object),
       expect.objectContaining({
         $set: expect.objectContaining({
-          status: 'acquired',
+          resource: 'stale-lock',
+          instanceId: 'instance-1',
         }),
       })
     );
@@ -320,5 +317,36 @@ describe('lock/helpers', () => {
       'Failed to acquire lock (already held): error',
       expect.objectContaining({ resource: 'error' })
     );
+  });
+
+  describe('isDuplicateKeyError', () => {
+    test('returns true for MongoError with code 11000', () => {
+      const err = new MongoError('dup');
+      err.code = 11000;
+      expect(isDuplicateKeyError(err)).toBe(true);
+    });
+
+    test('returns true for MongoError with writeErrors containing code 11000', () => {
+      const err = new MongoError('bulk write error') as MongoError & {
+        writeErrors: Array<{ code: number }>;
+      };
+      err.writeErrors = [{ code: 11000 }];
+      expect(isDuplicateKeyError(err)).toBe(true);
+    });
+
+    test('returns true for MongoError with hasWriteErrorWithCode method returning true', () => {
+      const err = new MongoError('bulk write error') as MongoError & {
+        hasWriteErrorWithCode: (code: number) => boolean;
+      };
+      err.hasWriteErrorWithCode = (code: number) => code === 11000;
+      expect(isDuplicateKeyError(err)).toBe(true);
+    });
+
+    test('returns false for non-MongoError or non-11000 error', () => {
+      expect(isDuplicateKeyError(new Error('regular error'))).toBe(false);
+      const otherMongoErr = new MongoError('other');
+      otherMongoErr.code = 12345;
+      expect(isDuplicateKeyError(otherMongoErr)).toBe(false);
+    });
   });
 });

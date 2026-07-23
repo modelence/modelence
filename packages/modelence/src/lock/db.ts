@@ -12,8 +12,6 @@ export const locksCollection = new Store('_modelenceLocks', {
     _id: schema.string(), // unique identifier for the lock, used as the primary key
     instanceId: schema.string(),
     acquiredAt: schema.date(),
-    status: schema.string(),
-    // Also reused to track dependent operation progress (e.g. cron job registration: 'running' | 'success' | 'failed') when the lock-holder needs to report completion status to waiting instances.
     resource: schema.string(), // deprecated, will be dropped in v1.0.0 (use _id instead)
   },
   indexes: [

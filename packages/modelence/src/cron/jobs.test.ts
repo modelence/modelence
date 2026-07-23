@@ -73,7 +73,11 @@ function registerMocks() {
     isDuplicateKeyError: (error: unknown) =>
       typeof error === 'object' &&
       error !== null &&
-      (error as Record<string, unknown>).code === 11000,
+      ((error as Record<string, unknown>).code === 11000 ||
+        (Array.isArray((error as Record<string, unknown>).writeErrors) &&
+          ((error as Record<string, unknown>).writeErrors as Array<{ code?: number }>).some(
+            (e) => e?.code === 11000
+          ))),
   }));
 
   vi.doMock('@/db/client', () => ({
@@ -394,6 +398,21 @@ describe('cron/jobs', () => {
       const dupError = new MongoError('duplicate key');
       dupError.code = 11000;
       cronStoreMocks.insertMany.mockRejectedValue(dupError as never);
+
+      await expect(registerNewCronJobs()).resolves.toBeUndefined();
+    });
+
+    test('ignores MongoBulkWriteError with writeErrors containing code 11000 thrown by insertMany', async () => {
+      defineCronJob('myJob2', {
+        interval: mockSeconds(10),
+        handler: async () => {},
+      });
+      cronStoreMocks.fetch.mockResolvedValue([] as never);
+      const bulkError = new MongoError('bulk write duplicate key') as MongoError & {
+        writeErrors: Array<{ code: number }>;
+      };
+      bulkError.writeErrors = [{ code: 11000 }];
+      cronStoreMocks.insertMany.mockRejectedValue(bulkError as never);
 
       await expect(registerNewCronJobs()).resolves.toBeUndefined();
     });
