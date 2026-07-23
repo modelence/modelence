@@ -58,15 +58,16 @@ type DuplicateKeyMongoError = MongoError & {
 };
 
 export const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError => {
-  if (!(error instanceof MongoError)) {
+  if (typeof error !== 'object' || error === null) {
     return false;
   }
 
-  if (error.code === 11000) {
+  const err = error as unknown as DuplicateKeyMongoError;
+
+  if (err.code === 11000) {
     return true;
   }
 
-  const err = error as unknown as DuplicateKeyMongoError;
   if (typeof err.hasWriteErrorWithCode === 'function' && err.hasWriteErrorWithCode(11000)) {
     return true;
   }

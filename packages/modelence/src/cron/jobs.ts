@@ -117,9 +117,12 @@ export async function startCronJobs() {
         if (!job) {
           return;
         }
-        job.state.scheduledRunTs = record.lastStartDate
+        const recordRunTs = record.lastStartDate
           ? record.lastStartDate.getTime() + job.params.interval
           : now;
+        if (!job.state.scheduledRunTs || recordRunTs > job.state.scheduledRunTs) {
+          job.state.scheduledRunTs = recordRunTs;
+        }
       });
     }
 
@@ -146,14 +149,14 @@ async function tickCronJobs() {
     return;
   }
 
-  Object.values(cronJobs).forEach(async (job) => {
+  for (const job of Object.values(cronJobs)) {
     const { params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         // TODO: log cron trace timeout error
         state.isRunning = false;
       }
-      return;
+      continue;
     }
 
     // TODO: limit the number of jobs running concurrently
@@ -161,7 +164,7 @@ async function tickCronJobs() {
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
       await runCronJob(job);
     }
-  });
+  }
 }
 
 async function runCronJob(job: CronJob) {
