@@ -16,21 +16,27 @@ export async function authenticate(
         status: { $nin: ['deleted', 'disabled'] },
       })
     : null;
+  //Destructure unsafe fields
   const user = userDoc
-    ? {
-        id: userDoc._id.toString(),
-        handle: userDoc.handle,
-        roles: userDoc.roles || [],
-        hasRole: (role: string) => (userDoc.roles || []).includes(role),
-        requireRole: (role: string) => {
-          if (!(userDoc.roles || []).includes(role)) {
-            throw new Error(`Access denied - role '${role}' required`);
-          }
-        },
-        firstName: userDoc.firstName ?? undefined,
-        lastName: userDoc.lastName ?? undefined,
-        avatarUrl: userDoc.avatarUrl ?? undefined,
-      }
+    ? (() => {
+        const { _id, authMethods, ...safeUser } = userDoc;
+
+        return {
+          ...safeUser,
+          id: userDoc._id.toString(),
+          handle: userDoc.handle,
+          roles: userDoc.roles || [],
+          hasRole: (role: string) => (userDoc.roles || []).includes(role),
+          requireRole: (role: string) => {
+            if (!(userDoc.roles || []).includes(role)) {
+              throw new Error(`Access denied - role '${role}' required`);
+            }
+          },
+          firstName: userDoc.firstName ?? undefined,
+          lastName: userDoc.lastName ?? undefined,
+          avatarUrl: userDoc.avatarUrl ?? undefined,
+        };
+      })()
     : null;
 
   const roles = user ? getDefaultAuthenticatedRoles() : getUnauthenticatedRoles();
