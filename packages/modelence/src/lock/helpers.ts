@@ -25,7 +25,7 @@ const DEFAULT_CACHE_DURATION = time.seconds(10);
  * Unique identifier for this application instance.
  * Generated once per application instance to track which container owns which locks.
  */
-export const INSTANCE_ID = randomBytes(32).toString('base64url');
+const INSTANCE_ID = randomBytes(32).toString('base64url');
 
 /**
  * Time after which a lock is expired
@@ -39,7 +39,6 @@ type LockOptions = {
   heartbeat?: boolean;
   bypassCache?: boolean;
   instanceId?: string;
-  isRefresh?: boolean;
 };
 
 type LockHeartbeat = {
@@ -51,7 +50,7 @@ type LockHeartbeat = {
 
 const lockHeartbeats = new Map<string, LockHeartbeat>();
 
-export type DuplicateKeyMongoError = MongoError & {
+type DuplicateKeyMongoError = MongoError & {
   code?: number;
   keyPattern?: Record<string, unknown>;
 };
@@ -95,12 +94,10 @@ const tryAcquireLockById = async ({
   resource,
   staleThresholdDate,
   instanceId,
-  isRefresh,
 }: {
   resource: string;
   staleThresholdDate: Date;
   instanceId: string;
-  isRefresh?: boolean;
 }): Promise<boolean> => {
   const result = await locksCollection.upsertOne(
     {
@@ -112,11 +109,10 @@ const tryAcquireLockById = async ({
         resource,
         instanceId,
         acquiredAt: new Date(),
-        ...(isRefresh ? {} : { status: 'acquired' }),
+        status: 'acquired',
       },
       $setOnInsert: {
         _id: resource,
-        ...(isRefresh ? { status: 'acquired' } : {}),
       },
     }
   );
@@ -209,7 +205,6 @@ const startLockHeartbeat = ({
         lockDuration,
         bypassCache: true,
         instanceId,
-        isRefresh: true,
       })
         .then((isLockAcquired) => {
           if (!isLockAcquired) {
@@ -258,7 +253,6 @@ export async function acquireLock(
     heartbeat,
     bypassCache,
     instanceId = INSTANCE_ID,
-    isRefresh, // Used to distinguish heartbeat refreshes from initial lock acquisitions and stale lock takeovers.
   }: LockOptions = {}
 ): Promise<boolean> {
   const now = Date.now();
@@ -286,7 +280,6 @@ export async function acquireLock(
       resource,
       staleThresholdDate,
       instanceId,
-      isRefresh,
     });
 
     lockCache[resource] = {
@@ -335,15 +328,13 @@ const acquireLockById = async ({
   resource,
   staleThresholdDate,
   instanceId,
-  isRefresh,
 }: {
   resource: string;
   staleThresholdDate: Date;
   instanceId: string;
-  isRefresh?: boolean;
 }): Promise<boolean> => {
   try {
-    return await tryAcquireLockById({ resource, staleThresholdDate, instanceId, isRefresh });
+    return await tryAcquireLockById({ resource, staleThresholdDate, instanceId });
   } catch (error) {
     // TODO(v1.0.0): Remove the legacy fallback
     // Backward compatibility: if an old lock doc exists with a non-resource _id and
@@ -361,7 +352,7 @@ const acquireLockById = async ({
       }
 
       try {
-        return await tryAcquireLockById({ resource, staleThresholdDate, instanceId, isRefresh });
+        return await tryAcquireLockById({ resource, staleThresholdDate, instanceId });
       } catch (retryError) {
         if (isDuplicateKeyError(retryError)) {
           return false;

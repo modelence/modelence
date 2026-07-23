@@ -8,15 +8,10 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
-import { locksCollection, INSTANCE_ID, isDuplicateKeyError } from '../lock';
+import { isDuplicateKeyError } from '../lock';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
-
-const CRON_REGISTRATION_STATUS = {
-  REGISTERED: 'cron_registered',
-  FAILED: 'cron_registration_failed',
-} as const;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -77,112 +72,31 @@ export function defineCronJob(
 export async function registerNewCronJobs() {
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length === 0) {
-    try {
-      await locksCollection.updateOne(
-        { _id: 'migrations', instanceId: INSTANCE_ID },
-        { $set: { status: CRON_REGISTRATION_STATUS.REGISTERED } }
-      );
-    } catch {
-      // Swallowed to prevent startup failure
-    }
     return;
   }
 
-  try {
-    // This read-then-insert pattern is safe because it
-    // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
-    // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
-    // duplicate-key error from the unique alias index.
-    const aliasSelector = { alias: { $in: aliasList } };
-    const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
-    const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
+  // This read-then-insert pattern is safe because it
+  // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
+  // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
+  // duplicate-key error from the unique alias index.
+  const aliasSelector = { alias: { $in: aliasList } };
+  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
+  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
 
-    const insertItems = Object.values(cronJobs)
-      .filter((job) => !existingCronJobAliases.has(job.alias))
-      .map((job) => ({
-        alias: job.alias,
-      }));
+  const insertItems = Object.values(cronJobs)
+    .filter((job) => !existingCronJobAliases.has(job.alias))
+    .map((job) => ({
+      alias: job.alias,
+    }));
 
-    if (insertItems.length > 0) {
-      try {
-        await cronJobsCollection.requireCollection().insertMany(insertItems, { ordered: false });
-      } catch (error) {
-        if (!isDuplicateKeyError(error)) {
-          throw error;
-        }
-      }
-    }
-
-    // Signal that cron job registration succeeded. Other instances polling in
-    // waitForCronJobsRegistered will see this and stop waiting.
-    await locksCollection.updateOne(
-      { _id: 'migrations', instanceId: INSTANCE_ID },
-      { $set: { status: CRON_REGISTRATION_STATUS.REGISTERED } }
-    );
-  } catch (error) {
+  if (insertItems.length > 0) {
     try {
-      // Signal that cron job registration failed so waiting instances stop
-      // polling immediately rather than blocking until the deadline.
-      await locksCollection.updateOne(
-        { _id: 'migrations', instanceId: INSTANCE_ID },
-        { $set: { status: CRON_REGISTRATION_STATUS.FAILED } }
-      );
-    } catch {
-      // Swallowed to prevent hiding original error
-    }
-    throw error;
-  }
-}
-
-async function waitForCronJobsRegistered(aliasList: string[], timeout: number): Promise<void> {
-  const deadline = Date.now() + timeout;
-  const pollInterval = time.seconds(1);
-
-  while (Date.now() < deadline) {
-    const lockDoc = await locksCollection.findOne({ _id: 'migrations' });
-
-    // If there is no active migrations lock at all, the lock-holder has already
-    // finished and released the lock document, so registration is complete.
-    if (!lockDoc) {
-      await logMissingAliasesWarning(aliasList);
-      return;
-    }
-
-    // If the lock-holder has finished cron registration (successfully or not),
-    // there is no point waiting further.
-    if (
-      lockDoc.status === CRON_REGISTRATION_STATUS.REGISTERED ||
-      lockDoc.status === CRON_REGISTRATION_STATUS.FAILED
-    ) {
-      if (lockDoc.status === CRON_REGISTRATION_STATUS.FAILED) {
-        await logMissingAliasesWarning(aliasList);
+      await cronJobsCollection.requireCollection().insertMany(insertItems, { ordered: false });
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
       }
-      return;
     }
-
-    // Fast-path: all expected aliases are already present in the DB.
-    const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
-    const registeredAliases = new Set(records.map((r) => r.alias));
-    if (aliasList.every((alias) => registeredAliases.has(alias))) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
-  }
-
-  // Timeout expired — some jobs were never registered by the lock-holder.
-  await logMissingAliasesWarning(aliasList);
-}
-
-async function logMissingAliasesWarning(aliasList: string[]): Promise<void> {
-  const records = await cronJobsCollection.fetch({ alias: { $in: aliasList } });
-  const registeredAliases = new Set(records.map((r) => r.alias));
-  const missingAliases = aliasList.filter((alias) => !registeredAliases.has(alias));
-  if (missingAliases.length > 0) {
-    console.warn(
-      `Timed out or failed waiting for cron job registration. Missing aliases: [${missingAliases.join(', ')}]. ` +
-        `These jobs will fall back to immediate scheduling.`
-    );
   }
 }
 
@@ -196,11 +110,7 @@ export async function startCronJobs() {
     const now = Date.now();
 
     if (getMongodbUri()) {
-      // Wait for the lock-holder to finish registerNewCronJobs() so every
-      // instance sees the DB records before scheduling.
-      await waitForCronJobsRegistered(aliasList, time.seconds(30));
       const aliasSelector = { alias: { $in: aliasList } };
-
       const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
       cronJobRecords.forEach((record) => {
         const job = cronJobs[record.alias];

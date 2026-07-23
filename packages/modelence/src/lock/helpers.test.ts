@@ -247,7 +247,6 @@ describe('lock/helpers', () => {
 
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockUpsertOne).toHaveBeenCalledTimes(2);
-      // Heartbeat refresh does NOT set status in $set
       expect(mockUpsertOne).toHaveBeenNthCalledWith(
         2,
         expect.any(Object),
@@ -256,6 +255,7 @@ describe('lock/helpers', () => {
             resource: 'heartbeat',
             instanceId: 'instance-1',
             acquiredAt: expect.any(Date),
+            status: 'acquired',
           },
         })
       );
