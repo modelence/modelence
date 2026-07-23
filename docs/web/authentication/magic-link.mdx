@@ -4,6 +4,8 @@ title: 'Magic Link'
 
 Modelence supports passwordless authentication with magic links: the user enters their email address and receives an email with a single-use sign-in **link** and a matching **one-time code**. Clicking the link signs them in; typing the code does the same — useful on mobile apps or when the email is read on a different device.
 
+<Note>Magic link sign-in and sign-up are available since `modelence@0.22.0`.</Note>
+
 Magic link can also work as a combined sign-in and sign-up: with the `allowSignup` option enabled, an account is created automatically when the link or code is used for an email that is not registered yet — just like OAuth sign-in. This is disabled by default (see [Sign-Up Behavior](#sign-up-behavior)).
 
 > The magic link email delivery setup below (provider, sender, template, redirect URL) is configured under the **`email:`** key of `startApp`. To run code on related auth events, register callbacks under **`auth:`** — see [Auth Hooks](/authentication/hooks).
