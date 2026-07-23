@@ -12,6 +12,7 @@ export const locksCollection = new Store('_modelenceLocks', {
     _id: schema.string(), // unique identifier for the lock, used as the primary key
     instanceId: schema.string(),
     acquiredAt: schema.date(),
+
     resource: schema.string(), // deprecated, will be dropped in v1.0.0 (use _id instead)
   },
   indexes: [
