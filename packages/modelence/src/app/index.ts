@@ -13,12 +13,7 @@ import { getLocalConfigs } from '../config/local';
 import { loadConfigs, setSchema } from '../config/server';
 import { startConfigSync, loadRemoteConfigs } from '../config/sync';
 import { ConfigSchema } from '../config/types';
-import cronModule, {
-  defineCronJob,
-  registerNewCronJobs,
-  getCronJobsMetadata,
-  startCronJobs,
-} from '../cron/jobs';
+import cronModule, { defineCronJob, getCronJobsMetadata, startCronJobs } from '../cron/jobs';
 import { type IndexReconcileMode, Store } from '../data/store';
 import { resolveStores } from '../data/resolveStores';
 import { connect, getClient, getMongodbUri } from '../db/client';
@@ -254,25 +249,8 @@ async function createIndexesAndMigrationsWithLock(
       (store) => store.getIndexCreationMode() === 'background'
     );
 
-    let cronJobsIndexCreated = true;
     for (const store of blockingStores) {
-      const success = await createStoreIndexes(store, 'full');
-      if (store.getName() === '_modelenceCronJobs' && !success) {
-        cronJobsIndexCreated = false;
-      }
-    }
-    // registerNewCronJobs runs here — after the unique alias index is guaranteed
-    // to exist (cronJobsCollection is now blocking!)
-    if (cronJobsIndexCreated) {
-      try {
-        await registerNewCronJobs();
-      } catch (error) {
-        console.warn('Failed to register cron jobs. Continuing startup.', error);
-      }
-    } else {
-      console.warn(
-        "Skipping cron job registration because index creation failed for store '_modelenceCronJobs'."
-      );
+      await createStoreIndexes(store, 'full');
     }
     for (const store of backgroundStores) {
       await createStoreIndexes(store, 'drop-only');
@@ -307,15 +285,13 @@ async function createIndexesAndMigrationsWithLock(
 async function createStoreIndexes(
   store: Store<ModelSchema, never>,
   reconcileMode: IndexReconcileMode = 'full'
-): Promise<boolean> {
+) {
   const storeName = store.getName();
 
   try {
     await store.createIndexes(reconcileMode);
-    return true;
   } catch (error) {
     warnIndexCreationFailure(storeName, error);
-    return false;
   }
 }
 

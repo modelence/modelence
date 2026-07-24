@@ -53,36 +53,10 @@ const lockHeartbeats = new Map<string, LockHeartbeat>();
 type DuplicateKeyMongoError = MongoError & {
   code?: number;
   keyPattern?: Record<string, unknown>;
-  writeErrors?: Array<{ code?: number }>;
-  hasWriteErrorWithCode?: (code: number) => boolean;
 };
 
-export const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError => {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  const err = error as unknown as DuplicateKeyMongoError;
-
-  if (err.code === 11000) {
-    return true;
-  }
-
-  if (typeof err.hasWriteErrorWithCode === 'function' && err.hasWriteErrorWithCode(11000)) {
-    return true;
-  }
-
-  if (
-    Array.isArray(err.writeErrors) &&
-    err.writeErrors.some(
-      (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: number }).code === 11000
-    )
-  ) {
-    return true;
-  }
-
-  return false;
-};
+const isDuplicateKeyError = (error: unknown): error is DuplicateKeyMongoError =>
+  error instanceof MongoError && error.code === 11000;
 
 const hasKeyPatternField = (error: DuplicateKeyMongoError, field: string): boolean =>
   typeof error.keyPattern === 'object' &&

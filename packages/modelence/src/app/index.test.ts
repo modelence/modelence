@@ -39,7 +39,6 @@ const mockLoadRemoteConfigs = vi.fn();
 const mockRunMigrations = vi.fn();
 const mockStartMigrations = vi.fn();
 const mockStartCronJobs = vi.fn<() => Promise<void>>();
-const mockRegisterNewCronJobs = vi.fn<() => Promise<void>>();
 const mockDefineCronJob = vi.fn();
 const mockGetCronJobsMetadata = vi.fn();
 const mockCreateQuery = vi.fn();
@@ -165,7 +164,6 @@ vi.doMock('../cron/jobs', () => ({
   defineCronJob: mockDefineCronJob,
   getCronJobsMetadata: mockGetCronJobsMetadata,
   startCronJobs: mockStartCronJobs,
-  registerNewCronJobs: mockRegisterNewCronJobs,
 }));
 
 vi.doMock('../methods', () => ({
@@ -294,7 +292,6 @@ describe('app/index', () => {
       telemetry: {},
     });
     mockStartCronJobs.mockResolvedValue(undefined);
-    mockRegisterNewCronJobs.mockResolvedValue(undefined);
     // Default resolveStores: each store is its own effective store
     mockResolveStores.mockImplementation((stores: unknown[]) => {
       const unique = [...new Set(stores)] as MinimalStore[];
@@ -314,6 +311,21 @@ describe('app/index', () => {
     await startApp({});
 
     expect(mockMarkAppStarted).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws when a user module name starts with _system.', async () => {
+    await expect(
+      startApp({
+        modules: [createTestModule({ name: '_system.evil' })],
+      })
+    ).rejects.toThrow("Invalid module name: '_system.evil'");
+
+    // Mixed-case variants must also be rejected (case-insensitive check)
+    await expect(
+      startApp({
+        modules: [createTestModule({ name: '_System.evil' })],
+      })
+    ).rejects.toThrow("Invalid module name: '_System.evil'");
   });
 
   test('loads dotenv configuration', async () => {
@@ -743,36 +755,6 @@ describe('app/index', () => {
     expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
   });
 
-  test('skips cron job registration when _modelenceCronJobs index creation fails', async () => {
-    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: vi.fn() });
-
-    const cronStore = createStoreMock('_modelenceCronJobs', 'blocking');
-    (cronStore.createIndexes as Mock).mockRejectedValue(new Error('index failure') as never);
-
-    mockResolveStores.mockReturnValue({
-      storesToInit: [cronStore],
-      effectiveStores: [cronStore],
-    });
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    await startApp({
-      modules: [
-        createTestModule({
-          stores: [cronStore as unknown as Store<ModelSchema, Record<string, never>>],
-        }),
-      ],
-    });
-
-    expect(mockRegisterNewCronJobs).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Skipping cron job registration because index creation failed for store '_modelenceCronJobs'."
-    );
-
-    warnSpy.mockRestore();
-  });
-
   test('warns and continues startup when blocking index creation fails', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockGetClient.mockReturnValue({ db: vi.fn() });
@@ -892,42 +874,6 @@ describe('app/index', () => {
     expect(mockAcquireLock).toHaveBeenCalledWith('migrations', expectedMigrationsLockOptions);
     expect(mockReleaseLock).toHaveBeenCalledTimes(1);
     expect(mockReleaseLock).toHaveBeenCalledWith('migrations');
-  });
-
-  test('registerNewCronJobs is called after createIndexesAndMigrationsWithLock when mongodb is connected', async () => {
-    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: vi.fn() });
-
-    await startApp({});
-
-    expect(mockRegisterNewCronJobs).toHaveBeenCalledTimes(1);
-    // Verify it runs after the migrations lock is acquired
-    expect(mockAcquireLock.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRegisterNewCronJobs.mock.invocationCallOrder[0]
-    );
-  });
-
-  test('registerNewCronJobs failure warns and continues startup', async () => {
-    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockGetClient.mockReturnValue({ db: vi.fn() });
-
-    const cronError = new Error('cron registration failed');
-    mockRegisterNewCronJobs.mockRejectedValue(cronError);
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    // registerNewCronJobs failure is now caught — startApp should NOT reject.
-    await expect(startApp({})).resolves.toBeUndefined();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to register cron jobs. Continuing startup.',
-      cronError
-    );
-    // The lock should NOT be prematurely released by the error path.
-    // It gets released later by the finally block after migrations complete.
-    expect(mockStartCronJobs).toHaveBeenCalledTimes(1);
-
-    warnSpy.mockRestore();
   });
 
   test('starts server with combined modules and channels', async () => {

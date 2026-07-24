@@ -8,7 +8,6 @@ import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
-import { isDuplicateKeyError } from '../lock';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -18,8 +17,7 @@ const cronJobsCollection = new Store('_modelenceCronJobs', {
     alias: schema.string(),
     lastStartDate: schema.date().optional(),
   },
-  indexes: [{ key: { alias: 1 }, unique: true }],
-  indexCreationMode: 'blocking',
+  indexes: [{ key: { alias: 1 }, unique: true, background: true }],
 });
 
 // TODO: allow changing interval and timeout with cron jobconfigs
@@ -60,71 +58,26 @@ export function defineCronJob(
   };
 }
 
-/**
- * Registers newly defined cron jobs in the database (If MongoDB Client Connected).
- *
- * This function initializes the database registry for all cron jobs defined
- * in the application. It compares the application's cron job definitions against
- * the database records and inserts only those that haven't been registered yet.
- * This prevents duplicate entries and maintains an audit trail of when each
- * cron job was first scheduled.
- */
-export async function registerNewCronJobs() {
-  const aliasList = Object.keys(cronJobs);
-  if (aliasList.length === 0) {
-    return;
-  }
-
-  // This read-then-insert pattern is safe because it
-  // only runs under the migrations lock (see createIndexesAndMigrationsWithLock).
-  // If this registerNewCronJobs is ever called without migrations lock, the ordered insertMany would abort on a
-  // duplicate-key error from the unique alias index.
-  const aliasSelector = { alias: { $in: aliasList } };
-  const existingCronJobs = await cronJobsCollection.fetch(aliasSelector);
-  const existingCronJobAliases = new Set(existingCronJobs.map((job) => job.alias));
-
-  const insertItems = Object.values(cronJobs)
-    .filter((job) => !existingCronJobAliases.has(job.alias))
-    .map((job) => ({
-      alias: job.alias,
-    }));
-
-  if (insertItems.length > 0) {
-    try {
-      await cronJobsCollection.requireCollection().insertMany(insertItems, { ordered: false });
-    } catch (error) {
-      if (!isDuplicateKeyError(error)) {
-        throw error;
-      }
-    }
-  }
-}
-
 export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
   }
 
   const aliasList = Object.keys(cronJobs);
-  if (aliasList.length > 0) {
-    const now = Date.now();
+  if (aliasList.length > 0 && getMongodbUri()) {
+    const aliasSelector = { alias: { $in: aliasList } };
 
-    if (getMongodbUri()) {
-      const aliasSelector = { alias: { $in: aliasList } };
-      const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-      cronJobRecords.forEach((record) => {
-        const job = cronJobs[record.alias];
-        if (!job) {
-          return;
-        }
-        const recordRunTs = record.lastStartDate
-          ? record.lastStartDate.getTime() + job.params.interval
-          : now;
-        if (!job.state.scheduledRunTs || recordRunTs > job.state.scheduledRunTs) {
-          job.state.scheduledRunTs = recordRunTs;
-        }
-      });
-    }
+    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+    const now = Date.now();
+    cronJobRecords.forEach((record) => {
+      const job = cronJobs[record.alias];
+      if (!job) {
+        return;
+      }
+      job.state.scheduledRunTs = record.lastStartDate
+        ? record.lastStartDate.getTime() + job.params.interval
+        : now;
+    });
 
     // Any jobs not yet scheduled (either no Mongo, or no DB record) run immediately.
     Object.values(cronJobs).forEach((job) => {
@@ -149,14 +102,14 @@ async function tickCronJobs() {
     return;
   }
 
-  for (const job of Object.values(cronJobs)) {
+  Object.values(cronJobs).forEach(async (job) => {
     const { params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         // TODO: log cron trace timeout error
         state.isRunning = false;
       }
-      continue;
+      return;
     }
 
     // TODO: limit the number of jobs running concurrently
@@ -164,7 +117,7 @@ async function tickCronJobs() {
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
       await runCronJob(job);
     }
-  }
+  });
 }
 
 async function runCronJob(job: CronJob) {

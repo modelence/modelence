@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { MongoError } from 'mongodb';
 
@@ -34,7 +34,7 @@ vi.doMock('crypto', () => ({
 }));
 
 const helpers = await import('./helpers');
-const { acquireLock, releaseLock, isDuplicateKeyError } = helpers;
+const { acquireLock, releaseLock } = helpers;
 
 describe('lock/helpers', () => {
   let dateSpy: MockInstance<typeof Date.now>;
@@ -231,30 +231,9 @@ describe('lock/helpers', () => {
 
       expect(acquired).toBe(true);
       expect(mockUpsertOne).toHaveBeenCalledTimes(1);
-      expect(mockUpsertOne).toHaveBeenNthCalledWith(
-        1,
-        expect.any(Object),
-        expect.objectContaining({
-          $set: expect.objectContaining({
-            resource: 'heartbeat',
-            instanceId: 'instance-1',
-          }),
-        })
-      );
 
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockUpsertOne).toHaveBeenCalledTimes(2);
-      expect(mockUpsertOne).toHaveBeenNthCalledWith(
-        2,
-        expect.any(Object),
-        expect.objectContaining({
-          $set: {
-            resource: 'heartbeat',
-            instanceId: 'instance-1',
-            acquiredAt: expect.any(Date),
-          },
-        })
-      );
 
       await releaseLock('heartbeat');
       await vi.advanceTimersByTimeAsync(3000);
@@ -267,22 +246,6 @@ describe('lock/helpers', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  test('takeover of a stale lock succeeds', async () => {
-    mockUpsertOne.mockResolvedValue({ upsertedCount: 0, modifiedCount: 1 } as never);
-
-    const acquired = await acquireLock('stale-lock');
-    expect(acquired).toBe(true);
-    expect(mockUpsertOne).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          resource: 'stale-lock',
-          instanceId: 'instance-1',
-        }),
-      })
-    );
   });
 
   test('releaseLock falls back to legacy deletion for pre-upgrade lock documents', async () => {
@@ -317,36 +280,5 @@ describe('lock/helpers', () => {
       'Failed to acquire lock (already held): error',
       expect.objectContaining({ resource: 'error' })
     );
-  });
-
-  describe('isDuplicateKeyError', () => {
-    test('returns true for MongoError with code 11000', () => {
-      const err = new MongoError('dup');
-      err.code = 11000;
-      expect(isDuplicateKeyError(err)).toBe(true);
-    });
-
-    test('returns true for MongoError with writeErrors containing code 11000', () => {
-      const err = new MongoError('bulk write error') as MongoError & {
-        writeErrors: Array<{ code: number }>;
-      };
-      err.writeErrors = [{ code: 11000 }];
-      expect(isDuplicateKeyError(err)).toBe(true);
-    });
-
-    test('returns true for MongoError with hasWriteErrorWithCode method returning true', () => {
-      const err = new MongoError('bulk write error') as MongoError & {
-        hasWriteErrorWithCode: (code: number) => boolean;
-      };
-      err.hasWriteErrorWithCode = (code: number) => code === 11000;
-      expect(isDuplicateKeyError(err)).toBe(true);
-    });
-
-    test('returns false for non-MongoError or non-11000 error', () => {
-      expect(isDuplicateKeyError(new Error('regular error'))).toBe(false);
-      const otherMongoErr = new MongoError('other');
-      otherMongoErr.code = 12345;
-      expect(isDuplicateKeyError(otherMongoErr)).toBe(false);
-    });
   });
 });
