@@ -7,6 +7,7 @@ import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
+import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
@@ -64,6 +65,11 @@ export async function startCronJobs() {
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
+    if (!getMongodbUri()) {
+      console.log('MongoDB URI is not configured. Skipping cron jobs.');
+      return;
+    }
+
     const aliasSelector = { alias: { $in: aliasList } };
 
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
@@ -77,6 +83,8 @@ export async function startCronJobs() {
         ? record.lastStartDate.getTime() + job.params.interval
         : now;
     });
+
+    // Any jobs not yet scheduled (either no Mongo, or no DB record) run immediately.
     Object.values(cronJobs).forEach((job) => {
       if (!job.state.scheduledRunTs) {
         job.state.scheduledRunTs = now;
@@ -122,12 +130,11 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   state.startTs = Date.now();
 
-  await cronJobsCollection.updateOne(
+  await cronJobsCollection.upsertOne(
     { alias },
     {
-      $set: {
-        lastStartDate: new Date(state.startTs),
-      },
+      $set: { lastStartDate: new Date(state.startTs) },
+      $setOnInsert: { alias },
     }
   );
 
