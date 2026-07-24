@@ -64,7 +64,12 @@ export async function startCronJobs() {
   }
 
   const aliasList = Object.keys(cronJobs);
-  if (aliasList.length > 0 && getMongodbUri()) {
+  if (aliasList.length > 0) {
+    if (!getMongodbUri()) {
+      console.log('MongoDB URI is not configured. Skipping cron jobs.');
+      return;
+    }
+
     const aliasSelector = { alias: { $in: aliasList } };
 
     const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);

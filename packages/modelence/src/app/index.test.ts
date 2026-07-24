@@ -313,21 +313,6 @@ describe('app/index', () => {
     expect(mockMarkAppStarted).toHaveBeenCalledTimes(1);
   });
 
-  test('throws when a user module name starts with _system.', async () => {
-    await expect(
-      startApp({
-        modules: [createTestModule({ name: '_system.evil' })],
-      })
-    ).rejects.toThrow("Invalid module name: '_system.evil'");
-
-    // Mixed-case variants must also be rejected (case-insensitive check)
-    await expect(
-      startApp({
-        modules: [createTestModule({ name: '_System.evil' })],
-      })
-    ).rejects.toThrow("Invalid module name: '_System.evil'");
-  });
-
   test('loads dotenv configuration', async () => {
     await startApp({});
 

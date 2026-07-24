@@ -130,6 +130,26 @@ describe('cron/jobs', () => {
     (Date.now as Mock).mockRestore();
   });
 
+  test('startCronJobs skips starting cron jobs and logs message when MongoDB URI is not set', async () => {
+    mockGetMongodbUri.mockReturnValue('');
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    defineCronJob('noDbJob', {
+      description: 'no db',
+      interval: mockSeconds(10),
+      handler: async () => {},
+    });
+
+    await startCronJobs();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MongoDB URI is not configured')
+    );
+    expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
+    expect(setIntervalMock).not.toHaveBeenCalled();
+    consoleLogSpy.mockRestore();
+  });
+
   test('startCronJobs uses lastStartDate from DB when present to schedule next run', async () => {
     const now = 1_000_000;
     vi.spyOn(Date, 'now').mockReturnValue(now);
