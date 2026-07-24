@@ -84,7 +84,6 @@ export async function startCronJobs() {
         : now;
     });
 
-    // Any jobs not yet scheduled (either no Mongo, or no DB record) run immediately.
     Object.values(cronJobs).forEach((job) => {
       if (!job.state.scheduledRunTs) {
         job.state.scheduledRunTs = now;
