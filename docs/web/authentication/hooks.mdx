@@ -47,7 +47,7 @@ startApp({
 
 Called after `validateSignup` and the built-in disposable-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
 
-Currently only invoked for `'email'` provider signups. OAuth signups are not gated because OAuth providers (Google, GitHub, etc.) do not issue disposable accounts.
+Invoked for `'email'` and `'magicLink'` provider signups. OAuth signups are not gated because OAuth providers (Google, GitHub, etc.) do not issue disposable accounts.
 
 ```typescript
 import { startApp } from 'modelence/server';
@@ -89,7 +89,7 @@ startApp({
 | `firstName`      | `string \| undefined`      |
 | `lastName`       | `string \| undefined`      |
 | `handle`         | `string \| undefined`      |
-| `provider`       | `'email'`                  |
+| `provider`       | `'email' \| 'magicLink'`   |
 | `connectionInfo` | `ConnectionInfo \| undefined` |
 
 **Returns:** `void | Promise<void>`

@@ -86,9 +86,14 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: true
         run: |
-          if [[ "${{ steps.package-info.outputs.version }}" == *"dev"* ]]; then
-            echo "Publishing dev version without latest tag"
+          VERSION="${{ steps.package-info.outputs.version }}"
+          if [[ "$VERSION" == *"dev"* ]]; then
+            echo "Publishing dev version under 'dev' tag"
             npm publish --tag dev --access public --provenance
+          elif [[ "$VERSION" == *"-"* ]]; then
+            # Any other prerelease (rc, beta, alpha, etc.) → publish under 'next', not 'latest'
+            echo "Publishing prerelease version under 'next' tag"
+            npm publish --tag next --access public --provenance
           else
             echo "Publishing with latest tag"
             npm publish --access public --provenance

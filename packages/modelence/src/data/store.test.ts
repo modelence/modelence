@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { IndexDescription, MongoError, ObjectId, SearchIndexDescription } from 'mongodb';
+import {
+  IndexDescription,
+  MongoError,
+  MongoServerError,
+  ObjectId,
+  SearchIndexDescription,
+} from 'mongodb';
 
 import { Store } from './store';
 import { schema, type ModelSchema } from './types';
@@ -174,6 +180,65 @@ describe('data/store', () => {
     expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_nameIdx');
     expect(collectionMock.createSearchIndexes).toHaveBeenCalledTimes(2);
     expect(collectionMock.dropSearchIndex).toHaveBeenCalledWith('searchIdx');
+  });
+
+  test('createIndexes logs an actionable report when a unique index build hits duplicates', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = createStore({
+      indexes: [{ key: { handle: 1 }, name: 'handleIdx', unique: true }],
+    });
+
+    const duplicateError = new MongoServerError({
+      errmsg:
+        'E11000 duplicate key error collection: app.testCollection index: _modelence_handleIdx dup key: { handle: "taken" }',
+    });
+    duplicateError.code = 11000;
+
+    const collectionMock = {
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: vi.fn().mockRejectedValue(duplicateError as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    // The error still propagates so startup orchestration keeps its behavior.
+    await expect(store.createIndexes()).rejects.toBe(duplicateError);
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const report = consoleError.mock.calls[0]?.[0] as string;
+    expect(report).toContain('[modelence:index-error]');
+    expect(report).toContain("collection 'testCollection'");
+    expect(report).toContain('db.getCollection("testCollection").aggregate(');
+
+    consoleError.mockRestore();
+  });
+
+  test('createIndexes does not log a duplicate-key report for non-unique index failures', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = createStore({
+      indexes: [{ key: { handle: 1 }, name: 'handleIdx' }],
+    });
+
+    const otherError = new MongoServerError({ errmsg: 'exceeded memory limit' });
+    otherError.code = 292;
+
+    const collectionMock = {
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ name: '_id_', key: { _id: 1 } }] as never),
+      }),
+      createIndexes: vi.fn().mockRejectedValue(otherError as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await expect(store.createIndexes()).rejects.toBe(otherError);
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
   });
 
   test('createIndexes drops auto-named indexes when options change', async () => {

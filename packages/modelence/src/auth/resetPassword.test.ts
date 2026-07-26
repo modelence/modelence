@@ -31,6 +31,7 @@ const mockTime = { hours: vi.fn() };
 const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
 const mockInvalidateAllUserSessions = vi.fn();
+const mockMagicLinkTokensDeleteMany = vi.fn();
 
 vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
@@ -55,6 +56,9 @@ vi.doMock('./db', () => ({
     findOne: mockResetTokensFindOne,
     deleteOne: mockResetTokensDeleteOne,
     findOneAndDelete: mockResetTokensFindOneAndDelete,
+  },
+  magicLinkTokensCollection: {
+    deleteMany: mockMagicLinkTokensDeleteMany,
   },
 }));
 
@@ -277,10 +281,53 @@ describe('auth/resetPassword', () => {
       });
     });
 
-    test('returns success message if user has no password auth method', async () => {
-      const email = 'oauth@example.com';
+    test('sends a reset email to a passwordless account (set-password flow)', async () => {
+      // Magic-link / OAuth-only accounts have no `authMethods.password`. Reset
+      // is the documented way to ADD a password, so a real email must be sent —
+      // not silently dead-ended.
+      const email = 'magiclink@example.com';
+      const resetToken = 'passwordless-token';
 
       mockValidateEmail.mockReturnValue(email);
+      mockRandomBytes.mockReturnValue({ toString: () => resetToken });
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          emails: [{ address: email, verified: true }],
+          authMethods: {}, // No password (nor any) auth method
+          status: 'active',
+        })
+      );
+
+      const result = await handleSendResetPasswordToken(
+        { email },
+        createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+      );
+
+      expect(mockResetTokensInsertOne).toHaveBeenCalledWith(
+        expect.objectContaining({ email, token: sha256(resetToken) })
+      );
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: email,
+          html: expect.stringContaining(
+            `https://example.com/api/_internal/auth/reset-password?token=${resetToken}`
+          ),
+        })
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'If an account with that email exists, a password reset link has been sent',
+      });
+    });
+
+    test('sends a reset email to an OAuth-only account (add-password flow)', async () => {
+      // Same set-password path for OAuth-only accounts: dropping the
+      // password-required guard lets these users add a local password too.
+      const email = 'oauth@example.com';
+      const resetToken = 'oauth-token';
+
+      mockValidateEmail.mockReturnValue(email);
+      mockRandomBytes.mockReturnValue({ toString: () => resetToken });
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
           emails: [{ address: email, verified: true }],
@@ -294,8 +341,10 @@ describe('auth/resetPassword', () => {
         createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
       );
 
-      expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
-      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+      expect(mockResetTokensInsertOne).toHaveBeenCalledWith(
+        expect.objectContaining({ email, token: sha256(resetToken) })
+      );
+      expect(mockEmailProvider.sendEmail).toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: 'If an account with that email exists, a password reset link has been sent',
@@ -616,10 +665,13 @@ describe('auth/resetPassword', () => {
         { _id: userId },
         { $set: { 'authMethods.password.hash': hashedPassword } }
       );
+      // The verify write uses strength-2 collation so a lowercased token email
+      // still matches a stored address that kept its original casing.
       expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
         2,
         { _id: userId, 'emails.address': email },
-        { $set: { 'emails.$.verified': true } }
+        { $set: { 'emails.$.verified': true } },
+        { collation: { locale: 'en', strength: 2 } }
       );
       expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
@@ -627,6 +679,97 @@ describe('auth/resetPassword', () => {
         success: true,
         message: 'Password has been reset successfully',
       });
+    });
+
+    test('verifies the email with strength-2 collation so mixed-case stored addresses still match', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+      // Token email is lowercased; the stored address kept its original casing
+      // (e.g. an OAuth-created account). Without collation the positional update
+      // would miss and leave the email unverified after a successful reset.
+      const tokenEmail = 'user@example.com';
+
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [{ address: 'User@Example.com', verified: false }],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, email: tokenEmail, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+        { _id: userId, 'emails.address': tokenEmail },
+        { $set: { 'emails.$.verified': true } },
+        { collation: { locale: 'en', strength: 2 } }
+      );
+    });
+
+    test('revokes outstanding magic link tokens for all of the user emails, lowercased', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      // Stored addresses keep their original casing (e.g. OAuth-created accounts),
+      // but magic link tokens are stored under the lowercased email — the revoke
+      // must line up with the stored keys, and cover every address on the user.
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [
+            { address: 'User@Example.com', verified: true },
+            { address: 'ALT@Example.com', verified: true },
+          ],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, email: 'user@example.com', token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      // Sessions are invalidated AND every outstanding magic link/code is deleted,
+      // so a link issued before the reset can't log an attacker back in.
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+      expect(mockMagicLinkTokensDeleteMany).toHaveBeenCalledWith({
+        email: { $in: ['user@example.com', 'alt@example.com'] },
+      });
+    });
+
+    test('does not attempt to revoke magic link tokens when the user has no emails', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({
+          _id: userId,
+          emails: [],
+          authMethods: { password: { hash: 'oldHash' } },
+        })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(mockMagicLinkTokensDeleteMany).not.toHaveBeenCalled();
     });
 
     test('skips email verification for legacy tokens without email field', async () => {

@@ -7,6 +7,7 @@ import { time } from '../time';
 import {
   dbDisposableEmailDomains,
   emailVerificationTokensCollection,
+  magicLinkTokensCollection,
   resetPasswordTokensCollection,
   usersCollection,
 } from './db';
@@ -21,6 +22,12 @@ import {
   handleResetPasswordLanding,
   handleSendResetPasswordToken,
 } from './resetPassword';
+import {
+  handleLoginWithMagicLink,
+  handleLoginWithOneTimeCode,
+  handleMagicLinkLanding,
+  handleSendMagicLink,
+} from './magicLink';
 
 function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
   return `${rule.bucket}\n${rule.type}\n${rule.window}`;
@@ -40,6 +47,14 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'passwordReset', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'passwordReset', type: 'email', window: time.hours(1), limit: 5 },
     { bucket: 'passwordReset', type: 'email', window: time.days(1), limit: 10 },
+    { bucket: 'magicLink', type: 'ip', window: time.minutes(15), limit: 10 },
+    { bucket: 'magicLink', type: 'ip', window: time.days(1), limit: 100 },
+    { bucket: 'magicLink', type: 'email', window: time.hours(1), limit: 5 },
+    { bucket: 'magicLink', type: 'email', window: time.days(1), limit: 10 },
+    { bucket: 'oneTimeCode', type: 'ip', window: time.minutes(15), limit: 20 },
+    { bucket: 'oneTimeCode', type: 'ip', window: time.days(1), limit: 100 },
+    { bucket: 'oneTimeCode', type: 'email', window: time.hours(1), limit: 10 },
+    { bucket: 'oneTimeCode', type: 'email', window: time.days(1), limit: 20 },
   ];
 }
 
@@ -52,6 +67,8 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'signin',
     'verification',
     'passwordReset',
+    'magicLink',
+    'oneTimeCode',
   ];
 
   for (const bucket of buckets) {
@@ -133,6 +150,7 @@ export default new Module('_system.user', {
     dbDisposableEmailDomains,
     emailVerificationTokensCollection,
     resetPasswordTokensCollection,
+    magicLinkTokensCollection,
   ],
   queries: {
     getOwnProfile,
@@ -144,6 +162,9 @@ export default new Module('_system.user', {
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,
+    sendMagicLink: handleSendMagicLink,
+    loginWithMagicLink: handleLoginWithMagicLink,
+    loginWithOneTimeCode: handleLoginWithOneTimeCode,
     updateProfile: handleUpdateProfile,
     unlinkOAuthProvider: handleUnlinkOAuthProvider,
   },
@@ -211,6 +232,14 @@ export default new Module('_system.user', {
       path: '/api/_internal/auth/reset-password',
       handlers: {
         get: handleResetPasswordLanding,
+      },
+    },
+    {
+      // Server landing for magic link sign-in (see handleMagicLinkLanding).
+      // Runs before the SPA catch-all.
+      path: '/api/_internal/auth/magic-link',
+      handlers: {
+        get: handleMagicLinkLanding,
       },
     },
   ],

@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 
 import { Args, Context } from '@/methods/types';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
-import { usersCollection, resetPasswordTokensCollection } from './db';
+import { usersCollection, resetPasswordTokensCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
@@ -13,6 +13,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { hashToken } from './tokenHash';
+import { resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
@@ -53,19 +54,6 @@ async function findResetTokenDoc(rawToken: string) {
  */
 async function claimResetTokenById(id: ObjectId) {
   return resetPasswordTokensCollection.findOneAndDelete({ _id: id });
-}
-
-function resolveUrl(baseUrl: string, configuredUrl?: string): string {
-  if (!configuredUrl) {
-    return baseUrl;
-  }
-
-  if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
-    return configuredUrl;
-  }
-
-  // Handle relative URL
-  return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
 }
 
 function defaultPasswordResetTemplate({ email, resetUrl }: { email: string; resetUrl: string }) {
@@ -113,10 +101,13 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
     return passwordResetSent;
   }
 
-  // Check if user has password auth method
-  if (!userDoc.authMethods?.password) {
-    return passwordResetSent;
-  }
+  // Intentionally NOT gated on an existing password: this is a set-OR-reset
+  // flow. Passwordless accounts (magic link, OAuth-only) are the documented
+  // way to *add* a password — `handleResetPassword` sets the hash whether or
+  // not one existed. Requiring `authMethods.password` here would silently dead-
+  // end those users (generic success, no email) despite the promised flow.
+  // Ownership is still proven by receiving the emailed token, and the response
+  // stays generic either way, so this doesn't enable account enumeration.
 
   const emailProvider = getEmailConfig().provider;
   if (!emailProvider) {
@@ -272,17 +263,42 @@ export async function handleResetPassword(args: Args, context: Context) {
     { $set: { 'authMethods.password.hash': hash } }
   );
 
-  // Mark the email as verified since the user proved ownership via the reset token
+  // Mark the email as verified since the user proved ownership via the reset token.
+  // Match with strength-2 collation: `resetTokenDoc.email` is lowercased, but the
+  // stored address may keep its original casing (e.g. OAuth-created accounts), and
+  // without the collation the positional `$` update would match nothing — leaving
+  // the email unverified after a successful reset and blocking password login when
+  // verification is required.
   if (resetTokenDoc.email) {
     await usersCollection.updateOne(
       { _id: userDoc._id, 'emails.address': resetTokenDoc.email },
-      { $set: { 'emails.$.verified': true } }
+      { $set: { 'emails.$.verified': true } },
+      { collation: { locale: 'en', strength: 2 } }
     );
   }
 
   // Invalidate all existing sessions for this user so that other browsers/devices
   // are forced to re-authenticate with the new password
   await invalidateAllUserSessions(userDoc._id);
+
+  // Revoke every outstanding magic link token and one-time code for this user's
+  // email addresses. A reset is meant to lock out anyone who had access; without
+  // this, a magic link or code issued before the reset (valid for up to 15
+  // minutes) would still log an attacker back in — bypassing the lockout.
+  // Magic link tokens are always stored with a `validateEmail`-lowercased email,
+  // while a user's stored addresses may keep their original casing (e.g. OAuth-
+  // created accounts), so match on the lowercased form to line up with the
+  // stored keys — covering every address, not just the one that was reset.
+  const userEmails = Array.from(
+    new Set(
+      (userDoc.emails ?? [])
+        .map((e) => e.address?.toLowerCase())
+        .filter((address): address is string => Boolean(address))
+    )
+  );
+  if (userEmails.length > 0) {
+    await magicLinkTokensCollection.deleteMany({ email: { $in: userEmails } });
+  }
 
   // Token already consumed at the commit point; just drop the cookie.
   clearCookie();

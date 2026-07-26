@@ -13,6 +13,22 @@ export type EmailConfig = {
     template?: (props: { name: string; email: string; resetUrl: string }) => string;
     redirectUrl?: string;
   };
+  magicLink?: {
+    subject?: string;
+    /**
+     * Custom email template. Receives both credentials for the sign-in:
+     * `magicLinkUrl` (the clickable link) and `code` (the typed one-time
+     * code for `loginWithOneTimeCode`) — render either or both.
+     */
+    template?: (props: {
+      name: string;
+      email: string;
+      magicLinkUrl: string;
+      code: string;
+    }) => string;
+    /** SPA page the landing route redirects to; it must call `loginWithMagicLink()`. */
+    redirectUrl?: string;
+  };
   // @deprecated use verification.redirectUrl instead
   emailVerifiedRedirectUrl?: string;
 };

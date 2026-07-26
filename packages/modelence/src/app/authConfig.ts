@@ -81,6 +81,10 @@ export type AuthRateLimitsConfig = {
   verification?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
   passwordReset?: AuthRateLimitOverride[];
+  /** Rate limits for magic link requests. */
+  magicLink?: AuthRateLimitOverride[];
+  /** Rate limits for one-time code sign-in attempts. */
+  oneTimeCode?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {
@@ -102,8 +106,8 @@ export type BeforeSignupProps = {
   firstName?: string;
   lastName?: string;
   handle?: string;
-  /** Provider that initiated the signup. Currently only `'email'`. */
-  provider: 'email';
+  /** Provider that initiated the signup: `'email'` or `'magicLink'`. */
+  provider: 'email' | 'magicLink';
   connectionInfo?: ConnectionInfo;
 };
 
@@ -198,8 +202,8 @@ export type AuthConfig = {
    * email-domain verification service) without having to disable the built-in
    * disposable-email check.
    *
-   * Currently only invoked for `'email'` provider signups. OAuth signups are
-   * not gated because OAuth providers (Google, GitHub, etc.) do not issue
+   * Invoked for `'email'` and `'magicLink'` provider signups. OAuth signups
+   * are not gated because OAuth providers (Google, GitHub, etc.) do not issue
    * disposable accounts.
    */
   onBeforeSignup?: (props: BeforeSignupProps) => void | Promise<void>;
@@ -256,6 +260,32 @@ export type AuthConfig = {
   login?: AuthOption;
   /** @deprecated Use {@link AuthConfig.onAfterSignup} and {@link AuthConfig.onSignupError} instead. */
   signup?: AuthOption;
+
+  /**
+   * Enables passwordless magic link authentication. Disabled by default.
+   *
+   * Requires an email provider and delivery settings under the `email` option
+   * (see `EmailConfig.magicLink`).
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   auth: {
+   *     magicLink: { enabled: true, allowSignup: true },
+   *   },
+   * });
+   * ```
+   */
+  magicLink?: {
+    enabled?: boolean;
+    /**
+     * Allows a magic link (or its one-time code) to create an account when
+     * the email has no existing one — combined sign-in/sign-up, like OAuth.
+     * Disabled by default: unknown emails get the same generic "link sent"
+     * response but no email, and no account is ever auto-created.
+     */
+    allowSignup?: boolean;
+  };
 
   /**
    * Controls how OAuth providers handle existing accounts with matching email.

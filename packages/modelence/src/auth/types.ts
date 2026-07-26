@@ -95,7 +95,7 @@ export type RoleDefinition = {
 export const SUPPORTED_OAUTH_PROVIDERS = ['google', 'github'] as const;
 export type OAuthProvider = (typeof SUPPORTED_OAUTH_PROVIDERS)[number];
 
-export type AuthProvider = OAuthProvider | 'email';
+export type AuthProvider = OAuthProvider | 'email' | 'magicLink';
 
 export type AuthSuccessProps = {
   provider: AuthProvider;

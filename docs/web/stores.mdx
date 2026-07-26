@@ -189,12 +189,25 @@ await dbTodos.upsertOne(
   { $set: { isCompleted: false } }
 );
 
+// Atomic find-or-create — returns the document and whether it was just created
+const { doc, isNew } = await dbTodos.findOneAndUpsert(
+  { userId: user.id, title: 'Unique task' },
+  { $setOnInsert: { userId: user.id, title: 'Unique task', isCompleted: false } }
+);
+if (isNew) {
+  // ...run first-time setup for the new document
+}
+
 // Update many
 await dbTodos.updateMany(
   { userId: user.id },
   { $set: { isArchived: true } }
 );
 ```
+
+<Note>
+`findOneAndUpsert` is the atomic form of a check-then-create: it matches or inserts in a single operation and reports `isNew` (from the driver's upsert result), so concurrent callers can't race between a lookup and an insert. Pass `upsert: false` to make it a pure find-and-report that returns `{ doc: null, isNew: false }` when nothing matches. It always returns the post-operation document.
+</Note>
 
 ### Deleting Documents
 
