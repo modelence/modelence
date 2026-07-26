@@ -1558,5 +1558,81 @@ describe('data/store', () => {
       expect(receivedDoc.teamSettings.maxQuota).toBe(500);
       expect(receivedDoc.teamSettings.region).toBe('us-east');
     });
+
+    test('store read methods with projection containing private fields un-hide private fields cleanly', async () => {
+      const organizationStore = new Store('organizationsProj', {
+        schema: {
+          name: schema.string(),
+          active: schema.boolean(),
+          apiKey: schema.string().private(),
+          teamSettings: schema.object({
+            memberEmails: schema.array(schema.string()).private(),
+            maxQuota: schema.number(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com'],
+          maxQuota: 500,
+        },
+      };
+
+      const collectionMock = {
+        findOne: vi.fn().mockImplementation((_query, opts) => {
+          const doc = { ...rawDocFromMongo };
+          if (opts?.projection?.apiKey === 0) {
+            delete (doc as { apiKey?: string }).apiKey;
+          }
+          return Promise.resolve(doc);
+        }),
+        find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([rawDocFromMongo]) }),
+      };
+
+      (organizationStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // Projection un-hides private field in both type system and query params:
+      const doc = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 1, name: 1 } }
+      );
+
+      expect(doc).toBeDefined();
+      expect(doc?.apiKey).toBe('key_live_12345');
+
+      // Both projection and select passed together merge cleanly:
+      await organizationStore.fetch(
+        { name: 'Acme Corp' },
+        { projection: { name: 1 }, select: ['apiKey'] }
+      );
+      expect(collectionMock.find).toHaveBeenCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { name: 1, apiKey: 1 } }
+      );
+
+      // Exclusion projection excluding public field: un-hides all private fields
+      const docExclPublic = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { active: 0 } }
+      );
+      expect(docExclPublic?.apiKey).toBe('key_live_12345');
+      expect(docExclPublic?.teamSettings.memberEmails).toEqual(['admin@acme.com']);
+
+      // Exclusion projection excluding one private field (apiKey: 0): apiKey remains hidden, other private fields are un-hidden
+      const docExclPrivate = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 0 } }
+      );
+      if (docExclPrivate) {
+        expect(docExclPrivate.apiKey).toBeUndefined();
+      }
+    });
   });
 });

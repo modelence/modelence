@@ -66,38 +66,107 @@ export type SelectKey<TSchema extends ModelSchema> =
   | (keyof TSchema & string)
   | `${keyof TSchema & string}.${string}`;
 
+//Determines whether the given projection object is an Inclusion projection or an Exclusion projection
+type IsInclusionProjection<TProj> =
+  TProj extends Record<string, unknown>
+    ? [
+        {
+          [K in keyof TProj]: TProj[K] extends 1 | true ? true : never;
+        }[keyof TProj],
+      ] extends [never]
+      ? false
+      : true
+    : false;
+
+//Extracts only the keys that are explicitly included (assigned 1 or true)
+type ExtractInclusionKeys<TProj> =
+  TProj extends Record<string, unknown>
+    ? {
+        [K in keyof TProj & string]: TProj[K] extends 1 | true ? K : never;
+      }[keyof TProj & string]
+    : never;
+
+//Extracts the keys that are explicitly excluded in an exclusion projection (e.g., { active: 0 })
+type ExtractExclusionKeys<TProj> =
+  TProj extends Record<string, unknown>
+    ? {
+        [K in keyof TProj & string]: string extends K ? never : K;
+      }[keyof TProj & string]
+    : never;
+
+/**
+ * ExtractProjectionUnHiddenKeys: Combines the rules above to calculate which private field paths should be un-hidden in the returned TypeScript document type
+ * Logic Branching:
+ * If {@link IsInclusionProjection<TProj>} is true: It calls {@link ExtractInclusionKeys}. Only fields explicitly included via 1 or true are un-hidden.
+ * If {@link IsInclusionProjection<TProj>} is false (Exclusion Projection): It takes all private fields in {@link SelectKey} and removes (Exclude) any keys (or subpaths) that were explicitly set to 0 in {@link ExtractExclusionKeys}.
+ * Example: If projection: { active: 0 } is passed, active is excluded, so all private fields (apiKey, teamSettings.memberEmails) are un-hidden.
+ * Example: If projection: { apiKey: 0 } is passed, apiKey is excluded, so apiKey remains hidden while teamSettings.memberEmails is un-hidden.
+ */
+type ExtractProjectionUnHiddenKeys<TSchema extends ModelSchema, TProj> =
+  IsInclusionProjection<TProj> extends true
+    ? ExtractInclusionKeys<TProj>
+    : Exclude<
+        SelectKey<TSchema>,
+        ExtractExclusionKeys<TProj> | `${Extract<ExtractExclusionKeys<TProj>, string>}.${string}`
+      >;
+
 /**
  * Reusable type helper representing the document returned by store read operations.
- * Defaults to excluding private fields unless `KSelect` explicitly selects them.
+ * Defaults to excluding private fields unless `KSelect` explicitly selects them or `KProjection` includes them / omits them from exclusion.
  */
 export type FetchedDoc<
   TSchema extends ModelSchema,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  TMethods extends Record<string, any> = Record<string, never>,
+  TMethods = Record<string, never>,
   KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
 > = WithId<
-  [KSelect] extends [never]
-    ? InferFetchedDocumentType<TSchema>
-    : InferSelectedDocumentType<TSchema, KSelect>
+  [KProjection] extends [undefined]
+    ? [KSelect] extends [never]
+      ? InferFetchedDocumentType<TSchema>
+      : InferSelectedDocumentType<TSchema, KSelect>
+    : InferSelectedDocumentType<
+        TSchema,
+        KSelect | ExtractProjectionUnHiddenKeys<TSchema, KProjection>
+      >
 > &
   TMethods;
 
 /**
- * Options for MongoDB `find` operations with support for un-hiding private fields via `select`.
+ * Options for MongoDB `find` operations with support for un-hiding private fields via `select` or `projection`.
  */
 export type FindOptionsWithSelect<
   TSchema extends ModelSchema,
   KSelect extends SelectKey<TSchema> = never,
-> = FindOptions & { select?: KSelect[] };
+  KProjection = undefined,
+> = FindOptions & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<InferDocumentType<TSchema>> & {
+      [K in keyof KProjection]: K extends
+        | keyof WithId<InferDocumentType<TSchema>>
+        | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
+};
 
 /**
- * Options for Store `fetch` operations with support for un-hiding private fields via `select`.
+ * Options for Store `fetch` operations with support for un-hiding private fields via `select` or `projection`.
  */
 export type FetchOptionsWithSelect<
   TSchema extends ModelSchema,
   TDoc = InferDocumentType<TSchema>,
   KSelect extends SelectKey<TSchema> = never,
-> = FetchOptions<TDoc> & { select?: KSelect[] };
+  KProjection = undefined,
+> = FetchOptions<TDoc> & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<TDoc> & {
+      [K in keyof KProjection]: K extends keyof WithId<TDoc> | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
+};
 
 /**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
@@ -823,10 +892,15 @@ export class Store<
     return result as this['_doc'];
   }
 
-  private wrapFetchedDocument<KSelect extends SelectKey<TSchema> = never>(
+  private wrapFetchedDocument<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     document: this['_rawDoc']
-  ): FetchedDoc<TSchema, TMethods, KSelect> {
-    return this.wrapDocument(document) as unknown as FetchedDoc<TSchema, TMethods, KSelect>;
+  ): FetchedDoc<TSchema, TMethods, KSelect, KProjection> {
+    return this.wrapDocument(document) as unknown as FetchedDoc<
+      TSchema,
+      TMethods,
+      KSelect,
+      KProjection
+    >;
   }
 
   /**
@@ -889,6 +963,19 @@ export class Store<
     select?: SelectKey<TSchema>[];
   }): Document | undefined {
     if (options?.projection) {
+      if (options?.select && options.select.length > 0) {
+        const proj: Document = { ...(options.projection as Document) };
+        const values = Object.values(proj);
+        const isInclusion = values.some((val) => val === 1 || val === true);
+        for (const key of options.select) {
+          if (isInclusion) {
+            proj[key] = 1;
+          } else {
+            delete proj[key];
+          }
+        }
+        return proj;
+      }
       return options.projection;
     }
     if (options?.select && options.select.length > 0) {
@@ -928,25 +1015,25 @@ export class Store<
    * await store.findOne({ name: 'John' }, { select: ['password'] })
    * ```
    */
-  async findOne<KSelect extends SelectKey<TSchema> = never>(
+  async findOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FindOptionsWithSelect<TSchema, KSelect>
-  ): Promise<FetchedDoc<TSchema, TMethods, KSelect> | null> {
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const projection = this.getFetchProjection(options);
 
     const document = await this.requireCollection().findOne<this['_rawDoc']>(
       query as Filter<this['_type']>,
       projection ? { ...options, projection } : options
     );
-    return document ? this.wrapFetchedDocument<KSelect>(document) : null;
+    return document ? this.wrapFetchedDocument<KSelect, KProjection>(document) : null;
   }
 
-  async requireOne<KSelect extends SelectKey<TSchema> = never>(
+  async requireOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FindOptionsWithSelect<TSchema, KSelect>,
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>,
     errorHandler?: () => Error
-  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>> {
-    const result = await this.findOne(query, options);
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const result = await this.findOne<KSelect, KProjection>(query, options);
     if (!result) {
       throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
     }
@@ -978,12 +1065,15 @@ export class Store<
    * @param options - Optional find options with `select` array {@link FindOptionsWithSelect}
    * @returns The document, or null if not found
    */
-  async findById<KSelect extends SelectKey<TSchema> = never>(
+  async findById<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     id: string | ObjectId,
-    options?: FindOptionsWithSelect<TSchema, KSelect>
-  ): Promise<FetchedDoc<TSchema, TMethods, KSelect> | null> {
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const idSelector = typeof id === 'string' ? { _id: new ObjectId(id) } : { _id: id };
-    return await this.findOne(idSelector as TypedFilter<this['_type']>, options);
+    return await this.findOne<KSelect, KProjection>(
+      idSelector as TypedFilter<this['_type']>,
+      options
+    );
   }
 
   /**
@@ -994,12 +1084,12 @@ export class Store<
    * @param errorHandler - Optional error handler to return a custom error if the document is not found
    * @returns The document
    */
-  async requireById<KSelect extends SelectKey<TSchema> = never>(
+  async requireById<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     id: string | ObjectId,
-    options?: FindOptionsWithSelect<TSchema, KSelect>,
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>,
     errorHandler?: () => Error
-  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>> {
-    const result = await this.findById(id, options);
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const result = await this.findById<KSelect, KProjection>(id, options);
     if (!result) {
       throw errorHandler
         ? errorHandler()
@@ -1044,12 +1134,14 @@ export class Store<
    * );
    * ```
    */
-  async fetch<KSelect extends SelectKey<TSchema> = never>(
+  async fetch<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FetchOptionsWithSelect<TSchema, this['_type'], KSelect>
-  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>[]> {
+    options?: FetchOptionsWithSelect<TSchema, this['_type'], KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>[]> {
     const cursor = this.find(query, options);
-    return (await cursor.toArray()).map((doc) => this.wrapFetchedDocument<KSelect>(doc));
+    return (await cursor.toArray()).map((doc) =>
+      this.wrapFetchedDocument<KSelect, KProjection>(doc)
+    );
   }
 
   /**

@@ -189,11 +189,13 @@ type SubKeys<KKeys, Prefix> = KKeys extends string
     : never
   : never;
 
-type IsSelectedKey<K, KKeys> = [Extract<KKeys, `${Extract<K, string>}.${string}` | K>] extends [
-  never,
-]
-  ? false
-  : true;
+type IsSelectedKey<K, KKeys> = K extends KKeys
+  ? true
+  : `${Extract<K, string>}.${string}` extends KKeys
+    ? true
+    : [Extract<KKeys, `${Extract<K, string>}.${string}` | K>] extends [never]
+      ? false
+      : true;
 
 /**
  * Represents the document when specific private fields are un-hidden using store.select(...).
