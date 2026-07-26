@@ -963,10 +963,11 @@ export class Store<
     select?: SelectKey<TSchema>[];
   }): Document | undefined {
     if (options?.projection) {
+      const proj: Document = { ...(options.projection as Document) };
+      const values = Object.values(proj);
+      const isInclusion = values.some((val) => val === 1 || val === true);
+
       if (options?.select && options.select.length > 0) {
-        const proj: Document = { ...(options.projection as Document) };
-        const values = Object.values(proj);
-        const isInclusion = values.some((val) => val === 1 || val === true);
         for (const key of options.select) {
           if (isInclusion) {
             proj[key] = 1;
@@ -974,14 +975,34 @@ export class Store<
             delete proj[key];
           }
         }
-        return proj;
       }
-      return options.projection;
+
+      if (isInclusion) {
+        const clean: Document = { ...proj };
+        const keys = Object.keys(clean);
+        for (const key of keys) {
+          if (clean[key] === 1 || clean[key] === true) {
+            const prefix = `${key}.`;
+            for (const childKey of keys) {
+              if (childKey.startsWith(prefix) && childKey !== key) {
+                delete clean[childKey];
+              }
+            }
+          }
+        }
+        return clean;
+      }
+      return proj;
     }
+
     if (options?.select && options.select.length > 0) {
-      const unselectedPrivateFields = this.privateFields.filter(
-        (field) => !options.select!.includes(field as SelectKey<TSchema>)
-      );
+      const selected = options.select as string[];
+      const unselectedPrivateFields = this.privateFields.filter((field) => {
+        if (selected.includes(field)) return false;
+        if (selected.some((s) => s.startsWith(`${field}.`))) return false;
+        return true;
+      });
+
       if (unselectedPrivateFields.length === 0) {
         return undefined;
       }
@@ -991,13 +1012,29 @@ export class Store<
       }
       return proj;
     }
+
     if (this.privateFields.length > 0) {
+      const unselectedPrivateFields = this.privateFields.filter((field) => {
+        const parts = field.split('.');
+        for (let i = 1; i < parts.length; i++) {
+          const parent = parts.slice(0, i).join('.');
+          if (this.privateFields.includes(parent)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (unselectedPrivateFields.length === 0) {
+        return undefined;
+      }
       const proj: Document = {};
-      for (const field of this.privateFields) {
+      for (const field of unselectedPrivateFields) {
         proj[field] = 0;
       }
       return proj;
     }
+
     return undefined;
   }
 

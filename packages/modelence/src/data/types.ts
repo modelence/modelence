@@ -65,11 +65,13 @@ export function isFieldPrivate(type: unknown): boolean {
 export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): string[] {
   if (!schemaDef || typeof schemaDef !== 'object') return [];
 
-  if (isFieldPrivate(schemaDef)) {
-    return prefix ? [prefix] : [];
-  }
-
   const paths: string[] = [];
+
+  if (isFieldPrivate(schemaDef)) {
+    if (prefix) {
+      paths.push(prefix);
+    }
+  }
 
   if (schemaDef instanceof z.ZodObject) {
     const shape = schemaDef.shape;
@@ -77,6 +79,8 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
       const fieldPath = prefix ? `${prefix}.${key}` : key;
       paths.push(...extractPrivateFieldPaths(shape[key], fieldPath));
     }
+  } else if (schemaDef instanceof z.ZodArray) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.element, prefix));
   } else if (
     schemaDef instanceof z.ZodOptional ||
     schemaDef instanceof z.ZodNullable ||
@@ -85,6 +89,10 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     paths.push(...extractPrivateFieldPaths((schemaDef._def as any).innerType, prefix));
   } else if (schemaDef instanceof z.ZodEffects) {
     paths.push(...extractPrivateFieldPaths((schemaDef._def as any).schema, prefix));
+  } else if (Array.isArray(schemaDef)) {
+    for (const item of schemaDef) {
+      paths.push(...extractPrivateFieldPaths(item, prefix));
+    }
   } else if (typeof schemaDef === 'object' && schemaDef !== null) {
     for (const key of Object.keys(schemaDef)) {
       const val = (schemaDef as any)[key];
@@ -154,6 +162,24 @@ export type InferDocumentType<T extends SchemaTypeDefinition> = {
         : never;
 };
 
+type InferFetchedZodElement<E> =
+  E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
+    ? InferFetchedDocumentType<Shape>
+    : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
+      ? Array<InferFetchedZodElement<InnerElement>>
+      : E extends z.ZodTypeAny
+        ? z.infer<E>
+        : never;
+
+type InferSelectedZodElement<E, KKeys extends string> =
+  E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
+    ? InferSelectedDocumentType<Shape, KKeys>
+    : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
+      ? Array<InferSelectedZodElement<InnerElement, KKeys>>
+      : E extends z.ZodTypeAny
+        ? z.infer<E>
+        : never;
+
 /**
  * Represents the default fetched document when reading from the store (store.fetch(), store.findOne()).
  */
@@ -164,9 +190,11 @@ export type InferFetchedDocumentType<T extends SchemaTypeDefinition> = {
       ? K
       : never]?: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
     ? InferFetchedDocumentType<Shape>
-    : T[K] extends z.ZodTypeAny
-      ? z.infer<T[K]>
-      : never;
+    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
+      ? Array<InferFetchedZodElement<ElementType>>
+      : T[K] extends z.ZodTypeAny
+        ? z.infer<T[K]>
+        : never;
 } & {
   [K in keyof T as IsPrivateField<T[K]> extends true
     ? never
@@ -174,13 +202,15 @@ export type InferFetchedDocumentType<T extends SchemaTypeDefinition> = {
       ? never
       : K]: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
     ? InferFetchedDocumentType<Shape>
-    : T[K] extends z.ZodTypeAny
-      ? z.infer<T[K]>
-      : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
-        ? Array<InferFetchedDocumentType<ElementType>>
-        : T[K] extends ObjectTypeDefinition
-          ? InferFetchedDocumentType<T[K]>
-          : never;
+    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
+      ? Array<InferFetchedZodElement<ElementType>>
+      : T[K] extends z.ZodTypeAny
+        ? z.infer<T[K]>
+        : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
+          ? Array<InferFetchedDocumentType<ElementType>>
+          : T[K] extends ObjectTypeDefinition
+            ? InferFetchedDocumentType<T[K]>
+            : never;
 };
 
 type SubKeys<KKeys, Prefix> = KKeys extends string
@@ -215,9 +245,11 @@ export type InferSelectedDocumentType<
       ? K
       : never]?: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
     ? InferSelectedDocumentType<Shape, SubKeys<KKeys, K>>
-    : T[K] extends z.ZodTypeAny
-      ? z.infer<T[K]>
-      : never;
+    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
+      ? Array<InferSelectedZodElement<ElementType, SubKeys<KKeys, K>>>
+      : T[K] extends z.ZodTypeAny
+        ? z.infer<T[K]>
+        : never;
 } & {
   [K in keyof T as IsPrivateField<T[K]> extends true
     ? IsSelectedKey<K, KKeys> extends true
@@ -229,13 +261,15 @@ export type InferSelectedDocumentType<
       ? never
       : K]: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
     ? InferSelectedDocumentType<Shape, SubKeys<KKeys, K>>
-    : T[K] extends z.ZodTypeAny
-      ? z.infer<T[K]>
-      : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
-        ? Array<InferSelectedDocumentType<ElementType, SubKeys<KKeys, K>>>
-        : T[K] extends ObjectTypeDefinition
-          ? InferSelectedDocumentType<T[K], SubKeys<KKeys, K>>
-          : never;
+    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
+      ? Array<InferSelectedZodElement<ElementType, SubKeys<KKeys, K>>>
+      : T[K] extends z.ZodTypeAny
+        ? z.infer<T[K]>
+        : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
+          ? Array<InferSelectedDocumentType<ElementType, SubKeys<KKeys, K>>>
+          : T[K] extends ObjectTypeDefinition
+            ? InferSelectedDocumentType<T[K], SubKeys<KKeys, K>>
+            : never;
 };
 
 export namespace schema {

@@ -271,6 +271,83 @@ describe('data/types', () => {
       void selected.metadata.internal.pin;
     });
 
+    test('selecting a private parent object should un-hide public fields but keep nested private fields hidden unless explicitly selected', () => {
+      const userSchema = {
+        name: schema.string(),
+        credentials: schema
+          .object({
+            password: schema.string().private(),
+            emails: schema.string(),
+          })
+          .private(),
+      };
+
+      // Selecting only 'credentials' un-hides the object and its public field (emails), but keeps password hidden
+      type SelectedCreds = schema.inferSelected<typeof userSchema, 'credentials'>;
+
+      const selectedCreds: SelectedCreds = {
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+        },
+      };
+
+      expect(selectedCreds.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials and was not explicitly selected
+      void selectedCreds.credentials.password;
+
+      // Selecting both 'credentials' and 'credentials.password' un-hides password as well
+      type SelectedBoth = schema.inferSelected<
+        typeof userSchema,
+        'credentials' | 'credentials.password'
+      >;
+
+      const selectedBoth: SelectedBoth = {
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+          password: 'supersecret',
+        },
+      };
+
+      expect(selectedBoth.credentials.password).toBe('supersecret');
+    });
+
+    test('extractPrivateFieldPaths and inferFetched should handle private fields inside ZodArray element schemas', () => {
+      const teamSchema = {
+        name: schema.string(),
+        members: schema.array(
+          schema.object({
+            name: schema.string(),
+            passcode: schema.string().private(),
+          })
+        ),
+      };
+
+      const paths = extractPrivateFieldPaths(teamSchema);
+      expect(paths).toEqual(['members.passcode']);
+
+      type TeamFetched = schema.inferFetched<typeof teamSchema>;
+
+      const fetched: TeamFetched = {
+        name: 'DevTeam',
+        members: [{ name: 'Bob' }],
+      };
+
+      expect(fetched.members[0].name).toBe('Bob');
+      // @ts-expect-error passcode inside array items is private and should not exist on fetched doc
+      void fetched.members[0].passcode;
+
+      type TeamSelected = schema.inferSelected<typeof teamSchema, 'members.passcode'>;
+
+      const selected: TeamSelected = {
+        name: 'DevTeam',
+        members: [{ name: 'Bob', passcode: '1234' }],
+      };
+
+      expect(selected.members[0].passcode).toBe('1234');
+    });
+
     test('should allow selecting nested array private field', () => {
       const organizationSchema = {
         name: schema.string(),

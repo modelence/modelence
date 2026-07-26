@@ -1634,5 +1634,71 @@ describe('data/store', () => {
         expect(docExclPrivate.apiKey).toBeUndefined();
       }
     });
+
+    it('should exclude nested private field when only private parent object is selected', async () => {
+      const profileStore = new Store('userProfilesNested', {
+        schema: {
+          name: schema.string(),
+          credentials: schema
+            .object({
+              password: schema.string().private(),
+              emails: schema.string(),
+            })
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+          password: 'supersecret',
+        },
+      };
+
+      const mockCol = {
+        findOne: vi.fn().mockImplementation((_query, opts) => {
+          const doc = JSON.parse(JSON.stringify(rawDoc));
+          if (opts?.projection?.['credentials.password'] === 0) {
+            delete doc.credentials.password;
+          }
+          return Promise.resolve(doc);
+        }),
+      };
+
+      (profileStore as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const result = await profileStore.findOne({ name: 'Alice' }, { select: ['credentials'] });
+
+      expect(mockCol.findOne).toHaveBeenCalledWith(
+        { name: 'Alice' },
+        { select: ['credentials'], projection: { 'credentials.password': 0 } }
+      );
+      expect(result?.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials and was not explicitly selected
+      expect(result?.credentials.password).toBeUndefined();
+
+      // Selecting both credentials and credentials.password should result in undefined projection (no path collision)
+      await profileStore.findOne(
+        { name: 'Alice' },
+        { select: ['credentials', 'credentials.password'] }
+      );
+      expect(mockCol.findOne).toHaveBeenLastCalledWith(
+        { name: 'Alice' },
+        { select: ['credentials', 'credentials.password'] }
+      );
+
+      // Inclusion projection containing both parent and sub-path should sanitize sub-path to prevent MongoDB collision
+      await profileStore.findOne(
+        { name: 'Alice' },
+        { projection: { credentials: 1, 'credentials.password': 1 } as any }
+      );
+      expect(mockCol.findOne).toHaveBeenLastCalledWith(
+        { name: 'Alice' },
+        { projection: { credentials: 1 } }
+      );
+    });
   });
 });
