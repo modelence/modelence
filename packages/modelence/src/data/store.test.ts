@@ -1359,4 +1359,204 @@ describe('data/store', () => {
       expect(calledFilter?.$expr).toEqual({ $gt: ['$value', 10] });
     });
   });
+
+  describe('private fields and options.select', () => {
+    const createPrivateStore = () =>
+      new Store('private_users', {
+        schema: {
+          name: schema.string(),
+          email: schema.string(),
+          password: schema.string().private(),
+          pin: schema.number().private(),
+        },
+        indexes: [],
+      });
+
+    test('should exclude private fields by default on findOne and fetch', async () => {
+      const store = createPrivateStore();
+      const toArrayMock = vi
+        .fn()
+        .mockResolvedValue([{ _id: new ObjectId(), name: 'Alice', email: 'alice@test.com' }]);
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: new ObjectId(), name: 'Alice', email: 'alice@test.com' }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOne({ name: 'Alice' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { name: 'Alice' },
+        { projection: { password: 0, pin: 0 } }
+      );
+
+      await store.fetch({ name: 'Alice' });
+      expect(collectionMock.find).toHaveBeenCalledWith(
+        { name: 'Alice' },
+        { projection: { password: 0, pin: 0 } }
+      );
+    });
+
+    test('store.findOne and store.fetch with options.select should un-hide selected private fields', async () => {
+      const store = createPrivateStore();
+      const toArrayMock = vi
+        .fn()
+        .mockResolvedValue([
+          { _id: new ObjectId(), name: 'Alice', email: 'alice@test.com', password: 'hash' },
+        ]);
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          name: 'Alice',
+          email: 'alice@test.com',
+          password: 'hash',
+        }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOne({ name: 'Alice' }, { select: ['password'] });
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { name: 'Alice' },
+        { select: ['password'], projection: { pin: 0 } }
+      );
+
+      await store.fetch({ name: 'Alice' }, { select: ['password', 'pin'] });
+      expect(collectionMock.find).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
+    });
+
+    test('store.findOne and store.fetch with nested and parent private fields should hide/un-hide correctly', async () => {
+      const profileStore = new Store('userProfiles', {
+        schema: {
+          username: schema.string(),
+          metadata: schema.object({
+            internal: schema.object({
+              pin: schema.number().private(),
+              score: schema.number(),
+            }),
+          }),
+          securityCredentials: schema
+            .object({
+              token: schema.string(),
+            })
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const toArrayMock = vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          username: 'alice',
+          metadata: { internal: { score: 100 } },
+        },
+      ]);
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          username: 'alice',
+          metadata: { internal: { score: 100 } },
+        }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (profileStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // By default without select: nested private field and parent private field are excluded
+      await profileStore.findOne({ username: 'alice' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { username: 'alice' },
+        { projection: { 'metadata.internal.pin': 0, securityCredentials: 0 } }
+      );
+
+      // With select for nested private field: metadata.internal.pin is un-hidden
+      await profileStore.findOne({ username: 'alice' }, { select: ['metadata.internal.pin'] });
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { username: 'alice' },
+        { select: ['metadata.internal.pin'], projection: { securityCredentials: 0 } }
+      );
+
+      // With select for parent private field: securityCredentials is un-hidden
+      await profileStore.fetch({ username: 'alice' }, { select: ['securityCredentials'] });
+      expect(collectionMock.find).toHaveBeenCalledWith(
+        { username: 'alice' },
+        { projection: { 'metadata.internal.pin': 0 } }
+      );
+
+      // With select for all private fields: projection is undefined (no fields hidden)
+      await profileStore.fetch(
+        { username: 'alice' },
+        { select: ['metadata.internal.pin', 'securityCredentials'] }
+      );
+      expect(collectionMock.find).toHaveBeenCalledWith({ username: 'alice' }, undefined);
+    });
+
+    test('store.findOne and store.fetch: selecting nested array private field returns full received data', async () => {
+      const organizationStore = new Store('organizations', {
+        schema: {
+          name: schema.string(),
+          active: schema.boolean(),
+          apiKey: schema.string().private(),
+          teamSettings: schema.object({
+            memberEmails: schema.array(schema.string()).private(),
+            maxQuota: schema.number(),
+            region: schema.string(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com', 'dev@acme.com'],
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      const toArrayMock = vi.fn().mockResolvedValue([rawDocFromMongo]);
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue(rawDocFromMongo),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (organizationStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // 1. By default with no select option: apiKey and teamSettings.memberEmails are projected out (hidden)
+      const fetchedDefault = await organizationStore.findOne({ name: 'Acme Corp' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 0, 'teamSettings.memberEmails': 0 } }
+      );
+      expect(fetchedDefault).toBeDefined();
+      expect(fetchedDefault?.name).toBe('Acme Corp');
+      expect(fetchedDefault?.teamSettings.maxQuota).toBe(500);
+
+      // 2. Fetching with select for apiKey and teamSettings.memberEmails:
+      const selectedOrgs = await organizationStore.fetch(
+        {},
+        { select: ['apiKey', 'teamSettings.memberEmails'] }
+      );
+
+      // Verify MongoDB call arguments:
+      expect(collectionMock.find).toHaveBeenCalledWith({}, undefined);
+
+      // Verify RECEIVED data in response:
+      expect(selectedOrgs).toHaveLength(1);
+      const receivedDoc = selectedOrgs[0];
+      expect(receivedDoc.apiKey).toBe('key_live_12345');
+      expect(receivedDoc.teamSettings.memberEmails).toEqual(['admin@acme.com', 'dev@acme.com']);
+      expect(receivedDoc.teamSettings.maxQuota).toBe(500);
+      expect(receivedDoc.teamSettings.region).toBe('us-east');
+    });
+  });
 });

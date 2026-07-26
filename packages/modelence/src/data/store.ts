@@ -34,7 +34,13 @@ import {
   ChangeStreamOptions,
   DistinctOptions,
 } from 'mongodb';
-import { ModelSchema, InferDocumentType } from './types';
+import {
+  ModelSchema,
+  InferDocumentType,
+  InferFetchedDocumentType,
+  InferSelectedDocumentType,
+  extractPrivateFieldPaths,
+} from './types';
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
 import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
@@ -51,6 +57,47 @@ export type UpsertResult<TDoc> = {
   /** True exactly when this call inserted the document. */
   isNew: boolean;
 };
+
+/**
+ * Helper type to extract string key selections for a schema.
+ * Accepts any top-level key of TSchema or any dot-notation path starting with a top-level key of TSchema (e.g. 'groupInfo.users').
+ */
+export type SelectKey<TSchema extends ModelSchema> =
+  | (keyof TSchema & string)
+  | `${keyof TSchema & string}.${string}`;
+
+/**
+ * Reusable type helper representing the document returned by store read operations.
+ * Defaults to excluding private fields unless `KSelect` explicitly selects them.
+ */
+export type FetchedDoc<
+  TSchema extends ModelSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TMethods extends Record<string, any> = Record<string, never>,
+  KSelect extends SelectKey<TSchema> = never,
+> = WithId<
+  [KSelect] extends [never]
+    ? InferFetchedDocumentType<TSchema>
+    : InferSelectedDocumentType<TSchema, KSelect>
+> &
+  TMethods;
+
+/**
+ * Options for MongoDB `find` operations with support for un-hiding private fields via `select`.
+ */
+export type FindOptionsWithSelect<
+  TSchema extends ModelSchema,
+  KSelect extends SelectKey<TSchema> = never,
+> = FindOptions & { select?: KSelect[] };
+
+/**
+ * Options for Store `fetch` operations with support for un-hiding private fields via `select`.
+ */
+export type FetchOptionsWithSelect<
+  TSchema extends ModelSchema,
+  TDoc = InferDocumentType<TSchema>,
+  KSelect extends SelectKey<TSchema> = never,
+> = FetchOptions<TDoc> & { select?: KSelect[] };
 
 /**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
@@ -394,7 +441,15 @@ export class Store<
   /** @internal */
   readonly _doc!: this['_rawDoc'] & TMethods;
 
+  /** @internal */
+  readonly _fetchedType!: InferFetchedDocumentType<TSchema>;
+  /** @internal */
+  readonly _fetchedRawDoc!: WithId<this['_fetchedType']>;
+  /** @internal */
+  readonly _fetchedDoc!: this['_fetchedRawDoc'] & TMethods;
+
   readonly Doc!: this['_doc'];
+  readonly FetchedDoc!: this['_fetchedDoc'];
 
   private name: string;
   private readonly schema: TSchema;
@@ -402,6 +457,7 @@ export class Store<
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
   private readonly indexCreationMode: IndexCreationMode;
+  private readonly privateFields: string[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -437,6 +493,7 @@ export class Store<
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
     this.indexCreationMode = options.indexCreationMode ?? 'background';
+    this.privateFields = extractPrivateFieldPaths(options.schema);
   }
 
   getName() {
@@ -766,6 +823,12 @@ export class Store<
     return result as this['_doc'];
   }
 
+  private wrapFetchedDocument<KSelect extends SelectKey<TSchema> = never>(
+    document: this['_rawDoc']
+  ): FetchedDoc<TSchema, TMethods, KSelect> {
+    return this.wrapDocument(document) as unknown as FetchedDoc<TSchema, TMethods, KSelect>;
+  }
+
   /**
    * For convenience, to also allow directy passing a string or ObjectId as the selector
    */
@@ -811,6 +874,7 @@ export class Store<
    * // ✅ Valid queries:
    * await store.findOne({ name: 'John' })
    * await store.findOne({ age: { $gt: 18 } })
+   * await store.findOne({ customerId: 25062006 },{ select: ['password'] })
    * await store.findOne({ _id: new ObjectId('...') })
    * await store.findOne({ tags: { $in: ['typescript', 'mongodb'] } })
    * await store.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] })
@@ -820,19 +884,68 @@ export class Store<
    * await store.findOne({ id: '123' })
    * ```
    */
-  async findOne(query: TypedFilter<this['_type']>, options?: FindOptions) {
-    const document = await this.requireCollection().findOne<this['_rawDoc']>(
-      query as Filter<this['_type']>,
-      options
-    );
-    return document ? this.wrapDocument(document) : null;
+  private getFetchProjection(options?: {
+    projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+    select?: SelectKey<TSchema>[];
+  }): Document | undefined {
+    if (options?.projection) {
+      return options.projection;
+    }
+    if (options?.select && options.select.length > 0) {
+      const unselectedPrivateFields = this.privateFields.filter(
+        (field) => !options.select!.includes(field as SelectKey<TSchema>)
+      );
+      if (unselectedPrivateFields.length === 0) {
+        return undefined;
+      }
+      const proj: Document = {};
+      for (const field of unselectedPrivateFields) {
+        proj[field] = 0;
+      }
+      return proj;
+    }
+    if (this.privateFields.length > 0) {
+      const proj: Document = {};
+      for (const field of this.privateFields) {
+        proj[field] = 0;
+      }
+      return proj;
+    }
+    return undefined;
   }
 
-  async requireOne(
+  /**
+   * Finds a single document matching the query
+   *
+   * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
+   * @param options - Find options, including optional `select` array to un-hide private fields {@link FindOptionsWithSelect}
+   * @returns The document, or null if not found
+   *
+   * @example
+   * ```ts
+   * // ✅ Valid queries:
+   * await store.findOne({ name: 'John' })
+   * await store.findOne({ name: 'John' }, { select: ['password'] })
+   * ```
+   */
+  async findOne<KSelect extends SelectKey<TSchema> = never>(
     query: TypedFilter<this['_type']>,
-    options?: FindOptions,
+    options?: FindOptionsWithSelect<TSchema, KSelect>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect> | null> {
+    const projection = this.getFetchProjection(options);
+
+    const document = await this.requireCollection().findOne<this['_rawDoc']>(
+      query as Filter<this['_type']>,
+      projection ? { ...options, projection } : options
+    );
+    return document ? this.wrapFetchedDocument<KSelect>(document) : null;
+  }
+
+  async requireOne<KSelect extends SelectKey<TSchema> = never>(
+    query: TypedFilter<this['_type']>,
+    options?: FindOptionsWithSelect<TSchema, KSelect>,
     errorHandler?: () => Error
-  ): Promise<this['_doc']> {
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>> {
     const result = await this.findOne(query, options);
     if (!result) {
       throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
@@ -841,9 +954,10 @@ export class Store<
   }
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
+    const projection = this.getFetchProjection(options);
     const cursor = this.requireCollection().find(
       query as Filter<this['_type']>,
-      options?.projection ? { projection: options.projection } : undefined
+      projection ? { projection } : undefined
     );
     if (options?.sort) {
       cursor.sort(options.sort);
@@ -861,22 +975,31 @@ export class Store<
    * Fetches a single document by its ID
    *
    * @param id - The ID of the document to find
+   * @param options - Optional find options with `select` array {@link FindOptionsWithSelect}
    * @returns The document, or null if not found
    */
-  async findById(id: string | ObjectId): Promise<this['_doc'] | null> {
+  async findById<KSelect extends SelectKey<TSchema> = never>(
+    id: string | ObjectId,
+    options?: FindOptionsWithSelect<TSchema, KSelect>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect> | null> {
     const idSelector = typeof id === 'string' ? { _id: new ObjectId(id) } : { _id: id };
-    return await this.findOne(idSelector as TypedFilter<this['_type']>);
+    return await this.findOne(idSelector as TypedFilter<this['_type']>, options);
   }
 
   /**
    * Fetches a single document by its ID, or throws an error if not found
    *
    * @param id - The ID of the document to find
+   * @param options - Optional find options with `select` array
    * @param errorHandler - Optional error handler to return a custom error if the document is not found
    * @returns The document
    */
-  async requireById(id: string | ObjectId, errorHandler?: () => Error): Promise<this['_doc']> {
-    const result = await this.findById(id);
+  async requireById<KSelect extends SelectKey<TSchema> = never>(
+    id: string | ObjectId,
+    options?: FindOptionsWithSelect<TSchema, KSelect>,
+    errorHandler?: () => Error
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>> {
+    const result = await this.findById(id, options);
     if (!result) {
       throw errorHandler
         ? errorHandler()
@@ -921,12 +1044,12 @@ export class Store<
    * );
    * ```
    */
-  async fetch(
+  async fetch<KSelect extends SelectKey<TSchema> = never>(
     query: TypedFilter<this['_type']>,
-    options?: FetchOptions<this['_type']>
-  ): Promise<this['_doc'][]> {
+    options?: FetchOptionsWithSelect<TSchema, this['_type'], KSelect>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect>[]> {
     const cursor = this.find(query, options);
-    return (await cursor.toArray()).map(this.wrapDocument.bind(this));
+    return (await cursor.toArray()).map((doc) => this.wrapFetchedDocument<KSelect>(doc));
   }
 
   /**
@@ -1095,13 +1218,14 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
     options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+  ): Promise<this['_fetchedDoc'] | null> {
+    const projection = this.getFetchProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
-      options ?? {}
+      projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
   }
 
   /**
@@ -1134,19 +1258,21 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
     options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata' | 'returnDocument'>
-  ): Promise<UpsertResult<this['_doc']>> {
+  ): Promise<UpsertResult<this['_fetchedDoc']>> {
+    const projection = this.getFetchProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
       {
         upsert: true,
         ...options,
+        ...(projection ? { projection } : {}),
         // Always request the post-op doc and the metadata carrying `upserted`.
         returnDocument: 'after',
         includeResultMetadata: true,
       }
     );
-    const doc = result.value ? this.wrapDocument(result.value as this['_rawDoc']) : null;
+    const doc = result.value ? this.wrapFetchedDocument(result.value as this['_rawDoc']) : null;
     return { doc, isNew: Boolean(result.lastErrorObject?.upserted) };
   }
 
@@ -1160,12 +1286,13 @@ export class Store<
   async findOneAndDelete(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+  ): Promise<this['_fetchedDoc'] | null> {
+    const projection = this.getFetchProjection(options);
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
-      options ?? {}
+      projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
   }
 
   /**
@@ -1180,13 +1307,14 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     replacement: WithoutId<this['_type']>,
     options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+  ): Promise<this['_fetchedDoc'] | null> {
+    const projection = this.getFetchProjection(options);
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
       replacement,
-      options ?? {}
+      projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
   }
 
   /**

@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { schema } from './types';
+import { schema, isFieldPrivate, extractPrivateFieldPaths } from './types';
 
 describe('data/types', () => {
   describe('schema.string', () => {
@@ -138,6 +139,185 @@ describe('data/types', () => {
       const inferred = schema.infer(testSchema);
       expect(inferred).toBeDefined();
       expect(typeof inferred).toBe('object');
+    });
+  });
+
+  describe('schema.private', () => {
+    test('should mark string, number, and optional schema fields as private', () => {
+      const s = schema.string().private();
+      const n = schema.number().private();
+      const opt = schema.string().optional().private();
+      const optReverse = schema.string().private().optional();
+
+      expect(isFieldPrivate(s)).toBe(true);
+      expect(isFieldPrivate(n)).toBe(true);
+      expect(isFieldPrivate(opt)).toBe(true);
+      expect(isFieldPrivate(optReverse)).toBe(true);
+    });
+
+    test('should provide inferFetched helper', () => {
+      const testSchema = {
+        name: schema.string(),
+        password: schema.string().private(),
+      };
+      const inferred = schema.inferFetched(testSchema);
+      expect(inferred).toBeDefined();
+    });
+
+    test('should accurately infer types for InferDocumentType, InferFetchedDocumentType, and InferSelectedDocumentType', () => {
+      const testSchema = {
+        name: schema.string(),
+        email: schema.string(),
+        password: schema.string().private(),
+        secretPin: schema.number().private(),
+        bio: schema.string().optional(),
+        optionalPrivate: schema.string().optional().private(),
+      };
+
+      type FullDoc = schema.infer<typeof testSchema>;
+      type FetchedDoc = schema.inferFetched<typeof testSchema>;
+      type SelectedDoc = schema.inferSelected<typeof testSchema, 'password'>;
+
+      const fullDoc: FullDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+        password: 'secret',
+        secretPin: 1234,
+      };
+      expect(fullDoc.password).toBe('secret');
+
+      const fetchedDoc: FetchedDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+      };
+      expect(fetchedDoc.name).toBe('Alice');
+
+      // @ts-expect-error password is a private field and should not exist on fetched doc
+      void fetchedDoc.password;
+      // @ts-expect-error secretPin is a private field and should not exist on fetched doc
+      void fetchedDoc.secretPin;
+
+      const selectedDoc: SelectedDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+        password: 'secret',
+      };
+      expect(selectedDoc.password).toBe('secret');
+
+      // @ts-expect-error secretPin was not selected and should not exist on selected doc
+      void selectedDoc.secretPin;
+    });
+
+    test('isFieldPrivate should identify nullable and default private fields', () => {
+      const nullablePrivate = schema.string().private().nullable();
+      const defaultPrivate = schema.string().private().default('secret');
+
+      expect(isFieldPrivate(nullablePrivate)).toBe(true);
+      expect(isFieldPrivate(defaultPrivate)).toBe(true);
+    });
+
+    test('extractPrivateFieldPaths should recursively extract nested and parent private field paths', () => {
+      const userProfileSchema = {
+        username: schema.string(),
+        metadata: schema.object({
+          internal: schema.object({
+            pin: schema.number().private(),
+            score: schema.number(),
+          }),
+        }),
+        securityCredentials: schema
+          .object({
+            token: schema.string(),
+          })
+          .private(),
+      };
+
+      const paths = extractPrivateFieldPaths(userProfileSchema);
+      expect(paths).toEqual(['metadata.internal.pin', 'securityCredentials']);
+
+      type ProfileFetched = schema.inferFetched<typeof userProfileSchema>;
+
+      const fetched: ProfileFetched = {
+        username: 'alice',
+        metadata: {
+          internal: {
+            score: 100,
+          },
+        },
+      };
+
+      expect(fetched.metadata.internal.score).toBe(100);
+      // @ts-expect-error pin is private inside nested object and should not exist on fetched doc
+      void fetched.metadata.internal.pin;
+      // @ts-expect-error securityCredentials is a private parent field and should not exist on fetched doc
+      void fetched.securityCredentials;
+
+      type ProfileSelected = schema.inferSelected<typeof userProfileSchema, 'securityCredentials'>;
+
+      const selected: ProfileSelected = {
+        username: 'alice',
+        metadata: {
+          internal: {
+            score: 100,
+          },
+        },
+        securityCredentials: {
+          token: 'secret_token_123',
+        },
+      };
+
+      expect(selected.securityCredentials.token).toBe('secret_token_123');
+      // @ts-expect-error pin was not selected and should remain hidden
+      void selected.metadata.internal.pin;
+    });
+
+    test('should allow selecting nested array private field', () => {
+      const organizationSchema = {
+        name: schema.string(),
+        active: schema.boolean(),
+        apiKey: schema.string().private(),
+        teamSettings: schema.object({
+          memberEmails: schema.array(schema.string()).private(),
+          maxQuota: schema.number(),
+          region: schema.string(),
+        }),
+      };
+
+      type FetchedOrg = schema.inferFetched<typeof organizationSchema>;
+
+      const fetched: FetchedOrg = {
+        name: 'Acme Corp',
+        active: true,
+        teamSettings: {
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      expect(fetched.teamSettings.maxQuota).toBe(500);
+      // @ts-expect-error apiKey is private and should not exist on fetched doc
+      void fetched.apiKey;
+      // @ts-expect-error teamSettings.memberEmails is private and should not exist on fetched doc
+      void fetched.teamSettings.memberEmails;
+
+      type SelectedOrg = schema.inferSelected<
+        typeof organizationSchema,
+        'apiKey' | 'teamSettings.memberEmails'
+      >;
+
+      const selected: SelectedOrg = {
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com', 'dev@acme.com'],
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      expect(selected.apiKey).toBe('key_live_12345');
+      expect(selected.teamSettings.memberEmails).toEqual(['admin@acme.com', 'dev@acme.com']);
     });
   });
 
