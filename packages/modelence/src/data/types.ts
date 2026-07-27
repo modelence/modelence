@@ -171,14 +171,22 @@ export type InferDocumentType<T extends SchemaTypeDefinition> = {
         : never;
 };
 
-type InferSelectedZodElement<E, KKeys extends string> =
-  E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferSelectedDocumentType<Shape, KKeys>
-    : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
-      ? Array<InferSelectedZodElement<InnerElement, KKeys>>
-      : E extends z.ZodTypeAny
-        ? z.infer<E>
-        : never;
+type InferSelectedZodType<E, KKeys extends string> =
+  E extends z.ZodOptional<infer Inner extends z.ZodTypeAny>
+    ? InferSelectedZodType<Inner, KKeys> | undefined
+    : E extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
+      ? InferSelectedZodType<Inner, KKeys> | null
+      : E extends z.ZodDefault<infer Inner extends z.ZodTypeAny>
+        ? InferSelectedZodType<Inner, KKeys>
+        : E extends z.ZodEffects<infer Inner extends z.ZodTypeAny, any, any>
+          ? InferSelectedZodType<Inner, KKeys>
+          : E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
+            ? InferSelectedDocumentType<Shape, KKeys>
+            : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
+              ? Array<InferSelectedZodType<InnerElement, KKeys>>
+              : E extends z.ZodTypeAny
+                ? z.infer<E>
+                : never;
 
 type SubKeys<KKeys, Prefix> = KKeys extends string
   ? KKeys extends `${Extract<Prefix, string>}.${infer Rest}`
@@ -194,6 +202,18 @@ type IsSelectedKey<K, KKeys> = K extends KKeys
       ? false
       : true;
 
+type IsFieldOptional<F> = F extends z.ZodOptional<z.ZodTypeAny> ? true : false;
+
+type IsFieldVisible<F, K, KKeys> = IsPrivateField<F> extends true ? IsSelectedKey<K, KKeys> : true;
+
+type InferFieldValue<F, KKeys, K> = F extends z.ZodTypeAny
+  ? InferSelectedZodType<F, SubKeys<KKeys, K>>
+  : F extends Array<infer ElementType extends SchemaTypeDefinition>
+    ? Array<InferSelectedDocumentType<ElementType, SubKeys<KKeys, K>>>
+    : F extends ObjectTypeDefinition
+      ? InferSelectedDocumentType<F, SubKeys<KKeys, K>>
+      : never;
+
 /**
  * Represents the document when specific private fields are un-hidden using store.select(...).
  * Includes all public (non-private) fields plus any explicitly selected private fields.
@@ -202,41 +222,17 @@ export type InferSelectedDocumentType<
   T extends SchemaTypeDefinition,
   KKeys extends string = never,
 > = {
-  [K in keyof T as IsPrivateField<T[K]> extends true
-    ? IsSelectedKey<K, KKeys> extends true
-      ? T[K] extends z.ZodOptional<z.ZodTypeAny>
-        ? K
-        : never
-      : never
-    : T[K] extends z.ZodOptional<z.ZodTypeAny>
+  [K in keyof T as IsFieldVisible<T[K], K, KKeys> extends true
+    ? IsFieldOptional<T[K]> extends true
       ? K
-      : never]?: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferSelectedDocumentType<Shape, SubKeys<KKeys, K>>
-    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
-      ? Array<InferSelectedZodElement<ElementType, SubKeys<KKeys, K>>>
-      : T[K] extends z.ZodTypeAny
-        ? z.infer<T[K]>
-        : never;
-} & {
-  [K in keyof T as IsPrivateField<T[K]> extends true
-    ? IsSelectedKey<K, KKeys> extends true
-      ? T[K] extends z.ZodOptional<z.ZodTypeAny>
-        ? never
-        : K
       : never
-    : T[K] extends z.ZodOptional<z.ZodTypeAny>
-      ? never
-      : K]: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferSelectedDocumentType<Shape, SubKeys<KKeys, K>>
-    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
-      ? Array<InferSelectedZodElement<ElementType, SubKeys<KKeys, K>>>
-      : T[K] extends z.ZodTypeAny
-        ? z.infer<T[K]>
-        : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
-          ? Array<InferSelectedDocumentType<ElementType, SubKeys<KKeys, K>>>
-          : T[K] extends ObjectTypeDefinition
-            ? InferSelectedDocumentType<T[K], SubKeys<KKeys, K>>
-            : never;
+    : never]?: InferFieldValue<T[K], KKeys, K>;
+} & {
+  [K in keyof T as IsFieldVisible<T[K], K, KKeys> extends true
+    ? IsFieldOptional<T[K]> extends false
+      ? K
+      : never
+    : never]: InferFieldValue<T[K], KKeys, K>;
 };
 
 /**

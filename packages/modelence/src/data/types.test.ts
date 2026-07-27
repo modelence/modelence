@@ -446,5 +446,38 @@ describe('data/types', () => {
       const privatePaths = extractPrivateFieldPaths(testSchema);
       expect(privatePaths).toEqual(['privateField']);
     });
+
+    test('InferFetchedDocumentType recursively strips private fields from optional/nullable/default/effects-wrapped objects', () => {
+      const targetSchema = {
+        title: schema.string(),
+        optionalObj: schema
+          .object({
+            publicBio: schema.string(),
+            secretPin: schema.number().private(),
+          })
+          .optional(),
+        nullableObj: schema
+          .object({
+            publicNote: schema.string(),
+            secretKey: schema.string().private(),
+          })
+          .nullable(),
+        effectsObj: schema
+          .object({
+            publicField: schema.string(),
+            secretField: schema.string().private(),
+          })
+          .refine(() => true),
+      };
+
+      type Fetched = import('./types').InferFetchedDocumentType<typeof targetSchema>;
+
+      expectTypeOf<Fetched>().toMatchTypeOf<{
+        title: string;
+        optionalObj?: { publicBio: string };
+        nullableObj: { publicNote: string } | null;
+        effectsObj: { publicField: string };
+      }>();
+    });
   });
 });
