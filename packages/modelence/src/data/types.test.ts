@@ -429,5 +429,22 @@ describe('data/types', () => {
         bio: 'Hello',
       });
     });
+
+    test('.private() returns a clone without mutating the original schema instance', () => {
+      const sharedStringSchema = schema.string();
+      const privateStringSchema = sharedStringSchema.private();
+
+      expect(sharedStringSchema).not.toBe(privateStringSchema);
+      expect(isFieldPrivate(sharedStringSchema)).toBe(false);
+      expect(isFieldPrivate(privateStringSchema)).toBe(true);
+
+      const testSchema = {
+        publicField: sharedStringSchema,
+        privateField: privateStringSchema,
+      };
+
+      const privatePaths = extractPrivateFieldPaths(testSchema);
+      expect(privatePaths).toEqual(['privateField']);
+    });
   });
 });

@@ -37,16 +37,21 @@ declare module 'zod' {
   }
 }
 
-if (!(z.ZodType.prototype as any).private) {
-  (z.ZodType.prototype as any).private = function (this: z.ZodType) {
-    (this as any)._isPrivate = true;
-    return this;
-  };
-}
+(z.ZodType.prototype as any).private = function (this: z.ZodType) {
+  const clone = new (this.constructor as any)({
+    ...this._def,
+    _isPrivate: true,
+  });
+  (clone as any)._isPrivate = true;
+  return clone;
+};
 
 export function isFieldPrivate(type: unknown): boolean {
   if (!type || typeof type !== 'object') return false;
-  if ('_isPrivate' in type && (type as any)._isPrivate === true) {
+  if (
+    ('_isPrivate' in type && (type as any)._isPrivate === true) ||
+    ('_def' in type && (type as any)._def && (type as any)._def._isPrivate === true)
+  ) {
     return true;
   }
   if (
@@ -93,7 +98,11 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     for (const item of schemaDef) {
       paths.push(...extractPrivateFieldPaths(item, prefix));
     }
-  } else if (typeof schemaDef === 'object' && schemaDef !== null) {
+  } else if (
+    typeof schemaDef === 'object' &&
+    schemaDef !== null &&
+    !(schemaDef instanceof z.ZodType)
+  ) {
     for (const key of Object.keys(schemaDef)) {
       const val = (schemaDef as any)[key];
       const fieldPath = prefix ? `${prefix}.${key}` : key;
