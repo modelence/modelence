@@ -1005,67 +1005,101 @@ export class Store<
     const selectedFields = (options?.select || []) as string[];
     const proj = (options?.projection || {}) as Record<string, unknown>;
 
-    const getNestedValue = (obj: any, path: string): any => {
-      if (!obj || typeof obj !== 'object') return undefined;
-      const parts = path.split('.');
-      let curr = obj;
-      for (const part of parts) {
-        if (!curr || typeof curr !== 'object') return undefined;
-        curr = curr[part];
-      }
-      return curr;
+    // Helper: Determines if a projection value represents an inclusion (e.g. 1, true, or operators like { $slice: 5 }).
+    const isProjectionInclusionValue = (val: unknown): boolean => {
+      if (val === 1 || val === true) return true;
+      if (val === 0 || val === false) return false;
+      if (val !== null && typeof val === 'object') return true;
+      return false;
     };
 
+    // Helper: Determines if a value is a container (object/array) capable of holding sub-properties.
+    // Rejects primitives, Date, RegExp, Buffers, BSON ObjectIds, and arrays of non-container items.
+    const isContainer = (val: unknown): boolean => {
+      if (val === null || val === undefined || typeof val !== 'object') return false;
+      if (Array.isArray(val)) {
+        return val.some((item) => isContainer(item));
+      }
+      if (val instanceof Date || val instanceof RegExp || ArrayBuffer.isView(val)) return false;
+      if (
+        val.constructor &&
+        val.constructor.name !== 'Object' &&
+        val.constructor.name !== 'Document'
+      ) {
+        if ('_bsontype' in (val as object)) return false;
+      }
+      return true;
+    };
+
+    // Helper: Recursively walks a dot-path (e.g. 'players.profile'), stepping through array items
+    // to check if a valid container object/array exists at that path in the document.
+    const hasContainerAtPath = (obj: any, parts: string[], index = 0): boolean => {
+      if (obj === null || obj === undefined) return false;
+
+      if (Array.isArray(obj)) {
+        return obj.some((item) => hasContainerAtPath(item, parts, index));
+      }
+
+      if (typeof obj !== 'object') return false;
+
+      const key = parts[index];
+      const next = obj[key];
+
+      if (index === parts.length - 1) {
+        return isContainer(next);
+      }
+
+      return hasContainerAtPath(next, parts, index + 1);
+    };
+
+    // Helper: Checks if a private field (or sub-path inside an object/array container) is selected in options.select.
     const isFieldSelected = (field: string): boolean => {
       if (selectedFields.includes(field)) return true;
 
-      // Sub-path selection is only valid if field value in doc is an object or array (not a primitive)
-      const val = getNestedValue(doc, field);
-      if (val !== null && typeof val === 'object') {
-        if (selectedFields.some((s) => s.startsWith(`${field}.`))) return true;
+      // Sub-path selection is only valid if field value in doc is an object or array container
+      const prefix = `${field}.`;
+      if (selectedFields.some((s) => s.startsWith(prefix))) {
+        return hasContainerAtPath(doc, field.split('.'));
       }
       return false;
     };
 
+    // Helper: Checks if a private field (or sub-path inside an object/array container) is made visible by projection.
     const isFieldVisibleByProjection = (field: string): boolean => {
-      if (proj[field] === 1 || proj[field] === true) return true;
+      if (isProjectionInclusionValue(proj[field])) return true;
 
-      // Sub-path projection is only valid if field value in doc is an object or array (not a primitive)
-      const val = getNestedValue(doc, field);
-      if (val !== null && typeof val === 'object') {
-        const prefix = `${field}.`;
-        return Object.keys(proj).some(
-          (k) => (proj[k] === 1 || proj[k] === true) && k.startsWith(prefix)
-        );
+      // Sub-path projection is only valid if field value in doc is an object or array container
+      const prefix = `${field}.`;
+      if (
+        Object.keys(proj).some((k) => isProjectionInclusionValue(proj[k]) && k.startsWith(prefix))
+      ) {
+        return hasContainerAtPath(doc, field.split('.'));
       }
       return false;
     };
 
+    // Helper: Recursively deletes a dot-path from an object/array in-place, handling nested arrays.
     const deletePath = (obj: any, parts: string[], index = 0): void => {
       if (!obj || typeof obj !== 'object') return;
+
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          deletePath(item, parts, index);
+        }
+        return;
+      }
+
       const key = parts[index];
 
       if (index === parts.length - 1) {
-        if (Array.isArray(obj)) {
-          for (const item of obj) {
-            if (item && typeof item === 'object') delete item[key];
-          }
-        } else {
-          delete obj[key];
-        }
+        delete obj[key];
         return;
       }
 
       const next = obj[key];
       if (!next || typeof next !== 'object') return;
 
-      if (Array.isArray(next)) {
-        for (const item of next) {
-          deletePath(item, parts, index + 1);
-        }
-      } else {
-        deletePath(next, parts, index + 1);
-      }
+      deletePath(next, parts, index + 1);
     };
 
     for (const field of this.privateFields) {
@@ -1090,9 +1124,16 @@ export class Store<
       return undefined;
     }
 
+    const isProjectionInclusionValue = (val: unknown): boolean => {
+      if (val === 1 || val === true) return true;
+      if (val === 0 || val === false) return false;
+      if (val !== null && typeof val === 'object') return true;
+      return false;
+    };
+
     const proj: Document = { ...(options.projection as Document) };
     const values = Object.values(proj);
-    const isInclusion = values.some((val) => val === 1 || val === true);
+    const isInclusion = values.some((val) => isProjectionInclusionValue(val));
 
     if (isInclusion && options?.select && options.select.length > 0) {
       for (const key of options.select) {
@@ -1101,7 +1142,7 @@ export class Store<
         let parentAlreadyIncluded = false;
         for (let i = 1; i <= parts.length; i++) {
           const parentPath = parts.slice(0, i).join('.');
-          if (proj[parentPath] === 1 || proj[parentPath] === true) {
+          if (isProjectionInclusionValue(proj[parentPath])) {
             parentAlreadyIncluded = true;
             break;
           }

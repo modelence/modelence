@@ -1519,6 +1519,89 @@ describe('data/store', () => {
       expect(doc).not.toHaveProperty('password');
     });
 
+    test('should NOT treat Date or ObjectId instances as sub-path container objects', async () => {
+      const dateStore = new Store('dateStore', {
+        schema: {
+          title: schema.string(),
+          secretDate: schema.date().private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Event',
+          secretDate: new Date(),
+        }),
+      };
+      (dateStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await dateStore.findOne(
+        { title: 'Event' },
+        { select: ['secretDate.foo' as any] }
+      );
+      expect(doc).not.toHaveProperty('secretDate');
+    });
+
+    test('should NOT treat an array of primitive strings as a container when invalid sub-path is selected', async () => {
+      const tokenStore = new Store('tokenStore', {
+        schema: {
+          title: schema.string(),
+          secretTokens: schema.array(schema.string()).private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Tokens',
+          secretTokens: ['token_1', 'token_2'],
+        }),
+      };
+      (tokenStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await tokenStore.findOne(
+        { title: 'Tokens' },
+        { select: ['secretTokens.foo' as any] }
+      );
+      expect(doc).not.toHaveProperty('secretTokens');
+    });
+
+    test('should preserve private fields when MongoDB projection operators like $slice are used', async () => {
+      const commentStore = new Store('commentStore', {
+        schema: {
+          title: schema.string(),
+          comments: schema
+            .array(
+              schema.object({
+                text: schema.string(),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Post',
+          comments: [{ text: 'Great post!' }],
+        }),
+      };
+      (commentStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await commentStore.findOne(
+        { title: 'Post' },
+        { projection: { comments: { $slice: 1 } } }
+      );
+      expect(doc?.comments).toBeDefined();
+      expect(doc?.comments[0].text).toBe('Great post!');
+    });
+
     test('store.findOne and store.fetch with nested and parent private fields should hide/un-hide correctly', async () => {
       const profileStore = new Store('userProfiles', {
         schema: {
@@ -1883,6 +1966,58 @@ describe('data/store', () => {
         { select: ['players', 'players.id', 'players.profile', 'players.profile.email'] }
       );
       expect(fullDoc?.players?.[0].profile?.[0].email).toBe('sam@cyber.com');
+    });
+
+    test('should preserve intermediate private array container when selecting deep child path', async () => {
+      const gameStore = new Store('gamesDeepSelect', {
+        schema: {
+          title: schema.string(),
+          players: schema
+            .array(
+              schema.object({
+                id: schema.string(),
+                profile: schema
+                  .array(
+                    schema.object({
+                      displayName: schema.string(),
+                      email: schema.string().private(),
+                    })
+                  )
+                  .private(),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        title: 'Cyberpunk',
+        players: [
+          {
+            id: 'p1',
+            profile: [{ displayName: 'Sam', email: 'sam@cyber.com' }],
+          },
+        ],
+      };
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue(rawDoc),
+      };
+      (gameStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      // Select ONLY deep path 'players.profile.displayName'
+      const doc = await gameStore.findOne(
+        { title: 'Cyberpunk' },
+        { select: ['players.profile.displayName'] }
+      );
+
+      // Intermediate private container players.profile must NOT be deleted!
+      expect(doc?.players?.[0]?.profile).toBeDefined();
+      expect(doc?.players?.[0]?.profile?.[0]?.displayName).toBe('Sam');
+      // Private leaf email must be stripped!
+      expect((doc?.players?.[0]?.profile?.[0] as any)?.email).toBeUndefined();
     });
   });
 
