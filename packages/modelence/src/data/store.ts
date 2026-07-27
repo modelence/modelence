@@ -1092,6 +1092,26 @@ export class Store<
     return proj;
   }
 
+  /**
+   * Constructs clean options for MongoDB driver operations by stripping Modelence-specific options
+   * like `select` to prevent leaking them to the MongoDB driver, and attaching the resolved
+   * MongoDB projection if present.
+   */
+  private cleanDriverOptions<T extends { select?: unknown; projection?: unknown }>(
+    options?: T
+  ): Omit<T, 'select'> | undefined {
+    if (!options) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { select, ...rest } = options;
+    const projection = this.getMongoProjection(
+      options as Parameters<typeof this.getMongoProjection>[0]
+    );
+    if (projection) {
+      return { ...rest, projection } as Omit<T, 'select'>;
+    }
+    return Object.keys(rest).length > 0 ? (rest as Omit<T, 'select'>) : undefined;
+  }
+
   /*
    * Finds a single document matching the query
    *
@@ -1132,10 +1152,10 @@ export class Store<
     query: TypedFilter<this['_type']>,
     options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
-    const projection = this.getMongoProjection(options);
+    const driverOptions = this.cleanDriverOptions(options);
     const document = await this.requireCollection().findOne<this['_rawDoc']>(
       query as Filter<this['_type']>,
-      projection ? { ...options, projection } : options
+      driverOptions
     );
     return document ? this.wrapFetchedDocument<KSelect, KProjection>(document, options) : null;
   }
@@ -1448,11 +1468,11 @@ export class Store<
       KProjection
     >
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
-    const projection = this.getMongoProjection(options);
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
-      projection ? { ...options, projection } : (options ?? {})
+      driverOptions ?? {}
     );
     return result
       ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
@@ -1495,14 +1515,13 @@ export class Store<
       KProjection
     >
   ): Promise<UpsertResult<FetchedDoc<TSchema, TMethods, KSelect, KProjection>>> {
-    const projection = this.getMongoProjection(options);
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
       {
         upsert: true,
-        ...options,
-        ...(projection ? { projection } : {}),
+        ...driverOptions,
         // Always request the post-op doc and the metadata carrying `upserted`.
         returnDocument: 'after',
         includeResultMetadata: true,
@@ -1530,10 +1549,10 @@ export class Store<
       KProjection
     >
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
-    const projection = this.getMongoProjection(options);
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
-      projection ? { ...options, projection } : (options ?? {})
+      driverOptions ?? {}
     );
     return result
       ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
@@ -1559,11 +1578,11 @@ export class Store<
       KProjection
     >
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
-    const projection = this.getMongoProjection(options);
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
       replacement,
-      projection ? { ...options, projection } : (options ?? {})
+      driverOptions ?? {}
     );
     return result
       ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)

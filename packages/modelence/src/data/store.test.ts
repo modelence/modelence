@@ -88,10 +88,10 @@ function assertFindOneAndUpdateTypeSafety() {
   // @ts-expect-error unknown projection field should be rejected
   void privateStore.findOneAndDelete({ title: 'x' }, { projection: { unknownField: 0 } });
 
-  // @ts-expect-error unknown projection field should be rejected
   void privateStore.findOneAndReplace(
     { title: 'x' },
     { title: 'y', secret: 's' },
+    // @ts-expect-error unknown projection field should be rejected
     { projection: { unknownField: 1 } }
   );
 
@@ -1465,10 +1465,7 @@ describe('data/store', () => {
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
       await store.findOne({ name: 'Alice' }, { select: ['password'] });
-      expect(collectionMock.findOne).toHaveBeenCalledWith(
-        { name: 'Alice' },
-        { select: ['password'] }
-      );
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
 
       await store.fetch({ name: 'Alice' }, { select: ['password', 'pin'] });
       expect(collectionMock.find).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
@@ -1518,10 +1515,7 @@ describe('data/store', () => {
 
       // With select for nested private field: metadata.internal.pin is un-hidden
       await profileStore.findOne({ username: 'alice' }, { select: ['metadata.internal.pin'] });
-      expect(collectionMock.findOne).toHaveBeenCalledWith(
-        { username: 'alice' },
-        { select: ['metadata.internal.pin'] }
-      );
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ username: 'alice' }, undefined);
 
       // With select for parent private field: securityCredentials is un-hidden
       await profileStore.fetch({ username: 'alice' }, { select: ['securityCredentials'] });
