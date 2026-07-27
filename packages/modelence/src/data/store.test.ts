@@ -56,6 +56,58 @@ function assertFetchOptionTypeSafety() {
 }
 void assertFetchOptionTypeSafety;
 
+function assertFindOneAndUpdateTypeSafety() {
+  const privateStore = new Store('privateStore', {
+    schema: {
+      title: schema.string(),
+      secret: schema.string().private(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  // No options: returns FetchedDoc (public fields only by default)
+  async function noOptions() {
+    const doc = await privateStore.findOneAndUpdate({ title: 'x' }, { $set: { title: 'y' } });
+    void doc?.title; // ✅ public field is accessible
+  }
+  void noOptions;
+
+  // With select: ['secret']: secret becomes visible in the return type
+  async function withSelect() {
+    const doc = await privateStore.findOneAndUpdate(
+      { title: 'x' },
+      { $set: { title: 'y' } },
+      { select: ['secret'] }
+    );
+    void doc?.secret; // ✅ no error — secret is un-hidden by select
+    void doc?.title; // ✅ public field always present
+  }
+  void withSelect;
+
+  // @ts-expect-error unknown projection field should be rejected
+  void privateStore.findOneAndDelete({ title: 'x' }, { projection: { unknownField: 0 } });
+
+  // @ts-expect-error unknown projection field should be rejected
+  void privateStore.findOneAndReplace(
+    { title: 'x' },
+    { title: 'y', secret: 's' },
+    { projection: { unknownField: 1 } }
+  );
+
+  // findOneAndUpsert: doc inside UpsertResult also reflects KSelect
+  async function upsertWithSelect() {
+    const { doc } = await privateStore.findOneAndUpsert(
+      { title: 'x' },
+      { $setOnInsert: { title: 'x', secret: 's' } },
+      { select: ['secret'] }
+    );
+    void doc?.secret; // ✅ un-hidden via select
+  }
+  void upsertWithSelect;
+}
+void assertFindOneAndUpdateTypeSafety;
+
 function assertExtendedStoreDotNotationTypeSafety() {
   const baseStore = new Store('baseStore', {
     schema: {

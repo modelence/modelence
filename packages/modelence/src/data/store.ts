@@ -185,6 +185,29 @@ export type FetchOptionsWithSelect<
 };
 
 /**
+ * Options for `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, and `findOneAndUpsert`
+ * that add typed `select` and `projection` support so the return type correctly reflects which
+ * fields are visible (public-only by default, private fields un-hidden via `select` or inclusion
+ * `projection`, excluded fields removed via exclusion `projection`).
+ */
+export type FindOneAndModifyOptionsWithSelect<
+  TBaseOptions,
+  TSchema extends ModelSchema,
+  KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
+> = Omit<TBaseOptions, 'includeResultMetadata'> & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<InferDocumentType<TSchema>> & {
+      [K in keyof KProjection]: K extends
+        | keyof WithId<InferDocumentType<TSchema>>
+        | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
+};
+
+/**
  * Top-level query operators (logical and evaluation) - custom version without Document index signature
  * Based on MongoDB's RootFilterOperators but without the [key: string]: any from Document
  * @internal
@@ -1411,21 +1434,29 @@ export class Store<
    *
    * @param selector - The selector to find the document
    * @param update - The update to apply
-   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`,
+   *   `select` (un-hide private fields by name), and `projection` (include/exclude specific fields).
    * @returns The document (before or after update, depending on options), or null if not found
    */
-  async findOneAndUpdate(
+  async findOneAndUpdate<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
-  ): Promise<this['_fetchedDoc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndUpdateOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**
@@ -1454,11 +1485,16 @@ export class Store<
    * @returns `{ doc, isNew }` — `doc` is null only when `upsert: false` and
    *   nothing matched; `isNew` is `true` exactly when this call inserted the doc.
    */
-  async findOneAndUpsert(
+  async findOneAndUpsert<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata' | 'returnDocument'>
-  ): Promise<UpsertResult<this['_fetchedDoc']>> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      Omit<FindOneAndUpdateOptions, 'returnDocument'>,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<UpsertResult<FetchedDoc<TSchema, TMethods, KSelect, KProjection>>> {
     const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
@@ -1473,7 +1509,7 @@ export class Store<
       }
     );
     const doc = result.value
-      ? this.wrapFetchedDocument(result.value as this['_rawDoc'], options)
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result.value as this['_rawDoc'], options)
       : null;
     return { doc, isNew: Boolean(result.lastErrorObject?.upserted) };
   }
@@ -1482,19 +1518,26 @@ export class Store<
    * Atomically finds a document and deletes it, returning the deleted document
    *
    * @param selector - The selector to find the document
-   * @param options - Options including `session`, `projection`, etc.
+   * @param options - Options including `session`, `projection`, `select`, etc.
    * @returns The deleted document, or null if not found
    */
-  async findOneAndDelete(
+  async findOneAndDelete<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
-    options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
-  ): Promise<this['_fetchedDoc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndDeleteOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**
@@ -1502,21 +1545,29 @@ export class Store<
    *
    * @param selector - The selector to find the document
    * @param replacement - The replacement document
-   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`,
+   *   `select` (un-hide private fields by name), and `projection` (include/exclude specific fields).
    * @returns The document (before or after replacement, depending on options), or null if not found
    */
-  async findOneAndReplace(
+  async findOneAndReplace<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     replacement: WithoutId<this['_type']>,
-    options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
-  ): Promise<this['_fetchedDoc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndReplaceOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
       replacement,
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**
