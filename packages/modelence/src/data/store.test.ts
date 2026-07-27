@@ -1791,4 +1791,57 @@ describe('data/store', () => {
       expect(fullDoc?.players?.[0].profile?.[0].email).toBe('sam@cyber.com');
     });
   });
+
+  describe('requireById and requireOne custom error handler support', () => {
+    class CustomNotFoundError extends Error {
+      constructor(msg: string) {
+        super(msg);
+        this.name = 'CustomNotFoundError';
+      }
+    }
+
+    it('should invoke custom errorHandler when passed as 2nd argument', async () => {
+      const store = new Store('test', { schema: { name: schema.string() }, indexes: [] });
+      const mockCol = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const id = new ObjectId();
+
+      // requireById with errorHandler as 2nd arg
+      await expect(
+        store.requireById(id, () => new CustomNotFoundError('Custom ID error'))
+      ).rejects.toThrow(CustomNotFoundError);
+
+      // requireOne with errorHandler as 2nd arg
+      await expect(
+        store.requireOne({ name: 'missing' }, () => new CustomNotFoundError('Custom query error'))
+      ).rejects.toThrow(CustomNotFoundError);
+    });
+
+    it('should invoke custom errorHandler when passed as 3rd argument with options', async () => {
+      const store = new Store('test', { schema: { name: schema.string() }, indexes: [] });
+      const mockCol = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const id = new ObjectId();
+
+      // requireById with options and errorHandler
+      await expect(
+        store.requireById(id, {}, () => new CustomNotFoundError('Custom ID error with options'))
+      ).rejects.toThrow(CustomNotFoundError);
+
+      // requireOne with options and errorHandler
+      await expect(
+        store.requireOne(
+          { name: 'missing' },
+          {},
+          () => new CustomNotFoundError('Custom query error with options')
+        )
+      ).rejects.toThrow(CustomNotFoundError);
+    });
+  });
 });

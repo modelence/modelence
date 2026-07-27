@@ -1101,14 +1101,31 @@ export class Store<
     return document ? this.wrapFetchedDocument<KSelect, KProjection>(document, options) : null;
   }
 
+  private normalizeRequireOptions<T extends object>(
+    optionsOrHandler?: T | (() => Error),
+    handler?: () => Error
+  ): { options?: T; errorHandler?: () => Error } {
+    if (typeof optionsOrHandler === 'function') {
+      return { errorHandler: optionsOrHandler as () => Error };
+    }
+    return { options: optionsOrHandler, errorHandler: handler };
+  }
+
+  /**
+   * Finds a single document matching the query, or throws an error if not found
+   */
   async requireOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>,
+    optionsOrHandler?: FindOptionsWithSelect<TSchema, KSelect, KProjection> | (() => Error),
     errorHandler?: () => Error
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const { options, errorHandler: errHandler } = this.normalizeRequireOptions(
+      optionsOrHandler,
+      errorHandler
+    );
     const result = await this.findOne<KSelect, KProjection>(query, options);
     if (!result) {
-      throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
+      throw errHandler ? errHandler() : new Error(`Record not found in ${this.name}`);
     }
     return result;
   }
@@ -1153,20 +1170,22 @@ export class Store<
    * Fetches a single document by its ID, or throws an error if not found
    *
    * @param id - The ID of the document to find
-   * @param options - Optional find options with `select` array
+   * @param optionsOrHandler - Optional find options with `select` array or errorHandler callback
    * @param errorHandler - Optional error handler to return a custom error if the document is not found
    * @returns The document
    */
   async requireById<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     id: string | ObjectId,
-    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>,
+    optionsOrHandler?: FindOptionsWithSelect<TSchema, KSelect, KProjection> | (() => Error),
     errorHandler?: () => Error
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const { options, errorHandler: errHandler } = this.normalizeRequireOptions(
+      optionsOrHandler,
+      errorHandler
+    );
     const result = await this.findById<KSelect, KProjection>(id, options);
     if (!result) {
-      throw errorHandler
-        ? errorHandler()
-        : new Error(`Record with id ${id} not found in ${this.name}`);
+      throw errHandler ? errHandler() : new Error(`Record with id ${id} not found in ${this.name}`);
     }
     return result;
   }
