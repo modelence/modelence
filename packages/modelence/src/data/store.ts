@@ -40,7 +40,6 @@ import {
   InferFetchedDocumentType,
   InferSelectedDocumentType,
   extractPrivateFieldPaths,
-  extractPublicFieldPaths,
 } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
@@ -528,7 +527,6 @@ export class Store<
   private readonly searchIndexes: SearchIndexDescription[];
   private readonly indexCreationMode: IndexCreationMode;
   private readonly privateFields: string[];
-  private readonly publicFields: string[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -565,7 +563,6 @@ export class Store<
     this.searchIndexes = options.searchIndexes || [];
     this.indexCreationMode = options.indexCreationMode ?? 'background';
     this.privateFields = extractPrivateFieldPaths(options.schema);
-    this.publicFields = extractPublicFieldPaths(options.schema);
   }
 
   getName() {
@@ -896,8 +893,13 @@ export class Store<
   }
 
   private wrapFetchedDocument<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
-    document: this['_rawDoc']
+    document: this['_rawDoc'],
+    options?: {
+      projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+      select?: SelectKey<TSchema>[];
+    }
   ): FetchedDoc<TSchema, TMethods, KSelect, KProjection> {
+    this.stripPrivateFields(document, options);
     return this.wrapDocument(document) as unknown as FetchedDoc<
       TSchema,
       TMethods,
@@ -940,6 +942,118 @@ export class Store<
   }
 
   /**
+   * Strips unselected private fields from a fetched document in-place.
+   *
+   * This is the runtime enforcement of `.private()`. After MongoDB returns the full document,
+   * we delete any private fields that the caller did not explicitly request via `select` or `projection`.
+   *
+   * @param doc - The raw document from MongoDB (mutated in-place)
+   * @param options - Options containing caller-provided `select` and `projection`
+   */
+  private stripPrivateFields(
+    doc: Document,
+    options?: {
+      projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+      select?: SelectKey<TSchema>[];
+    }
+  ): void {
+    if (this.privateFields.length === 0) return;
+
+    const selectedFields = (options?.select || []) as string[];
+    const proj = (options?.projection || {}) as Record<string, unknown>;
+
+    const isIncludedInProjection = (field: string): boolean => {
+      if (proj[field] === 1 || proj[field] === true) return true;
+      const prefix = `${field}.`;
+      return Object.keys(proj).some(
+        (k) => (proj[k] === 1 || proj[k] === true) && k.startsWith(prefix)
+      );
+    };
+
+    const deletePath = (obj: any, parts: string[], index = 0): void => {
+      if (!obj || typeof obj !== 'object') return;
+      const key = parts[index];
+
+      if (index === parts.length - 1) {
+        if (Array.isArray(obj)) {
+          for (const item of obj) {
+            if (item && typeof item === 'object') delete item[key];
+          }
+        } else {
+          delete obj[key];
+        }
+        return;
+      }
+
+      const next = obj[key];
+      if (!next || typeof next !== 'object') return;
+
+      if (Array.isArray(next)) {
+        for (const item of next) {
+          deletePath(item, parts, index + 1);
+        }
+      } else {
+        deletePath(next, parts, index + 1);
+      }
+    };
+
+    for (const field of this.privateFields) {
+      // Skip stripping if this field was explicitly selected or included in projection
+      if (selectedFields.includes(field)) continue;
+      if (selectedFields.some((s) => s.startsWith(`${field}.`))) continue;
+      if (isIncludedInProjection(field)) continue;
+
+      deletePath(doc, field.split('.'));
+    }
+  }
+
+  /**
+   * Constructs the MongoDB projection options for read queries.
+   * If caller passes an inclusion projection and select array together,
+   * selected fields are added to the projection without causing MongoDB path collision errors.
+   */
+  private getMongoProjection(options?: {
+    projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+    select?: SelectKey<TSchema>[];
+  }): Document | undefined {
+    if (!options?.projection) {
+      return undefined;
+    }
+
+    const proj: Document = { ...(options.projection as Document) };
+    const values = Object.values(proj);
+    const isInclusion = values.some((val) => val === 1 || val === true);
+
+    if (isInclusion && options?.select && options.select.length > 0) {
+      for (const key of options.select) {
+        // Skip adding key if key itself or a parent path is already included in projection
+        const parts = key.split('.');
+        let parentAlreadyIncluded = false;
+        for (let i = 1; i <= parts.length; i++) {
+          const parentPath = parts.slice(0, i).join('.');
+          if (proj[parentPath] === 1 || proj[parentPath] === true) {
+            parentAlreadyIncluded = true;
+            break;
+          }
+        }
+
+        if (!parentAlreadyIncluded) {
+          // Remove any existing child paths in proj that are covered by this broader key
+          const prefix = `${key}.`;
+          for (const k of Object.keys(proj)) {
+            if (k.startsWith(prefix)) {
+              delete proj[k];
+            }
+          }
+          proj[key] = 1;
+        }
+      }
+    }
+
+    return proj;
+  }
+
+  /*
    * Finds a single document matching the query
    *
    * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
@@ -962,189 +1076,6 @@ export class Store<
    * ```
    */
   /**
-   * Constructs the MongoDB projection document for fetch/read operations based on
-   * schema private fields, caller-provided `select` parameters, and `projection` options.
-   *
-   * High-Level Overview:
-   * 1. If `options.projection` is passed: Handles caller-defined projections.
-   *    - In Inclusion mode (e.g. `{ name: 1 }`): Ensures nested private fields under included parents
-   *      are excluded by expanding the parent key into its public sub-fields (e.g. `'teamSettings.maxQuota': 1`),
-   *      without violating MongoDB rules against mixing 1 and 0 in a single projection.
-   *    - In Exclusion mode (e.g. `{ active: 0 }`): Merges the caller's exclusions with the default
-   *      private field exclusions so private fields never leak through.
-   *    - Merges any fields specified in `options.select`.
-   *    - Sanitizes redundant sub-path inclusion keys to prevent MongoDB path collision errors.
-   * 2. If `options.select` is passed (without explicit `projection`):
-   *    - Constructs an exclusion projection (`{ field: 0 }`) for all private fields NOT in `select`.
-   * 3. Default query (no `projection` or `select`):
-   *    - Excludes all top-level private fields (`{ apiKey: 0, credentials: 0 }`) by default.
-   */
-  private getFetchProjection(options?: {
-    projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
-    select?: SelectKey<TSchema>[];
-  }): Document | undefined {
-    // =========================================================================
-    // CASE 1: Caller provided an explicit MongoDB projection parameter
-    // =========================================================================
-    if (options?.projection) {
-      const proj: Document = { ...(options.projection as Document) };
-      const values = Object.values(proj);
-      const isInclusion = values.some((val) => val === 1 || val === true);
-
-      // Step 1A: Merge `options.select` keys into the explicit projection
-      if (options?.select && options.select.length > 0) {
-        for (const key of options.select) {
-          if (isInclusion) {
-            // Inclusion Mode: Add selected keys as 1
-            proj[key] = 1;
-          } else {
-            // Exclusion Mode: Remove selected keys from the exclusion object to un-hide them
-            delete proj[key];
-          }
-        }
-      }
-
-      // Step 1B: Process Inclusion Projections
-      if (isInclusion) {
-        const selectedKeys = (options?.select || []) as string[];
-        const expandedProj: Document = { ...proj };
-
-        // Sub-Step B1: Parent Object Expansion
-        // Problem: If projection includes a parent object (e.g. `teamSettings: 1`), MongoDB returns all
-        // child fields, leaking unselected private fields (e.g. `teamSettings.memberEmails`).
-        // Adding `teamSettings.memberEmails: 0` is invalid because MongoDB rejects mixing 1 and 0.
-        // Solution: Expand `teamSettings: 1` into explicit inclusions of all PUBLIC sub-fields
-        // (e.g. `'teamSettings.maxQuota': 1`), keeping the projection purely inclusion-based.
-        for (const key of Object.keys(expandedProj)) {
-          if (expandedProj[key] === 1 || expandedProj[key] === true) {
-            const prefix = `${key}.`;
-            const privateChildren = this.privateFields.filter(
-              (f) => f.startsWith(prefix) && f !== key
-            );
-
-            if (privateChildren.length > 0) {
-              const unselectedPrivateChildren = privateChildren.filter((pField) => {
-                const isSelected =
-                  selectedKeys.includes(pField) ||
-                  selectedKeys.some((s) => s.startsWith(`${pField}.`));
-                const isExplicitlyIncluded =
-                  expandedProj[pField] === 1 || expandedProj[pField] === true;
-                return !isSelected && !isExplicitlyIncluded;
-              });
-
-              // If parent has unselected private children, replace parent key with its public sub-fields
-              if (unselectedPrivateChildren.length > 0) {
-                delete expandedProj[key];
-                const publicChildren = this.publicFields.filter(
-                  (f) => f.startsWith(prefix) && f !== key
-                );
-                for (const pChild of publicChildren) {
-                  expandedProj[pChild] = 1;
-                }
-              }
-            }
-          }
-        }
-
-        // Sub-Step B2: Path Collision Sanitization
-        // MongoDB rejects queries that combine parent inclusion and child inclusion
-        // (e.g. `{ credentials: 1, 'credentials.password': 1 }`).
-        // If a parent key is included (`1`), delete redundant child inclusion keys.
-        const clean: Document = { ...expandedProj };
-        const keys = Object.keys(clean);
-        for (const key of keys) {
-          if (clean[key] === 1 || clean[key] === true) {
-            const prefix = `${key}.`;
-            for (const childKey of keys) {
-              if (
-                childKey.startsWith(prefix) &&
-                childKey !== key &&
-                (clean[childKey] === 1 || clean[childKey] === true)
-              ) {
-                delete clean[childKey];
-              }
-            }
-          }
-        }
-
-        // Sub-Step B3: Empty Inclusion Protection
-        // If all requested keys were private and unselected, `clean` becomes `{}`.
-        // Returning `{}` to MongoDB causes it to return the full document with all fields.
-        // Fallback to `{ _id: 1 }` so MongoDB returns an empty document containing only `_id`.
-        if (Object.keys(clean).length === 0) {
-          clean['_id'] = 1;
-        }
-        return clean;
-      }
-
-      // Step 1C: Process Exclusion Projections
-      // Merge the caller's exclusion keys with the default private field exclusions.
-      // This ensures that private fields are still hidden even when an exclusion projection is passed.
-      // Fields in `options.select` are removed from the exclusion list (they were already deleted in Step 1A).
-      const selectedKeys = (options?.select || []) as string[];
-      const defaultExclusion = this.getTopLevelPrivateExclusion(selectedKeys);
-      if (defaultExclusion) {
-        Object.assign(proj, defaultExclusion);
-      }
-      return proj;
-    }
-
-    // =========================================================================
-    // CASE 2: Caller passed `select` options (without explicit projection parameter)
-    // =========================================================================
-    if (options?.select && options.select.length > 0) {
-      const selected = options.select as string[];
-      return this.getTopLevelPrivateExclusion(selected) ?? undefined;
-    }
-
-    // =========================================================================
-    // CASE 3: Default read query (no projection and no select options)
-    // =========================================================================
-    return this.getTopLevelPrivateExclusion([]) ?? undefined;
-  }
-
-  /**
-   * Returns an exclusion projection document (`{ field: 0 }`) for top-level private fields
-   * that are NOT in the `selectedFields` list. Returns `undefined` if no exclusions are needed.
-   *
-   * This is the single source of truth for "which private fields should be excluded by default."
-   * Used by all three cases in `getFetchProjection` to avoid duplicating exclusion logic.
-   *
-   * @param selectedFields - Fields explicitly selected/un-hidden by the caller
-   */
-  private getTopLevelPrivateExclusion(selectedFields: string[]): Document | undefined {
-    // Find private fields that were NOT selected by the caller
-    const unselectedPrivateFields = this.privateFields.filter((field) => {
-      if (selectedFields.includes(field)) return false;
-      if (selectedFields.some((s) => s.startsWith(`${field}.`))) return false;
-      return true;
-    });
-
-    // Filter out redundant child exclusion paths when the parent is already excluded.
-    // e.g., if `credentials` is excluded, no need to also exclude `credentials.password`.
-    const topLevel = unselectedPrivateFields.filter((field) => {
-      const parts = field.split('.');
-      for (let i = 1; i < parts.length; i++) {
-        const parent = parts.slice(0, i).join('.');
-        if (unselectedPrivateFields.includes(parent)) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    if (topLevel.length === 0) {
-      return undefined;
-    }
-
-    const proj: Document = {};
-    for (const field of topLevel) {
-      proj[field] = 0;
-    }
-    return proj;
-  }
-
-  /**
    * Finds a single document matching the query
    *
    * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
@@ -1162,13 +1093,12 @@ export class Store<
     query: TypedFilter<this['_type']>,
     options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
-    const projection = this.getFetchProjection(options);
-
+    const projection = this.getMongoProjection(options);
     const document = await this.requireCollection().findOne<this['_rawDoc']>(
       query as Filter<this['_type']>,
       projection ? { ...options, projection } : options
     );
-    return document ? this.wrapFetchedDocument<KSelect, KProjection>(document) : null;
+    return document ? this.wrapFetchedDocument<KSelect, KProjection>(document, options) : null;
   }
 
   async requireOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
@@ -1184,7 +1114,7 @@ export class Store<
   }
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
-    const projection = this.getFetchProjection(options);
+    const projection = this.getMongoProjection(options);
     const cursor = this.requireCollection().find(
       query as Filter<this['_type']>,
       projection ? { projection } : undefined
@@ -1283,7 +1213,7 @@ export class Store<
   ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>[]> {
     const cursor = this.find(query, options);
     return (await cursor.toArray()).map((doc) =>
-      this.wrapFetchedDocument<KSelect, KProjection>(doc)
+      this.wrapFetchedDocument<KSelect, KProjection>(doc, options)
     );
   }
 
@@ -1454,13 +1384,13 @@ export class Store<
     update: UpdateFilter<this['_type']>,
     options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
   ): Promise<this['_fetchedDoc'] | null> {
-    const projection = this.getFetchProjection(options);
+    const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
   }
 
   /**
@@ -1494,7 +1424,7 @@ export class Store<
     update: UpdateFilter<this['_type']>,
     options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata' | 'returnDocument'>
   ): Promise<UpsertResult<this['_fetchedDoc']>> {
-    const projection = this.getFetchProjection(options);
+    const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
@@ -1507,7 +1437,9 @@ export class Store<
         includeResultMetadata: true,
       }
     );
-    const doc = result.value ? this.wrapFetchedDocument(result.value as this['_rawDoc']) : null;
+    const doc = result.value
+      ? this.wrapFetchedDocument(result.value as this['_rawDoc'], options)
+      : null;
     return { doc, isNew: Boolean(result.lastErrorObject?.upserted) };
   }
 
@@ -1522,12 +1454,12 @@ export class Store<
     selector: TypedFilter<this['_type']> | string | ObjectId,
     options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
   ): Promise<this['_fetchedDoc'] | null> {
-    const projection = this.getFetchProjection(options);
+    const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
   }
 
   /**
@@ -1543,13 +1475,13 @@ export class Store<
     replacement: WithoutId<this['_type']>,
     options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
   ): Promise<this['_fetchedDoc'] | null> {
-    const projection = this.getFetchProjection(options);
+    const projection = this.getMongoProjection(options);
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
       replacement,
       projection ? { ...options, projection } : (options ?? {})
     );
-    return result ? this.wrapFetchedDocument(result as this['_rawDoc']) : null;
+    return result ? this.wrapFetchedDocument(result as this['_rawDoc'], options) : null;
   }
 
   /**
