@@ -56,6 +56,34 @@ function assertFetchOptionTypeSafety() {
 }
 void assertFetchOptionTypeSafety;
 
+function assertInclusionProjectionWidenedTypeSafety() {
+  const store = new Store('projectionStore', {
+    schema: {
+      name: schema.string(),
+      age: schema.number(),
+      secret: schema.string().private(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  async function testWidenedProjection() {
+    // When projection is passed with fresh literal or number type (e.g. { name: 1 })
+    const doc = await store.findOne({ name: 'john' }, { projection: { name: 1 } });
+    void doc?.name; // ✅ name must NOT be omitted or typed as undefined
+    void doc?.age; // ✅ age preserved
+  }
+  void testWidenedProjection;
+
+  async function testInclusionUnHidesPrivateField() {
+    // Inclusion projection with secret: 1 un-hides secret
+    const doc = await store.findOne({ name: 'john' }, { projection: { secret: 1 } });
+    void doc?.secret; // ✅ secret is un-hidden by inclusion projection
+  }
+  void testInclusionUnHidesPrivateField;
+}
+void assertInclusionProjectionWidenedTypeSafety;
+
 function assertFindOneAndUpdateTypeSafety() {
   const privateStore = new Store('privateStore', {
     schema: {

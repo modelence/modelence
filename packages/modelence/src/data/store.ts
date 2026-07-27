@@ -66,11 +66,15 @@ export type SelectKey<TSchema extends ModelSchema> =
   | (keyof TSchema & string)
   | `${keyof TSchema & string}.${string}`;
 
-type IsLiteralOneOrTrue<V> = number extends V
+// IsInclusionValue: returns true if V is an inclusion projection value (1, true, number, boolean, or operator object)
+type IsInclusionValue<V> = V extends 0 | false ? false : true;
+
+// IsExclusionValue: returns true if V is explicitly 0 or false (exclusion)
+type IsExclusionValue<V> = number extends V
   ? false
   : boolean extends V
     ? false
-    : V extends 1 | true
+    : V extends 0 | false
       ? true
       : false;
 
@@ -79,18 +83,18 @@ type IsInclusionProjection<TProj> =
   TProj extends Record<string, unknown>
     ? [
         {
-          [K in keyof TProj]: IsLiteralOneOrTrue<TProj[K]> extends true ? true : never;
+          [K in keyof TProj]: IsInclusionValue<TProj[K]> extends true ? true : never;
         }[keyof TProj],
       ] extends [never]
       ? false
       : true
     : false;
 
-// Extracts only the keys that are explicitly included (assigned 1 or true)
+// Extracts only the keys that are explicitly included in an inclusion projection
 type ExtractInclusionKeys<TProj> =
   TProj extends Record<string, unknown>
     ? {
-        [K in keyof TProj & string]: IsLiteralOneOrTrue<TProj[K]> extends true ? K : never;
+        [K in keyof TProj & string]: IsInclusionValue<TProj[K]> extends true ? K : never;
       }[keyof TProj & string]
     : never;
 
@@ -101,7 +105,7 @@ type ExtractExclusionKeys<TProj> = [TProj] extends [undefined]
     ? never
     : TProj extends Record<string, unknown>
       ? {
-          [K in keyof TProj & string]: IsLiteralOneOrTrue<TProj[K]> extends true ? never : K;
+          [K in keyof TProj & string]: IsExclusionValue<TProj[K]> extends true ? K : never;
         }[keyof TProj & string]
       : never;
 
