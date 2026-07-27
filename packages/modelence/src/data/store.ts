@@ -66,33 +66,44 @@ export type SelectKey<TSchema extends ModelSchema> =
   | (keyof TSchema & string)
   | `${keyof TSchema & string}.${string}`;
 
-//Determines whether the given projection object is an Inclusion projection or an Exclusion projection
+type IsLiteralOneOrTrue<V> = number extends V
+  ? false
+  : boolean extends V
+    ? false
+    : V extends 1 | true
+      ? true
+      : false;
+
+// Determines whether the given projection object is an Inclusion projection
 type IsInclusionProjection<TProj> =
   TProj extends Record<string, unknown>
     ? [
         {
-          [K in keyof TProj]: TProj[K] extends 1 | true ? true : never;
+          [K in keyof TProj]: IsLiteralOneOrTrue<TProj[K]> extends true ? true : never;
         }[keyof TProj],
       ] extends [never]
       ? false
       : true
     : false;
 
-//Extracts only the keys that are explicitly included (assigned 1 or true)
+// Extracts only the keys that are explicitly included (assigned 1 or true)
 type ExtractInclusionKeys<TProj> =
   TProj extends Record<string, unknown>
     ? {
-        [K in keyof TProj & string]: TProj[K] extends 1 | true ? K : never;
+        [K in keyof TProj & string]: IsLiteralOneOrTrue<TProj[K]> extends true ? K : never;
       }[keyof TProj & string]
     : never;
 
-//Extracts the keys that are explicitly excluded in an exclusion projection (e.g., { active: 0 })
-type ExtractExclusionKeys<TProj> =
-  TProj extends Record<string, unknown>
-    ? {
-        [K in keyof TProj & string]: string extends K ? never : K;
-      }[keyof TProj & string]
-    : never;
+// Extracts the keys that are explicitly excluded in an exclusion projection (e.g. { title: 0 })
+type ExtractExclusionKeys<TProj> = [TProj] extends [undefined]
+  ? never
+  : IsInclusionProjection<TProj> extends true
+    ? never
+    : TProj extends Record<string, unknown>
+      ? {
+          [K in keyof TProj & string]: IsLiteralOneOrTrue<TProj[K]> extends true ? never : K;
+        }[keyof TProj & string]
+      : never;
 
 /**
  * ExtractProjectionVisibleKeys: Extracts private field keys explicitly included with 1 or true in an inclusion projection.
@@ -102,25 +113,39 @@ type ExtractProjectionVisibleKeys<TSchema extends ModelSchema, TProj> =
   IsInclusionProjection<TProj> extends true ? ExtractInclusionKeys<TProj> : never;
 
 /**
+ * Removes excluded keys from a document type.
+ * - When KExclusions = never (inclusion projection or no projection), returns T unchanged so
+ *   `this["_fetchedDoc"]` assignability is preserved.
+ * - When there are exclusions, uses TypeScript key remapping (`as` clause).
+ */
+type OmitExclusions<T, KExclusions> = [KExclusions] extends [never]
+  ? T
+  : { [K in keyof T as K extends KExclusions ? never : K]: T[K] };
+
+/**
  * Reusable type helper representing the document returned by store read operations.
- * Defaults to excluding private fields unless `KSelect` explicitly selects them or `KProjection` includes them / omits them from exclusion.
+ * Excludes private fields by default unless in `KSelect` or inclusion `KProjection`,
+ * and omits fields explicitly set to 0 or false in an exclusion projection.
  */
 export type FetchedDoc<
   TSchema extends ModelSchema,
   TMethods = Record<string, never>,
   KSelect extends SelectKey<TSchema> = never,
   KProjection = undefined,
-> = WithId<
-  [KProjection] extends [undefined]
-    ? [KSelect] extends [never]
-      ? InferFetchedDocumentType<TSchema>
-      : InferSelectedDocumentType<TSchema, KSelect>
-    : InferSelectedDocumentType<
-        TSchema,
-        KSelect | ExtractProjectionVisibleKeys<TSchema, KProjection>
-      >
-> &
-  TMethods;
+> = OmitExclusions<
+  WithId<
+    [KProjection] extends [undefined]
+      ? [KSelect] extends [never]
+        ? InferFetchedDocumentType<TSchema>
+        : InferSelectedDocumentType<TSchema, KSelect>
+      : InferSelectedDocumentType<
+          TSchema,
+          KSelect | ExtractProjectionVisibleKeys<TSchema, KProjection>
+        >
+  > &
+    TMethods,
+  ExtractExclusionKeys<KProjection>
+>;
 
 /**
  * Options for MongoDB `find` operations with support for making private fields visible via `select` or `projection`.

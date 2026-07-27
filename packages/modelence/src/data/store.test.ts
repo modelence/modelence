@@ -1631,7 +1631,7 @@ describe('data/store', () => {
       // Exclusion projection excluding one private field ({ apiKey: 0 }): all private fields remain hidden by default
       const resExclPrivate = await organizationStore.findOne(
         { name: 'Acme Corp' },
-        { projection: { apiKey: 0 } }
+        { projection: { apiKey: 0 } as const }
       );
       expect((resExclPrivate as any)?.apiKey).toBeUndefined();
       expect((resExclPrivate as any)?.teamSettings?.memberEmails).toBeUndefined();
@@ -1639,7 +1639,7 @@ describe('data/store', () => {
       // Exclusion projection with select: select explicitly un-hides selected private field (apiKey) while unselected stay hidden
       const resSelect = await organizationStore.findOne(
         { name: 'Acme Corp' },
-        { projection: { active: 0 }, select: ['apiKey'] }
+        { projection: { active: 0 } as const, select: ['apiKey'] }
       );
       expect(resSelect?.apiKey).toBe('key_live_12345');
       expect((resSelect as any)?.teamSettings?.memberEmails).toBeUndefined();

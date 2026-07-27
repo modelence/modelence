@@ -171,15 +171,6 @@ export type InferDocumentType<T extends SchemaTypeDefinition> = {
         : never;
 };
 
-type InferFetchedZodElement<E> =
-  E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferFetchedDocumentType<Shape>
-    : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
-      ? Array<InferFetchedZodElement<InnerElement>>
-      : E extends z.ZodTypeAny
-        ? z.infer<E>
-        : never;
-
 type InferSelectedZodElement<E, KKeys extends string> =
   E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
     ? InferSelectedDocumentType<Shape, KKeys>
@@ -188,39 +179,6 @@ type InferSelectedZodElement<E, KKeys extends string> =
       : E extends z.ZodTypeAny
         ? z.infer<E>
         : never;
-
-/**
- * Represents the default fetched document when reading from the store (store.fetch(), store.findOne()).
- */
-export type InferFetchedDocumentType<T extends SchemaTypeDefinition> = {
-  [K in keyof T as IsPrivateField<T[K]> extends true
-    ? never
-    : T[K] extends z.ZodOptional<z.ZodTypeAny>
-      ? K
-      : never]?: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferFetchedDocumentType<Shape>
-    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
-      ? Array<InferFetchedZodElement<ElementType>>
-      : T[K] extends z.ZodTypeAny
-        ? z.infer<T[K]>
-        : never;
-} & {
-  [K in keyof T as IsPrivateField<T[K]> extends true
-    ? never
-    : T[K] extends z.ZodOptional<z.ZodTypeAny>
-      ? never
-      : K]: T[K] extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-    ? InferFetchedDocumentType<Shape>
-    : T[K] extends z.ZodArray<infer ElementType extends z.ZodTypeAny, any>
-      ? Array<InferFetchedZodElement<ElementType>>
-      : T[K] extends z.ZodTypeAny
-        ? z.infer<T[K]>
-        : T[K] extends Array<infer ElementType extends SchemaTypeDefinition>
-          ? Array<InferFetchedDocumentType<ElementType>>
-          : T[K] extends ObjectTypeDefinition
-            ? InferFetchedDocumentType<T[K]>
-            : never;
-};
 
 type SubKeys<KKeys, Prefix> = KKeys extends string
   ? KKeys extends `${Extract<Prefix, string>}.${infer Rest}`
@@ -280,6 +238,14 @@ export type InferSelectedDocumentType<
             ? InferSelectedDocumentType<T[K], SubKeys<KKeys, K>>
             : never;
 };
+
+/**
+ * Represents the default fetched document when reading from the store (store.fetch(), store.findOne()).
+ */
+export type InferFetchedDocumentType<T extends SchemaTypeDefinition> = InferSelectedDocumentType<
+  T,
+  never
+>;
 
 export namespace schema {
   export type infer<T extends SchemaTypeDefinition> = InferDocumentType<T>;
