@@ -1617,22 +1617,39 @@ describe('data/store', () => {
         { projection: { name: 1, apiKey: 1 } }
       );
 
-      // Exclusion projection excluding public field: un-hides all private fields
-      const docExclPublic = await organizationStore.findOne(
+      // Exclusion projection excluding a public field: private fields should still be excluded by default
+      await organizationStore.findOne({ name: 'Acme Corp' }, { projection: { active: 0 } });
+      expect(collectionMock.findOne).toHaveBeenLastCalledWith(
         { name: 'Acme Corp' },
-        { projection: { active: 0 } }
+        { projection: { active: 0, apiKey: 0, 'teamSettings.memberEmails': 0 } }
       );
-      expect(docExclPublic?.apiKey).toBe('key_live_12345');
-      expect(docExclPublic?.teamSettings.memberEmails).toEqual(['admin@acme.com']);
 
-      // Exclusion projection excluding one private field (apiKey: 0): apiKey remains hidden, other private fields are un-hidden
-      const docExclPrivate = await organizationStore.findOne(
+      // Exclusion projection excluding one private field (apiKey: 0): should also exclude other private fields
+      await organizationStore.findOne({ name: 'Acme Corp' }, { projection: { apiKey: 0 } });
+      expect(collectionMock.findOne).toHaveBeenLastCalledWith(
         { name: 'Acme Corp' },
-        { projection: { apiKey: 0 } }
+        { projection: { apiKey: 0, 'teamSettings.memberEmails': 0 } }
       );
-      if (docExclPrivate) {
-        expect(docExclPrivate.apiKey).toBeUndefined();
-      }
+
+      // Exclusion projection with select: un-hiding a private field should remove it from the merged exclusion
+      await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { active: 0 }, select: ['apiKey'] }
+      );
+      expect(collectionMock.findOne).toHaveBeenLastCalledWith(
+        { name: 'Acme Corp' },
+        { select: ['apiKey'], projection: { active: 0, 'teamSettings.memberEmails': 0 } }
+      );
+
+      // Inclusion projection including a parent object (teamSettings: 1) expands to public sub-fields to prevent leakage without mixing 1 and 0
+      await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { teamSettings: 1 } as any }
+      );
+      expect(collectionMock.findOne).toHaveBeenLastCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { 'teamSettings.maxQuota': 1 } }
+      );
     });
 
     it('should exclude nested private field when only private parent object is selected', async () => {
@@ -1690,6 +1707,23 @@ describe('data/store', () => {
         { select: ['credentials', 'credentials.password'] }
       );
 
+      // Inclusion projection for private parent object (credentials: 1) expands to public sub-field (credentials.emails: 1), omitting private fields and unprojected fields
+      await profileStore.findOne({ name: 'Alice' }, { projection: { credentials: 1 } as any });
+      expect(mockCol.findOne).toHaveBeenLastCalledWith(
+        { name: 'Alice' },
+        { projection: { 'credentials.emails': 1 } }
+      );
+
+      // Inclusion projection with select: ['credentials'] expands selected credentials to public sub-fields
+      await profileStore.findOne(
+        { name: 'Alice' },
+        { projection: { name: 1 }, select: ['credentials'] }
+      );
+      expect(mockCol.findOne).toHaveBeenLastCalledWith(
+        { name: 'Alice' },
+        { select: ['credentials'], projection: { name: 1, 'credentials.emails': 1 } }
+      );
+
       // Inclusion projection containing both parent and sub-path should sanitize sub-path to prevent MongoDB collision
       await profileStore.findOne(
         { name: 'Alice' },
@@ -1698,6 +1732,12 @@ describe('data/store', () => {
       expect(mockCol.findOne).toHaveBeenLastCalledWith(
         { name: 'Alice' },
         { projection: { credentials: 1 } }
+      );
+      // Exclusion projection on nested private parent: private fields should still be excluded
+      await profileStore.findOne({ name: 'Alice' }, { projection: { name: 0 } as any });
+      expect(mockCol.findOne).toHaveBeenLastCalledWith(
+        { name: 'Alice' },
+        { projection: { name: 0, credentials: 0 } }
       );
     });
   });
