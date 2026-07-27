@@ -15,7 +15,12 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["index", "quickstart", "setup", "react-native"]
+            "pages": [
+              "index",
+              "quickstart",
+              "setup",
+              "react-native"
+            ]
           },
           {
             "group": "Core Concepts",
@@ -50,7 +55,10 @@
               {
                 "group": "Email",
                 "icon": "envelope",
-                "pages": ["email/index", "email/providers"]
+                "pages": [
+                  "email/index",
+                  "email/providers"
+                ]
               },
               "files",
               "stores",
@@ -65,7 +73,11 @@
           },
           {
             "group": "Tutorials",
-            "pages": ["tutorial", "data-api", "voyage-ai"]
+            "pages": [
+              "tutorial",
+              "data-api",
+              "voyage-ai"
+            ]
           }
         ]
       },
@@ -158,9 +170,7 @@
                     "group": "Namespaces",
                     "pages": [
                       "api-reference/modelence/server/namespaces/schema/index",
-                      "api-reference/modelence/server/namespaces/schema/type-aliases/infer",
-                      "api-reference/modelence/server/namespaces/schema/type-aliases/inferFetched",
-                      "api-reference/modelence/server/namespaces/schema/type-aliases/inferSelected"
+                      "api-reference/modelence/server/namespaces/schema/type-aliases/infer"
                     ]
                   }
                 ]
@@ -260,7 +270,9 @@
                   },
                   {
                     "group": "Variables",
-                    "pages": ["api-reference/modelence/index/variables/time"]
+                    "pages": [
+                      "api-reference/modelence/index/variables/time"
+                    ]
                   },
                   {
                     "group": "Type Aliases",
@@ -305,7 +317,9 @@
               "api-reference/@modelence/ai/index",
               {
                 "group": "Functions",
-                "pages": ["api-reference/@modelence/ai/functions/generateText"]
+                "pages": [
+                  "api-reference/@modelence/ai/functions/generateText"
+                ]
               },
               {
                 "group": "Type Aliases",
@@ -321,17 +335,23 @@
               "api-reference/@modelence/next/index",
               {
                 "group": "Classes",
-                "pages": ["api-reference/@modelence/next/classes/NextServer"]
+                "pages": [
+                  "api-reference/@modelence/next/classes/NextServer"
+                ]
               },
               {
                 "group": "Variables",
-                "pages": ["api-reference/@modelence/next/variables/nextServer"]
+                "pages": [
+                  "api-reference/@modelence/next/variables/nextServer"
+                ]
               }
             ]
           },
           {
             "group": "@modelence/auth-ui",
-            "pages": ["api-reference/@modelence/auth-ui/index"]
+            "pages": [
+              "api-reference/@modelence/auth-ui/index"
+            ]
           },
           {
             "group": "@modelence/smtp",
@@ -339,11 +359,15 @@
               "api-reference/@modelence/smtp/index",
               {
                 "group": "Functions",
-                "pages": ["api-reference/@modelence/smtp/functions/sendEmail"]
+                "pages": [
+                  "api-reference/@modelence/smtp/functions/sendEmail"
+                ]
               },
               {
                 "group": "Variables",
-                "pages": ["api-reference/@modelence/smtp/variables/default"]
+                "pages": [
+                  "api-reference/@modelence/smtp/variables/default"
+                ]
               },
               {
                 "group": "Type Aliases",
@@ -360,11 +384,15 @@
               "api-reference/@modelence/resend/index",
               {
                 "group": "Functions",
-                "pages": ["api-reference/@modelence/resend/functions/sendEmail"]
+                "pages": [
+                  "api-reference/@modelence/resend/functions/sendEmail"
+                ]
               },
               {
                 "group": "Variables",
-                "pages": ["api-reference/@modelence/resend/variables/default"]
+                "pages": [
+                  "api-reference/@modelence/resend/variables/default"
+                ]
               },
               {
                 "group": "Type Aliases",
@@ -387,7 +415,9 @@
               },
               {
                 "group": "Variables",
-                "pages": ["api-reference/@modelence/aws-ses/variables/default"]
+                "pages": [
+                  "api-reference/@modelence/aws-ses/variables/default"
+                ]
               },
               {
                 "group": "Type Aliases",

@@ -1499,6 +1499,26 @@ describe('data/store', () => {
       expect(collectionMock.find).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
     });
 
+    test('should NOT un-hide private primitive fields when invalid sub-path like password.foo is selected', async () => {
+      const store = createPrivateStore();
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          name: 'Alice',
+          email: 'alice@test.com',
+          password: 'hash',
+        }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      // Select 'password.foo' (which starts with 'password.') on primitive field 'password'
+      const doc = await store.findOne({ name: 'Alice' }, { select: ['password.foo' as any] });
+
+      // password must be stripped and not leaked!
+      expect(doc).not.toHaveProperty('password');
+    });
+
     test('store.findOne and store.fetch with nested and parent private fields should hide/un-hide correctly', async () => {
       const profileStore = new Store('userProfiles', {
         schema: {

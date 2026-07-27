@@ -1005,12 +1005,40 @@ export class Store<
     const selectedFields = (options?.select || []) as string[];
     const proj = (options?.projection || {}) as Record<string, unknown>;
 
+    const getNestedValue = (obj: any, path: string): any => {
+      if (!obj || typeof obj !== 'object') return undefined;
+      const parts = path.split('.');
+      let curr = obj;
+      for (const part of parts) {
+        if (!curr || typeof curr !== 'object') return undefined;
+        curr = curr[part];
+      }
+      return curr;
+    };
+
+    const isFieldSelected = (field: string): boolean => {
+      if (selectedFields.includes(field)) return true;
+
+      // Sub-path selection is only valid if field value in doc is an object or array (not a primitive)
+      const val = getNestedValue(doc, field);
+      if (val !== null && typeof val === 'object') {
+        if (selectedFields.some((s) => s.startsWith(`${field}.`))) return true;
+      }
+      return false;
+    };
+
     const isFieldVisibleByProjection = (field: string): boolean => {
       if (proj[field] === 1 || proj[field] === true) return true;
-      const prefix = `${field}.`;
-      return Object.keys(proj).some(
-        (k) => (proj[k] === 1 || proj[k] === true) && k.startsWith(prefix)
-      );
+
+      // Sub-path projection is only valid if field value in doc is an object or array (not a primitive)
+      const val = getNestedValue(doc, field);
+      if (val !== null && typeof val === 'object') {
+        const prefix = `${field}.`;
+        return Object.keys(proj).some(
+          (k) => (proj[k] === 1 || proj[k] === true) && k.startsWith(prefix)
+        );
+      }
+      return false;
     };
 
     const deletePath = (obj: any, parts: string[], index = 0): void => {
@@ -1042,8 +1070,7 @@ export class Store<
 
     for (const field of this.privateFields) {
       // Skip stripping if this field was explicitly selected or made visible by projection
-      if (selectedFields.includes(field)) continue;
-      if (selectedFields.some((s) => s.startsWith(`${field}.`))) continue;
+      if (isFieldSelected(field)) continue;
       if (isFieldVisibleByProjection(field)) continue;
 
       deletePath(doc, field.split('.'));
