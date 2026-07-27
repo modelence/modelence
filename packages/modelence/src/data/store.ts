@@ -95,20 +95,11 @@ type ExtractExclusionKeys<TProj> =
     : never;
 
 /**
- * ExtractProjectionUnHiddenKeys: Combines the rules above to calculate which private field paths should be un-hidden in the returned TypeScript document type
- * Logic Branching:
- * If {@link IsInclusionProjection<TProj>} is true: It calls {@link ExtractInclusionKeys}. Only fields explicitly included via 1 or true are un-hidden.
- * If {@link IsInclusionProjection<TProj>} is false (Exclusion Projection): It takes all private fields in {@link SelectKey} and removes (Exclude) any keys (or subpaths) that were explicitly set to 0 in {@link ExtractExclusionKeys}.
- * Example: If projection: { active: 0 } is passed, active is excluded, so all private fields (apiKey, teamSettings.memberEmails) are un-hidden.
- * Example: If projection: { apiKey: 0 } is passed, apiKey is excluded, so apiKey remains hidden while teamSettings.memberEmails is un-hidden.
+ * ExtractProjectionVisibleKeys: Extracts private field keys explicitly included with 1 or true in an inclusion projection.
+ * Exclusion projections (e.g. { active: 0 }) do not un-hide private fields — private fields remain hidden by default.
  */
-type ExtractProjectionUnHiddenKeys<TSchema extends ModelSchema, TProj> =
-  IsInclusionProjection<TProj> extends true
-    ? ExtractInclusionKeys<TProj>
-    : Exclude<
-        SelectKey<TSchema>,
-        ExtractExclusionKeys<TProj> | `${Extract<ExtractExclusionKeys<TProj>, string>}.${string}`
-      >;
+type ExtractProjectionVisibleKeys<TSchema extends ModelSchema, TProj> =
+  IsInclusionProjection<TProj> extends true ? ExtractInclusionKeys<TProj> : never;
 
 /**
  * Reusable type helper representing the document returned by store read operations.
@@ -126,13 +117,13 @@ export type FetchedDoc<
       : InferSelectedDocumentType<TSchema, KSelect>
     : InferSelectedDocumentType<
         TSchema,
-        KSelect | ExtractProjectionUnHiddenKeys<TSchema, KProjection>
+        KSelect | ExtractProjectionVisibleKeys<TSchema, KProjection>
       >
 > &
   TMethods;
 
 /**
- * Options for MongoDB `find` operations with support for un-hiding private fields via `select` or `projection`.
+ * Options for MongoDB `find` operations with support for making private fields visible via `select` or `projection`.
  */
 export type FindOptionsWithSelect<
   TSchema extends ModelSchema,
@@ -962,7 +953,7 @@ export class Store<
     const selectedFields = (options?.select || []) as string[];
     const proj = (options?.projection || {}) as Record<string, unknown>;
 
-    const isIncludedInProjection = (field: string): boolean => {
+    const isFieldVisibleByProjection = (field: string): boolean => {
       if (proj[field] === 1 || proj[field] === true) return true;
       const prefix = `${field}.`;
       return Object.keys(proj).some(
@@ -998,10 +989,10 @@ export class Store<
     };
 
     for (const field of this.privateFields) {
-      // Skip stripping if this field was explicitly selected or included in projection
+      // Skip stripping if this field was explicitly selected or made visible by projection
       if (selectedFields.includes(field)) continue;
       if (selectedFields.some((s) => s.startsWith(`${field}.`))) continue;
-      if (isIncludedInProjection(field)) continue;
+      if (isFieldVisibleByProjection(field)) continue;
 
       deletePath(doc, field.split('.'));
     }
