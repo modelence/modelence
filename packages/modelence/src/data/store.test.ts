@@ -1602,6 +1602,41 @@ describe('data/store', () => {
       expect(doc?.comments[0].text).toBe('Great post!');
     });
 
+    test('should preserve private empty array container when selecting sub-path', async () => {
+      const emptyArrayStore = new Store('emptyArrayStore', {
+        schema: {
+          title: schema.string(),
+          players: schema
+            .array(
+              schema.object({
+                profile: schema.object({ email: schema.string() }),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Empty Game',
+          players: [],
+        }),
+      };
+      (emptyArrayStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await emptyArrayStore.findOne(
+        { title: 'Empty Game' },
+        { select: ['players.profile.email' as any] }
+      );
+
+      // Empty array players must be preserved as [] and not deleted!
+      expect(doc?.players).toBeDefined();
+      expect(doc?.players).toEqual([]);
+    });
+
     test('store.findOne and store.fetch with nested and parent private fields should hide/un-hide correctly', async () => {
       const profileStore = new Store('userProfiles', {
         schema: {

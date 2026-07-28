@@ -1018,6 +1018,7 @@ export class Store<
     const isContainer = (val: unknown): boolean => {
       if (val === null || val === undefined || typeof val !== 'object') return false;
       if (Array.isArray(val)) {
+        if (val.length === 0) return true;
         return val.some((item) => isContainer(item));
       }
       if (val instanceof Date || val instanceof RegExp || ArrayBuffer.isView(val)) return false;
