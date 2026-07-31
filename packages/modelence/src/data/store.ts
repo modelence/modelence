@@ -1013,23 +1013,19 @@ export class Store<
       return false;
     };
 
-    // Helper: Determines if a value is a container (object/array) capable of holding sub-properties.
-    // Rejects primitives, Date, RegExp, Buffers, BSON ObjectIds, and arrays of non-container items.
+    // Helper: Determines if a value is a container (plain object or array) capable of holding
+    // sub-properties that stripPrivateFields should recurse into.
     const isContainer = (val: unknown): boolean => {
       if (val === null || val === undefined || typeof val !== 'object') return false;
       if (Array.isArray(val)) {
+        // An empty array is treated as a valid container so that sub-path selections
+        // against array fields are not silently dropped when the array happens to be empty.
         if (val.length === 0) return true;
         return val.some((item) => isContainer(item));
       }
-      if (val instanceof Date || val instanceof RegExp || ArrayBuffer.isView(val)) return false;
-      if (
-        val.constructor &&
-        val.constructor.name !== 'Object' &&
-        val.constructor.name !== 'Document'
-      ) {
-        if ('_bsontype' in (val as object)) return false;
-      }
-      return true;
+
+      const ctor = (val as object).constructor;
+      return ctor === undefined || ctor === Object;
     };
 
     // Helper: Recursively walks a dot-path (e.g. 'players.profile'), stepping through array items
