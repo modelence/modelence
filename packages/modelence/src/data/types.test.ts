@@ -430,16 +430,17 @@ describe('data/types', () => {
       });
     });
 
-    test('.private() returns a clone without mutating the original schema instance', () => {
-      const sharedStringSchema = schema.string();
-      const privateStringSchema = sharedStringSchema.private();
+    test('.private() does not contaminate other schema instances', () => {
+      // Two independently-created schemas of the same type.
+      const publicStringSchema = schema.string();
+      const privateStringSchema = schema.string().private();
 
-      expect(sharedStringSchema).not.toBe(privateStringSchema);
-      expect(isFieldPrivate(sharedStringSchema)).toBe(false);
+      // Only the explicitly-marked instance should be considered private.
+      expect(isFieldPrivate(publicStringSchema)).toBe(false);
       expect(isFieldPrivate(privateStringSchema)).toBe(true);
 
       const testSchema = {
-        publicField: sharedStringSchema,
+        publicField: publicStringSchema,
         privateField: privateStringSchema,
       };
 

@@ -37,23 +37,30 @@ declare module 'zod' {
   }
 }
 
+/**
+ * Registry of Zod schema instances that have been marked as private via `.private()`.
+ *
+ * The WeakSet holds no strong references, so schemas are
+ * garbage-collected normally when no longer in use.
+ */
+const privateSchemaRegistry = new WeakSet<z.ZodType>();
+
 (z.ZodType.prototype as any).private = function (this: z.ZodType) {
-  const clone = new (this.constructor as any)({
-    ...this._def,
-    _isPrivate: true,
-  });
-  (clone as any)._isPrivate = true;
-  return clone;
+  privateSchemaRegistry.add(this);
+  return this;
 };
 
 export function isFieldPrivate(type: unknown): boolean {
   if (!type || typeof type !== 'object') return false;
-  if (
-    ('_isPrivate' in type && (type as any)._isPrivate === true) ||
-    ('_def' in type && (type as any)._def && (type as any)._def._isPrivate === true)
-  ) {
+
+  // Check the registry first — handles all Zod types uniformly.
+  if (type instanceof z.ZodType && privateSchemaRegistry.has(type)) {
     return true;
   }
+
+  // Unwrap transparent wrapper types so that `.private()` applied to the
+  // inner schema is visible even when the field is declared as, e.g.,
+  // `schema.string().private().optional()`.
   if (
     type instanceof z.ZodOptional ||
     type instanceof z.ZodNullable ||

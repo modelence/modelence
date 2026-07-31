@@ -1263,19 +1263,19 @@ export class Store<
   }
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
-    const projection = this.getMongoProjection(options);
-    const cursor = this.requireCollection().find(
-      query as Filter<this['_type']>,
-      projection ? { projection } : undefined
-    );
-    if (options?.sort) {
-      cursor.sort(options.sort);
+    const { sort, limit, skip, ...driverCompatibleOptions } = options ?? {};
+    const driverOptions = this.cleanDriverOptions(
+      driverCompatibleOptions as Parameters<typeof this.cleanDriverOptions>[0]
+    ) as FindOptions | undefined;
+    const cursor = this.requireCollection().find(query as Filter<this['_type']>, driverOptions);
+    if (sort) {
+      cursor.sort(sort);
     }
-    if (options?.limit) {
-      cursor.limit(options.limit);
+    if (limit) {
+      cursor.limit(limit);
     }
-    if (options?.skip) {
-      cursor.skip(options.skip);
+    if (skip) {
+      cursor.skip(skip);
     }
     return cursor;
   }
