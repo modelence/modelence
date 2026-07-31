@@ -2054,6 +2054,132 @@ describe('data/store', () => {
       // Private leaf email must be stripped!
       expect((doc?.players?.[0]?.profile?.[0] as any)?.email).toBeUndefined();
     });
+
+    test('atomic mutation methods (findOneAndUpdate, findOneAndUpsert, findOneAndDelete, findOneAndReplace) should hide private fields by default and un-hide via select', async () => {
+      const mutStore = new Store('mutationTest', {
+        schema: {
+          title: schema.string(),
+          secret: schema.string().private(),
+          audit: schema.object({
+            createdBy: schema.string().private(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        title: 'Project Alpha',
+        secret: 'shhh',
+        audit: { createdBy: 'admin' },
+      };
+
+      const mockCollection = {
+        findOneAndUpdate: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+        findOneAndDelete: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+        findOneAndReplace: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+      };
+
+      (mutStore as unknown as { collection: typeof mockCollection }).collection = mockCollection;
+
+      // 1. findOneAndUpdate by default hides secret & audit.createdBy
+      const doc1 = await mutStore.findOneAndUpdate(
+        { title: 'Project Alpha' },
+        { $set: { title: 'Updated' } }
+      );
+      expect(doc1?.title).toBe('Project Alpha');
+      expect((doc1 as any)?.secret).toBeUndefined();
+      expect((doc1 as any)?.audit?.createdBy).toBeUndefined();
+
+      // 2. findOneAndUpdate with select un-hides secret
+      const doc2 = await mutStore.findOneAndUpdate(
+        { title: 'Project Alpha' },
+        { $set: { title: 'Updated' } },
+        { select: ['secret'] }
+      );
+      expect(doc2?.secret).toBe('shhh');
+      expect((doc2 as any)?.audit?.createdBy).toBeUndefined();
+
+      // 3. findOneAndUpsert by default hides secret inside UpsertResult doc
+      mockCollection.findOneAndUpdate.mockResolvedValueOnce({
+        value: JSON.parse(JSON.stringify(rawDoc)),
+        lastErrorObject: { upserted: new ObjectId() },
+      });
+      const upsertRes1 = await mutStore.findOneAndUpsert(
+        { title: 'Project Alpha' },
+        { $setOnInsert: { title: 'Project Alpha', secret: 'shhh' } }
+      );
+      expect(upsertRes1.isNew).toBe(true);
+      expect(upsertRes1.doc?.title).toBe('Project Alpha');
+      expect((upsertRes1.doc as any)?.secret).toBeUndefined();
+
+      // 4. findOneAndUpsert with select un-hides secret inside UpsertResult doc
+      mockCollection.findOneAndUpdate.mockResolvedValueOnce({
+        value: JSON.parse(JSON.stringify(rawDoc)),
+        lastErrorObject: { upserted: new ObjectId() },
+      });
+      const upsertRes2 = await mutStore.findOneAndUpsert(
+        { title: 'Project Alpha' },
+        { $setOnInsert: { title: 'Project Alpha', secret: 'shhh' } },
+        { select: ['secret'] }
+      );
+      expect(upsertRes2.doc?.secret).toBe('shhh');
+
+      // 5. findOneAndDelete with select un-hides secret
+      const deletedDoc = await mutStore.findOneAndDelete(
+        { title: 'Project Alpha' },
+        { select: ['secret'] }
+      );
+      expect(deletedDoc?.secret).toBe('shhh');
+
+      // 6. findOneAndReplace with select un-hides secret
+      const replacedDoc = await mutStore.findOneAndReplace(
+        { title: 'Project Alpha' },
+        { title: 'Project Alpha', secret: 'shhh', audit: { createdBy: 'admin' } },
+        { select: ['secret'] }
+      );
+      expect(replacedDoc?.secret).toBe('shhh');
+    });
+
+    it('should hide private fields by default on requireById and requireOne, and un-hide only when select is passed', async () => {
+      const store = new Store('reqTest', {
+        schema: {
+          title: schema.string(),
+          secret: schema.string().private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = { _id: new ObjectId(), title: 'Test', secret: 'hidden_val' };
+      const mockCol = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      // 1. requireById & requireOne without options: secret is HIDDEN by default
+      const defaultDocById = await store.requireById(rawDoc._id);
+      expect(defaultDocById.title).toBe('Test');
+      expect((defaultDocById as any).secret).toBeUndefined();
+
+      const defaultDocByOne = await store.requireOne({ title: 'Test' });
+      expect(defaultDocByOne.title).toBe('Test');
+      expect((defaultDocByOne as any).secret).toBeUndefined();
+
+      // 2. requireById & requireOne with select option: secret is UN-HIDDEN
+      const selectedDocById = await store.requireById(rawDoc._id, { select: ['secret'] });
+      expect(selectedDocById.secret).toBe('hidden_val');
+
+      const selectedDocByOne = await store.requireOne({ title: 'Test' }, { select: ['secret'] });
+      expect(selectedDocByOne.secret).toBe('hidden_val');
+    });
   });
 
   describe('requireById and requireOne custom error handler support', () => {
