@@ -987,9 +987,6 @@ export class Store<
   /**
    * Strips unselected private fields from a fetched document in-place.
    *
-   * This is the runtime enforcement of `.private()`. After MongoDB returns the full document,
-   * we delete any private fields that the caller did not explicitly request via `select` or `projection`.
-   *
    * @param doc - The raw document from MongoDB (mutated in-place)
    * @param options - Options containing caller-provided `select` and `projection`
    */
@@ -1013,13 +1010,27 @@ export class Store<
       return false;
     };
 
+    // Fast O(1) lookups for selected and projection-included fields
+    const selectedSet = new Set<string>(selectedFields);
+    const projInclusionSet = new Set<string>();
+
+    for (const key of Object.keys(proj)) {
+      if (isProjectionInclusionValue(proj[key])) {
+        projInclusionSet.add(key);
+      }
+    }
+
+    // Active selection set combining select and projection inclusions
+    const activeSelectionsSet = new Set<string>([...selectedSet, ...projInclusionSet]);
+
+    // Sub-path selection prefixes (e.g., 'user.profile' in activeSelectionsSet)
+    const activeSelectionList = Array.from(activeSelectionsSet);
+
     // Helper: Determines if a value is a container (plain object or array) capable of holding
     // sub-properties that stripPrivateFields should recurse into.
     const isContainer = (val: unknown): boolean => {
       if (val === null || val === undefined || typeof val !== 'object') return false;
       if (Array.isArray(val)) {
-        // An empty array is treated as a valid container so that sub-path selections
-        // against array fields are not silently dropped when the array happens to be empty.
         if (val.length === 0) return true;
         return val.some((item) => isContainer(item));
       }
@@ -1049,33 +1060,20 @@ export class Store<
       return hasContainerAtPath(next, parts, index + 1);
     };
 
-    // Helper: Checks if a private field (or sub-path inside an object/array container) is selected in options.select.
-    const isFieldSelected = (field: string): boolean => {
-      if (selectedFields.includes(field)) return true;
+    // Helper: Checks if a private field (or sub-path inside an object/array container) is explicitly selected/projected.
+    const isFieldKept = (field: string, fieldParts: string[]): boolean => {
+      if (activeSelectionsSet.has(field)) return true;
 
-      // Sub-path selection is only valid if field value in doc is an object or array container
       const prefix = `${field}.`;
-      if (selectedFields.some((s) => s.startsWith(prefix))) {
-        return hasContainerAtPath(doc, field.split('.'));
+      if (activeSelectionList.some((s) => s.startsWith(prefix))) {
+        return hasContainerAtPath(doc, fieldParts);
       }
       return false;
     };
 
-    // Helper: Checks if a private field (or sub-path inside an object/array container) is made visible by projection.
-    const isFieldVisibleByProjection = (field: string): boolean => {
-      if (isProjectionInclusionValue(proj[field])) return true;
-
-      // Sub-path projection is only valid if field value in doc is an object or array container
-      const prefix = `${field}.`;
-      if (
-        Object.keys(proj).some((k) => isProjectionInclusionValue(proj[k]) && k.startsWith(prefix))
-      ) {
-        return hasContainerAtPath(doc, field.split('.'));
-      }
-      return false;
-    };
-
-    // Helper: Recursively deletes a dot-path from an object/array in-place, handling nested arrays.
+    // Helper: Recursively deletes a dot-path from an object/array in-place.
+    // Parent object structures defined in the schema are preserved so consumer code
+    // expecting the parent object container does not encounter undefined property access errors.
     const deletePath = (obj: any, parts: string[], index = 0): void => {
       if (!obj || typeof obj !== 'object') return;
 
@@ -1087,6 +1085,7 @@ export class Store<
       }
 
       const key = parts[index];
+      if (!(key in obj)) return;
 
       if (index === parts.length - 1) {
         delete obj[key];
@@ -1100,11 +1099,10 @@ export class Store<
     };
 
     for (const field of this.privateFields) {
-      // Skip stripping if this field was explicitly selected or made visible by projection
-      if (isFieldSelected(field)) continue;
-      if (isFieldVisibleByProjection(field)) continue;
+      const fieldParts = field.split('.');
+      if (isFieldKept(field, fieldParts)) continue;
 
-      deletePath(doc, field.split('.'));
+      deletePath(doc, fieldParts);
     }
   }
 

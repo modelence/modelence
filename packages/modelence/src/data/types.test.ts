@@ -480,5 +480,52 @@ describe('data/types', () => {
         effectsObj: { publicField: string };
       }>();
     });
+
+    test('extractPrivateFieldPaths and isFieldPrivate handle ZodUnion, ZodBranded, ZodReadonly, ZodCatch, and ZodEffects wrappers', () => {
+      // 1. ZodUnion
+      const unionSchema = {
+        auth: schema.union([
+          z.object({ username: schema.string(), password: schema.string().private() }),
+          z.object({ token: schema.string().private() }),
+        ]),
+      };
+      expect(extractPrivateFieldPaths(unionSchema)).toEqual(['auth.password', 'auth.token']);
+
+      // 3. ZodBranded
+      const brandedSchema = {
+        apiKey: schema.string().private().brand<'ApiKey'>(),
+      };
+      expect(isFieldPrivate(brandedSchema.apiKey)).toBe(true);
+      expect(extractPrivateFieldPaths(brandedSchema)).toEqual(['apiKey']);
+
+      // 4. ZodReadonly
+      const readonlySchema = {
+        config: schema
+          .object({
+            publicSetting: schema.string(),
+            privateKey: schema.string().private(),
+          })
+          .readonly(),
+      };
+      expect(extractPrivateFieldPaths(readonlySchema)).toEqual(['config.privateKey']);
+
+      // 5. ZodCatch
+      const catchSchema = {
+        fallbackToken: schema.string().private().catch('default_token'),
+      };
+      expect(isFieldPrivate(catchSchema.fallbackToken)).toBe(true);
+      expect(extractPrivateFieldPaths(catchSchema)).toEqual(['fallbackToken']);
+
+      // 6. ZodEffects
+      const effectsSchema = {
+        user: schema
+          .object({
+            id: schema.string(),
+            ssn: schema.string().private(),
+          })
+          .transform((val) => val),
+      };
+      expect(extractPrivateFieldPaths(effectsSchema)).toEqual(['user.ssn']);
+    });
   });
 });

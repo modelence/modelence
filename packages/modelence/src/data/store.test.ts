@@ -1765,6 +1765,49 @@ describe('data/store', () => {
       expect(receivedDoc.teamSettings.region).toBe('us-east');
     });
 
+    test('should preserve non-private parent object containers when stripping inner private fields', async () => {
+      const nestedPrivateStore = new Store('nestedPrivateStore', {
+        schema: {
+          title: schema.string(),
+          secretDetails: schema.object({
+            credentials: schema.object({
+              token: schema.string().private(),
+            }),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        title: 'App Secrets',
+        secretDetails: {
+          credentials: {
+            token: 'secret_token_abc',
+          },
+        },
+      };
+
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)))),
+      };
+
+      (nestedPrivateStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await nestedPrivateStore.findOne({ title: 'App Secrets' });
+
+      expect(doc).toBeDefined();
+      expect(doc?.title).toBe('App Secrets');
+      // Parent objects defined in schema (secretDetails and credentials) must be preserved
+      expect(doc?.secretDetails).toBeDefined();
+      expect(doc?.secretDetails.credentials).toBeDefined();
+      // Only the inner private token field should be stripped
+      expect((doc as any).secretDetails.credentials.token).toBeUndefined();
+    });
+
     test('store read methods with projection containing private fields un-hide private fields cleanly', async () => {
       const organizationStore = new Store('organizationsProj', {
         schema: {

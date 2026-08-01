@@ -61,16 +61,16 @@ export function isFieldPrivate(type: unknown): boolean {
   // Unwrap transparent wrapper types so that `.private()` applied to the
   // inner schema is visible even when the field is declared as, e.g.,
   // `schema.string().private().optional()`.
-  if (
-    type instanceof z.ZodOptional ||
-    type instanceof z.ZodNullable ||
-    type instanceof z.ZodDefault
-  ) {
-    return isFieldPrivate((type._def as any).innerType);
-  }
-  if (type instanceof z.ZodEffects) {
-    return isFieldPrivate((type._def as any).schema);
-  }
+  // Using public Zod API methods (.unwrap(), .removeDefault(), etc.) wherever
+  // they exist, to avoid dependence on the unstable `_def` internal structure.
+  if (type instanceof z.ZodOptional) return isFieldPrivate(type.unwrap());
+  if (type instanceof z.ZodNullable) return isFieldPrivate(type.unwrap());
+  if (type instanceof z.ZodDefault) return isFieldPrivate(type.removeDefault());
+  if (type instanceof z.ZodBranded) return isFieldPrivate(type.unwrap());
+  if (type instanceof z.ZodReadonly) return isFieldPrivate(type.unwrap());
+  if (type instanceof z.ZodCatch) return isFieldPrivate(type.removeCatch());
+  // ZodEffects (transform/refine/pipe) has no public unwrap — _def.schema is the only accessor.
+  if (type instanceof z.ZodEffects) return isFieldPrivate((type._def as any).schema);
   return false;
 }
 
@@ -93,14 +93,22 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     }
   } else if (schemaDef instanceof z.ZodArray) {
     paths.push(...extractPrivateFieldPaths(schemaDef.element, prefix));
-  } else if (
-    schemaDef instanceof z.ZodOptional ||
-    schemaDef instanceof z.ZodNullable ||
-    schemaDef instanceof z.ZodDefault
-  ) {
-    paths.push(...extractPrivateFieldPaths((schemaDef._def as any).innerType, prefix));
+  } else if (schemaDef instanceof z.ZodOptional) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
+  } else if (schemaDef instanceof z.ZodNullable) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
+  } else if (schemaDef instanceof z.ZodDefault) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.removeDefault(), prefix));
   } else if (schemaDef instanceof z.ZodEffects) {
+    // ZodEffects (transform/refine) has no public unwrap — _def.schema is the only accessor.
     paths.push(...extractPrivateFieldPaths((schemaDef._def as any).schema, prefix));
+  } else if (schemaDef instanceof z.ZodUnion) {
+    // Recurse into every branch; a private field inside any branch must be stripped.
+    for (const option of schemaDef.options as z.ZodTypeAny[]) {
+      paths.push(...extractPrivateFieldPaths(option, prefix));
+    }
+  } else if (schemaDef instanceof z.ZodReadonly) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
   } else if (Array.isArray(schemaDef)) {
     for (const item of schemaDef) {
       paths.push(...extractPrivateFieldPaths(item, prefix));
