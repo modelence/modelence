@@ -44,6 +44,7 @@ import {
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
 import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
+import { isProjectionInclusionValue, hasContainerAtPath, deletePath } from './projectionHelpers';
 
 /**
  * Result of {@link Store.findOneAndUpsert}: the post-op document plus whether
@@ -1002,14 +1003,6 @@ export class Store<
     const selectedFields = (options?.select || []) as string[];
     const proj = (options?.projection || {}) as Record<string, unknown>;
 
-    // Helper: Determines if a projection value represents an inclusion (e.g. 1, true, or operators like { $slice: 5 }).
-    const isProjectionInclusionValue = (val: unknown): boolean => {
-      if (val === 1 || val === true) return true;
-      if (val === 0 || val === false) return false;
-      if (val !== null && typeof val === 'object') return true;
-      return false;
-    };
-
     // Fast O(1) lookups for selected and projection-included fields
     const selectedSet = new Set<string>(selectedFields);
     const projInclusionSet = new Set<string>();
@@ -1026,40 +1019,6 @@ export class Store<
     // Sub-path selection prefixes (e.g., 'user.profile' in activeSelectionsSet)
     const activeSelectionList = Array.from(activeSelectionsSet);
 
-    // Helper: Determines if a value is a container (plain object or array) capable of holding
-    // sub-properties that stripPrivateFields should recurse into.
-    const isContainer = (val: unknown): boolean => {
-      if (val === null || val === undefined || typeof val !== 'object') return false;
-      if (Array.isArray(val)) {
-        if (val.length === 0) return true;
-        return val.some((item) => isContainer(item));
-      }
-
-      const ctor = (val as object).constructor;
-      return ctor === undefined || ctor === Object;
-    };
-
-    // Helper: Recursively walks a dot-path (e.g. 'players.profile'), stepping through array items
-    // to check if a valid container object/array exists at that path in the document.
-    const hasContainerAtPath = (obj: any, parts: string[], index = 0): boolean => {
-      if (obj === null || obj === undefined) return false;
-
-      if (Array.isArray(obj)) {
-        return obj.some((item) => hasContainerAtPath(item, parts, index));
-      }
-
-      if (typeof obj !== 'object') return false;
-
-      const key = parts[index];
-      const next = obj[key];
-
-      if (index === parts.length - 1) {
-        return isContainer(next);
-      }
-
-      return hasContainerAtPath(next, parts, index + 1);
-    };
-
     // Helper: Checks if a private field (or sub-path inside an object/array container) is explicitly selected/projected.
     const isFieldKept = (field: string, fieldParts: string[]): boolean => {
       if (activeSelectionsSet.has(field)) return true;
@@ -1069,33 +1028,6 @@ export class Store<
         return hasContainerAtPath(doc, fieldParts);
       }
       return false;
-    };
-
-    // Helper: Recursively deletes a dot-path from an object/array in-place.
-    // Parent object structures defined in the schema are preserved so consumer code
-    // expecting the parent object container does not encounter undefined property access errors.
-    const deletePath = (obj: any, parts: string[], index = 0): void => {
-      if (!obj || typeof obj !== 'object') return;
-
-      if (Array.isArray(obj)) {
-        for (const item of obj) {
-          deletePath(item, parts, index);
-        }
-        return;
-      }
-
-      const key = parts[index];
-      if (!(key in obj)) return;
-
-      if (index === parts.length - 1) {
-        delete obj[key];
-        return;
-      }
-
-      const next = obj[key];
-      if (!next || typeof next !== 'object') return;
-
-      deletePath(next, parts, index + 1);
     };
 
     for (const field of this.privateFields) {
@@ -1118,13 +1050,6 @@ export class Store<
     if (!options?.projection) {
       return undefined;
     }
-
-    const isProjectionInclusionValue = (val: unknown): boolean => {
-      if (val === 1 || val === true) return true;
-      if (val === 0 || val === false) return false;
-      if (val !== null && typeof val === 'object') return true;
-      return false;
-    };
 
     const proj: Document = { ...(options.projection as Document) };
     const values = Object.values(proj);
