@@ -491,12 +491,26 @@ describe('data/types', () => {
       };
       expect(extractPrivateFieldPaths(unionSchema)).toEqual(['auth.password', 'auth.token']);
 
-      // 3. ZodBranded
+      // 2. ZodIntersection
+      const intersectionSchema = {
+        profile: z.intersection(
+          z.object({ publicName: schema.string() }),
+          z.object({ secretPin: schema.number().private() })
+        ),
+      };
+      expect(extractPrivateFieldPaths(intersectionSchema)).toEqual(['profile.secretPin']);
+
+      // 3. ZodBranded (both top-level branded primitive and nested branded object)
       const brandedSchema = {
         apiKey: schema.string().private().brand<'ApiKey'>(),
+        brandedConfig: z
+          .object({
+            secret: schema.string().private(),
+          })
+          .brand<'BrandedConfig'>(),
       };
       expect(isFieldPrivate(brandedSchema.apiKey)).toBe(true);
-      expect(extractPrivateFieldPaths(brandedSchema)).toEqual(['apiKey']);
+      expect(extractPrivateFieldPaths(brandedSchema)).toEqual(['apiKey', 'brandedConfig.secret']);
 
       // 4. ZodReadonly
       const readonlySchema = {
@@ -509,12 +523,20 @@ describe('data/types', () => {
       };
       expect(extractPrivateFieldPaths(readonlySchema)).toEqual(['config.privateKey']);
 
-      // 5. ZodCatch
+      // 5. ZodCatch (both top-level catch primitive and nested catch object)
       const catchSchema = {
         fallbackToken: schema.string().private().catch('default_token'),
+        catchObj: z
+          .object({
+            secretPin: schema.number().private(),
+          })
+          .catch({ secretPin: 0 }),
       };
       expect(isFieldPrivate(catchSchema.fallbackToken)).toBe(true);
-      expect(extractPrivateFieldPaths(catchSchema)).toEqual(['fallbackToken']);
+      expect(extractPrivateFieldPaths(catchSchema)).toEqual([
+        'fallbackToken',
+        'catchObj.secretPin',
+      ]);
 
       // 6. ZodEffects
       const effectsSchema = {

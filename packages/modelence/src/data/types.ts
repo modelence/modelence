@@ -80,7 +80,7 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
   const paths: string[] = [];
 
   if (isFieldPrivate(schemaDef)) {
-    if (prefix) {
+    if (prefix && !paths.includes(prefix)) {
       paths.push(prefix);
     }
   }
@@ -107,8 +107,15 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     for (const option of schemaDef.options as z.ZodTypeAny[]) {
       paths.push(...extractPrivateFieldPaths(option, prefix));
     }
+  } else if (schemaDef instanceof z.ZodIntersection) {
+    paths.push(...extractPrivateFieldPaths((schemaDef._def as any).left, prefix));
+    paths.push(...extractPrivateFieldPaths((schemaDef._def as any).right, prefix));
+  } else if (schemaDef instanceof z.ZodBranded) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
   } else if (schemaDef instanceof z.ZodReadonly) {
     paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
+  } else if (schemaDef instanceof z.ZodCatch) {
+    paths.push(...extractPrivateFieldPaths(schemaDef.removeCatch(), prefix));
   } else if (Array.isArray(schemaDef)) {
     for (const item of schemaDef) {
       paths.push(...extractPrivateFieldPaths(item, prefix));
@@ -125,7 +132,7 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     }
   }
 
-  return paths;
+  return Array.from(new Set(paths));
 }
 
 export type IsPrivateField<F> = F extends { readonly _isPrivateTag: true }
