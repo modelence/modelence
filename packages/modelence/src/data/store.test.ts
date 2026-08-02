@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 import {
   IndexDescription,
   MongoError,
@@ -6,6 +6,7 @@ import {
   ObjectId,
   SearchIndexDescription,
 } from 'mongodb';
+import { z } from 'zod';
 
 import { Store } from './store';
 import { schema, type ModelSchema } from './types';
@@ -1806,6 +1807,48 @@ describe('data/store', () => {
       expect(doc?.secretDetails.credentials).toBeDefined();
       // Only the inner private token field should be stripped
       expect((doc as any).secretDetails.credentials.token).toBeUndefined();
+    });
+
+    test('branded private fields (schema.string().private().brand()) are stripped by default and un-hidden when in select', async () => {
+      type TokenBrand = z.BRAND<'TokenBrand'>;
+
+      const brandedStore = new Store('brandedStore', {
+        schema: {
+          username: schema.string(),
+          brandedToken: schema.string().private().brand<'TokenBrand'>(),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        username: 'alice',
+        brandedToken: 'secret_branded_123',
+      };
+
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)))),
+      };
+
+      (brandedStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // 1. Without select: brandedToken MUST be stripped at runtime
+      const defaultDoc = await brandedStore.findOne({ username: 'alice' });
+      expect(defaultDoc).toBeDefined();
+      expect(defaultDoc?.username).toBe('alice');
+      expect((defaultDoc as any)?.brandedToken).toBeUndefined();
+
+      // 2. With select: brandedToken MUST be preserved at runtime
+      const selectedDoc = await brandedStore.findOne(
+        { username: 'alice' },
+        { select: ['brandedToken'] }
+      );
+      expect(selectedDoc).toBeDefined();
+      expect(selectedDoc?.username).toBe('alice');
+      expect(selectedDoc?.brandedToken).toBe('secret_branded_123');
     });
 
     test('store read methods with projection containing private fields un-hide private fields cleanly', async () => {
