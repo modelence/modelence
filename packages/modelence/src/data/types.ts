@@ -135,15 +135,29 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
   return Array.from(new Set(paths));
 }
 
+/** Helper type to unwrap transparent Zod wrapper schemas (Default, Effects, Branded, Readonly, Catch). */
+type UnwrapTransparent<E> =
+  E extends z.ZodDefault<infer Inner>
+    ? Inner
+    : E extends z.ZodEffects<infer Inner, any, any>
+      ? Inner
+      : E extends z.ZodBranded<infer Inner, any>
+        ? Inner
+        : E extends z.ZodReadonly<infer Inner>
+          ? Inner
+          : E extends z.ZodCatch<infer Inner>
+            ? Inner
+            : never;
+
 export type IsPrivateField<F> = F extends { readonly _isPrivateTag: true }
   ? true
   : F extends z.ZodOptional<infer Inner>
     ? IsPrivateField<Inner>
     : F extends z.ZodNullable<infer Inner>
       ? IsPrivateField<Inner>
-      : F extends z.ZodDefault<infer Inner>
-        ? IsPrivateField<Inner>
-        : false;
+      : [UnwrapTransparent<F>] extends [never]
+        ? false
+        : IsPrivateField<UnwrapTransparent<F>>;
 
 export const schema = {
   string: schemaString,
@@ -198,17 +212,15 @@ type InferSelectedZodType<E, KKeys extends string> =
     ? InferSelectedZodType<Inner, KKeys> | undefined
     : E extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
       ? InferSelectedZodType<Inner, KKeys> | null
-      : E extends z.ZodDefault<infer Inner extends z.ZodTypeAny>
-        ? InferSelectedZodType<Inner, KKeys>
-        : E extends z.ZodEffects<infer Inner extends z.ZodTypeAny, any, any>
-          ? InferSelectedZodType<Inner, KKeys>
-          : E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
-            ? InferSelectedDocumentType<Shape, KKeys>
-            : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
-              ? Array<InferSelectedZodType<InnerElement, KKeys>>
-              : E extends z.ZodTypeAny
-                ? z.infer<E>
-                : never;
+      : E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
+        ? InferSelectedDocumentType<Shape, KKeys>
+        : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
+          ? Array<InferSelectedZodType<InnerElement, KKeys>>
+          : [UnwrapTransparent<E>] extends [never]
+            ? E extends z.ZodTypeAny
+              ? z.infer<E>
+              : never
+            : InferSelectedZodType<Extract<UnwrapTransparent<E>, z.ZodTypeAny>, KKeys>;
 
 type SubKeys<KKeys, Prefix> = KKeys extends string
   ? KKeys extends `${Extract<Prefix, string>}.${infer Rest}`

@@ -469,6 +469,14 @@ describe('data/types', () => {
             secretField: schema.string().private(),
           })
           .refine(() => true),
+        brandedField: schema.string().private().brand<'ApiKey'>(),
+        readonlyObj: schema
+          .object({
+            publicProp: schema.string(),
+            secretProp: schema.string().private(),
+          })
+          .readonly(),
+        catchField: schema.string().private().catch('fallback'),
       };
 
       type Fetched = import('./types').InferFetchedDocumentType<typeof targetSchema>;
@@ -478,7 +486,13 @@ describe('data/types', () => {
         optionalObj?: { publicBio: string };
         nullableObj: { publicNote: string } | null;
         effectsObj: { publicField: string };
+        readonlyObj: { publicProp: string };
       }>();
+
+      // @ts-expect-error brandedField was private and must be omitted from Fetched type
+      type CheckBranded = Fetched['brandedField'];
+      // @ts-expect-error catchField was private and must be omitted from Fetched type
+      type CheckCatch = Fetched['catchField'];
     });
 
     test('extractPrivateFieldPaths and isFieldPrivate handle ZodUnion, ZodBranded, ZodReadonly, ZodCatch, and ZodEffects wrappers', () => {
