@@ -18,6 +18,9 @@ import {
   validateOAuthStateAndGetMode,
   resolveUserIdFromLinkNonce,
   sendOAuthError,
+  encodeOAuthState,
+  resolveMobileRedirectRequest,
+  toOAuthOutcome,
 } from './oauth-common';
 
 interface GoogleTokenResponse {
@@ -90,6 +93,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const stateResult = validateOAuthStateAndGetMode(req, res, 'authStateGoogle');
   if (!stateResult) return;
   const { mode, linkedUserId } = stateResult;
+  const outcome = toOAuthOutcome(stateResult);
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -117,16 +121,16 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       avatarUrl: googleUser.picture || undefined,
     };
     if (mode === 'link') {
-      await handleOAuthProviderLink(req, res, userData, linkedUserId);
+      await handleOAuthProviderLink(req, res, userData, linkedUserId, outcome);
     } else {
-      await handleOAuthUserAuthentication(req, res, userData);
+      await handleOAuthUserAuthentication(req, res, userData, outcome);
     }
   } catch (error) {
     console.error('Google OAuth error:', error);
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
-    sendOAuthError(res, 500, 'Authentication failed');
+    sendOAuthError(res, 500, 'Authentication failed', outcome);
   }
 }
 
@@ -159,6 +163,12 @@ function getRouter(): ExpressRouter {
 
       const mode = req.query.mode === 'link' ? 'link' : 'login';
 
+      // Validate the mobile deep link before leaving the app, so a bad target
+      // fails here rather than after the user has granted consent.
+      const mobileRequest = resolveMobileRedirectRequest(req, res);
+      if (!mobileRequest.ok) return;
+      const mobileRedirectUri = mobileRequest.redirectUri;
+
       // React Native: consume single-use nonce and embed resolved userId in state cookie.
       let linkedUserId: string | null = null;
       if (mode === 'link' && req.query.linkNonce) {
@@ -169,7 +179,13 @@ function getRouter(): ExpressRouter {
         }
       }
 
-      const stateValue = linkedUserId ? `${state}:${mode}:${linkedUserId}` : `${state}:${mode}`;
+      const stateValue = encodeOAuthState({
+        state,
+        mode,
+        linkedUserId,
+        platform: mobileRedirectUri ? 'mobile' : 'web',
+        redirectUri: mobileRedirectUri,
+      });
       res.cookie('authStateGoogle', stateValue, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',

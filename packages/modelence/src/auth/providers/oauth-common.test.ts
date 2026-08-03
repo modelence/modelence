@@ -10,6 +10,7 @@ const mockGetAuthConfig = vi.fn();
 const mockGetCallContext = vi.fn();
 const mockGetConfig = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
+const mockIssueOAuthExchangeCode = vi.fn();
 
 vi.doMock('../db', () => ({
   usersCollection: {
@@ -29,6 +30,8 @@ vi.doMock('../session', () => ({
       path: '/',
     });
   }),
+  consumeLinkNonce: vi.fn(),
+  issueOAuthExchangeCode: mockIssueOAuthExchangeCode,
 }));
 
 vi.doMock('@/app/authConfig', () => ({

@@ -161,22 +161,87 @@ function ItemList() {
 
 ## OAuth sign-in
 
-For Google or GitHub sign-in, Modelence opens an OAuth URL in the browser. On React Native, provide `openUrl` in `configureClient` so the SDK can hand off to the device browser via `Linking.openURL`:
+<Note>Native OAuth sign-in is available from **modelence v0.23.0**.</Note>
+
+Google and GitHub sign-in run in the device browser and hand the result back to your app through a deep link. You register **one** redirect URI with the provider — the same one a web app uses — and Modelence routes the mobile flow through it.
+
+<Steps>
+  <Step title="Allowlist your deep link">
+    The server only redirects to deep links you have explicitly allowed. Set `auth.mobile.redirectUrls` in `startApp`:
+
+    ```typescript
+    startApp({
+      auth: {
+        mobile: { redirectUrls: ['myapp://auth'] },
+      },
+    });
+    ```
+
+    Or as a comma-separated config value, manageable from Modelence Cloud or the environment:
+
+    ```bash
+    MODELENCE_AUTH_MOBILE_REDIRECT_URLS=myapp://auth
+    ```
+
+    Both sources are merged. Until at least one entry exists, mobile sign-in is rejected.
+  </Step>
+
+  <Step title="Start the flow">
+    Pass the deep link your app listens on. `openUrl` must be configured (see Setup above).
+
+    ```typescript
+    import { signInWithOAuth } from 'modelence/client';
+
+    await signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+    ```
+  </Step>
+
+  <Step title="Complete the sign-in">
+    When the flow finishes, Modelence redirects to `myapp://auth?code=...`. Exchange that code for a session:
+
+    ```typescript
+    import { loginWithOAuth } from 'modelence/client';
+    import { Linking } from 'react-native';
+    import { useEffect } from 'react';
+
+    useEffect(() => {
+      const subscription = Linking.addEventListener('url', async ({ url }) => {
+        const { searchParams } = new URL(url);
+        const code = searchParams.get('code');
+        const error = searchParams.get('error');
+
+        if (error) {
+          // Sign-in failed — show this to the user.
+          return;
+        }
+        if (code) {
+          await loginWithOAuth({ code });
+          // useSession() now reflects the signed-in user.
+        }
+      });
+
+      return () => subscription.remove();
+    }, []);
+    ```
+
+    Handle the cold-start case too — if the app was closed, the deep link arrives via `Linking.getInitialURL()` rather than the `url` event.
+  </Step>
+</Steps>
+
+### Why a code instead of a token
+
+The deep link carries a single-use code valid for one minute, not the session token. Custom URL schemes can be registered by more than one app on a device, so a token in the redirect could be picked up by an app that isn't yours. The code is exchanged for the real session over HTTPS in `loginWithOAuth`, and it cannot be redeemed twice.
+
+### Linking a provider to an existing account
+
+For an already signed-in user, `linkOAuthProvider` takes the same `redirectUri` so the flow returns to your app instead of ending in the browser:
 
 ```typescript
 import { linkOAuthProvider } from 'modelence/client';
-import { Linking } from 'react-native';
 
-configureClient({
-  // ...
-  openUrl: (url) => Linking.openURL(url),
-});
-
-// Trigger OAuth linking
-await linkOAuthProvider({ provider: 'google' });
+await linkOAuthProvider({ provider: 'github', redirectUri: 'myapp://auth' });
+// returns to myapp://auth?linked=github
 ```
-
-After the OAuth flow completes, the provider redirects back to your app via a deep link. Configure your deep link scheme to call `loginWithOAuth` with the returned token.
 
 ## Notes
 

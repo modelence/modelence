@@ -30,6 +30,7 @@ const mockClearOAuthLinkCookie = vi.fn();
 const mockValidateOAuthStateAndGetMode =
   vi.fn<(req: Request, res: Response, cookieName: string) => string | null>();
 const mockSendOAuthError = vi.fn();
+const mockResolveMobileRedirectRequest = vi.fn(() => ({ ok: true, redirectUri: null }));
 
 vi.doMock('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
@@ -39,6 +40,29 @@ vi.doMock('./oauth-common', () => ({
   validateOAuthStateAndGetMode: mockValidateOAuthStateAndGetMode,
   clearOAuthLinkCookie: mockClearOAuthLinkCookie,
   sendOAuthError: mockSendOAuthError,
+  // Mirrors the real encoder: the assertions below check the exact cookie value
+  // the router writes, so a stub returning a placeholder would test nothing.
+  encodeOAuthState: (params: {
+    state: string;
+    mode: string;
+    linkedUserId?: string | null;
+    platform?: 'web' | 'mobile';
+    redirectUri?: string | null;
+  }) => {
+    const fields = [params.state, params.mode, params.linkedUserId ?? ''];
+    if ((params.platform ?? 'web') !== 'web' || params.redirectUri) {
+      fields.push(params.platform ?? 'web');
+      fields.push(
+        params.redirectUri ? Buffer.from(params.redirectUri, 'utf8').toString('base64url') : ''
+      );
+    }
+    return fields.join(':');
+  },
+  toOAuthOutcome: (state: { platform?: string; redirectUri?: string }) =>
+    state.platform === 'mobile' && state.redirectUri
+      ? { platform: 'mobile', redirectUri: state.redirectUri }
+      : { platform: 'web' },
+  resolveMobileRedirectRequest: mockResolveMobileRedirectRequest,
 }));
 
 const fetchMock = vi.fn();
@@ -185,7 +209,8 @@ describe('auth/providers/google', () => {
         firstName: 'User',
         lastName: 'Test',
         avatarUrl: 'pic',
-      }
+      },
+      { platform: 'web' }
     );
   });
 
@@ -247,7 +272,9 @@ describe('auth/providers/google', () => {
       res
     );
 
-    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed');
+    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed', {
+      platform: 'web',
+    });
     consoleError.mockRestore();
   });
 });
