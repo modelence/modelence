@@ -1,5 +1,3 @@
-import { Document } from 'mongodb';
-
 /**
  * Determines if a projection value represents an inclusion.
  * Inclusion values: `1`, `true`, or operator objects like `{ $slice: 5 }` / `{ $elemMatch: ... }`.
