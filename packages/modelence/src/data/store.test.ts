@@ -1514,7 +1514,7 @@ describe('data/store', () => {
       (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
       // Select 'password.foo' (which starts with 'password.') on primitive field 'password'
-      const doc = await store.findOne({ name: 'Alice' }, { select: ['password.foo' as any] });
+      const doc = await store.findOne({ name: 'Alice' }, { select: ['password.foo'] });
 
       // password must be stripped and not leaked!
       expect(doc).not.toHaveProperty('password');
@@ -1538,10 +1538,7 @@ describe('data/store', () => {
       };
       (dateStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
-      const doc = await dateStore.findOne(
-        { title: 'Event' },
-        { select: ['secretDate.foo' as any] }
-      );
+      const doc = await dateStore.findOne({ title: 'Event' }, { select: ['secretDate.foo'] });
       expect(doc).not.toHaveProperty('secretDate');
     });
 
@@ -1563,10 +1560,7 @@ describe('data/store', () => {
       };
       (tokenStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
-      const doc = await tokenStore.findOne(
-        { title: 'Tokens' },
-        { select: ['secretTokens.foo' as any] }
-      );
+      const doc = await tokenStore.findOne({ title: 'Tokens' }, { select: ['secretTokens.foo'] });
       expect(doc).not.toHaveProperty('secretTokens');
     });
 
@@ -1630,7 +1624,7 @@ describe('data/store', () => {
 
       const doc = await emptyArrayStore.findOne(
         { title: 'Empty Game' },
-        { select: ['players.profile.email' as any] }
+        { select: ['players.profile.email'] }
       );
 
       // Empty array players must be preserved as [] and not deleted!
@@ -1745,8 +1739,8 @@ describe('data/store', () => {
       expect(fetchedDefault).toBeDefined();
       expect(fetchedDefault?.name).toBe('Acme Corp');
       expect(fetchedDefault?.teamSettings?.maxQuota).toBe(500);
-      expect((fetchedDefault as any)?.apiKey).toBeUndefined();
-      expect((fetchedDefault as any)?.teamSettings?.memberEmails).toBeUndefined();
+      expect(fetchedDefault).not.toHaveProperty('apiKey');
+      expect(fetchedDefault?.teamSettings).not.toHaveProperty('memberEmails');
 
       // 2. Fetching with select for apiKey and teamSettings.memberEmails:
       const selectedOrgs = await organizationStore.fetch(
@@ -1806,7 +1800,7 @@ describe('data/store', () => {
       expect(doc?.secretDetails).toBeDefined();
       expect(doc?.secretDetails.credentials).toBeDefined();
       // Only the inner private token field should be stripped
-      expect((doc as any).secretDetails.credentials.token).toBeUndefined();
+      expect(doc?.secretDetails.credentials).not.toHaveProperty('token');
     });
 
     test('branded private fields (schema.string().private().brand()) are stripped by default and un-hidden when in select', async () => {
@@ -1839,7 +1833,7 @@ describe('data/store', () => {
       const defaultDoc = await brandedStore.findOne({ username: 'alice' });
       expect(defaultDoc).toBeDefined();
       expect(defaultDoc?.username).toBe('alice');
-      expect((defaultDoc as any)?.brandedToken).toBeUndefined();
+      expect(defaultDoc).not.toHaveProperty('brandedToken');
 
       // 2. With select: brandedToken MUST be preserved at runtime
       const selectedDoc = await brandedStore.findOne(
@@ -1923,16 +1917,16 @@ describe('data/store', () => {
         { name: 'Acme Corp' },
         { projection: { active: 0 } }
       );
-      expect((resExclPublic as any)?.apiKey).toBeUndefined();
-      expect((resExclPublic as any)?.teamSettings?.memberEmails).toBeUndefined();
+      expect(resExclPublic).not.toHaveProperty('apiKey');
+      expect(resExclPublic?.teamSettings).not.toHaveProperty('memberEmails');
 
       // Exclusion projection excluding one private field ({ apiKey: 0 }): all private fields remain hidden by default
       const resExclPrivate = await organizationStore.findOne(
         { name: 'Acme Corp' },
         { projection: { apiKey: 0 } as const }
       );
-      expect((resExclPrivate as any)?.apiKey).toBeUndefined();
-      expect((resExclPrivate as any)?.teamSettings?.memberEmails).toBeUndefined();
+      expect(resExclPrivate).not.toHaveProperty('apiKey');
+      expect(resExclPrivate?.teamSettings).not.toHaveProperty('memberEmails');
 
       // Exclusion projection with select: select explicitly un-hides selected private field (apiKey) while unselected stay hidden
       const resSelect = await organizationStore.findOne(
@@ -1940,7 +1934,7 @@ describe('data/store', () => {
         { projection: { active: 0 } as const, select: ['apiKey'] }
       );
       expect(resSelect?.apiKey).toBe('key_live_12345');
-      expect((resSelect as any)?.teamSettings?.memberEmails).toBeUndefined();
+      expect(resSelect?.teamSettings).not.toHaveProperty('memberEmails');
 
       // Inclusion projection including a parent object: public sub-fields stay, private sub-fields are stripped
       const resParent = await organizationStore.findOne(
@@ -1948,7 +1942,7 @@ describe('data/store', () => {
         { projection: { teamSettings: 1 } as const }
       );
       expect(resParent?.teamSettings?.maxQuota).toBe(500);
-      expect((resParent as any)?.teamSettings?.memberEmails).toBeUndefined();
+      expect(resParent?.teamSettings).not.toHaveProperty('memberEmails');
     });
 
     it('should exclude nested private field when only private parent object is selected', async () => {
@@ -1993,7 +1987,7 @@ describe('data/store', () => {
         { select: ['credentials', 'credentials.password'] }
       );
       expect(resultBoth?.credentials.emails).toBe('alice@example.com');
-      expect((resultBoth?.credentials as any)?.password).toBe('supersecret');
+      expect(resultBoth?.credentials.password).toBe('supersecret');
 
       // Inclusion projection for private parent object (credentials: 1) strips private sub-fields (password)
       const resultParentProj = await profileStore.findOne(
@@ -2067,7 +2061,7 @@ describe('data/store', () => {
       // 1. By default: players array is private -> stripped completely
       const defaultDoc = await gameStore.findOne({ title: 'Cyberpunk' });
       expect(defaultDoc?.title).toBe('Cyberpunk');
-      expect((defaultDoc as any)?.players).toBeUndefined();
+      expect(defaultDoc).not.toHaveProperty('players');
 
       // 2. Selecting players, players.id, and players.profile:
       //    players.username is public (kept), players.id (kept), players.profile.displayName (kept), players.profile.email (stripped)
@@ -2079,7 +2073,7 @@ describe('data/store', () => {
       expect(selectedDoc?.players?.[0].id).toBe('player_123');
       expect(selectedDoc?.players?.[0].username).toBe('cyber_sam');
       expect(selectedDoc?.players?.[0].profile?.[0].displayName).toBe('Samurai');
-      expect((selectedDoc?.players?.[0].profile?.[0] as any)?.email).toBeUndefined();
+      expect(selectedDoc?.players?.[0].profile?.[0]).not.toHaveProperty('email');
 
       // 3. Selecting players.profile.email as well un-hides email:
       const fullDoc = await gameStore.findOne(
@@ -2138,7 +2132,7 @@ describe('data/store', () => {
       expect(doc?.players?.[0]?.profile).toBeDefined();
       expect(doc?.players?.[0]?.profile?.[0]?.displayName).toBe('Sam');
       // Private leaf email must be stripped!
-      expect((doc?.players?.[0]?.profile?.[0] as any)?.email).toBeUndefined();
+      expect(doc?.players?.[0]?.profile?.[0]).not.toHaveProperty('email');
     });
 
     test('atomic mutation methods (findOneAndUpdate, findOneAndUpsert, findOneAndDelete, findOneAndReplace) should hide private fields by default and un-hide via select', async () => {
@@ -2180,8 +2174,8 @@ describe('data/store', () => {
         { $set: { title: 'Updated' } }
       );
       expect(doc1?.title).toBe('Project Alpha');
-      expect((doc1 as any)?.secret).toBeUndefined();
-      expect((doc1 as any)?.audit?.createdBy).toBeUndefined();
+      expect(doc1).not.toHaveProperty('secret');
+      expect(doc1?.audit).not.toHaveProperty('createdBy');
 
       // 2. findOneAndUpdate with select un-hides secret
       const doc2 = await mutStore.findOneAndUpdate(
@@ -2190,7 +2184,7 @@ describe('data/store', () => {
         { select: ['secret'] }
       );
       expect(doc2?.secret).toBe('shhh');
-      expect((doc2 as any)?.audit?.createdBy).toBeUndefined();
+      expect(doc2?.audit).not.toHaveProperty('createdBy');
 
       // 3. findOneAndUpsert by default hides secret inside UpsertResult doc
       mockCollection.findOneAndUpdate.mockResolvedValueOnce({
@@ -2203,7 +2197,7 @@ describe('data/store', () => {
       );
       expect(upsertRes1.isNew).toBe(true);
       expect(upsertRes1.doc?.title).toBe('Project Alpha');
-      expect((upsertRes1.doc as any)?.secret).toBeUndefined();
+      expect(upsertRes1.doc).not.toHaveProperty('secret');
 
       // 4. findOneAndUpsert with select un-hides secret inside UpsertResult doc
       mockCollection.findOneAndUpdate.mockResolvedValueOnce({
@@ -2253,11 +2247,11 @@ describe('data/store', () => {
       // 1. requireById & requireOne without options: secret is HIDDEN by default
       const defaultDocById = await store.requireById(rawDoc._id);
       expect(defaultDocById.title).toBe('Test');
-      expect((defaultDocById as any).secret).toBeUndefined();
+      expect(defaultDocById).not.toHaveProperty('secret');
 
       const defaultDocByOne = await store.requireOne({ title: 'Test' });
       expect(defaultDocByOne.title).toBe('Test');
-      expect((defaultDocByOne as any).secret).toBeUndefined();
+      expect(defaultDocByOne).not.toHaveProperty('secret');
 
       // 2. requireById & requireOne with select option: secret is UN-HIDDEN
       const selectedDocById = await store.requireById(rawDoc._id, { select: ['secret'] });

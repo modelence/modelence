@@ -32,7 +32,7 @@ export function isContainer(val: unknown): boolean {
  * Recursively walks a dot-path (e.g. 'players.profile'), stepping through array items,
  * to check if a valid container object/array exists at that path in the document.
  */
-export function hasContainerAtPath(obj: any, parts: string[], index = 0): boolean {
+export function hasContainerAtPath(obj: unknown, parts: string[], index = 0): boolean {
   if (obj === null || obj === undefined) return false;
 
   if (Array.isArray(obj)) {
@@ -41,8 +41,8 @@ export function hasContainerAtPath(obj: any, parts: string[], index = 0): boolea
 
   if (typeof obj !== 'object') return false;
 
-  const key = parts[index];
-  const next = obj[key];
+  const record = obj as Record<string, unknown>;
+  const next = record[parts[index]];
 
   if (index === parts.length - 1) {
     return isContainer(next);
@@ -56,7 +56,7 @@ export function hasContainerAtPath(obj: any, parts: string[], index = 0): boolea
  * Parent object structures defined in the schema are preserved so consumer code
  * expecting the parent object container does not encounter undefined property access errors.
  */
-export function deletePath(obj: any, parts: string[], index = 0): void {
+export function deletePath(obj: unknown, parts: string[], index = 0): void {
   if (!obj || typeof obj !== 'object') return;
 
   if (Array.isArray(obj)) {
@@ -66,15 +66,16 @@ export function deletePath(obj: any, parts: string[], index = 0): void {
     return;
   }
 
+  const record = obj as Record<string, unknown>;
   const key = parts[index];
-  if (!(key in obj)) return;
+  if (!(key in record)) return;
 
   if (index === parts.length - 1) {
-    delete obj[key];
+    delete record[key];
     return;
   }
 
-  const next = obj[key];
+  const next = record[key];
   if (!next || typeof next !== 'object') return;
 
   deletePath(next, parts, index + 1);
