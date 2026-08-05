@@ -75,7 +75,7 @@ describe('auth/validators', () => {
     test('should accept valid handles between 3 and 50 characters', () => {
       expect(validateHandle('abc')).toBe('abc');
       expect(validateHandle('my_handle')).toBe('my_handle');
-      expect(validateHandle('user123')).toBe('user123');
+      expect(validateHandle('user-123')).toBe('user-123');
     });
 
     test('should throw error for handle shorter than 3 characters', () => {
@@ -87,6 +87,18 @@ describe('auth/validators', () => {
     test('should throw error for handle longer than 50 characters', () => {
       const longHandle = 'a'.repeat(51);
       expect(() => validateHandle(longHandle)).toThrow('must be at most 50 characters');
+    });
+
+    test('should throw error for handle with spaces or invalid special characters', () => {
+      expect(() => validateHandle('user name')).toThrow(
+        'must contain only letters, numbers, underscores, and hyphens'
+      );
+      expect(() => validateHandle('user@123')).toThrow(
+        'must contain only letters, numbers, underscores, and hyphens'
+      );
+      expect(() => validateHandle('user.name!')).toThrow(
+        'must contain only letters, numbers, underscores, and hyphens'
+      );
     });
 
     test('should accept handle at exactly 3 and 50 characters', () => {
