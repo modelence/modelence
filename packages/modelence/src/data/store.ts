@@ -114,7 +114,7 @@ type ExtractExclusionKeys<TProj> = [TProj] extends [undefined]
  * ExtractProjectionVisibleKeys: Extracts private field keys explicitly included with 1 or true in an inclusion projection.
  * Exclusion projections (e.g. { active: 0 }) do not un-hide private fields — private fields remain hidden by default.
  */
-type ExtractProjectionVisibleKeys<TSchema extends ModelSchema, TProj> =
+type ExtractProjectionVisibleKeys<TProj> =
   IsInclusionProjection<TProj> extends true ? ExtractInclusionKeys<TProj> : never;
 
 /**
@@ -143,10 +143,7 @@ export type FetchedDoc<
       ? [KSelect] extends [never]
         ? InferFetchedDocumentType<TSchema>
         : InferSelectedDocumentType<TSchema, KSelect>
-      : InferSelectedDocumentType<
-          TSchema,
-          KSelect | ExtractProjectionVisibleKeys<TSchema, KProjection>
-        >
+      : InferSelectedDocumentType<TSchema, KSelect | ExtractProjectionVisibleKeys<KProjection>>
   > &
     TMethods,
   ExtractExclusionKeys<KProjection>

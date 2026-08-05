@@ -165,7 +165,7 @@ describe('data/types', () => {
     });
 
     test('should accurately infer types for InferDocumentType, InferFetchedDocumentType, and InferSelectedDocumentType', () => {
-      const testSchema = {
+      const _testSchema = {
         name: schema.string(),
         email: schema.string(),
         password: schema.string().private(),
@@ -174,9 +174,9 @@ describe('data/types', () => {
         optionalPrivate: schema.string().optional().private(),
       };
 
-      type FullDoc = schema.infer<typeof testSchema>;
-      type FetchedDoc = schema.inferFetched<typeof testSchema>;
-      type SelectedDoc = schema.inferSelected<typeof testSchema, 'password'>;
+      type FullDoc = schema.infer<typeof _testSchema>;
+      type FetchedDoc = schema.inferFetched<typeof _testSchema>;
+      type SelectedDoc = schema.inferSelected<typeof _testSchema, 'password'>;
 
       const fullDoc: FullDoc = {
         name: 'Alice',
@@ -272,7 +272,7 @@ describe('data/types', () => {
     });
 
     test('selecting a private parent object should un-hide public fields but keep nested private fields hidden unless explicitly selected', () => {
-      const userSchema = {
+      const _userSchema = {
         name: schema.string(),
         credentials: schema
           .object({
@@ -283,7 +283,7 @@ describe('data/types', () => {
       };
 
       // Selecting only 'credentials' un-hides the object and its public field (emails), but keeps password hidden
-      type SelectedCreds = schema.inferSelected<typeof userSchema, 'credentials'>;
+      type SelectedCreds = schema.inferSelected<typeof _userSchema, 'credentials'>;
 
       const selectedCreds: SelectedCreds = {
         name: 'Alice',
@@ -298,7 +298,7 @@ describe('data/types', () => {
 
       // Selecting both 'credentials' and 'credentials.password' un-hides password as well
       type SelectedBoth = schema.inferSelected<
-        typeof userSchema,
+        typeof _userSchema,
         'credentials' | 'credentials.password'
       >;
 
@@ -349,7 +349,7 @@ describe('data/types', () => {
     });
 
     test('should allow selecting nested array private field', () => {
-      const organizationSchema = {
+      const _organizationSchema = {
         name: schema.string(),
         active: schema.boolean(),
         apiKey: schema.string().private(),
@@ -360,7 +360,7 @@ describe('data/types', () => {
         }),
       };
 
-      type FetchedOrg = schema.inferFetched<typeof organizationSchema>;
+      type FetchedOrg = schema.inferFetched<typeof _organizationSchema>;
 
       const fetched: FetchedOrg = {
         name: 'Acme Corp',
@@ -378,7 +378,7 @@ describe('data/types', () => {
       void fetched.teamSettings.memberEmails;
 
       type SelectedOrg = schema.inferSelected<
-        typeof organizationSchema,
+        typeof _organizationSchema,
         'apiKey' | 'teamSettings.memberEmails'
       >;
 
@@ -449,7 +449,7 @@ describe('data/types', () => {
     });
 
     test('InferFetchedDocumentType recursively strips private fields from optional/nullable/default/effects-wrapped objects', () => {
-      const targetSchema = {
+      const _targetSchema = {
         title: schema.string(),
         optionalObj: schema
           .object({
@@ -479,7 +479,7 @@ describe('data/types', () => {
         catchField: schema.string().private().catch('fallback'),
       };
 
-      type Fetched = import('./types').InferFetchedDocumentType<typeof targetSchema>;
+      type Fetched = import('./types').InferFetchedDocumentType<typeof _targetSchema>;
 
       expectTypeOf<Fetched>().toMatchTypeOf<{
         title: string;
@@ -490,9 +490,9 @@ describe('data/types', () => {
       }>();
 
       // @ts-expect-error brandedField was private and must be omitted from Fetched type
-      type CheckBranded = Fetched['brandedField'];
+      type _CheckBranded = Fetched['brandedField'];
       // @ts-expect-error catchField was private and must be omitted from Fetched type
-      type CheckCatch = Fetched['catchField'];
+      type _CheckCatch = Fetched['catchField'];
     });
 
     test('extractPrivateFieldPaths and isFieldPrivate handle ZodUnion, ZodBranded, ZodReadonly, ZodCatch, and ZodEffects wrappers', () => {
@@ -556,14 +556,14 @@ describe('data/types', () => {
     });
 
     test('InferFetchedDocumentType strips private fields inside ZodUnion branches and InferSelectedDocumentType restores them', () => {
-      const unionSchema = {
+      const _unionSchema = {
         auth: schema.union([
           z.object({ username: schema.string(), password: schema.string().private() }),
           z.object({ token: schema.string().private() }),
         ]),
       };
 
-      type UnionFetched = schema.inferFetched<typeof unionSchema>;
+      type UnionFetched = schema.inferFetched<typeof _unionSchema>;
 
       // Private fields inside union branches must be stripped from fetched type
       const fetched: UnionFetched = {
@@ -575,11 +575,12 @@ describe('data/types', () => {
       expectTypeOf<UnionFetched['auth']>().not.toMatchTypeOf<{ token: string }>();
 
       // Selecting 'auth.password' should un-hide password in the type
-      type UnionSelected = schema.inferSelected<typeof unionSchema, 'auth.password'>;
+      type UnionSelected = schema.inferSelected<typeof _unionSchema, 'auth.password'>;
 
       const selected: UnionSelected = {
         auth: { username: 'alice', password: 'secret' },
       };
+      expect(selected.auth).toBeDefined();
       // The union branch that has 'password' should expose it; the type narrows correctly.
       type AuthSelected = UnionSelected['auth'];
       // Extract the branch that contains password — it must exist and be string

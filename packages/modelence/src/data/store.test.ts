@@ -6,7 +6,6 @@ import {
   ObjectId,
   SearchIndexDescription,
 } from 'mongodb';
-import { z } from 'zod';
 
 import { Store } from './store';
 import { schema, type ModelSchema } from './types';
@@ -1804,8 +1803,6 @@ describe('data/store', () => {
     });
 
     test('branded private fields (schema.string().private().brand()) are stripped by default and un-hidden when in select', async () => {
-      type TokenBrand = z.BRAND<'TokenBrand'>;
-
       const brandedStore = new Store('brandedStore', {
         schema: {
           username: schema.string(),
@@ -1887,6 +1884,7 @@ describe('data/store', () => {
         { name: 'Acme Corp' },
         { projection: { apiKey: 1, name: 1 } }
       );
+      expect(doc?.apiKey).toBe('key_live_12345');
       expect(collectionMock.findOne).toHaveBeenCalledWith(
         { name: 'Acme Corp' },
         { projection: { apiKey: 1, name: 1 } }

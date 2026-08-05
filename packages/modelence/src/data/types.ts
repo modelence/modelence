@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import { z, ZodArray, ZodNumber, ZodRawShape } from 'zod';
+import { z, ZodArray, ZodNumber } from 'zod';
 import { Store } from './store';
 
 type ObjectTypeDefinition = {
