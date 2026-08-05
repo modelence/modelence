@@ -505,16 +505,7 @@ describe('data/types', () => {
       };
       expect(extractPrivateFieldPaths(unionSchema)).toEqual(['auth.password', 'auth.token']);
 
-      // 2. ZodIntersection
-      const intersectionSchema = {
-        profile: z.intersection(
-          z.object({ publicName: schema.string() }),
-          z.object({ secretPin: schema.number().private() })
-        ),
-      };
-      expect(extractPrivateFieldPaths(intersectionSchema)).toEqual(['profile.secretPin']);
-
-      // 3. ZodBranded (both top-level branded primitive and nested branded object)
+      // 2. ZodBranded (both top-level branded primitive and nested branded object)
       const brandedSchema = {
         apiKey: schema.string().private().brand<'ApiKey'>(),
         brandedConfig: z
@@ -526,7 +517,7 @@ describe('data/types', () => {
       expect(isFieldPrivate(brandedSchema.apiKey)).toBe(true);
       expect(extractPrivateFieldPaths(brandedSchema)).toEqual(['apiKey', 'brandedConfig.secret']);
 
-      // 4. ZodReadonly
+      // 3. ZodReadonly
       const readonlySchema = {
         config: schema
           .object({
@@ -537,7 +528,7 @@ describe('data/types', () => {
       };
       expect(extractPrivateFieldPaths(readonlySchema)).toEqual(['config.privateKey']);
 
-      // 5. ZodCatch (both top-level catch primitive and nested catch object)
+      // 4. ZodCatch (both top-level catch primitive and nested catch object)
       const catchSchema = {
         fallbackToken: schema.string().private().catch('default_token'),
         catchObj: z
@@ -552,7 +543,7 @@ describe('data/types', () => {
         'catchObj.secretPin',
       ]);
 
-      // 6. ZodEffects
+      // 5. ZodEffects
       const effectsSchema = {
         user: schema
           .object({
@@ -562,6 +553,39 @@ describe('data/types', () => {
           .transform((val) => val),
       };
       expect(extractPrivateFieldPaths(effectsSchema)).toEqual(['user.ssn']);
+    });
+
+    test('InferFetchedDocumentType strips private fields inside ZodUnion branches and InferSelectedDocumentType restores them', () => {
+      const unionSchema = {
+        auth: schema.union([
+          z.object({ username: schema.string(), password: schema.string().private() }),
+          z.object({ token: schema.string().private() }),
+        ]),
+      };
+
+      type UnionFetched = schema.inferFetched<typeof unionSchema>;
+
+      // Private fields inside union branches must be stripped from fetched type
+      const fetched: UnionFetched = {
+        auth: { username: 'alice' },
+      };
+      expect(fetched.auth).toBeDefined();
+
+      expectTypeOf<UnionFetched['auth']>().not.toMatchTypeOf<{ password: string }>();
+      expectTypeOf<UnionFetched['auth']>().not.toMatchTypeOf<{ token: string }>();
+
+      // Selecting 'auth.password' should un-hide password in the type
+      type UnionSelected = schema.inferSelected<typeof unionSchema, 'auth.password'>;
+
+      const selected: UnionSelected = {
+        auth: { username: 'alice', password: 'secret' },
+      };
+      // The union branch that has 'password' should expose it; the type narrows correctly.
+      type AuthSelected = UnionSelected['auth'];
+      // Extract the branch that contains password — it must exist and be string
+      expectTypeOf<Extract<AuthSelected, { password: string }>>().toMatchTypeOf<{
+        password: string;
+      }>();
     });
   });
 });

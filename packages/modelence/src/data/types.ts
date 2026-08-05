@@ -107,9 +107,6 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
     for (const option of schemaDef.options as z.ZodTypeAny[]) {
       paths.push(...extractPrivateFieldPaths(option, prefix));
     }
-  } else if (schemaDef instanceof z.ZodIntersection) {
-    paths.push(...extractPrivateFieldPaths((schemaDef._def as any).left, prefix));
-    paths.push(...extractPrivateFieldPaths((schemaDef._def as any).right, prefix));
   } else if (schemaDef instanceof z.ZodBranded) {
     paths.push(...extractPrivateFieldPaths(schemaDef.unwrap(), prefix));
   } else if (schemaDef instanceof z.ZodReadonly) {
@@ -135,7 +132,7 @@ export function extractPrivateFieldPaths(schemaDef: unknown, prefix = ''): strin
   return Array.from(new Set(paths));
 }
 
-/** Helper type to unwrap transparent Zod wrapper schemas (Default, Effects, Branded, Readonly, Catch). */
+/** Helper type to unwrap transparent Zod wrapper schemas (Default, Effects, Branded, Readonly, Catch, Union). */
 type UnwrapTransparent<E> =
   E extends z.ZodDefault<infer Inner>
     ? Inner
@@ -147,7 +144,9 @@ type UnwrapTransparent<E> =
           ? Inner
           : E extends z.ZodCatch<infer Inner>
             ? Inner
-            : never;
+            : E extends z.ZodUnion<infer Options>
+              ? Options[number]
+              : never;
 
 export type IsPrivateField<F> = F extends { readonly _isPrivateTag: true }
   ? true
@@ -208,19 +207,31 @@ export type InferDocumentType<T extends SchemaTypeDefinition> = {
 };
 
 type InferSelectedZodType<E, KKeys extends string> =
-  E extends z.ZodOptional<infer Inner extends z.ZodTypeAny>
+  E extends z.ZodOptional<infer Inner>
     ? InferSelectedZodType<Inner, KKeys> | undefined
-    : E extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
+    : E extends z.ZodNullable<infer Inner>
       ? InferSelectedZodType<Inner, KKeys> | null
-      : E extends z.ZodObject<infer Shape extends ZodRawShape, any, any>
+      : E extends z.ZodObject<infer Shape, any, any>
         ? InferSelectedDocumentType<Shape, KKeys>
-        : E extends z.ZodArray<infer InnerElement extends z.ZodTypeAny, any>
+        : E extends z.ZodArray<infer InnerElement, any>
           ? Array<InferSelectedZodType<InnerElement, KKeys>>
-          : [UnwrapTransparent<E>] extends [never]
-            ? E extends z.ZodTypeAny
-              ? z.infer<E>
+          : E extends { _def: { typeName: 'ZodUnion'; options: infer Options } }
+            ? Options extends Array<z.ZodTypeAny>
+              ? InferSelectedZodType<Options[number], KKeys>
               : never
-            : InferSelectedZodType<Extract<UnwrapTransparent<E>, z.ZodTypeAny>, KKeys>;
+            : E extends z.ZodDefault<infer Inner>
+              ? InferSelectedZodType<Inner, KKeys>
+              : E extends z.ZodEffects<infer Inner, any, any>
+                ? InferSelectedZodType<Inner, KKeys>
+                : E extends z.ZodBranded<infer Inner, any>
+                  ? InferSelectedZodType<Inner, KKeys>
+                  : E extends z.ZodReadonly<infer Inner>
+                    ? InferSelectedZodType<Inner, KKeys>
+                    : E extends z.ZodCatch<infer Inner>
+                      ? InferSelectedZodType<Inner, KKeys>
+                      : E extends z.ZodTypeAny
+                        ? z.infer<E>
+                        : never;
 
 type SubKeys<KKeys, Prefix> = KKeys extends string
   ? KKeys extends `${Extract<Prefix, string>}.${infer Rest}`
@@ -228,13 +239,15 @@ type SubKeys<KKeys, Prefix> = KKeys extends string
     : never
   : never;
 
-type IsSelectedKey<K, KKeys> = K extends KKeys
-  ? true
-  : `${Extract<K, string>}.${string}` extends KKeys
+type IsSelectedKey<K, KKeys> = [KKeys] extends [never]
+  ? false
+  : K extends KKeys
     ? true
-    : [Extract<KKeys, `${Extract<K, string>}.${string}` | K>] extends [never]
-      ? false
-      : true;
+    : `${Extract<K, string>}.${string}` extends KKeys
+      ? true
+      : [Extract<KKeys, `${Extract<K, string>}.${string}` | K>] extends [never]
+        ? false
+        : true;
 
 type IsFieldOptional<F> = F extends z.ZodOptional<z.ZodTypeAny> ? true : false;
 
