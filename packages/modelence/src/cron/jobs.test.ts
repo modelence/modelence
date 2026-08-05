@@ -226,4 +226,40 @@ describe('cron/jobs', () => {
     const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
+
+  test('cron loop handles and captures timeout when job runs past its timeout limit', async () => {
+    mockCaptureError.mockClear();
+    let resolveHandler: () => void;
+    const handlerPromise = new Promise<void>((resolve) => {
+      resolveHandler = resolve;
+    });
+    const handler = vi.fn(async () => {
+      await handlerPromise;
+    });
+
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('timeoutJob', {
+      interval: mockSeconds(10),
+      timeout: 5000,
+      handler,
+    });
+
+    await startCronJobs();
+
+    const startTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(startTs);
+    await intervalCallback?.();
+
+    (Date.now as Mock).mockReturnValue(startTs + 6000);
+    await intervalCallback?.();
+
+    expect(mockCaptureError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Cron job 'timeoutJob' timed out after 5000ms"),
+      })
+    );
+
+    resolveHandler!();
+    (Date.now as Mock).mockRestore();
+  });
 });
