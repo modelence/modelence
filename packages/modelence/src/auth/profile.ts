@@ -3,10 +3,11 @@ import { Args, Context, UpdateProfileProps } from '../methods/types';
 import { serializeUserForClient } from './utils';
 import { validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { AuthError, ValidationError } from '../error';
 
 export async function getOwnProfile(props: Args, { user }: Context) {
   if (!user) {
-    throw new Error('Not authenticated');
+    throw new AuthError('Not authenticated');
   }
 
   const profile = await usersCollection.requireById(user.id);
@@ -23,7 +24,7 @@ export async function getOwnProfile(props: Args, { user }: Context) {
 
 export async function handleUpdateProfile(props: Args, { user }: Context) {
   if (!user) {
-    throw new Error('Not authenticated');
+    throw new AuthError('Not authenticated');
   }
 
   let profile = await usersCollection.requireById(user.id);
@@ -43,7 +44,7 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
     );
 
     if (existing) {
-      throw new Error('Handle already taken.');
+      throw new ValidationError('Handle already taken.');
     }
   }
 
@@ -74,7 +75,7 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
       profile = { ...profile, ...setFields, ...clearedFields } as typeof profile;
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as { code: number }).code === 11000) {
-        throw new Error('Handle already taken.');
+        throw new ValidationError('Handle already taken.');
       }
       throw error;
     }
