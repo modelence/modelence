@@ -1,0 +1,168 @@
+---
+title: 'AI Coding Agents'
+description: 'Set up Claude Code, Cursor, or Codex to build Modelence apps locally'
+icon: 'robot'
+---
+
+Modelence apps follow framework conventions that a general-purpose coding agent doesn't know by
+default: [Stores](/stores) instead of raw MongoDB drivers, [`configSchema`](/configuration) instead of
+`process.env`, and typed [queries](/core-concepts/queries) and [mutations](/core-concepts/mutations)
+instead of `fetch('/api/...')` calls. Without guidance, an agent writes code that looks reasonable but
+works against the framework.
+
+This page shows how to give your local agent the same rules and documentation access that the
+Modelence App Builder uses in the cloud.
+
+## Claude Code plugin
+
+The `modelence` plugin gives Claude Code:
+
+- **Framework rules**, always in context — database, configuration, authentication, and UI conventions.
+- **Skills**, loaded on demand — complete reference implementations of Modules, Stores, queries,
+  mutations, and cron jobs, plus Expo Router rules for [React Native apps](/react-native).
+- **Live documentation access** through the Modelence docs MCP server, so the agent looks up APIs
+  instead of writing them from memory.
+
+It works everywhere Claude Code runs: the terminal CLI, the desktop app, and the VS Code and JetBrains
+extensions.
+
+### Nothing to install
+
+New Modelence projects come with the plugin already wired up. Open the project in Claude Code, approve
+the one-time confirmation prompt, and the plugin loads in every session from then on.
+
+You can confirm it's active by running `/plugin` and looking for `modelence` in the list of installed
+plugins.
+
+### Adding it to an existing project
+
+Projects created before the plugin existed — or ones where the configuration was removed — need it
+added once. Commit a `.claude/settings.json` file at the repository root:
+
+```json .claude/settings.json
+{
+  "extraKnownMarketplaces": {
+    "modelence": {
+      "source": {
+        "source": "github",
+        "repo": "modelence/modelence"
+      }
+    }
+  },
+  "enabledPlugins": ["modelence@modelence"]
+}
+```
+
+This is the same file new projects ship with. Committing it means everyone on the team gets the plugin
+after a single confirmation prompt, and the setting stays project-scoped — it doesn't affect your other
+projects.
+
+If you'd rather install it only for yourself, without committing anything, run these in a Claude Code
+session instead:
+
+```
+/plugin marketplace add modelence/modelence
+/plugin install modelence@modelence
+```
+
+<Note>
+If `/plugin` isn't recognized, update Claude Code by running `claude update`, then start a new session.
+</Note>
+
+## The local workflow
+
+A few conventions are worth knowing about, since they shape how sessions behave:
+
+- **The agent runs the dev server.** If nothing is already serving your app, it starts `npm run dev` in
+  the background (port 3000 by default, restarting on file changes) and reads the output, so it catches
+  runtime errors and not just type errors. You don't need to run any commands yourself.
+- **It won't fight a server you started.** If you're already running `npm run dev` in your own terminal,
+  the agent uses that one instead of starting a second. In that case the logs belong to your terminal
+  and the agent can't read them — paste any errors you want it to fix.
+- **Type checking is part of finishing.** The agent runs `npx tsc --noEmit` and fixes all errors before
+  reporting work as done.
+- **Your local files are the source of truth.** Everything happens in your working copy, not in a cloud
+  sandbox.
+- **`.modelence.env` is left alone.** It connects your project to its Modelence Cloud environment,
+  including the MongoDB database — see [Setup](/setup).
+- **Some things need the dashboard.** [Config values](/configuration),
+  [authentication providers](/authentication), [email providers](/email/providers),
+  [user roles](/roles), database connections, and [file storage](/files) are set up in Modelence Cloud.
+  The agent makes the code-side change and points you to the right dashboard page for the rest.
+
+## Docs access for any agent
+
+The Modelence documentation is available as a hosted MCP server that requires no authentication. The
+Claude Code plugin registers it for you; add it manually for other tools.
+
+<CodeGroup>
+
+```bash Claude Code
+claude mcp add --transport http modelence-docs https://docs.modelence.com/mcp
+```
+
+```json Other MCP clients
+{
+  "mcpServers": {
+    "modelence-docs": {
+      "type": "http",
+      "url": "https://docs.modelence.com/mcp"
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+It exposes `search_modelence` for searching the documentation, `query_docs_filesystem_modelence` for
+reading specific pages, and `submit_feedback` for reporting gaps in the docs.
+
+For agents without MCP support, the documentation is also published in plain text:
+
+- [`docs.modelence.com/llms.txt`](https://docs.modelence.com/llms.txt) — an index of every page
+- [`docs.modelence.com/llms-full.txt`](https://docs.modelence.com/llms-full.txt) — the full
+  documentation as a single file
+
+## Other agents
+
+Cursor, Codex, and most other agents read an `AGENTS.md` file from the project root. Apps generated by
+the App Builder already include one covering the framework conventions. For projects created with the
+CLI, add your own `AGENTS.md` describing the conventions your project relies on, and point the agent at
+`llms.txt` for the rest.
+
+Then register the docs MCP server through your tool's own MCP configuration, using the JSON above.
+
+## Inspecting a cloud environment
+
+Modelence Cloud also exposes an MCP server at `https://cloud.modelence.com/mcp` for inspecting your
+environments — app status, logs, and database contents — covering both deployed cloud environments and
+App Builder sandboxes. It requires signing in, so consent happens in the browser the first time you
+connect:
+
+```bash
+claude mcp add --transport http modelence-cloud https://cloud.modelence.com/mcp
+```
+
+<Note>
+This server inspects the **environment** — status, logs, and data. Your local files stay the source of
+truth for code while you're working locally.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Project Structure"
+    icon="folder-tree"
+    href="/core-concepts/project-structure"
+  >
+    How a Modelence project is laid out
+  </Card>
+  <Card
+    title="Modules"
+    icon="cube"
+    href="/core-concepts/modules"
+  >
+    The building block agents work with most
+  </Card>
+</CardGroup>

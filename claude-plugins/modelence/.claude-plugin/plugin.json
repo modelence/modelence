@@ -1,0 +1,13 @@
+{
+  "name": "modelence",
+  "version": "0.1.0",
+  "description": "Build Modelence apps with correct framework patterns: rules, working examples, and Modelence docs access.",
+  "author": {
+    "name": "Modelence",
+    "email": "support@modelence.com"
+  },
+  "homepage": "https://modelence.com",
+  "repository": "https://github.com/modelence/modelence",
+  "license": "MIT",
+  "keywords": ["modelence", "fullstack", "typescript", "mongodb", "react"]
+}

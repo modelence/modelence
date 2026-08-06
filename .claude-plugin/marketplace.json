@@ -1,0 +1,14 @@
+{
+  "name": "modelence",
+  "owner": {
+    "name": "Modelence",
+    "email": "support@modelence.com"
+  },
+  "plugins": [
+    {
+      "name": "modelence",
+      "source": "./claude-plugins/modelence",
+      "description": "Build Modelence apps with correct framework patterns: rules, working examples, and Modelence docs access."
+    }
+  ]
+}
