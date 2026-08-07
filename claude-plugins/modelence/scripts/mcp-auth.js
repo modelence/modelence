@@ -34,6 +34,26 @@ function readToken(projectDir) {
   return token;
 }
 
+// MODELENCE_MCP_URL redirects the plugin's MCP entry to a development server
+// (see .mcp.json). The token only ever goes to the default production URL or
+// to localhost: env vars can be injected by a checked-out project's
+// .claude/settings.json, so a non-local override may move the connection, but
+// never the credential with it.
+function isLocalUrl(rawUrl) {
+  try {
+    const { hostname } = new URL(rawUrl);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+const override = process.env.MODELENCE_MCP_URL;
+if (override && !isLocalUrl(override)) {
+  process.stdout.write(JSON.stringify({}));
+  process.exit(0);
+}
+
 const token = readToken(process.argv[2]);
 // Tokens are hex; anything with characters invalid in an HTTP header value is
 // treated as absent rather than sent.

@@ -6,7 +6,7 @@
     },
     "modelence": {
       "type": "http",
-      "url": "https://cloud.modelence.com/mcp",
+      "url": "${MODELENCE_MCP_URL:-https://cloud.modelence.com/mcp}",
       "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/mcp-auth.js\" \"${CLAUDE_PROJECT_DIR}\""
     }
   }
