@@ -20,7 +20,8 @@ When unsure about a Modelence API or pattern, look it up instead of guessing —
 - `.modelence.env` connects the project to its Modelence Cloud backend, including the MongoDB database. Never edit, delete, or regenerate it.
 - After making code changes, always run `npx tsc --noEmit` and fix all errors before finishing. Type-checking is not optional — never report work as done with outstanding TypeScript errors.
 - Your local checkout is the source of truth for code — read and edit it with your own file tools rather than through a remote MCP server, whose view of the project can be stale and may be rejected while a local session is active.
-- Cloud MCP inspection tools (app status, logs, database contents) are useful for diagnosis: they report on the environment your local app is connected to, including the same MongoDB database and config values.
+- The `modelence` MCP server queries the database of the environment this project is connected to — the same MongoDB your local app reads and writes. Use it for diagnosis. App status and server logs come from your own dev server output, not from this server.
+- If the MCP server reports that the environment does not match `.modelence.env`, the connection was made before the project switched environments — tell the user to reconnect the `modelence` server from `/mcp` or start a new session.
 
 ## Database
 

@@ -22,6 +22,8 @@ The `modelence` plugin gives Claude Code:
   mutations, and cron jobs, plus Expo Router rules for [React Native apps](/react-native).
 - **Live documentation access** through the Modelence docs MCP server, so the agent looks up APIs
   instead of writing them from memory.
+- **Database access** to the environment your project is connected to, authenticated automatically —
+  see [Inspecting your environment](#inspecting-your-environment).
 
 It works everywhere Claude Code runs: the terminal CLI, the desktop app, and the VS Code and JetBrains
 extensions.
@@ -132,21 +134,33 @@ CLI, add your own `AGENTS.md` describing the conventions your project relies on,
 
 Then register the docs MCP server through your tool's own MCP configuration, using the JSON above.
 
-## Inspecting a cloud environment
+## Inspecting your environment
 
-Modelence Cloud also exposes an MCP server at `https://cloud.modelence.com/mcp` for inspecting your
-environments — app status, logs, and database contents — covering both deployed cloud environments and
-App Builder sandboxes. It requires signing in, so consent happens in the browser the first time you
-connect:
+Your project is connected to a Modelence environment, and the agent can query its database directly —
+the same MongoDB your local app reads and writes. That makes it useful for diagnosis: confirming what a
+mutation actually stored, checking a migration's result, or inspecting a document's real shape.
 
-```bash
-claude mcp add --transport http modelence-cloud https://cloud.modelence.com/mcp
-```
+The plugin sets this up for you. It authenticates with the service token already in `.modelence.env`,
+so there's no sign-in step and nothing to configure.
 
 <Note>
-This server inspects the **environment** — status, logs, and data. Your local files stay the source of
-truth for code while you're working locally.
+If you switch environments by re-running `modelence setup`, reconnect the `modelence` server from
+`/mcp` (or start a new session). The connection reads `.modelence.env` once, when it connects.
 </Note>
+
+### From other clients
+
+The same server is available at `https://cloud.modelence.com/mcp` for tools that aren't running inside
+your project — claude.ai on web or mobile, Cursor, Codex, or a Claude Code session outside a project
+directory. Signing in through the browser grants access to every app in your organization, including
+status and logs for App Builder sandboxes:
+
+```bash
+claude mcp add --transport http modelence https://cloud.modelence.com/mcp
+```
+
+You don't need this inside a Modelence project — the plugin already connects you, scoped to that
+project's own environment.
 
 ## Next steps
 
