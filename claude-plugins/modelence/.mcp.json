@@ -3,6 +3,11 @@
     "modelence-docs": {
       "type": "http",
       "url": "https://docs.modelence.com/mcp"
+    },
+    "modelence": {
+      "type": "http",
+      "url": "https://cloud.modelence.com/mcp",
+      "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/mcp-auth.js\" \"${CLAUDE_PROJECT_DIR}\""
     }
   }
 }

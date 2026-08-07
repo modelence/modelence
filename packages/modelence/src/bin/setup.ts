@@ -64,11 +64,13 @@ export async function setup(options: { token: string; host: string }) {
   try {
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
     let existingEnv = {};
+    let fileExisted = false;
 
     try {
       // Check if .modelence.env exists
       const envContent = await fs.readFile(envPath, 'utf8');
       existingEnv = parseEnv(envContent);
+      fileExisted = true;
 
       // Create backup before overwriting
       await backupEnvFile(envPath);
@@ -105,6 +107,16 @@ export async function setup(options: { token: string; host: string }) {
     // Write the file
     await fs.writeFile(envPath, envContent.trim() + '\n');
     console.log(`Successfully configured ${MODELENCE_ENV_FILE} file`);
+
+    if (fileExisted) {
+      // Anything that read the old file holds stale credentials: the dev
+      // server loads it at boot, and MCP connections send its token per
+      // connection.
+      console.log(
+        'The project now points to a different environment. Restart your dev server, and if you use ' +
+          'an AI coding agent, reconnect its Modelence MCP server (in Claude Code: /mcp) or start a new session.'
+      );
+    }
   } catch (error: unknown) {
     console.error(`Setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     process.exit(1);
