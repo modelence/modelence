@@ -13,7 +13,7 @@ When unsure about a Modelence API or pattern, look it up instead of guessing —
 
 ## Environment
 
-- If `node_modules` is missing, the project's dependencies were never installed — offer to run `npm install` first. You can still read and edit code without it, but type-checking, the dev server, and any environment inspection tools will not work until it is installed. Say that plainly instead of silently skipping those verification steps.
+- If `node_modules` is missing, the project's dependencies were never installed — offer to run `npm install` first. You can still read and edit code without it (and the `modelence` MCP server's database tools still work), but type-checking and the dev server will not work until it is installed. Say that plainly instead of silently skipping those verification steps.
 - Keep a dev server running while you work and use it to verify changes. First check whether the app already responds on its port (`MODELENCE_PORT`, else `PORT`, else 3000) — if it does, the user is running it themselves; use that one and NEVER start a second server. If nothing responds, start `npm run dev` yourself as a background process rather than asking the user to run it, and tell them the URL once it is up. It is non-interactive (`tsx watch`) and safe to background.
 - After changes, read the dev server output and fix what you find: boot failures, missing config, migration and index errors, and unhandled request errors. Type-checking does not catch these. Check the output after a change instead of streaming it continuously, and look for errors rather than reading every line.
 - When the user owns the dev server process, its output goes to their terminal and you cannot read it — verify over HTTP and ask them to paste any errors you need.
