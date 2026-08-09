@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
+import { authenticateCli } from './auth';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
 
@@ -12,12 +13,24 @@ interface SetupResponse {
   containerId: string;
 }
 
-async function fetchServiceConfig(setupToken: string, host: string): Promise<SetupResponse> {
+/*
+  Two ways to authenticate against /api/setup, matching the two ways setup is
+  run: a setup token pasted from the dashboard, or a CLI token from the
+  browser device flow. Either way the credential itself carries the
+  environment choice — the server derives the target from it, so nothing
+  else needs to be sent.
+*/
+type SetupAuth = { setupToken: string } | { cliToken: string };
+
+async function fetchServiceConfig(host: string, auth: SetupAuth): Promise<SetupResponse> {
+  const headers: Record<string, string> =
+    'setupToken' in auth
+      ? { 'X-Modelence-Setup-Token': auth.setupToken }
+      : { Authorization: `Bearer ${auth.cliToken}` };
+
   const response = await fetch(`${host}/api/setup`, {
     method: 'GET',
-    headers: {
-      'X-Modelence-Setup-Token': setupToken,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -60,7 +73,7 @@ async function backupEnvFile(envPath: string): Promise<void> {
   }
 }
 
-export async function setup(options: { token: string; host: string }) {
+export async function setup(options: { token?: string; host: string }) {
   try {
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
     let existingEnv = {};
@@ -85,9 +98,19 @@ export async function setup(options: { token: string; host: string }) {
       // File doesn't exist, we'll create it
     }
 
-    // Fetch service configuration using setup token
+    let auth: SetupAuth;
+    if (options.token) {
+      auth = { setupToken: options.token };
+    } else {
+      // No token given: authorize in the browser, where the approval page
+      // also asks which environment to connect to.
+      const { token: cliToken } = await authenticateCli(options.host, { pickEnvironment: true });
+      auth = { cliToken };
+    }
+
+    // Fetch service configuration
     console.log('Fetching service configuration...');
-    const config = await fetchServiceConfig(options.token, options.host);
+    const config = await fetchServiceConfig(options.host, auth);
 
     // Update environment variables
     const newEnv = {

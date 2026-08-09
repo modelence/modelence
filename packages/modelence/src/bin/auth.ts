@@ -1,10 +1,20 @@
 import open from 'open';
-import { writeFileSync } from 'fs';
-import { join } from 'path';
 
-export async function authenticateCli(host: string) {
-  // TODO: check if a token already exists in .modelence/auth.json
+/*
+  Browser device authorization. The returned token is short-lived and
+  user-scoped; commands re-authorize on every run, so no credential is ever
+  stored on disk.
 
+  With `pickEnvironment`, the approval page also asks the user to choose an
+  environment. The choice never travels back through the CLI — the server
+  stamps it on the token itself, and /api/setup derives the target from
+  there, so the authorization is only good for the environment the user
+  approved.
+*/
+export async function authenticateCli(
+  host: string,
+  { pickEnvironment = false }: { pickEnvironment?: boolean } = {}
+): Promise<{ token: string }> {
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
   });
@@ -14,15 +24,14 @@ export async function authenticateCli(host: string) {
   }
 
   const { code, verificationUrl } = await response.json();
+  const url = pickEnvironment ? `${verificationUrl}&pick=environment` : verificationUrl;
 
-  console.log(`Please visit ${verificationUrl} to authenticate`);
+  console.log(`Please visit ${url} to authenticate`);
   console.log(`Code: ${code}`);
 
-  await open(verificationUrl);
+  await open(url);
 
   const token = await waitForAuth(host, code);
-
-  writeFileSync(join(process.cwd(), '.modelence', 'auth.json'), JSON.stringify({ token }));
 
   return { token };
 }
