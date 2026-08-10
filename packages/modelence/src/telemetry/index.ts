@@ -45,11 +45,37 @@ function getLogLevel(): LogLevel {
   return (process.env.MODELENCE_LOG_LEVEL as LogLevel) || defaultLoglevel;
 }
 
+/**
+ * Whether `level` should also be written to the console.
+ *
+ * Normal rule: the configured level (see {@link getLogLevel}) must allow it —
+ * telemetry-enabled deployments send to Elastic, not stdout, unless
+ * MODELENCE_LOG_LEVEL is set.
+ *
+ * Bootstrap exception: while telemetry is enabled but the Winston logger is
+ * not ready yet (startup runs `setMetadata` → `connect()` → index/migration
+ * creation → `initMetrics`), there is no Elastic sink, so output falls back
+ * to the console to avoid silently dropping startup errors (e.g. MongoDB
+ * connect failures, unique-index violation reports).
+ *
+ * This cannot feed back into the logger: `startLoggerProcess` is only started
+ * after the logger is created, so once its stdout/stderr capture loop runs,
+ * `isLoggerReady()` is already true and this branch is off.
+ */
+function shouldLogToConsole(level: Exclude<LogLevel, ''>): boolean {
+  const enabledLevels: Record<Exclude<LogLevel, ''>, LogLevel[]> = {
+    debug: ['debug'],
+    info: ['debug', 'info'],
+    error: ['debug', 'info', 'error'],
+  };
+  return enabledLevels[level].includes(getLogLevel()) || (isTelemetryEnabled() && !isLoggerReady());
+}
+
 export function logDebug(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().debug(message, args);
   }
-  if (getLogLevel() === 'debug') {
+  if (shouldLogToConsole('debug')) {
     console.debug(message, args);
   }
 }
@@ -58,7 +84,7 @@ export function logInfo(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().info(message, args);
   }
-  if (['debug', 'info'].includes(getLogLevel())) {
+  if (shouldLogToConsole('info')) {
     console.info(message, args);
   }
 }
@@ -89,7 +115,7 @@ export function logError(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().error(message, redactSensitive(normalizeErrors(args)) as object);
   }
-  if (['debug', 'info', 'error'].includes(getLogLevel())) {
+  if (shouldLogToConsole('error')) {
     console.error(message, args);
   }
 }
