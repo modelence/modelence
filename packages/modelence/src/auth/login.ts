@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 
@@ -35,7 +37,8 @@ function isEmailVerificationRequired(): boolean {
   return Boolean(getConfig('_system.user.auth.email.verification'));
 }
 
-const DUMMY_PASSWORD_HASH = '$2b$10$AUM.KxS9LpsdJ5XQ85jQG.zC2y8b375b4pQeO2XoGf29xNn4/WlFm';
+const SALT_ROUNDS = 10;
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(32).toString('hex'), SALT_ROUNDS);
 
 export async function handleLoginWithPassword(
   args: Args,

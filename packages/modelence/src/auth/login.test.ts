@@ -12,6 +12,7 @@ const mockGetEmailConfig = vi.fn();
 const mockGetAuthConfig = vi.fn();
 const mockGetConfig = vi.fn();
 const mockCompare = vi.fn();
+const mockHashSync = vi.fn(() => '$2b$10$dummyDummyDummyDummyDummyDummyDummyDummy');
 
 vi.doMock('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
@@ -56,8 +57,10 @@ vi.doMock('@/config/server', () => ({
 vi.doMock('bcrypt', () => ({
   default: {
     compare: mockCompare,
+    hashSync: mockHashSync,
   },
   compare: mockCompare,
+  hashSync: mockHashSync,
 }));
 
 const { handleLoginWithPassword, handleLogout } = await import('./login');
