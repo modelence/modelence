@@ -49,7 +49,7 @@ export function logDebug(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().debug(message, args);
   }
-  if (getLogLevel() === 'debug' || (isTelemetryEnabled() && !isLoggerReady())) {
+  if (getLogLevel() === 'debug') {
     console.debug(message, args);
   }
 }
@@ -58,19 +58,38 @@ export function logInfo(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
     getLogger().info(message, args);
   }
-  if (['debug', 'info'].includes(getLogLevel()) || (isTelemetryEnabled() && !isLoggerReady())) {
+  if (['debug', 'info'].includes(getLogLevel())) {
     console.info(message, args);
   }
 }
 
+/**
+ * Replaces any {@link Error} in `args` with `{ message, stack, name }` so the
+ * payload survives JSON serialization to the remote sink (Errors otherwise
+ * serialize to `{}`).
+ */
+function normalizeErrors(args: object): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    result[key] =
+      value instanceof Error
+        ? { message: value.message, stack: value.stack, name: value.name }
+        : value;
+  }
+  return result;
+}
+
+/**
+ * Logs an error. Before the payload is sent to the remote (Elastic) sink,
+ * {@link Error} values are normalized for JSON serialization and
+ * {@link SENSITIVE_KEYS} matches are redacted. Console output keeps the raw
+ * values for local debugging.
+ */
 export function logError(message: string, args: object) {
   if (isTelemetryEnabled() && isLoggerReady()) {
-    getLogger().error(message, args);
+    getLogger().error(message, redactSensitive(normalizeErrors(args)) as object);
   }
-  if (
-    ['debug', 'info', 'error'].includes(getLogLevel()) ||
-    (isTelemetryEnabled() && !isLoggerReady())
-  ) {
+  if (['debug', 'info', 'error'].includes(getLogLevel())) {
     console.error(message, args);
   }
 }

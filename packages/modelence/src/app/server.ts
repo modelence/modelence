@@ -161,11 +161,8 @@ export async function startServer(
     Promise.resolve(server.handler(req, res)).catch(next);
   });
 
-  process.on('unhandledRejection', (reason, promise) => {
-    logError('Unhandled Promise Rejection', {
-      reason: reason instanceof Error ? reason.stack : reason,
-      promise,
-    });
+  process.on('unhandledRejection', (reason) => {
+    logError('Unhandled Promise Rejection', { error: reason });
   });
 
   // Global uncaught exceptions

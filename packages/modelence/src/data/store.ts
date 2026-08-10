@@ -38,6 +38,7 @@ import { ModelSchema, InferDocumentType } from './types';
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
 import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
+import { logError } from '@/telemetry';
 
 /**
  * Result of {@link Store.findOneAndUpsert}: the post-op document plus whether
@@ -722,7 +723,11 @@ export class Store<
             // (the constraint stays unenforced), so log an actionable report an
             // operator or AI agent can resolve, then let the error propagate.
             if (index.unique && isUniqueIndexViolation(error)) {
-              console.error(formatUniqueIndexViolationReport(this.name, index, error));
+              logError('Unique index creation failed on existing data', {
+                store: this.name,
+                index: index.name,
+                report: formatUniqueIndexViolationReport(this.name, index, error),
+              });
             }
             throw error;
           }

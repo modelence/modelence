@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 
 const mockSeconds = vi.fn((value: number) => value * 1000);
@@ -8,11 +8,13 @@ const mockStartTransaction = vi.fn(() => ({
   end: vi.fn(),
 }));
 const mockCaptureError = vi.fn();
+const mockLogError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
+const mockGetMongodbUri = vi.fn();
 
-const cronStoreMocks: { fetch: Mock; updateOne: Mock } = {
+const cronStoreMocks: { fetch: Mock; upsertOne: Mock } = {
   fetch: vi.fn(),
-  updateOne: vi.fn(),
+  upsertOne: vi.fn(),
 };
 
 function registerMocks() {
@@ -27,7 +29,7 @@ function registerMocks() {
   vi.doMock('@/telemetry', () => ({
     startTransaction: mockStartTransaction,
     captureError: mockCaptureError,
-    logError: vi.fn(),
+    logError: mockLogError,
   }));
 
   vi.doMock('../data/store', () => ({
@@ -36,6 +38,10 @@ function registerMocks() {
 
   vi.doMock('../lock/helpers', () => ({
     acquireLock: mockAcquireLock,
+  }));
+
+  vi.doMock('@/db/client', () => ({
+    getMongodbUri: mockGetMongodbUri,
   }));
 }
 
@@ -53,8 +59,9 @@ describe('cron/jobs', () => {
     vi.resetModules();
     Object.assign(cronStoreMocks, {
       fetch: vi.fn(),
-      updateOne: vi.fn().mockResolvedValue(undefined as never),
+      upsertOne: vi.fn().mockResolvedValue(undefined as never),
     });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     mockAcquireLock.mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
@@ -125,12 +132,55 @@ describe('cron/jobs', () => {
     (Date.now as Mock).mockRestore();
   });
 
+  test('startCronJobs skips starting cron jobs and logs message when MongoDB URI is not set', async () => {
+    mockGetMongodbUri.mockReturnValue('');
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    defineCronJob('noDbJob', {
+      description: 'no db',
+      interval: mockSeconds(10),
+      handler: async () => {},
+    });
+
+    await startCronJobs();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('MongoDB URI is not configured')
+    );
+    expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
+    expect(setIntervalMock).not.toHaveBeenCalled();
+    consoleLogSpy.mockRestore();
+  });
+
+  test('startCronJobs uses lastStartDate from DB when present to schedule next run', async () => {
+    const now = 1_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const lastRun = new Date(now - 5_000);
+    cronStoreMocks.fetch.mockResolvedValueOnce([
+      { alias: 'existingJob', lastStartDate: lastRun },
+    ] as never);
+
+    defineCronJob('existingJob', {
+      interval: mockSeconds(10),
+      handler: async () => {},
+    });
+
+    await startCronJobs();
+
+    expect(cronStoreMocks.fetch).toHaveBeenCalledWith({
+      alias: { $in: ['existingJob'] },
+    });
+    expect(intervalDelay).toBe(mockSeconds(1));
+    (Date.now as Mock).mockRestore();
+  });
+
   test('startCronJobs no-ops when no cron jobs defined', async () => {
     await startCronJobs();
     expect(cronStoreMocks.fetch).not.toHaveBeenCalled();
     expect(setIntervalMock).not.toHaveBeenCalled();
   });
-  test('cron loop executes job handler and records completion', async () => {
+
+  test('cron loop executes job handler and records completion using upsertOne', async () => {
     const handler = vi.fn(async () => {});
     cronStoreMocks.fetch.mockResolvedValue([] as never);
     defineCronJob('hourly', {
@@ -145,10 +195,11 @@ describe('cron/jobs', () => {
 
     expect(mockAcquireLock).toHaveBeenCalled();
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(cronStoreMocks.updateOne).toHaveBeenCalledWith(
+    expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
       { alias: 'hourly' },
       {
         $set: { lastStartDate: expect.any(Date) },
+        $setOnInsert: { alias: 'hourly' },
       }
     );
     const transactionCall = (mockStartTransaction as Mock).mock.calls.slice(-1)[0];
