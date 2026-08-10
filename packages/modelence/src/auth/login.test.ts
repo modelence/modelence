@@ -163,6 +163,25 @@ describe('auth/login', () => {
     expect(mockCompare).toHaveBeenCalledWith('Secret123', expect.stringMatching(/^\$2b\$10\$/));
   });
 
+  test('runs bcrypt against a dummy hash for accounts without a password', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439014');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: {},
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+
+    await expect(
+      handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      )
+    ).rejects.toThrow('Incorrect email/password combination');
+
+    expect(mockCompare).toHaveBeenCalledWith('Secret123', expect.stringMatching(/^\$2b\$10\$/));
+  });
+
   test('throws unverified error when email is unverified and provider configured', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439012');
     mockFindOne.mockResolvedValue({
