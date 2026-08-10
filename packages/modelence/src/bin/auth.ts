@@ -10,10 +10,15 @@ import open from 'open';
   stamps it on the token itself, and /api/setup derives the target from
   there, so the authorization is only good for the environment the user
   approved.
+
+  `appId` is the hint from .modelence/project.json: the approval page uses it
+  to preselect the app this project was last connected to. Purely a
+  convenience for the picker — the user can still choose any app, and an
+  unresolvable ID is simply ignored.
 */
 export async function authenticateCli(
   host: string,
-  { pickEnvironment = false }: { pickEnvironment?: boolean } = {}
+  { pickEnvironment = false, appId }: { pickEnvironment?: boolean; appId?: string } = {}
 ): Promise<{ token: string }> {
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
@@ -24,7 +29,11 @@ export async function authenticateCli(
   }
 
   const { code, verificationUrl } = await response.json();
-  const url = pickEnvironment ? `${verificationUrl}&pick=environment` : verificationUrl;
+  const hintParams = new URLSearchParams({
+    ...(pickEnvironment ? { pick: 'environment' } : {}),
+    ...(appId ? { appId } : {}),
+  });
+  const url = hintParams.size > 0 ? `${verificationUrl}&${hintParams}` : verificationUrl;
 
   console.log(`Please visit ${url} to authenticate`);
   console.log(`Code: ${code}`);

@@ -80,6 +80,21 @@ function escapeEnvValue(value: string | number): string {
   would make teammates connected to different environments fight over the
   value.
 */
+/*
+  The app this project was last connected to, if a previous setup (by anyone
+  on the team — the file is committed) recorded it. Used only to preselect
+  the app on the approval page; anything unreadable means "no hint".
+*/
+async function readProjectAppId(): Promise<string | undefined> {
+  try {
+    const content = await fs.readFile(join(process.cwd(), MODELENCE_DIR, PROJECT_FILE), 'utf8');
+    const { appId } = JSON.parse(content);
+    return typeof appId === 'string' && appId ? appId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function recordProjectAppId(appId: string): Promise<void> {
   const dirPath = join(process.cwd(), MODELENCE_DIR);
   const projectPath = join(dirPath, PROJECT_FILE);
@@ -136,7 +151,10 @@ export async function setup(options: { token?: string; host: string }) {
     } else {
       // No token given: authorize in the browser, where the approval page
       // also asks which environment to connect to.
-      const { token: cliToken } = await authenticateCli(options.host, { pickEnvironment: true });
+      const { token: cliToken } = await authenticateCli(options.host, {
+        pickEnvironment: true,
+        appId: await readProjectAppId(),
+      });
       auth = { cliToken };
     }
 
