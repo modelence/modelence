@@ -5,12 +5,16 @@ import { createInterface } from 'readline';
 import { authenticateCli } from './auth';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
+const MODELENCE_DIR = '.modelence';
+const PROJECT_FILE = 'project.json';
 
 interface SetupResponse {
   environmentId: string;
   serviceEndpoint: string;
   serviceToken: string;
   containerId: string;
+  // Absent on older Modelence Cloud versions.
+  appId?: string;
 }
 
 /*
@@ -61,6 +65,34 @@ async function confirmOverwrite(): Promise<boolean> {
 function escapeEnvValue(value: string | number): string {
   // Convert to string and escape quotes
   return String(value).replace(/"/g, '\\"');
+}
+
+/*
+  Records which app this project belongs to in .modelence/project.json. Unlike
+  .modelence.env this file is meant to be committed (the .modelence/ root holds
+  CLI-managed project state; only designated subdirs like cache/ are
+  temporary), so the whole team gets it. It's a hint in the git-remote sense —
+  connect flows use it to preselect the app, never to block a different
+  choice — which is why failing to write it doesn't fail the setup.
+
+  Only the app goes here: which ENVIRONMENT a working copy connects to is
+  per-developer state, already recorded by .modelence.env, and committing it
+  would make teammates connected to different environments fight over the
+  value.
+*/
+async function recordProjectAppId(appId: string): Promise<void> {
+  const dirPath = join(process.cwd(), MODELENCE_DIR);
+  const projectPath = join(dirPath, PROJECT_FILE);
+
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(await fs.readFile(projectPath, 'utf8'));
+  } catch {
+    // Missing or malformed — start fresh.
+  }
+
+  await fs.mkdir(dirPath, { recursive: true });
+  await fs.writeFile(projectPath, JSON.stringify({ ...existing, appId }, null, 2) + '\n');
 }
 
 async function backupEnvFile(envPath: string): Promise<void> {
@@ -130,6 +162,15 @@ export async function setup(options: { token?: string; host: string }) {
     // Write the file
     await fs.writeFile(envPath, envContent.trim() + '\n');
     console.log(`Successfully configured ${MODELENCE_ENV_FILE} file`);
+
+    if (config.appId) {
+      try {
+        await recordProjectAppId(config.appId);
+        console.log(`Recorded the app ID in ${MODELENCE_DIR}/${PROJECT_FILE}`);
+      } catch (error) {
+        console.warn(`Failed to record the app ID in ${MODELENCE_DIR}/${PROJECT_FILE}:`, error);
+      }
+    }
 
     if (fileExisted) {
       // Anything that read the old file holds stale credentials: the dev
