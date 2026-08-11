@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from 'vitest';
-import type { Mock } from 'vitest';
 
 type SetupOptions = {
   telemetryEnabled?: boolean;
@@ -17,7 +16,6 @@ async function setupMetrics(options: SetupOptions = {}) {
     telemetryEnabled = true,
     configValues = {
       '_system.elastic.apmEndpoint': 'https://apm.example.com',
-      '_system.elastic.cloudId': 'cloud-id',
       '_system.elastic.apiKey': 'api-key',
     },
     appAlias = 'app-alias',
@@ -27,13 +25,8 @@ async function setupMetrics(options: SetupOptions = {}) {
   } = options;
 
   const apmInstance = { name: 'apm' };
-  const loggerInstance = { log: vi.fn() };
 
   const elasticStart = vi.fn().mockReturnValue(apmInstance);
-  const createLogger = vi.fn().mockReturnValue(loggerInstance);
-  const formatCombine = vi.fn(() => 'combined-format');
-  const formatJson = vi.fn(() => 'json-format');
-  const startLoggerProcess = vi.fn();
   const getConfig = vi.fn((key: string) => configValues[key]);
 
   const stateMocks = {
@@ -44,45 +37,14 @@ async function setupMetrics(options: SetupOptions = {}) {
     isTelemetryEnabled: vi.fn(() => telemetryEnabled),
   };
 
-  type TransportInstance = { options: unknown; on: Mock };
-  const transportInstances: TransportInstance[] = [];
-
-  class MockElasticsearchTransport {
-    options: unknown;
-    on: Mock;
-    constructor(opts: unknown) {
-      this.options = opts;
-      this.on = vi.fn();
-      transportInstances.push(this);
-    }
-  }
-
   vi.doMock('elastic-apm-node', () => ({
     default: {
       start: elasticStart,
     },
   }));
 
-  vi.doMock('winston', () => ({
-    default: {
-      createLogger,
-      format: {
-        combine: formatCombine,
-        json: formatJson,
-      },
-    },
-  }));
-
-  vi.doMock('winston-elasticsearch', () => ({
-    ElasticsearchTransport: MockElasticsearchTransport,
-  }));
-
   vi.doMock('../config/server', () => ({
     getConfig,
-  }));
-
-  vi.doMock('./loggerProcess', () => ({
-    startLoggerProcess,
   }));
 
   vi.doMock('./state', () => stateMocks);
@@ -93,15 +55,9 @@ async function setupMetrics(options: SetupOptions = {}) {
     metrics,
     mocks: {
       elasticStart,
-      createLogger,
-      formatCombine,
-      formatJson,
-      startLoggerProcess,
       getConfig,
       state: stateMocks,
-      transportInstances,
       apmInstance,
-      loggerInstance,
       configValues,
       serviceName,
       environmentAlias,
@@ -117,21 +73,13 @@ describe('app/metrics', () => {
     expect(() => metrics.getApm()).toThrow('APM is not initialized');
   });
 
-  test('getLogger throws when initialization never happened', async () => {
-    const { metrics } = await setupMetrics();
-    expect(() => metrics.getLogger()).toThrow('Logger is not initialized');
-  });
-
   test('initMetrics skips telemetry setup when disabled', async () => {
     const { metrics, mocks } = await setupMetrics({ telemetryEnabled: false });
 
     await metrics.initMetrics();
 
     expect(mocks.elasticStart).not.toHaveBeenCalled();
-    expect(mocks.createLogger).not.toHaveBeenCalled();
-    expect(mocks.startLoggerProcess).not.toHaveBeenCalled();
     expect(() => metrics.getApm()).toThrow('APM is not initialized');
-    expect(() => metrics.getLogger()).toThrow('Logger is not initialized');
   });
 
   test('initMetrics throws on duplicate initialization', async () => {
@@ -144,10 +92,9 @@ describe('app/metrics', () => {
     );
   });
 
-  test('initMetrics configures Elastic APM, logger, and logger process when telemetry enabled', async () => {
+  test('initMetrics configures Elastic APM when telemetry enabled', async () => {
     const configValues = {
       '_system.elastic.apmEndpoint': 'https://apm.service.test',
-      '_system.elastic.cloudId': 'elastic-cloud',
       '_system.elastic.apiKey': 'elastic-key',
     };
 
@@ -175,31 +122,6 @@ describe('app/metrics', () => {
       })
     );
 
-    expect(mocks.transportInstances).toHaveLength(1);
-    const transportInstance = mocks.transportInstances[0];
-    expect(transportInstance?.options).toMatchObject({
-      apm: mocks.apmInstance,
-      level: 'debug',
-      clientOpts: {
-        cloud: { id: 'elastic-cloud' },
-        auth: { apiKey: 'elastic-key' },
-      },
-    });
-
-    expect(mocks.createLogger).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'debug',
-        defaultMeta: { serviceName: 'svc-api' },
-        transports: [transportInstance],
-      })
-    );
-
-    expect(mocks.startLoggerProcess).toHaveBeenCalledWith({
-      elasticCloudId: 'elastic-cloud',
-      elasticApiKey: 'elastic-key',
-    });
-
     expect(metrics.getApm()).toBe(mocks.apmInstance);
-    expect(metrics.getLogger()).toBe(mocks.loggerInstance);
   });
 });
