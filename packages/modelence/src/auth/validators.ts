@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { UpdateProfileProps } from '../methods/types';
+import { ValidationError } from '../error';
 
 export const MIN_HANDLE_LENGTH = 3;
 export const MAX_HANDLE_LENGTH = 50;
@@ -54,7 +55,7 @@ export function validateProfileFields(
     const issue = result.error.issues[0];
     const path = issue.path.join('.');
     const msg = path ? `${path}: ${issue.message}` : issue.message;
-    throw new Error(msg);
+    throw new ValidationError(msg);
   }
 
   return result.data;
