@@ -181,11 +181,10 @@ describe('auth/verification', () => {
         {
           _id: tokenDoc.userId,
           status: { $nin: ['deleted', 'disabled'] },
-          'emails.address': tokenDoc.email,
-          'emails.verified': { $ne: true },
+          emails: { $elemMatch: { address: tokenDoc.email, verified: { $ne: true } } },
         },
         { $set: { 'emails.$.verified': true } },
-        { returnDocument: 'after' }
+        { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
       );
       expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
       expect(authConfig.onAfterEmailVerification).toHaveBeenCalledWith({
@@ -212,6 +211,151 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=verified',
       });
+    });
+
+    test('verifies a second address on an account that already has a verified one', async () => {
+      // The reported repro: account holds a verified address A plus an
+      // unverified B. The old filter's independent `'emails.verified': { $ne:
+      // true }` meant "no element is verified", so B could never be verified.
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'b@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [
+          { address: 'a@example.com', verified: true },
+          { address: 'b@example.com', verified: false },
+        ],
+      } as never);
+      mockFindOneAndUpdate.mockResolvedValue({
+        _id: 'user123',
+        emails: [
+          { address: 'a@example.com', verified: true },
+          { address: 'b@example.com', verified: true },
+        ],
+      } as never);
+      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      // The selector must scope both conditions to the single element carrying
+      // the address, so the already-verified A cannot block B.
+      expect(mockFindOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          emails: { $elemMatch: { address: 'b@example.com', verified: { $ne: true } } },
+        }),
+        { $set: { 'emails.$.verified': true } },
+        { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
+      );
+      expect(result).toEqual({
+        status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: '/verified?status=verified',
+      });
+    });
+
+    test('reports already-verified only when that specific address is verified', async () => {
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'b@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [
+          { address: 'a@example.com', verified: true },
+          { address: 'b@example.com', verified: true },
+        ],
+      } as never);
+      mockFindOneAndUpdate.mockResolvedValue(null as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result).toEqual({
+        status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: '/verified?status=error&message=Email%20is%20already%20verified',
+      });
+    });
+
+    test('does not claim already-verified when the address is still unverified', async () => {
+      // Previously the fallback only matched on address, so a failed update on
+      // an unverified address was misreported as "Email is already verified".
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'b@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'b@example.com', verified: false }],
+      } as never);
+      mockFindOneAndUpdate.mockResolvedValue(null as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result).toEqual({
+        status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: '/verified?status=error&message=Unable%20to%20verify%20email%20address',
+      });
+    });
+
+    test('reports a missing address when the user does not hold it', async () => {
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'ghost@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'a@example.com', verified: true }],
+      } as never);
+      mockFindOneAndUpdate.mockResolvedValue(null as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result).toEqual({
+        status: 301,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect:
+          '/verified?status=error&message=Email%20address%20not%20found%20for%20this%20user',
+      });
+    });
+
+    test('consumes the token even when the update matches nothing', async () => {
+      // A token that always fails must not stay spendable until its 24h expiry.
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'b@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'b@example.com', verified: true }],
+      } as never);
+      mockFindOneAndUpdate.mockResolvedValue(null as never);
+
+      await handleVerifyEmail(baseParams as never);
+
+      expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
     });
 
     test('redirects with error when token is invalid', async () => {

@@ -15,6 +15,8 @@ import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { createSession, setAuthTokenCookie } from './session';
 
+const USER_COLLATION = { locale: 'en', strength: 2 } as const;
+
 async function verifyEmailToken(token: string) {
   const tokenDoc = await emailVerificationTokensCollection.findOne({
     token,
@@ -40,33 +42,47 @@ async function verifyEmailToken(token: string) {
     throw new Error('Email not found in token');
   }
 
-  // Mark the specific email as verified atomically, returning the updated doc
+  // Mark the specific email as verified atomically, returning the updated doc.
+  // `$elemMatch` keeps both conditions bound to a single array element: with two
+  // independent dotted predicates, `'emails.verified': { $ne: true }` means "no
+  // element is verified", so any account already holding one verified address
+  // could never verify another, and the positional `$` had no guarantee of
+  // binding to the element carrying `address`.
+  // Same strength-2 collation as the lookups: the token always carries a
+  // lowercased address (validateEmail) while the stored address may keep its
+  // original casing (e.g. OAuth-created accounts), or the match silently fails.
   const updatedUserDoc = await usersCollection.findOneAndUpdate(
     {
       _id: tokenDoc.userId,
       status: { $nin: ['deleted', 'disabled'] },
-      'emails.address': email,
-      'emails.verified': { $ne: true },
+      emails: { $elemMatch: { address: email, verified: { $ne: true } } },
     },
     { $set: { 'emails.$.verified': true } },
-    { returnDocument: 'after' }
+    { collation: USER_COLLATION, returnDocument: 'after' }
   );
 
-  if (!updatedUserDoc) {
-    const existingUser = await usersCollection.findOne({
-      _id: tokenDoc.userId,
-      'emails.address': email,
-    });
+  // Consume the token regardless of the update outcome: it has now been
+  // presented, and leaving it spendable until its 24h expiry lets a token that
+  // always fails be replayed.
+  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
 
-    if (existingUser) {
-      throw new Error('Email is already verified');
-    } else {
+  if (!updatedUserDoc) {
+    // Distinguish "already verified" from "not this user's address" by checking
+    // the specific element, mirroring handleResendEmailVerification. The prior
+    // check only matched on address, so an address that failed to verify for any
+    // other reason was still reported as already verified.
+    const existingEmailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
+
+    if (!existingEmailDoc) {
       throw new Error('Email address not found for this user');
     }
-  }
 
-  // Delete the used token
-  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+    if (existingEmailDoc.verified) {
+      throw new Error('Email is already verified');
+    }
+
+    throw new Error('Unable to verify email address');
+  }
 
   return { userDoc: updatedUserDoc, email };
 }
