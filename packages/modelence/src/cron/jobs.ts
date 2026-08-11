@@ -107,10 +107,11 @@ async function tickCronJobs() {
   }
 
   Object.values(cronJobs).forEach(async (job) => {
-    const { params, state } = job;
+    const { alias, params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
-        // TODO: log cron trace timeout error
+        const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
+        captureError(timeoutError);
         state.isRunning = false;
       }
       return;

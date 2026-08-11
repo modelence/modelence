@@ -3,6 +3,7 @@ import { MongoServerError } from 'mongodb';
 import { usersCollection } from './db';
 import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
+import { ValidationError } from '../error';
 
 /**
  * Detects the duplicate-key error thrown when the unique `emails.address` index
@@ -148,7 +149,7 @@ export async function resolveUniqueHandle(
       );
 
       if (existing) {
-        throw new Error('Handle already taken.');
+        throw new ValidationError('Handle already taken.');
       }
 
       return handle;
