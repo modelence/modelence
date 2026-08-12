@@ -226,4 +226,27 @@ describe('cron/jobs', () => {
     const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
+
+  test('cron loop recovers when the lastStartDate write fails', async () => {
+    const handler = vi.fn(async () => {});
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    cronStoreMocks.upsertOne.mockRejectedValue(new Error('write failed') as never);
+    defineCronJob('hourly', {
+      description: '',
+      interval: mockSeconds(10),
+      handler,
+    });
+
+    await startCronJobs();
+    await intervalCallback?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // With the write outside the try/catch, its rejection escaped runCronJob,
+    // so the error was never captured and isRunning was left true, wedging the
+    // job until its timeout. It must be caught and the run marked as errored.
+    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
+    expect(transaction.end).toHaveBeenCalledWith('error');
+  });
 });
