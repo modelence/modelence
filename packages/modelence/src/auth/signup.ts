@@ -87,6 +87,14 @@ export async function handleSignupWithPassword(
       ...profileFields,
     });
 
+    // Runs on every password-setting path (see `resetPassword`), so a policy
+    // configured here can't be bypassed by resetting to a weaker password.
+    await authConfig.validatePassword?.({
+      password,
+      email,
+      context: 'signup',
+    });
+
     // Resolve unique handle
     let resolvedHandle: string;
 

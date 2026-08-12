@@ -22,7 +22,7 @@ Modelence authentication includes:
 
 Modelence splits authentication configuration across two top-level keys in `startApp`:
 
-- **`auth: { ... }`** — authentication *lifecycle*: validation hooks (`validateSignup`, `validateProfileUpdate`), event callbacks (`onAfterLogin`, `onAfterSignup`, `onAfterEmailVerification`, …), `generateHandle`, OAuth linking behavior, and `rateLimits`. See [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) and [Hooks](/authentication/hooks).
+- **`auth: { ... }`** — authentication *lifecycle*: validation hooks (`validateSignup`, `validatePassword`, `validateProfileUpdate`), event callbacks (`onAfterLogin`, `onAfterSignup`, `onAfterEmailVerification`, …), `generateHandle`, OAuth linking behavior, and `rateLimits`. See [AuthConfig](/api-reference/modelence/server/type-aliases/AuthConfig) and [Hooks](/authentication/hooks).
 - **`email: { ... }`** — email *delivery*: the email provider, sender address, and per-flow templates/subjects/redirect URLs for `verification` and `passwordReset`. See [Email Configuration](/email).
 
 The two are complementary: `email:` controls whether and how the verification/reset email is delivered; `auth:` controls what happens when the user clicks the link (and the rest of the auth lifecycle).
@@ -58,10 +58,11 @@ When a user signs up with email and password:
 1. **Validation** - Email format and password strength are validated
 2. **Duplicate Check** - System checks if email already exists
 3. **Validate Signup** (Optional) - If provided, validates signup using `validateSignup` hook
-4. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
-5. **User Creation** - User record is created in the `_modelenceUsers` collection
-6. **Session Linking** - The session is linked to the new user
-7. **Email Verification** (Optional) - If enabled, a verification email is sent
+4. **Validate Password** (Optional) - If provided, the `validatePassword` hook enforces your password policy. This hook also runs on password reset, so a policy set here can't be bypassed by resetting to a weaker password.
+5. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+6. **User Creation** - User record is created in the `_modelenceUsers` collection
+7. **Session Linking** - The session is linked to the new user
+8. **Email Verification** (Optional) - If enabled, a verification email is sent
 
 #### Login Process
 
