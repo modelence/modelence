@@ -94,8 +94,6 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-eslint": "^1.8.1",
-    "winston": "^3.15.0",
-    "winston-elasticsearch": "^0.19.0",
     "zod": "^3.23.8",
     "zustand": "^5.0.2"
   },

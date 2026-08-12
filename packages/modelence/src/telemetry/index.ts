@@ -1,4 +1,4 @@
-import { getLogger, getApm, isLoggerReady } from '@/app/metrics';
+import { getApm } from '@/app/metrics';
 import { isTelemetryEnabled } from '@/app/state';
 
 type LogLevel = 'error' | 'info' | 'debug' | '';
@@ -29,44 +29,28 @@ export function redactSensitive(value: unknown): unknown {
 /**
  * Gets the logging level for console logs based on the MODELENCE_LOG_LEVEL environment variable.
  *
- * @returns The log level ('error' | 'info' | 'debug' | '')
+ * Logs go to stdout/stderr only, where the hosting infrastructure (e.g. CloudWatch
+ * via the container log driver) picks them up.
  *
- * Behavior:
- * - If MODELENCE_LOG_LEVEL is set, returns that value
- * - If telemetry is disabled and MODELENCE_LOG_LEVEL is not set, defaults to 'info'
- * - If telemetry is enabled and MODELENCE_LOG_LEVEL is not set, returns '' (no console logging)
+ * @returns The log level ('error' | 'info' | 'debug'), defaulting to 'info'
  */
 function getLogLevel(): LogLevel {
-  let defaultLoglevel: LogLevel = '';
-  if (!isTelemetryEnabled()) {
-    defaultLoglevel = 'info';
-  }
-
-  return (process.env.MODELENCE_LOG_LEVEL as LogLevel) || defaultLoglevel;
+  return (process.env.MODELENCE_LOG_LEVEL as LogLevel) || 'info';
 }
 
 export function logDebug(message: string, args: object) {
-  if (isTelemetryEnabled() && isLoggerReady()) {
-    getLogger().debug(message, args);
-  }
   if (getLogLevel() === 'debug') {
     console.debug(message, args);
   }
 }
 
 export function logInfo(message: string, args: object) {
-  if (isTelemetryEnabled() && isLoggerReady()) {
-    getLogger().info(message, args);
-  }
   if (['debug', 'info'].includes(getLogLevel())) {
     console.info(message, args);
   }
 }
 
 export function logError(message: string, args: object) {
-  if (isTelemetryEnabled() && isLoggerReady()) {
-    getLogger().error(message, args);
-  }
   if (['debug', 'info', 'error'].includes(getLogLevel())) {
     console.error(message, args);
   }

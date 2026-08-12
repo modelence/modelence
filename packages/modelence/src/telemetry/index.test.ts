@@ -1,14 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockGetLogger = vi.fn();
 const mockGetApm = vi.fn();
 const mockIsTelemetryEnabled = vi.fn();
-const mockIsLoggerReady = vi.fn();
 
 vi.doMock('@/app/metrics', () => ({
-  getLogger: mockGetLogger,
   getApm: mockGetApm,
-  isLoggerReady: mockIsLoggerReady,
 }));
 
 vi.doMock('@/app/state', () => ({
@@ -73,22 +69,8 @@ describe('telemetry/index', () => {
     consoleError.mockRestore();
   });
 
-  test('logDebug uses logger when telemetry enabled and console when log level is debug', () => {
+  test('logDebug logs to console when log level is debug', () => {
     process.env.MODELENCE_LOG_LEVEL = 'debug';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
-
-    telemetry.logDebug('debug-msg', { foo: 'bar' });
-
-    expect(logger.debug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
-    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
-  });
-
-  test('logDebug uses only console when telemetry disabled and log level is debug', () => {
-    process.env.MODELENCE_LOG_LEVEL = 'debug';
-    mockIsTelemetryEnabled.mockReturnValue(false);
 
     telemetry.logDebug('debug-msg', { foo: 'bar' });
 
@@ -97,101 +79,58 @@ describe('telemetry/index', () => {
 
   test('logDebug does not log to console when log level is not debug', () => {
     process.env.MODELENCE_LOG_LEVEL = 'info';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logDebug('debug-msg', { foo: 'bar' });
 
-    expect(logger.debug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
     expect(consoleDebug).not.toHaveBeenCalled();
   });
 
-  test('logInfo uses logger when telemetry enabled and console when log level allows', () => {
+  test('logDebug does not log to console by default', () => {
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
+
+    expect(consoleDebug).not.toHaveBeenCalled();
+  });
+
+  test('logInfo logs to console for debug and info levels', () => {
     process.env.MODELENCE_LOG_LEVEL = 'info';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
-
     telemetry.logInfo('info-msg', { foo: 'bar' });
+    expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
 
-    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+    consoleInfo.mockClear();
+    process.env.MODELENCE_LOG_LEVEL = 'debug';
+    telemetry.logInfo('info-msg', { foo: 'bar' });
     expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
   });
 
-  test('logInfo logs to console when log level is debug', () => {
-    process.env.MODELENCE_LOG_LEVEL = 'debug';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
-
+  test('logInfo logs to console by default', () => {
     telemetry.logInfo('info-msg', { foo: 'bar' });
 
-    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
     expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
   });
 
   test('logInfo does not log to console when log level is error', () => {
     process.env.MODELENCE_LOG_LEVEL = 'error';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
 
     telemetry.logInfo('info-msg', { foo: 'bar' });
 
-    expect(logger.info).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
     expect(consoleInfo).not.toHaveBeenCalled();
   });
 
-  test('logError uses logger when telemetry enabled and console when log level allows', () => {
-    process.env.MODELENCE_LOG_LEVEL = 'error';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
+  test('logError logs to console for debug, info and error levels', () => {
+    for (const level of ['debug', 'info', 'error']) {
+      consoleError.mockClear();
+      process.env.MODELENCE_LOG_LEVEL = level;
 
-    telemetry.logError('error-msg', { foo: 'bar' });
+      telemetry.logError('error-msg', { foo: 'bar' });
 
-    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
-    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+      expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+    }
   });
 
-  test('logError uses console when telemetry disabled and log level allows', () => {
-    process.env.MODELENCE_LOG_LEVEL = 'error';
-    mockIsTelemetryEnabled.mockReturnValue(false);
-
+  test('logError logs to console by default', () => {
     telemetry.logError('error-msg', { foo: 'bar' });
 
     expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
-  });
-
-  test('logError logs to console for debug and info levels', () => {
-    process.env.MODELENCE_LOG_LEVEL = 'info';
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
-
-    telemetry.logError('error-msg', { foo: 'bar' });
-
-    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
-    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
-  });
-
-  test('logError does not log to console when log level is not set', () => {
-    mockIsTelemetryEnabled.mockReturnValue(true);
-    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
-    mockGetLogger.mockReturnValue(logger);
-    mockIsLoggerReady.mockReturnValue(true);
-
-    telemetry.logError('error-msg', { foo: 'bar' });
-
-    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
-    expect(consoleError).not.toHaveBeenCalled();
   });
 
   test('startTransaction returns noop handlers when telemetry disabled', () => {
