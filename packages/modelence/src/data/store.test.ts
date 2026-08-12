@@ -208,7 +208,9 @@ describe('data/store', () => {
     await expect(store.createIndexes()).rejects.toBe(duplicateError);
 
     expect(consoleError).toHaveBeenCalledTimes(1);
-    const report = consoleError.mock.calls[0]?.[0] as string;
+    const [message, context] = consoleError.mock.calls[0] as [string, { report?: string }];
+    expect(message).toBe('Unique index creation failed on existing data');
+    const report = context?.report;
     expect(report).toContain('[modelence:index-error]');
     expect(report).toContain("collection 'testCollection'");
     expect(report).toContain('db.getCollection("testCollection").aggregate(');

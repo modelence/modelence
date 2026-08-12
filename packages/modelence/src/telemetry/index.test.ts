@@ -194,6 +194,71 @@ describe('telemetry/index', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
+  test('logError falls back to console when logger is not ready and log level is not set', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    mockIsLoggerReady.mockReturnValue(false);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(mockGetLogger).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+  });
+
+  test('logError stops console output once the logger is ready without a log level', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
+    mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
+
+    telemetry.logError('error-msg', { foo: 'bar' });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', { foo: 'bar' });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  test('logInfo and logDebug fall back to console when logger is not ready', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    mockIsLoggerReady.mockReturnValue(false);
+
+    telemetry.logInfo('info-msg', { foo: 'bar' });
+    telemetry.logDebug('debug-msg', { foo: 'bar' });
+
+    expect(consoleInfo).toHaveBeenCalledWith('info-msg', { foo: 'bar' });
+    expect(consoleDebug).toHaveBeenCalledWith('debug-msg', { foo: 'bar' });
+  });
+
+  test('logError normalizes Error instances for the remote sink', () => {
+    process.env.MODELENCE_LOG_LEVEL = 'error';
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
+    mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
+    const error = new Error('boom');
+
+    telemetry.logError('error-msg', { path: '/api/x', error });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', {
+      path: '/api/x',
+      error: { message: 'boom', stack: error.stack, name: 'Error' },
+    });
+    expect(consoleError).toHaveBeenCalledWith('error-msg', { path: '/api/x', error });
+  });
+
+  test('logError redacts sensitive keys before sending to the remote sink', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const logger = { debug: vi.fn(), info: vi.fn(), error: vi.fn() };
+    mockGetLogger.mockReturnValue(logger);
+    mockIsLoggerReady.mockReturnValue(true);
+
+    telemetry.logError('error-msg', { token: 'raw', nested: { authToken: 't' }, email: 'a@b.com' });
+
+    expect(logger.error).toHaveBeenCalledWith('error-msg', {
+      token: '[redacted]',
+      nested: { authToken: '[redacted]' },
+      email: 'a@b.com',
+    });
+  });
+
   test('startTransaction returns noop handlers when telemetry disabled', () => {
     mockIsTelemetryEnabled.mockReturnValue(false);
 

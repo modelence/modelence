@@ -840,14 +840,12 @@ describe('auth/magicLink', () => {
           expect(onAfterEmailVerification).toHaveBeenCalled();
           expect(onAfterLogin).toHaveBeenCalled();
           // Both failures are logged, not swallowed silently.
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterEmailVerification hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterLogin hook:',
-            expect.any(Error)
-          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith('Error in onAfterEmailVerification hook', {
+            error: expect.any(Error),
+          });
+          expect(consoleErrorSpy).toHaveBeenCalledWith('Error in onAfterLogin hook', {
+            error: expect.any(Error),
+          });
         } finally {
           consoleErrorSpy.mockRestore();
         }

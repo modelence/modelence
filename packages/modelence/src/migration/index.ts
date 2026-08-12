@@ -1,7 +1,7 @@
 import { acquireLock, releaseLock } from '@/lock';
 import { Module } from '../app/module';
 import { dbMigrations } from './db';
-import { logInfo } from '../telemetry';
+import { logInfo, logError } from '../telemetry';
 
 export type MigrationScript = {
   version: number;
@@ -109,7 +109,7 @@ export async function runMigrations(
 export function startMigrations(migrations: MigrationScript[]) {
   setTimeout(() => {
     runMigrations(migrations).catch((err) => {
-      console.error('Error running migrations:', err);
+      logError('Migration startup failed', { error: err });
     });
   }, 0);
 }

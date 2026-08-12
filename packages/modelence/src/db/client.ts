@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import systemModule from '../system';
+import { logError } from '../telemetry';
 import packageJson from '../../package.json';
 
 let client: MongoClient | null = null;
@@ -31,7 +32,7 @@ export async function connect() {
     console.log('Pinged your deployment. You successfully connected to MongoDB!');
     return client;
   } catch (err) {
-    console.error(err);
+    logError('MongoDB connection failed', { error: err });
     client = null;
     throw err;
   }

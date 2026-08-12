@@ -8,6 +8,7 @@ const mockStartTransaction = vi.fn(() => ({
   end: vi.fn(),
 }));
 const mockCaptureError = vi.fn();
+const mockLogError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
 const mockGetMongodbUri = vi.fn();
 
@@ -28,6 +29,7 @@ function registerMocks() {
   vi.doMock('@/telemetry', () => ({
     startTransaction: mockStartTransaction,
     captureError: mockCaptureError,
+    logError: mockLogError,
   }));
 
   vi.doMock('../data/store', () => ({

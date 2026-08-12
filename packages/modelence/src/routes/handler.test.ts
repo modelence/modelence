@@ -33,6 +33,7 @@ function redactSensitive(value: unknown): unknown {
 vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
+  logError: vi.fn(),
 }));
 
 const { ValidationError } = await import('../error');

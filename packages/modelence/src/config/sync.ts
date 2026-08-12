@@ -2,6 +2,7 @@ import { time } from '../time';
 import { fetchConfigs, syncStatus } from '../app/backendApi';
 import { getLocalConfigs } from './local';
 import { loadConfigs, getSchema } from './server';
+import { logError } from '../telemetry';
 import { AppConfig } from './types';
 
 let isSyncing = false;
@@ -20,13 +21,13 @@ export function startConfigSync() {
     try {
       await syncStatus();
     } catch (error) {
-      console.error('Error syncing status', error);
+      logError('Config sync status failed', { error });
     }
 
     try {
       await syncConfig();
     } catch (error) {
-      console.error('Error syncing config', error);
+      logError('Config sync failed', { error });
     }
 
     isSyncing = false;
