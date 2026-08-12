@@ -6,6 +6,7 @@ import { Args, Context } from '@/methods/types';
 import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { usersCollection, resetPasswordTokensCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
+import { getAuthConfig } from '@/app/authConfig';
 import { time } from '@/time';
 import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
@@ -245,6 +246,20 @@ export async function handleResetPassword(args: Args, context: Context) {
   if (!userDoc) {
     throw new Error('User not found');
   }
+
+  // App-level password policy. Runs before the token is claimed below, so a
+  // rejected password leaves the link valid and the user can retry with a
+  // compliant one — same rationale as the deferred token lookup above.
+  //
+  // Legacy tokens predate the `email` field (see the guard on the verify write
+  // below), so fall back to the user's first stored address. The hook still
+  // runs either way: skipping the policy for those tokens would reopen the very
+  // bypass it exists to close.
+  await getAuthConfig().validatePassword?.({
+    password,
+    email: resetTokenDoc.email ?? userDoc.emails?.[0]?.address?.toLowerCase() ?? '',
+    context: 'reset',
+  });
 
   // Hash the new password
   const hash = await bcrypt.hash(password, 10);

@@ -90,12 +90,14 @@ describe('auth/signup', () => {
     onAfterSignup: ReturnType<typeof vi.fn>;
     onSignupError: ReturnType<typeof vi.fn>;
     onBeforeSignup?: ReturnType<typeof vi.fn>;
+    validatePassword?: ReturnType<typeof vi.fn>;
     allowDisposableEmails?: boolean;
     signup: { onSuccess: ReturnType<typeof vi.fn>; onError: ReturnType<typeof vi.fn> };
   } = {
     onAfterSignup: vi.fn(),
     onSignupError: vi.fn(),
     onBeforeSignup: vi.fn(),
+    validatePassword: vi.fn(),
     signup: {
       onSuccess: vi.fn(),
       onError: vi.fn(),
@@ -106,6 +108,7 @@ describe('auth/signup', () => {
     vi.clearAllMocks();
     authConfig.allowDisposableEmails = false;
     authConfig.onBeforeSignup = vi.fn();
+    authConfig.validatePassword = vi.fn();
     mockGetAuthConfig.mockReturnValue(authConfig as never);
     mockValidateEmail.mockImplementation((v: unknown) => v);
     mockValidatePassword.mockImplementation((v: unknown) => v);
@@ -159,6 +162,46 @@ describe('auth/signup', () => {
 
     // The inserted document should use the email-derived handle
     expect(mockInsertOne).toHaveBeenCalledWith(expect.objectContaining({ handle: 'test' }));
+  });
+
+  test('runs the validatePassword hook with the signup context', async () => {
+    const insertedId = createObjectId('user-vp');
+    mockInsertOne.mockResolvedValue({ insertedId } as never);
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: insertedId,
+      handle: 'test',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'test@example.com', verified: false }],
+    } as never);
+
+    await handleSignupWithPassword(
+      { email: 'test@example.com', password: 'Secret123' },
+      baseContext
+    );
+
+    expect(authConfig.validatePassword).toHaveBeenCalledWith({
+      password: 'Secret123',
+      email: 'test@example.com',
+      context: 'signup',
+    });
+  });
+
+  test('rejects the signup when validatePassword throws, without creating a user', async () => {
+    authConfig.validatePassword = vi.fn(() => {
+      throw new Error('Password must be at least 12 characters');
+    });
+    mockFindOne.mockResolvedValueOnce(null as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Password must be at least 12 characters');
+
+    expect(mockHash).not.toHaveBeenCalled();
+    expect(mockInsertOne).not.toHaveBeenCalled();
+    expect(mockSendVerificationEmail).not.toHaveBeenCalled();
+    // A rejected password is a signup failure like any other.
+    expect(authConfig.onSignupError).toHaveBeenCalled();
   });
 
   test('uses provided handle when supplied', async () => {
