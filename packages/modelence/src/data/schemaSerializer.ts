@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ModelSchema } from './types';
+import { ModelSchema, isFieldPrivate } from './types';
 
 type ObjectTypeDefinition = {
   [key: string]: z.ZodType | ObjectTypeDefinition | Array<z.ZodType | ObjectTypeDefinition>;
@@ -48,7 +48,7 @@ type ZodEffectsDef = ZodDefWithTypeName & {
   description?: string;
 };
 
-type BaseSerializedSchema =
+type BaseSerializedSchema = (
   | { type: 'string' }
   | { type: 'number' }
   | { type: 'boolean' }
@@ -57,14 +57,26 @@ type BaseSerializedSchema =
   | { type: 'object'; items: Record<string, SerializedSchema> }
   | { type: 'enum'; items: readonly string[] }
   | { type: 'union'; items: SerializedSchema[] }
-  | { type: 'custom'; typeName: string };
+  | { type: 'custom'; typeName: string }
+) & {
+  optional?: true;
+  private?: true;
+};
 
-type SerializedSchema = BaseSerializedSchema | (BaseSerializedSchema & { optional: true });
+type SerializedSchema = BaseSerializedSchema;
 
 /**
  * Serializes a Zod schema to a JSON-serializable format
  */
 function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
+  const result = serializeZodSchemaInternal(zodType);
+  if (isFieldPrivate(zodType)) {
+    return { ...result, private: true };
+  }
+  return result;
+}
+
+function serializeZodSchemaInternal(zodType: z.ZodType): SerializedSchema {
   const def = zodType._def as ZodDefWithTypeName;
 
   if (def.typeName === 'ZodString') {

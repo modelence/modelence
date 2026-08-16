@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { serializeModelSchema } from './schemaSerializer';
+import { schema } from './types';
 
 describe('data/schemaSerializer', () => {
   describe('serializeModelSchema - primitive types', () => {
@@ -716,6 +717,52 @@ describe('data/schemaSerializer', () => {
       expect(result['field-name']).toEqual({ type: 'string' });
       expect(result['field_name']).toEqual({ type: 'number' });
       expect(result['field.name']).toEqual({ type: 'boolean' });
+    });
+  });
+
+  describe('serializeModelSchema - private fields', () => {
+    test('serializes top-level, nested, and parent private fields correctly', () => {
+      const testSchema = {
+        name: schema.string(),
+        password: schema.string().private(),
+        info: schema.object({
+          abc: schema.object({
+            baba: schema.number().private(),
+            mbapu: schema.number(),
+          }),
+        }),
+        secretParent: schema
+          .object({
+            token: schema.string(),
+          })
+          .private(),
+      };
+
+      const result = serializeModelSchema(testSchema);
+
+      expect(result).toEqual({
+        name: { type: 'string' },
+        password: { type: 'string', private: true },
+        info: {
+          type: 'object',
+          items: {
+            abc: {
+              type: 'object',
+              items: {
+                baba: { type: 'number', private: true },
+                mbapu: { type: 'number' },
+              },
+            },
+          },
+        },
+        secretParent: {
+          type: 'object',
+          private: true,
+          items: {
+            token: { type: 'string' },
+          },
+        },
+      });
     });
   });
 });

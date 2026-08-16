@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { schema } from './types';
+import { schema, isFieldPrivate, extractPrivateFieldPaths } from './types';
 
 describe('data/types', () => {
   describe('schema.string', () => {
@@ -141,6 +142,262 @@ describe('data/types', () => {
     });
   });
 
+  describe('schema.private', () => {
+    test('should mark string, number, and optional schema fields as private', () => {
+      const s = schema.string().private();
+      const n = schema.number().private();
+      const opt = schema.string().optional().private();
+      const optReverse = schema.string().private().optional();
+
+      expect(isFieldPrivate(s)).toBe(true);
+      expect(isFieldPrivate(n)).toBe(true);
+      expect(isFieldPrivate(opt)).toBe(true);
+      expect(isFieldPrivate(optReverse)).toBe(true);
+    });
+
+    test('should provide inferFetched helper', () => {
+      const testSchema = {
+        name: schema.string(),
+        password: schema.string().private(),
+      };
+      const inferred = schema.inferFetched(testSchema);
+      expect(inferred).toBeDefined();
+    });
+
+    test('should accurately infer types for InferDocumentType, InferFetchedDocumentType, and InferSelectedDocumentType', () => {
+      const _testSchema = {
+        name: schema.string(),
+        email: schema.string(),
+        password: schema.string().private(),
+        secretPin: schema.number().private(),
+        bio: schema.string().optional(),
+        optionalPrivate: schema.string().optional().private(),
+      };
+
+      type FullDoc = schema.infer<typeof _testSchema>;
+      type FetchedDoc = schema.inferFetched<typeof _testSchema>;
+      type SelectedDoc = schema.inferSelected<typeof _testSchema, 'password'>;
+
+      const fullDoc: FullDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+        password: 'secret',
+        secretPin: 1234,
+      };
+      expect(fullDoc.password).toBe('secret');
+
+      const fetchedDoc: FetchedDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+      };
+      expect(fetchedDoc.name).toBe('Alice');
+
+      // @ts-expect-error password is a private field and should not exist on fetched doc
+      void fetchedDoc.password;
+      // @ts-expect-error secretPin is a private field and should not exist on fetched doc
+      void fetchedDoc.secretPin;
+
+      const selectedDoc: SelectedDoc = {
+        name: 'Alice',
+        email: 'alice@example.com',
+        password: 'secret',
+      };
+      expect(selectedDoc.password).toBe('secret');
+
+      // @ts-expect-error secretPin was not selected and should not exist on selected doc
+      void selectedDoc.secretPin;
+    });
+
+    test('isFieldPrivate should identify nullable and default private fields', () => {
+      const nullablePrivate = schema.string().private().nullable();
+      const defaultPrivate = schema.string().private().default('secret');
+
+      expect(isFieldPrivate(nullablePrivate)).toBe(true);
+      expect(isFieldPrivate(defaultPrivate)).toBe(true);
+    });
+
+    test('extractPrivateFieldPaths should recursively extract nested and parent private field paths', () => {
+      const userProfileSchema = {
+        username: schema.string(),
+        metadata: schema.object({
+          internal: schema.object({
+            pin: schema.number().private(),
+            score: schema.number(),
+          }),
+        }),
+        securityCredentials: schema
+          .object({
+            token: schema.string(),
+          })
+          .private(),
+      };
+
+      const paths = extractPrivateFieldPaths(userProfileSchema);
+      expect(paths).toEqual(['metadata.internal.pin', 'securityCredentials']);
+
+      type ProfileFetched = schema.inferFetched<typeof userProfileSchema>;
+
+      const fetched: ProfileFetched = {
+        username: 'alice',
+        metadata: {
+          internal: {
+            score: 100,
+          },
+        },
+      };
+
+      expect(fetched.metadata.internal.score).toBe(100);
+      // @ts-expect-error pin is private inside nested object and should not exist on fetched doc
+      void fetched.metadata.internal.pin;
+      // @ts-expect-error securityCredentials is a private parent field and should not exist on fetched doc
+      void fetched.securityCredentials;
+
+      type ProfileSelected = schema.inferSelected<typeof userProfileSchema, 'securityCredentials'>;
+
+      const selected: ProfileSelected = {
+        username: 'alice',
+        metadata: {
+          internal: {
+            score: 100,
+          },
+        },
+        securityCredentials: {
+          token: 'secret_token_123',
+        },
+      };
+
+      expect(selected.securityCredentials.token).toBe('secret_token_123');
+      // @ts-expect-error pin was not selected and should remain hidden
+      void selected.metadata.internal.pin;
+    });
+
+    test('selecting a private parent object should un-hide public fields but keep nested private fields hidden unless explicitly selected', () => {
+      const _userSchema = {
+        name: schema.string(),
+        credentials: schema
+          .object({
+            password: schema.string().private(),
+            emails: schema.string(),
+          })
+          .private(),
+      };
+
+      // Selecting only 'credentials' un-hides the object and its public field (emails), but keeps password hidden
+      type SelectedCreds = schema.inferSelected<typeof _userSchema, 'credentials'>;
+
+      const selectedCreds: SelectedCreds = {
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+        },
+      };
+
+      expect(selectedCreds.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials and was not explicitly selected
+      void selectedCreds.credentials.password;
+
+      // Selecting both 'credentials' and 'credentials.password' un-hides password as well
+      type SelectedBoth = schema.inferSelected<
+        typeof _userSchema,
+        'credentials' | 'credentials.password'
+      >;
+
+      const selectedBoth: SelectedBoth = {
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+          password: 'supersecret',
+        },
+      };
+
+      expect(selectedBoth.credentials.password).toBe('supersecret');
+    });
+
+    test('extractPrivateFieldPaths and inferFetched should handle private fields inside ZodArray element schemas', () => {
+      const teamSchema = {
+        name: schema.string(),
+        members: schema.array(
+          schema.object({
+            name: schema.string(),
+            passcode: schema.string().private(),
+          })
+        ),
+      };
+
+      const paths = extractPrivateFieldPaths(teamSchema);
+      expect(paths).toEqual(['members.passcode']);
+
+      type TeamFetched = schema.inferFetched<typeof teamSchema>;
+
+      const fetched: TeamFetched = {
+        name: 'DevTeam',
+        members: [{ name: 'Bob' }],
+      };
+
+      expect(fetched.members[0].name).toBe('Bob');
+      // @ts-expect-error passcode inside array items is private and should not exist on fetched doc
+      void fetched.members[0].passcode;
+
+      type TeamSelected = schema.inferSelected<typeof teamSchema, 'members.passcode'>;
+
+      const selected: TeamSelected = {
+        name: 'DevTeam',
+        members: [{ name: 'Bob', passcode: '1234' }],
+      };
+
+      expect(selected.members[0].passcode).toBe('1234');
+    });
+
+    test('should allow selecting nested array private field', () => {
+      const _organizationSchema = {
+        name: schema.string(),
+        active: schema.boolean(),
+        apiKey: schema.string().private(),
+        teamSettings: schema.object({
+          memberEmails: schema.array(schema.string()).private(),
+          maxQuota: schema.number(),
+          region: schema.string(),
+        }),
+      };
+
+      type FetchedOrg = schema.inferFetched<typeof _organizationSchema>;
+
+      const fetched: FetchedOrg = {
+        name: 'Acme Corp',
+        active: true,
+        teamSettings: {
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      expect(fetched.teamSettings.maxQuota).toBe(500);
+      // @ts-expect-error apiKey is private and should not exist on fetched doc
+      void fetched.apiKey;
+      // @ts-expect-error teamSettings.memberEmails is private and should not exist on fetched doc
+      void fetched.teamSettings.memberEmails;
+
+      type SelectedOrg = schema.inferSelected<
+        typeof _organizationSchema,
+        'apiKey' | 'teamSettings.memberEmails'
+      >;
+
+      const selected: SelectedOrg = {
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com', 'dev@acme.com'],
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      expect(selected.apiKey).toBe('key_live_12345');
+      expect(selected.teamSettings.memberEmails).toEqual(['admin@acme.com', 'dev@acme.com']);
+    });
+  });
+
   describe('complex schema combinations', () => {
     test('should work with nested schemas', () => {
       const userSchema = schema.object({
@@ -171,6 +428,165 @@ describe('data/types', () => {
         username: 'bob',
         bio: 'Hello',
       });
+    });
+
+    test('.private() does not contaminate other schema instances', () => {
+      // Two independently-created schemas of the same type.
+      const publicStringSchema = schema.string();
+      const privateStringSchema = schema.string().private();
+
+      // Only the explicitly-marked instance should be considered private.
+      expect(isFieldPrivate(publicStringSchema)).toBe(false);
+      expect(isFieldPrivate(privateStringSchema)).toBe(true);
+
+      const testSchema = {
+        publicField: publicStringSchema,
+        privateField: privateStringSchema,
+      };
+
+      const privatePaths = extractPrivateFieldPaths(testSchema);
+      expect(privatePaths).toEqual(['privateField']);
+    });
+
+    test('InferFetchedDocumentType recursively strips private fields from optional/nullable/default/effects-wrapped objects', () => {
+      const _targetSchema = {
+        title: schema.string(),
+        optionalObj: schema
+          .object({
+            publicBio: schema.string(),
+            secretPin: schema.number().private(),
+          })
+          .optional(),
+        nullableObj: schema
+          .object({
+            publicNote: schema.string(),
+            secretKey: schema.string().private(),
+          })
+          .nullable(),
+        effectsObj: schema
+          .object({
+            publicField: schema.string(),
+            secretField: schema.string().private(),
+          })
+          .refine(() => true),
+        brandedField: schema.string().private().brand<'ApiKey'>(),
+        readonlyObj: schema
+          .object({
+            publicProp: schema.string(),
+            secretProp: schema.string().private(),
+          })
+          .readonly(),
+        catchField: schema.string().private().catch('fallback'),
+      };
+
+      type Fetched = import('./types').InferFetchedDocumentType<typeof _targetSchema>;
+
+      expectTypeOf<Fetched>().toMatchTypeOf<{
+        title: string;
+        optionalObj?: { publicBio: string };
+        nullableObj: { publicNote: string } | null;
+        effectsObj: { publicField: string };
+        readonlyObj: { publicProp: string };
+      }>();
+
+      // @ts-expect-error brandedField was private and must be omitted from Fetched type
+      type _CheckBranded = Fetched['brandedField'];
+      // @ts-expect-error catchField was private and must be omitted from Fetched type
+      type _CheckCatch = Fetched['catchField'];
+    });
+
+    test('extractPrivateFieldPaths and isFieldPrivate handle ZodUnion, ZodBranded, ZodReadonly, ZodCatch, and ZodEffects wrappers', () => {
+      // 1. ZodUnion
+      const unionSchema = {
+        auth: schema.union([
+          z.object({ username: schema.string(), password: schema.string().private() }),
+          z.object({ token: schema.string().private() }),
+        ]),
+      };
+      expect(extractPrivateFieldPaths(unionSchema)).toEqual(['auth.password', 'auth.token']);
+
+      // 2. ZodBranded (both top-level branded primitive and nested branded object)
+      const brandedSchema = {
+        apiKey: schema.string().private().brand<'ApiKey'>(),
+        brandedConfig: z
+          .object({
+            secret: schema.string().private(),
+          })
+          .brand<'BrandedConfig'>(),
+      };
+      expect(isFieldPrivate(brandedSchema.apiKey)).toBe(true);
+      expect(extractPrivateFieldPaths(brandedSchema)).toEqual(['apiKey', 'brandedConfig.secret']);
+
+      // 3. ZodReadonly
+      const readonlySchema = {
+        config: schema
+          .object({
+            publicSetting: schema.string(),
+            privateKey: schema.string().private(),
+          })
+          .readonly(),
+      };
+      expect(extractPrivateFieldPaths(readonlySchema)).toEqual(['config.privateKey']);
+
+      // 4. ZodCatch (both top-level catch primitive and nested catch object)
+      const catchSchema = {
+        fallbackToken: schema.string().private().catch('default_token'),
+        catchObj: z
+          .object({
+            secretPin: schema.number().private(),
+          })
+          .catch({ secretPin: 0 }),
+      };
+      expect(isFieldPrivate(catchSchema.fallbackToken)).toBe(true);
+      expect(extractPrivateFieldPaths(catchSchema)).toEqual([
+        'fallbackToken',
+        'catchObj.secretPin',
+      ]);
+
+      // 5. ZodEffects
+      const effectsSchema = {
+        user: schema
+          .object({
+            id: schema.string(),
+            ssn: schema.string().private(),
+          })
+          .transform((val) => val),
+      };
+      expect(extractPrivateFieldPaths(effectsSchema)).toEqual(['user.ssn']);
+    });
+
+    test('InferFetchedDocumentType strips private fields inside ZodUnion branches and InferSelectedDocumentType restores them', () => {
+      const _unionSchema = {
+        auth: schema.union([
+          z.object({ username: schema.string(), password: schema.string().private() }),
+          z.object({ token: schema.string().private() }),
+        ]),
+      };
+
+      type UnionFetched = schema.inferFetched<typeof _unionSchema>;
+
+      // Private fields inside union branches must be stripped from fetched type
+      const fetched: UnionFetched = {
+        auth: { username: 'alice' },
+      };
+      expect(fetched.auth).toBeDefined();
+
+      expectTypeOf<UnionFetched['auth']>().not.toMatchTypeOf<{ password: string }>();
+      expectTypeOf<UnionFetched['auth']>().not.toMatchTypeOf<{ token: string }>();
+
+      // Selecting 'auth.password' should un-hide password in the type
+      type UnionSelected = schema.inferSelected<typeof _unionSchema, 'auth.password'>;
+
+      const selected: UnionSelected = {
+        auth: { username: 'alice', password: 'secret' },
+      };
+      expect(selected.auth).toBeDefined();
+      // The union branch that has 'password' should expose it; the type narrows correctly.
+      type AuthSelected = UnionSelected['auth'];
+      // Extract the branch that contains password — it must exist and be string
+      expectTypeOf<Extract<AuthSelected, { password: string }>>().toMatchTypeOf<{
+        password: string;
+      }>();
     });
   });
 });
