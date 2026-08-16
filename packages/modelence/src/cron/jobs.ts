@@ -127,7 +127,8 @@ async function tickCronJobs() {
 async function runCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
   state.isRunning = true;
-  state.startTs = Date.now();
+  const currentStartTs = Date.now();
+  state.startTs = currentStartTs;
 
   await cronJobsCollection.upsertOne(
     { alias },
@@ -141,10 +142,10 @@ async function runCronJob(job: CronJob) {
   // TODO: enforce job timeout
   try {
     await handler();
-    handleCronJobCompletion(state, params);
+    handleCronJobCompletion(state, params, currentStartTs);
     transaction.end('success');
   } catch (err) {
-    handleCronJobCompletion(state, params);
+    handleCronJobCompletion(state, params, currentStartTs);
     const error = err instanceof Error ? err : new Error(String(err));
     captureError(error);
     transaction.end('error');
@@ -152,8 +153,15 @@ async function runCronJob(job: CronJob) {
   }
 }
 
-function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
-  state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
+function handleCronJobCompletion(
+  state: CronJob['state'],
+  params: CronJob['params'],
+  currentStartTs: number
+) {
+  if (state.startTs !== currentStartTs) {
+    return;
+  }
+  state.scheduledRunTs = currentStartTs + params.interval;
   state.startTs = undefined;
   state.isRunning = false;
 }

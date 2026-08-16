@@ -223,9 +223,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 20 rules covering all auth buckets', () => {
+    test('produces exactly 22 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(20);
+      expect(rules).toHaveLength(22);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -237,8 +237,21 @@ describe('auth/user', () => {
           'passwordReset',
           'magicLink',
           'oneTimeCode',
+          'updateProfile',
         ])
       );
+    });
+
+    test('allows profile update limits to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        updateProfile: [{ type: 'user', window: 15 * 60 * 1000, limit: 10 }],
+      });
+
+      const profileRules = rules.filter((rule) => rule.bucket === 'updateProfile');
+      expect(profileRules).toEqual([
+        { bucket: 'updateProfile', type: 'user', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'updateProfile', type: 'user', window: 24 * 60 * 60 * 1000, limit: 200 },
+      ]);
     });
 
     test('array override merges into defaults by (bucket, type, window)', () => {
