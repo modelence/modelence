@@ -1,4 +1,5 @@
 export { LoginForm } from './components/LoginForm';
+export { MagicLinkForm } from './components/MagicLinkForm';
 export { SignupForm } from './components/SignupForm';
 export { UserMenu } from './components/UserMenu';
 export { UserProfile } from './components/UserProfile';

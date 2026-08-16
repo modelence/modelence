@@ -61,6 +61,27 @@ You can customize the appearance using className props:
 />
 ```
 
+## Passwordless magic-link sign-in
+
+After enabling magic links in your Modelence server configuration, render the
+included request form instead of building the email and confirmation UX yourself:
+
+```tsx
+import { MagicLinkForm } from '@modelence/auth-ui';
+
+<MagicLinkForm
+  renderLoginLink={({ className, children }) => (
+    <Link href="/login" className={className}>{children}</Link>
+  )}
+/>
+```
+
+The success state is intentionally generic, so it does not reveal whether an
+email address is registered. Configure a `redirectUrl` for magic links that
+calls `loginWithMagicLink()` to complete the sign-in. See the [magic-link
+guide](https://modelence.com/docs/authentication/magic-link) for the server
+configuration and completion route.
+
 ## Framework Support
 
 This library is framework-agnostic but includes special support for navigation:
