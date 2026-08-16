@@ -75,6 +75,8 @@ function registerModuleRoutes(app: express.Application, modules: Module[]) {
   }
 }
 
+let globalProcessListenersRegistered = false;
+
 export async function startServer(
   server: AppServer,
   {
@@ -161,18 +163,21 @@ export async function startServer(
     Promise.resolve(server.handler(req, res)).catch(next);
   });
 
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Promise Rejection:');
-    console.error(reason instanceof Error ? reason.stack : reason);
-    console.error('Promise:', promise);
-  });
+  if (!globalProcessListenersRegistered) {
+    globalProcessListenersRegistered = true;
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('Unhandled Promise Rejection:');
+      console.error(reason instanceof Error ? reason.stack : reason);
+      console.error('Promise:', promise);
+    });
 
-  // Global uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:');
-    console.error(error.stack); // This gives you the full stack trace
-    console.trace('Full application stack:'); // Additional context
-  });
+    // Global uncaught exceptions
+    process.on('uncaughtException', (error) => {
+      console.error('Uncaught Exception:');
+      console.error(error.stack); // This gives you the full stack trace
+      console.trace('Full application stack:'); // Additional context
+    });
+  }
 
   const websocketProvider = getWebsocketConfig()?.provider;
   if (websocketProvider) {
