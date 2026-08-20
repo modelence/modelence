@@ -113,6 +113,12 @@ async function recordProjectAppId(appId: string): Promise<void> {
 const CLAUDE_DIR = '.claude';
 const CLAUDE_SETTINGS_FILE = join(CLAUDE_DIR, 'settings.json');
 const CLAUDE_PLUGIN_ID = 'modelence@modelence';
+// Without the marketplace declared alongside enabledPlugins, Claude Code
+// can't resolve the plugin unless the user already ran
+// `claude plugin marketplace add` themselves.
+const CLAUDE_MARKETPLACES = {
+  modelence: { source: { source: 'github', repo: 'modelence/modelence' } },
+};
 
 /*
   Makes the Modelence Claude Code plugin available in connected projects that
@@ -135,7 +141,14 @@ async function ensureClaudePluginEnabled(): Promise<void> {
       await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
       await fs.writeFile(
         settingsPath,
-        JSON.stringify({ enabledPlugins: { [CLAUDE_PLUGIN_ID]: true } }, null, 2) + '\n'
+        JSON.stringify(
+          {
+            extraKnownMarketplaces: CLAUDE_MARKETPLACES,
+            enabledPlugins: { [CLAUDE_PLUGIN_ID]: true },
+          },
+          null,
+          2
+        ) + '\n'
       );
       console.log(`Enabled the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
     } catch (error) {
@@ -151,7 +164,8 @@ async function ensureClaudePluginEnabled(): Promise<void> {
       console.warn(
         `Note: the Modelence plugin is ${enabled === false ? 'disabled' : 'not enabled'} in ` +
           `${CLAUDE_SETTINGS_FILE}. To get Modelence tools and docs in Claude Code, add ` +
-          `"${CLAUDE_PLUGIN_ID}": true under "enabledPlugins".`
+          `"${CLAUDE_PLUGIN_ID}": true under "enabledPlugins", and declare the marketplace under ` +
+          `"extraKnownMarketplaces": ${JSON.stringify(CLAUDE_MARKETPLACES)}.`
       );
     }
   } catch {
