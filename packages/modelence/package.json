@@ -23,6 +23,9 @@
   "bin": {
     "modelence": "./dist/bin/modelence.js"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
