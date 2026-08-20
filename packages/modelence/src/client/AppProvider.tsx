@@ -63,6 +63,10 @@ export function AppProvider({ children, loadingElement, setupElement }: AppProvi
         if (_isReconciliationPending()) {
           await reconcileSession();
         }
+        // The initial useState read already saw the hydrated value, but only
+        // because hydrateSession() runs before the first render — re-read
+        // here so the setup screen doesn't depend on that ordering.
+        setNeedsSetup(_isSetupRequired());
         return;
       }
 
@@ -77,12 +81,17 @@ export function AppProvider({ children, loadingElement, setupElement }: AppProvi
   // While the setup screen is up, watch for the project getting connected
   // (setup writes .modelence.env and the user restarts the dev server) and
   // reload for a clean boot. Poll errors are expected mid-restart.
+  // Rescheduled after each poll settles, so requests never pile up while the
+  // dev server hangs mid-restart and background-tab throttling can't burst.
   useEffect(() => {
     if (!needsSetup) {
       return;
     }
 
-    const timer = setInterval(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function poll() {
       try {
         const { setupRequired } = await callMethod<{ setupRequired: boolean }>(
           '_system.setupStatus',
@@ -91,13 +100,22 @@ export function AppProvider({ children, loadingElement, setupElement }: AppProvi
         );
         if (!setupRequired) {
           window.location.reload();
+          return;
         }
       } catch {
         // Dev server restarting — keep polling.
       }
-    }, SETUP_POLL_INTERVAL);
+      if (!cancelled) {
+        timer = setTimeout(poll, SETUP_POLL_INTERVAL);
+      }
+    }
 
-    return () => clearInterval(timer);
+    timer = setTimeout(poll, SETUP_POLL_INTERVAL);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [needsSetup]);
 
   if (isLoading) {
