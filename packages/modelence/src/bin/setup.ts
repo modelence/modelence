@@ -110,6 +110,55 @@ async function recordProjectAppId(appId: string): Promise<void> {
   await fs.writeFile(projectPath, JSON.stringify({ ...existing, appId }, null, 2) + '\n');
 }
 
+const CLAUDE_DIR = '.claude';
+const CLAUDE_SETTINGS_FILE = join(CLAUDE_DIR, 'settings.json');
+const CLAUDE_PLUGIN_ID = 'modelence@modelence';
+
+/*
+  Makes the Modelence Claude Code plugin available in connected projects that
+  didn't start from the template (which ships this file). Only ever creates
+  the file: an existing settings.json is the user's own — a missing or
+  explicitly disabled plugin entry there gets a hint, not an edit, so a
+  deliberate opt-out is never flipped back on. The file is inert for people
+  who don't use Claude Code, and like the project file, failing to write it
+  doesn't fail the setup.
+*/
+async function ensureClaudePluginEnabled(): Promise<void> {
+  const settingsPath = join(process.cwd(), CLAUDE_SETTINGS_FILE);
+
+  let content: string;
+  try {
+    content = await fs.readFile(settingsPath, 'utf8');
+  } catch {
+    // Missing — create it with just the plugin enabled.
+    try {
+      await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
+      await fs.writeFile(
+        settingsPath,
+        JSON.stringify({ enabledPlugins: { [CLAUDE_PLUGIN_ID]: true } }, null, 2) + '\n'
+      );
+      console.log(`Enabled the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
+    } catch (error) {
+      console.warn(`Failed to create ${CLAUDE_SETTINGS_FILE}:`, error);
+    }
+    return;
+  }
+
+  try {
+    const settings = JSON.parse(content);
+    const enabled = settings?.enabledPlugins?.[CLAUDE_PLUGIN_ID];
+    if (enabled !== true) {
+      console.warn(
+        `Note: the Modelence plugin is ${enabled === false ? 'disabled' : 'not enabled'} in ` +
+          `${CLAUDE_SETTINGS_FILE}. To get Modelence tools and docs in Claude Code, add ` +
+          `"${CLAUDE_PLUGIN_ID}": true under "enabledPlugins".`
+      );
+    }
+  } catch {
+    console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE} to check the Modelence plugin status.`);
+  }
+}
+
 async function backupEnvFile(envPath: string): Promise<void> {
   try {
     const backupPath = envPath.replace('.env', '.backup.env');
@@ -189,6 +238,8 @@ export async function setup(options: { token?: string; host: string }) {
         console.warn(`Failed to record the app ID in ${MODELENCE_DIR}/${PROJECT_FILE}:`, error);
       }
     }
+
+    await ensureClaudePluginEnabled();
 
     if (fileExisted) {
       // Anything that read the old file holds stale credentials: the dev
