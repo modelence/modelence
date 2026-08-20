@@ -151,6 +151,17 @@ export async function startServer(
 
   const httpServer = http.createServer(app);
 
+  // Keep-alive must exceed the idle timeout of any load balancer in front of the
+  // app, or Node destroys pooled sockets the LB still considers live and requests
+  // dispatched onto them fail with intermittent 502s. Node's stock default is 5s,
+  // below every common LB idle timeout (AWS ALB defaults to 60s). This is the
+  // post-response idle timeout only; it never applies to an in-flight request.
+  const keepAliveTimeoutMs = Number(process.env.MODELENCE_KEEP_ALIVE_TIMEOUT_MS) || 65000;
+  httpServer.keepAliveTimeout = keepAliveTimeoutMs;
+  // Must exceed keepAliveTimeout, or requests whose headers are still in flight
+  // when keep-alive expires are dropped (nodejs/node#27363).
+  httpServer.headersTimeout = keepAliveTimeoutMs + 5000;
+
   await server.init({ httpServer });
 
   if (server.middlewares) {
