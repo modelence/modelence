@@ -121,6 +121,7 @@
                       "api-reference/modelence/server/functions/disableUser",
                       "api-reference/modelence/server/functions/downloadFile",
                       "api-reference/modelence/server/functions/getConfig",
+                      "api-reference/modelence/server/functions/getEnvironmentId",
                       "api-reference/modelence/server/functions/getFileUrl",
                       "api-reference/modelence/server/functions/getUploadUrl",
                       "api-reference/modelence/server/functions/invalidateAllUserSessions",
