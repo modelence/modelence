@@ -96,6 +96,29 @@ type GenerateHandleProps = {
 };
 
 /**
+ * The password-setting flow that invoked {@link AuthConfig.validatePassword}.
+ *
+ * Every path that writes a password hash passes one of these, so a policy can
+ * be uniform by default while still special-casing a flow if it needs to.
+ */
+export type PasswordContext = 'signup' | 'reset';
+
+/**
+ * Props passed to {@link AuthConfig.validatePassword}.
+ */
+export type ValidatePasswordProps = {
+  /** The candidate plaintext password, after the built-in length checks. */
+  password: string;
+  /**
+   * Lowercased email address of the account the password is being set on.
+   * Useful for rejecting passwords that contain the local-part.
+   */
+  email: string;
+  /** Which flow is setting the password. */
+  context: PasswordContext;
+};
+
+/**
  * Props passed to {@link AuthConfig.onBeforeSignup}.
  *
  * The hook fires after validation and the built-in disposable-email check,
@@ -173,6 +196,36 @@ export type AuthConfig = {
    * `firstName`, `lastName`, `avatarUrl`, `handle`). May be async.
    */
   validateSignup?: (props: SignupProps) => void | Promise<void>;
+
+  /**
+   * Password policy hook. Runs on **every** path that sets a password — signup
+   * and password reset today, plus any future change-password flow — after the
+   * built-in length checks (`MIN_PASSWORD_LENGTH`..`MAX_PASSWORD_LENGTH`) and
+   * before the password is hashed. Throw to reject the password; the thrown
+   * message is surfaced to the client.
+   *
+   * Prefer this over {@link AuthConfig.validateSignup} for password rules.
+   * `validateSignup` only runs at signup, so a policy enforced there alone can
+   * be bypassed by signing up with a compliant password and immediately
+   * resetting to a weaker one.
+   *
+   * Receives `{ password, email, context }`, where `context` is the flow that
+   * triggered the check (`'signup'` or `'reset'`). May be async.
+   *
+   * @example Enforce a 12-character minimum everywhere.
+   * ```typescript
+   * startApp({
+   *   auth: {
+   *     validatePassword: ({ password }) => {
+   *       if (password.length < 12) {
+   *         throw new Error('Password must be at least 12 characters');
+   *       }
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  validatePassword?: (props: ValidatePasswordProps) => void | Promise<void>;
 
   /**
    * Pre-update validation hook. Runs before a user's profile fields

@@ -17,9 +17,6 @@ startApp({
   auth: {
     validateSignup: ({ email, firstName, lastName, password, handle, avatarUrl }) => {
       // Custom validation logic
-      if (password.length < 12) {
-        throw new Error('Password must be at least 12 characters');
-      }
       if (!firstName) {
         throw new Error('First name is required');
       }
@@ -27,6 +24,13 @@ startApp({
   },
 });
 ```
+
+<Warning>
+  Don't enforce **password** rules here. `validateSignup` only runs at signup, so a user
+  could sign up with a compliant password and immediately reset to a weaker one — password
+  reset would only enforce the framework's built-in 8-character floor. Use
+  [`validatePassword`](#validatepassword) instead: it runs on every password-setting path.
+</Warning>
 
 **Props:**
 
@@ -40,6 +44,61 @@ startApp({
 | `handle`    | `string \| undefined` | 
 
 **Returns:** `void | Promise<void>` 
+
+### `validatePassword`
+
+Enforces your password policy on **every** path that sets a password — signup and password
+reset today, plus any future change-password flow. Throw an error to reject the password;
+the message is surfaced to the client.
+
+This is the hook to use for password rules. Modelence enforces a built-in floor of 8
+characters (and a 128-character ceiling) before calling it, so your hook only needs to add
+your own rules on top.
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  auth: {
+    validatePassword: ({ password, email, context }) => {
+      if (password.length < 12) {
+        throw new Error('Password must be at least 12 characters');
+      }
+      if (password.toLowerCase().includes(email.split('@')[0])) {
+        throw new Error('Password must not contain your email address');
+      }
+    },
+  },
+});
+```
+
+The hook runs after the built-in length checks and before the password is hashed. On the
+reset path it runs *before* the reset token is consumed, so a user whose password is
+rejected can retry with the same link.
+
+**Props:**
+
+| Property   | Type                    |                                                          |
+| ---------- | ----------------------- | -------------------------------------------------------- |
+| `password` | `string`                | The candidate plaintext password                          |
+| `email`    | `string`                | Lowercased email of the account the password is set on    |
+| `context`  | `'signup' \| 'reset'`   | Which flow is setting the password                        |
+
+**Returns:** `void | Promise<void>`
+
+Use `context` when a flow needs different treatment — for example, checking a
+breach-database only on reset:
+
+```typescript
+validatePassword: async ({ password, context }) => {
+  if (password.length < 12) {
+    throw new Error('Password must be at least 12 characters');
+  }
+  if (context === 'reset' && (await isBreachedPassword(password))) {
+    throw new Error('This password has appeared in a data breach — pick another');
+  }
+},
+```
 
 ### `onBeforeSignup`
 
@@ -224,6 +283,11 @@ startApp({
     validateSignup: ({ email, password, firstName }) => {
       if (!firstName) {
         throw new Error('First name is required');
+      }
+    },
+    validatePassword: ({ password }) => {
+      if (password.length < 12) {
+        throw new Error('Password must be at least 12 characters');
       }
     },
     validateProfileUpdate: ({ handle }) => {

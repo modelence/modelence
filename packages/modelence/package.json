@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.22.0-mt.dev.0",
+  "version": "0.23.0",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -94,8 +94,6 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-eslint": "^1.8.1",
-    "winston": "^3.15.0",
-    "winston-elasticsearch": "^0.19.0",
     "zod": "^3.23.8",
     "zustand": "^5.0.2"
   },

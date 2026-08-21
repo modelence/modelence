@@ -70,28 +70,29 @@ export async function sendEmail(
 ) {
   const client = initializeResendClient();
 
-  console.log("client initialized");
+  // The Resend SDK does not throw on failure: it catches both non-2xx responses
+  // and network-level errors and resolves with `{ data: null, error }`, so the
+  // returned error has to be checked explicitly.
+  const { error } = await client.emails.send({
+    from,
+    to,
+    subject,
+    html,
+    text,
+    react: undefined,
+    cc,
+    bcc,
+    replyTo,
+    headers,
+    attachments: attachments?.map(attachment => ({
+      name: attachment.filename,
+      content: attachment.content,
+      type: attachment.contentType,
+    })),
+  });
 
-  try {
-    await client.emails.send({
-      from,
-      to,
-      subject,
-      html,
-      text,
-      react: undefined,
-      cc,
-      bcc,
-      replyTo,
-      headers,
-      attachments: attachments?.map(attachment => ({
-        name: attachment.filename,
-        content: attachment.content,
-        type: attachment.contentType,
-      })),
-    });
-  } catch (error) {
-    throw new Error(`Failed to send email using Resend: ${error instanceof Error ? error.message : String(error)}`);
+  if (error) {
+    throw new Error(`Failed to send email using Resend (${error.name}): ${error.message}`);
   }
 }
 

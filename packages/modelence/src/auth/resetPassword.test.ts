@@ -21,6 +21,7 @@ const mockResetTokensFindOneAndDelete: MockedFunction<
   ResetPasswordTokensCollection['findOneAndDelete']
 > = vi.fn();
 const mockGetEmailConfig = vi.fn();
+const mockGetAuthConfig = vi.fn();
 const mockHtmlToText: MockedFunction<(html: string) => string> = vi.fn();
 const mockValidateEmail: MockedFunction<(email: string) => string> = vi.fn();
 const mockValidatePassword: MockedFunction<(password: string) => string> = vi.fn();
@@ -64,6 +65,10 @@ vi.doMock('./db', () => ({
 
 vi.doMock('@/app/emailConfig', () => ({
   getEmailConfig: mockGetEmailConfig,
+}));
+
+vi.doMock('@/app/authConfig', () => ({
+  getAuthConfig: mockGetAuthConfig,
 }));
 
 vi.doMock('@/utils', () => ({
@@ -172,6 +177,7 @@ describe('auth/resetPassword', () => {
         redirectUrl: '/reset-password',
       },
     });
+    mockGetAuthConfig.mockReturnValue({});
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockHtmlToText.mockImplementation((html: string) => html.replace(/<[^>]*>/g, ''));
     mockTime.hours.mockReturnValue(3600000); // 1 hour in ms
@@ -679,6 +685,118 @@ describe('auth/resetPassword', () => {
         success: true,
         message: 'Password has been reset successfully',
       });
+    });
+
+    test('runs the validatePassword hook with the reset context', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+      const email = 'user@example.com';
+      const validatePasswordHook = vi.fn();
+
+      mockGetAuthConfig.mockReturnValue({ validatePassword: validatePasswordHook });
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      const tokenDoc = createMockResetToken({ userId, email, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      expect(validatePasswordHook).toHaveBeenCalledWith({
+        password,
+        email,
+        context: 'reset',
+      });
+    });
+
+    test('still runs validatePassword for legacy tokens without an email field', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+      const validatePasswordHook = vi.fn();
+
+      mockGetAuthConfig.mockReturnValue({ validatePassword: validatePasswordHook });
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(
+        createMockUser({ _id: userId, emails: [{ address: 'User@Example.com', verified: true }] })
+      );
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+
+      // Legacy token: no `email` field.
+      const tokenDoc = createMockResetToken({ userId, token });
+      delete (tokenDoc as unknown as { email?: string }).email;
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await handleResetPassword({ token, password }, createContext());
+
+      // Falls back to the user's stored address, lowercased — the policy must
+      // not be skipped just because the token predates the email field.
+      expect(validatePasswordHook).toHaveBeenCalledWith({
+        password,
+        email: 'user@example.com',
+        context: 'reset',
+      });
+    });
+
+    test('rejects a password the validatePassword hook throws on, without writing a hash', async () => {
+      const token = 'validtoken123';
+      // Clears the framework floor of 8 but violates an app policy of 12.
+      const password = 'shortpass9';
+      const userId = new ObjectId();
+
+      mockGetAuthConfig.mockReturnValue({
+        validatePassword: () => {
+          throw new Error('Password must be at least 12 characters');
+        },
+      });
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+
+      const tokenDoc = createMockResetToken({ userId, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
+        'Password must be at least 12 characters'
+      );
+
+      // The policy runs before the commit point, so nothing was written...
+      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
+      expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
+      // ...and the token stays unclaimed so the same link can be retried with a
+      // compliant password.
+      expect(mockResetTokensFindOneAndDelete).not.toHaveBeenCalled();
+    });
+
+    test('awaits an async validatePassword hook before setting the password', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockGetAuthConfig.mockReturnValue({
+        validatePassword: async () => {
+          await Promise.resolve();
+          throw new Error('Password was found in a breach database');
+        },
+      });
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+
+      const tokenDoc = createMockResetToken({ userId, token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
+        'Password was found in a breach database'
+      );
+
+      expect(mockBcryptHash).not.toHaveBeenCalled();
+      expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
     test('verifies the email with strength-2 collation so mixed-case stored addresses still match', async () => {

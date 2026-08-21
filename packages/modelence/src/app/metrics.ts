@@ -1,9 +1,6 @@
 import elasticApm from 'elastic-apm-node';
-import winston from 'winston';
-import { ElasticsearchTransport } from 'winston-elasticsearch';
 
 import { getConfig } from '../config/server';
-import { startLoggerProcess } from './loggerProcess';
 import {
   getAppAlias,
   getEnvironmentAlias,
@@ -14,7 +11,6 @@ import {
 
 let isInitialized = false;
 let apm: typeof elasticApm | null = null;
-let logger: winston.Logger | null = null;
 
 export const initMetrics = async () => {
   if (isInitialized) {
@@ -24,13 +20,12 @@ export const initMetrics = async () => {
   isInitialized = true;
 
   if (isTelemetryEnabled()) {
-    await initElasticApm();
+    initElasticApm();
   }
 };
 
-async function initElasticApm() {
+function initElasticApm() {
   const elasticApmEndpoint = getConfig('_system.elastic.apmEndpoint') as string;
-  const elasticCloudId = getConfig('_system.elastic.cloudId') as string;
   const elasticApiKey = getConfig('_system.elastic.apiKey') as string;
 
   const appAlias = getAppAlias() ?? 'unknown';
@@ -42,7 +37,6 @@ async function initElasticApm() {
     serviceName,
     apiKey: elasticApiKey,
     serverUrl: elasticApmEndpoint,
-    // environment: 'dev',
     transactionSampleRate: 1.0,
     centralConfig: false,
     globalLabels: {
@@ -52,44 +46,6 @@ async function initElasticApm() {
       appAlias,
       environmentAlias,
     },
-    // logLevel: 'debug'
-  });
-
-  const esTransport = new ElasticsearchTransport({
-    apm,
-    level: 'debug',
-    clientOpts: {
-      cloud: {
-        id: elasticCloudId,
-      },
-      auth: {
-        apiKey: elasticApiKey,
-      },
-      requestTimeout: 10000,
-      tls: {
-        rejectUnauthorized: false,
-      },
-    },
-    bufferLimit: 1000,
-    silent: false,
-  });
-
-  esTransport.on('error', (error) => {
-    console.error('Elasticsearch Transport Error:', error);
-  });
-
-  logger = winston.createLogger({
-    level: 'debug',
-    defaultMeta: {
-      serviceName,
-    },
-    format: winston.format.combine(winston.format.json()),
-    transports: [esTransport],
-  });
-
-  startLoggerProcess({
-    elasticCloudId,
-    elasticApiKey,
   });
 }
 
@@ -98,15 +54,4 @@ export function getApm() {
     throw new Error('APM is not initialized');
   }
   return apm;
-}
-
-export function isLoggerReady() {
-  return logger !== null;
-}
-
-export function getLogger() {
-  if (!logger) {
-    throw new Error('Logger is not initialized');
-  }
-  return logger;
 }
