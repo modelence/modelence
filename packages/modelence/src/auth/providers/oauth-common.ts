@@ -93,8 +93,8 @@ export function sendOAuthError(
 export async function authenticateUser(
   res: Response,
   userId: ObjectId,
-  outcome: OAuthOutcome = { platform: 'web' },
-  provider?: OAuthProvider
+  provider: OAuthProvider,
+  outcome: OAuthOutcome = { platform: 'web' }
 ) {
   if (outcome.platform === 'mobile') {
     // Deliberately no session and no cookie here: the deep link is the weakest
@@ -102,11 +102,6 @@ export async function authenticateUser(
     // it carries only a single-use code. The session is minted when the app
     // redeems that code over TLS, which means an intercepted-but-unredeemed code
     // never corresponds to a live session.
-    if (!provider) {
-      // Unreachable via the provider routers, which always pass userData.providerName.
-      throw new Error('An OAuth provider is required to complete a mobile sign-in.');
-    }
-
     const code = await issueOAuthExchangeCode(userId.toString(), provider);
 
     res.status(302);
@@ -159,7 +154,7 @@ async function handleExistingProviderLogin(
       user = { ...existingUser, ...update } as typeof existingUser;
     }
 
-    await authenticateUser(res, existingUser._id, outcome, userData.providerName);
+    await authenticateUser(res, existingUser._id, userData.providerName, outcome);
     authConfig.onAfterLogin?.({
       provider: userData.providerName,
       user,
@@ -256,7 +251,7 @@ async function handleExistingEmailLogin(
         return;
       }
 
-      await authenticateUser(res, existingUserByEmail._id, outcome, userData.providerName);
+      await authenticateUser(res, existingUserByEmail._id, userData.providerName, outcome);
 
       // Construct updated user in-memory to provide fresh data to callbacks
       const updatedUser: User = {
@@ -347,7 +342,7 @@ async function handleNewUserSignup(
 
     const newUser = await usersCollection.insertOne(userDoc);
 
-    await authenticateUser(res, newUser.insertedId, outcome, userData.providerName);
+    await authenticateUser(res, newUser.insertedId, userData.providerName, outcome);
 
     const userDocument = await usersCollection.findOne(
       { _id: newUser.insertedId },
@@ -528,14 +523,11 @@ function decodeOAuthState(storedState: string): {
     ':'
   );
 
-  let redirectUri: string | undefined;
-  if (encodedRedirectUri) {
-    try {
-      redirectUri = Buffer.from(encodedRedirectUri, 'base64url').toString('utf8') || undefined;
-    } catch {
-      redirectUri = undefined;
-    }
-  }
+  // Never throws: invalid base64url decodes to garbage rather than raising, and
+  // garbage is rejected by the allowlist check in the caller.
+  const redirectUri = encodedRedirectUri
+    ? Buffer.from(encodedRedirectUri, 'base64url').toString('utf8') || undefined
+    : undefined;
 
   return {
     stateValue,

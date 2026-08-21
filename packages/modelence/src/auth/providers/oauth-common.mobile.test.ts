@@ -82,7 +82,7 @@ describe('auth/providers/oauth-common — mobile', () => {
     test('redirects to the deep link with a single-use code', async () => {
       const userId = new ObjectId();
 
-      await oauth.authenticateUser(res, userId, MOBILE_OUTCOME, 'google');
+      await oauth.authenticateUser(res, userId, 'google', MOBILE_OUTCOME);
 
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(userId.toString(), 'google');
       expect(res.status).toHaveBeenCalledWith(302);
@@ -92,7 +92,7 @@ describe('auth/providers/oauth-common — mobile', () => {
     // The whole point of the exchange-code design: nothing usable is created
     // until the app redeems the code over TLS.
     test('creates no session and sets no cookie', async () => {
-      await oauth.authenticateUser(res, new ObjectId(), MOBILE_OUTCOME, 'google');
+      await oauth.authenticateUser(res, new ObjectId(), 'google', MOBILE_OUTCOME);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
       expect(mockSetAuthTokenCookie).not.toHaveBeenCalled();
@@ -100,13 +100,13 @@ describe('auth/providers/oauth-common — mobile', () => {
     });
 
     test('suppresses the referrer so the code cannot leak', async () => {
-      await oauth.authenticateUser(res, new ObjectId(), MOBILE_OUTCOME, 'google');
+      await oauth.authenticateUser(res, new ObjectId(), 'google', MOBILE_OUTCOME);
 
       expect(res.set).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
     });
 
     test('records the provider the code was minted for', async () => {
-      await oauth.authenticateUser(res, new ObjectId(), MOBILE_OUTCOME, 'github');
+      await oauth.authenticateUser(res, new ObjectId(), 'github', MOBILE_OUTCOME);
 
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(expect.any(String), 'github');
     });
@@ -114,7 +114,7 @@ describe('auth/providers/oauth-common — mobile', () => {
     test('web flow is unchanged: session, cookie, redirect to root', async () => {
       const userId = new ObjectId();
 
-      await oauth.authenticateUser(res, userId);
+      await oauth.authenticateUser(res, userId, 'google');
 
       expect(mockCreateSession).toHaveBeenCalledWith(userId);
       expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(res, 'tok');

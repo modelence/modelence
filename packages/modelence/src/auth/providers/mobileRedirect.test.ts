@@ -108,6 +108,24 @@ describe('auth/providers/mobileRedirect', () => {
       expect(isAllowedMobileRedirectUrl('myapp://auth')).toBe(false);
     });
 
+    // Host and path are separate fields, so the opaque and authority spellings of
+    // a custom scheme are different targets. Pinned so the exact-match semantics
+    // are not silently loosened into normalization later.
+    test('treats the opaque and authority forms as distinct targets', () => {
+      setAllowlist({ config: 'myapp://auth' });
+
+      expect(isAllowedMobileRedirectUrl('myapp://auth')).toBe(true);
+      expect(isAllowedMobileRedirectUrl('myapp:auth')).toBe(false);
+      expect(isAllowedMobileRedirectUrl('myapp:/auth')).toBe(false);
+    });
+
+    test('matches the opaque form only against an opaque allowlist entry', () => {
+      setAllowlist({ config: 'myapp:auth' });
+
+      expect(isAllowedMobileRedirectUrl('myapp:auth')).toBe(true);
+      expect(isAllowedMobileRedirectUrl('myapp://auth')).toBe(false);
+    });
+
     test('rejects dangerous schemes even if somehow allowlisted', () => {
       setAllowlist({ config: 'javascript:alert(1), data:text/html;base64:x, file:///etc/passwd' });
 

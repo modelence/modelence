@@ -45,6 +45,13 @@ export function getAllowedMobileRedirectUrls(): string[] {
  * allowlisted `myapp://auth`. A candidate may add query parameters or a
  * fragment (the callback itself appends `?code=`), but may not change where it
  * points.
+ *
+ * Host and path are compared as separate fields, so the two ways of writing a
+ * custom scheme are distinct targets rather than synonyms: `myapp://auth`
+ * parses as host `auth` with an empty path, while `myapp:auth` parses as an
+ * empty host with path `auth`. Nothing is normalized between the two forms —
+ * write the allowlist entry exactly as the app registers its scheme, which for
+ * React Native and Expo is the `myapp://auth` form used throughout the docs.
  */
 export function isAllowedMobileRedirectUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
@@ -62,8 +69,6 @@ export function isAllowedMobileRedirectUrl(url: string): boolean {
 
     return (
       candidate.protocol.toLowerCase() === entry.protocol.toLowerCase() &&
-      // Custom schemes (myapp://auth) parse their first segment as the host on
-      // some platforms and as the pathname on others, so both must agree.
       // `host` carries the port, so a differing port fails here too.
       candidate.host.toLowerCase() === entry.host.toLowerCase() &&
       normalizePath(candidate.pathname) === normalizePath(entry.pathname)
