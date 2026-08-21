@@ -1,13 +1,42 @@
 import { type Request, type Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
-import { createSession, setAuthTokenCookie, consumeLinkNonce } from '@/auth/session';
+import {
+  createSession,
+  setAuthTokenCookie,
+  consumeLinkNonce,
+  issueOAuthExchangeCode,
+} from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
+import { isAllowedMobileRedirectUrl, buildMobileRedirect } from './mobileRedirect';
+
+/** Which kind of client started an OAuth flow. */
+export type OAuthPlatform = 'web' | 'mobile';
+
+/**
+ * How a completed OAuth flow is handed back to the client.
+ *
+ * Web sets the session cookie and redirects to the site root, as it always has.
+ * Mobile has no shared cookie jar, so it redirects to the app's deep link with a
+ * single-use exchange code the app redeems for a session (see
+ * `issueOAuthExchangeCode`).
+ */
+export type OAuthOutcome = { platform: 'web' } | { platform: 'mobile'; redirectUri: string };
+
+/** Resolves the outcome for a validated OAuth state. */
+export function toOAuthOutcome(
+  state: Pick<OAuthStateResult, 'platform' | 'redirectUri'>
+): OAuthOutcome {
+  if (state.platform === 'mobile' && state.redirectUri) {
+    return { platform: 'mobile', redirectUri: state.redirectUri };
+  }
+  return { platform: 'web' };
+}
 
 export interface OAuthUserData {
   id: string;
@@ -30,8 +59,24 @@ export async function resolveUserIdFromLinkNonce(
  * Sends OAuth error response.
  * If `errorComponent` is configured, renders HTML.
  * Otherwise falls back to JSON.
+ *
+ * On a mobile flow, an HTML or JSON body would strand the user in the device
+ * browser with no route back into the app, so the error is delivered as a
+ * redirect to the app's deep link instead. Errors raised before the state is
+ * decoded have no known platform and keep the default behaviour.
  */
-export function sendOAuthError(res: Response, statusCode: number, errorMessage: string) {
+export function sendOAuthError(
+  res: Response,
+  statusCode: number,
+  errorMessage: string,
+  outcome: OAuthOutcome = { platform: 'web' }
+) {
+  if (outcome.platform === 'mobile') {
+    res.status(302);
+    res.set('Referrer-Policy', 'no-referrer');
+    return res.redirect(buildMobileRedirect(outcome.redirectUri, { error: errorMessage }));
+  }
+
   const authConfig = getAuthConfig();
   const response = res.status(statusCode);
   if (authConfig.errorComponent) {
@@ -45,7 +90,27 @@ export function sendOAuthError(res: Response, statusCode: number, errorMessage: 
   return response.json({ error: errorMessage });
 }
 
-export async function authenticateUser(res: Response, userId: ObjectId) {
+export async function authenticateUser(
+  res: Response,
+  userId: ObjectId,
+  provider: OAuthProvider,
+  outcome: OAuthOutcome = { platform: 'web' }
+) {
+  if (outcome.platform === 'mobile') {
+    // Deliberately no session and no cookie here: the deep link is the weakest
+    // hop in the chain (a custom scheme can be claimed by any installed app), so
+    // it carries only a single-use code. The session is minted when the app
+    // redeems that code over TLS, which means an intercepted-but-unredeemed code
+    // never corresponds to a live session.
+    const code = await issueOAuthExchangeCode(userId.toString(), provider);
+
+    res.status(302);
+    // The deep link carries a credential; keep it out of any Referer header.
+    res.set('Referrer-Policy', 'no-referrer');
+    res.redirect(buildMobileRedirect(outcome.redirectUri, { code }));
+    return;
+  }
+
   const { authToken } = await createSession(userId);
 
   setAuthTokenCookie(res, authToken);
@@ -58,13 +123,14 @@ async function handleExistingProviderLogin(
   userData: OAuthUserData,
   existingUser: User,
   session: Session | null,
-  connectionInfo: ConnectionInfo
+  connectionInfo: ConnectionInfo,
+  outcome: OAuthOutcome
 ) {
   const authConfig = getAuthConfig();
 
   try {
     if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
-      sendOAuthError(res, 400, 'User account is not active.');
+      sendOAuthError(res, 400, 'User account is not active.', outcome);
       return;
     }
 
@@ -88,7 +154,7 @@ async function handleExistingProviderLogin(
       user = { ...existingUser, ...update } as typeof existingUser;
     }
 
-    await authenticateUser(res, existingUser._id);
+    await authenticateUser(res, existingUser._id, userData.providerName, outcome);
     authConfig.onAfterLogin?.({
       provider: userData.providerName,
       user,
@@ -116,14 +182,15 @@ async function handleExistingEmailLogin(
   userData: OAuthUserData,
   existingUserByEmail: User,
   session: Session | null,
-  connectionInfo: ConnectionInfo
+  connectionInfo: ConnectionInfo,
+  outcome: OAuthOutcome
 ) {
   const authConfig = getAuthConfig();
   const linkingMode = authConfig.oauthAccountLinking ?? 'manual';
 
   if (linkingMode === 'auto' && userData.emailVerified) {
     if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
-      sendOAuthError(res, 400, 'User account is not active.');
+      sendOAuthError(res, 400, 'User account is not active.', outcome);
       return;
     }
 
@@ -133,7 +200,12 @@ async function handleExistingEmailLogin(
 
     // Prevent pre-registration takeover by requiring local ownership verification too.
     if (!matchedEmail?.verified) {
-      sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
+      sendOAuthError(
+        res,
+        400,
+        'User with this email already exists. Please log in instead.',
+        outcome
+      );
       return;
     }
 
@@ -170,11 +242,16 @@ async function handleExistingEmailLogin(
 
       if (!autoLinkSuccessful) {
         // User was deleted/disabled between findOne and updateOne, or linked to a *different* ID
-        sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
+        sendOAuthError(
+          res,
+          400,
+          'User with this email already exists. Please log in instead.',
+          outcome
+        );
         return;
       }
 
-      await authenticateUser(res, existingUserByEmail._id);
+      await authenticateUser(res, existingUserByEmail._id, userData.providerName, outcome);
 
       // Construct updated user in-memory to provide fresh data to callbacks
       const updatedUser: User = {
@@ -213,7 +290,7 @@ async function handleExistingEmailLogin(
   }
 
   // Manual mode (default) or unverified email — reject
-  sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.');
+  sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.', outcome);
   return;
 }
 
@@ -221,7 +298,8 @@ async function handleNewUserSignup(
   res: Response,
   userData: OAuthUserData,
   session: Session | null,
-  connectionInfo: ConnectionInfo
+  connectionInfo: ConnectionInfo,
+  outcome: OAuthOutcome
 ) {
   const authConfig = getAuthConfig();
 
@@ -264,7 +342,7 @@ async function handleNewUserSignup(
 
     const newUser = await usersCollection.insertOne(userDoc);
 
-    await authenticateUser(res, newUser.insertedId);
+    await authenticateUser(res, newUser.insertedId, userData.providerName, outcome);
 
     const userDocument = await usersCollection.findOne(
       { _id: newUser.insertedId },
@@ -303,7 +381,8 @@ export function getRedirectUri(provider: string): string {
 export async function handleOAuthUserAuthentication(
   req: Request,
   res: Response,
-  userData: OAuthUserData
+  userData: OAuthUserData,
+  outcome: OAuthOutcome = { platform: 'web' }
 ): Promise<void> {
   // 1. Try to fetch existing user by OAuth ID
   const existingUser = await usersCollection.findOne({
@@ -313,7 +392,14 @@ export async function handleOAuthUserAuthentication(
   const { session, connectionInfo } = await getCallContext(req, res);
 
   if (existingUser) {
-    return handleExistingProviderLogin(res, userData, existingUser, session, connectionInfo);
+    return handleExistingProviderLogin(
+      res,
+      userData,
+      existingUser,
+      session,
+      connectionInfo,
+      outcome
+    );
   }
 
   // 2. Validate Email is provided by Provider
@@ -321,7 +407,8 @@ export async function handleOAuthUserAuthentication(
     sendOAuthError(
       res,
       400,
-      `Email address is required for ${userData.providerName} authentication.`
+      `Email address is required for ${userData.providerName} authentication.`,
+      outcome
     );
     return;
   }
@@ -351,11 +438,18 @@ export async function handleOAuthUserAuthentication(
 
   //User Already existed via email verification but now trying to login via OAuth Providers from the same email
   if (existingUserByEmail) {
-    return handleExistingEmailLogin(res, userData, existingUserByEmail, session, connectionInfo);
+    return handleExistingEmailLogin(
+      res,
+      userData,
+      existingUserByEmail,
+      session,
+      connectionInfo,
+      outcome
+    );
   }
 
   //New User
-  return handleNewUserSignup(res, userData, session, connectionInfo);
+  return handleNewUserSignup(res, userData, session, connectionInfo, outcome);
 }
 
 export function clearOAuthLinkCookie(res: Response) {
@@ -383,6 +477,65 @@ export interface OAuthStateResult {
   mode: string;
   /** Set only in the React Native linking flow. */
   linkedUserId?: string;
+  /** Which client started the flow; decides how the callback hands back the result. */
+  platform: OAuthPlatform;
+  /** Deep link to return to. Set only when `platform` is 'mobile'. */
+  redirectUri?: string;
+}
+
+/**
+ * Builds the value of the per-provider OAuth state cookie.
+ *
+ * Fields are colon-separated for backwards compatibility with in-flight cookies
+ * written before mobile support (`state:mode` and `state:mode:userId` both still
+ * parse). `redirectUri` contains colons and slashes of its own, so it is
+ * base64url-encoded rather than embedded raw — otherwise a deep link would split
+ * into several bogus fields.
+ */
+export function encodeOAuthState(params: {
+  state: string;
+  mode: string;
+  linkedUserId?: string | null;
+  platform?: OAuthPlatform;
+  redirectUri?: string | null;
+}): string {
+  const { state, mode, linkedUserId, platform = 'web', redirectUri } = params;
+  const fields = [state, mode, linkedUserId ?? ''];
+
+  // Only extend the cookie when there is something to say — a web flow keeps
+  // producing exactly the value it produced before mobile existed.
+  if (platform !== 'web' || redirectUri) {
+    fields.push(platform);
+    fields.push(redirectUri ? Buffer.from(redirectUri, 'utf8').toString('base64url') : '');
+  }
+
+  return fields.join(':');
+}
+
+function decodeOAuthState(storedState: string): {
+  stateValue: string;
+  mode: string;
+  linkedUserId?: string;
+  platform: OAuthPlatform;
+  redirectUri?: string;
+} {
+  const [stateValue, mode, linkedUserId, platform, encodedRedirectUri] = (storedState || '').split(
+    ':'
+  );
+
+  // Never throws: invalid base64url decodes to garbage rather than raising, and
+  // garbage is rejected by the allowlist check in the caller.
+  const redirectUri = encodedRedirectUri
+    ? Buffer.from(encodedRedirectUri, 'base64url').toString('utf8') || undefined
+    : undefined;
+
+  return {
+    stateValue,
+    mode: mode || 'login',
+    ...(linkedUserId ? { linkedUserId } : {}),
+    platform: platform === 'mobile' ? 'mobile' : 'web',
+    ...(redirectUri ? { redirectUri } : {}),
+  };
 }
 
 export function validateOAuthStateAndGetMode(
@@ -393,25 +546,75 @@ export function validateOAuthStateAndGetMode(
   const state = req.query.state as string;
   const storedState = req.cookies[stateCookieName];
 
-  const [storedStateValue, storedMode, storedUserId] = (storedState || '').split(':');
+  const decoded = decodeOAuthState(storedState || '');
 
-  if (!state || !storedState || state !== storedStateValue) {
+  if (!state || !storedState || state !== decoded.stateValue) {
     sendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
     return null;
   }
 
   res.clearCookie(stateCookieName);
+
+  // Re-check the target against the current allowlist. The cookie is httpOnly
+  // and integrity-checked by the state comparison above, but the allowlist may
+  // have changed while the user was on the provider's consent screen — and a
+  // redirect target is worth validating on both sides of a round trip.
+  if (decoded.platform === 'mobile') {
+    if (!decoded.redirectUri || !isAllowedMobileRedirectUrl(decoded.redirectUri)) {
+      sendOAuthError(res, 400, 'Invalid OAuth redirect target.');
+      return null;
+    }
+  }
+
   return {
-    mode: storedMode || 'login',
-    ...(storedUserId ? { linkedUserId: storedUserId } : {}),
+    mode: decoded.mode,
+    ...(decoded.linkedUserId ? { linkedUserId: decoded.linkedUserId } : {}),
+    platform: decoded.platform,
+    ...(decoded.redirectUri ? { redirectUri: decoded.redirectUri } : {}),
   };
+}
+
+/**
+ * Reads and validates the mobile handoff parameters from an OAuth initiation
+ * request. Returns null when the request is not a mobile flow.
+ *
+ * Validation happens here, before the redirect to the provider, so a
+ * misconfigured or malicious target fails immediately instead of after the user
+ * has already granted consent.
+ */
+export function resolveMobileRedirectRequest(
+  req: Request,
+  res: Response
+): { ok: true; redirectUri: string | null } | { ok: false } {
+  if (req.query.platform !== 'mobile') {
+    return { ok: true, redirectUri: null };
+  }
+
+  const redirectUri = typeof req.query.redirectUri === 'string' ? req.query.redirectUri : '';
+
+  if (!redirectUri) {
+    sendOAuthError(res, 400, 'A redirectUri is required for mobile authentication.');
+    return { ok: false };
+  }
+
+  if (!isAllowedMobileRedirectUrl(redirectUri)) {
+    sendOAuthError(
+      res,
+      400,
+      'This redirectUri is not allowed. Add it to auth.mobile.redirectUrls to enable mobile sign-in.'
+    );
+    return { ok: false };
+  }
+
+  return { ok: true, redirectUri };
 }
 
 export async function handleOAuthProviderLink(
   req: Request,
   res: Response,
   userData: OAuthUserData,
-  linkedUserId?: string
+  linkedUserId?: string,
+  outcome: OAuthOutcome = { platform: 'web' }
 ): Promise<void> {
   const authConfig = getAuthConfig();
   const { session, connectionInfo } = await getCallContext(req, res);
@@ -422,7 +625,7 @@ export async function handleOAuthProviderLink(
   if (linkedUserId) {
     if (!ObjectId.isValid(linkedUserId)) {
       clearOAuthLinkCookie(res);
-      sendOAuthError(res, 400, 'Invalid OAuth linking state.');
+      sendOAuthError(res, 400, 'Invalid OAuth linking state.', outcome);
       return;
     }
     resolvedUserId = new ObjectId(linkedUserId);
@@ -432,7 +635,7 @@ export async function handleOAuthProviderLink(
 
   if (!resolvedUserId) {
     clearOAuthLinkCookie(res);
-    sendOAuthError(res, 401, 'You must be signed in to link a provider.');
+    sendOAuthError(res, 401, 'You must be signed in to link a provider.', outcome);
     return;
   }
 
@@ -473,7 +676,7 @@ export async function handleOAuthProviderLink(
 
         clearOAuthLinkCookie(res);
 
-        sendOAuthError(res, 400, 'User account is not active.');
+        sendOAuthError(res, 400, 'User account is not active.', outcome);
         return;
       }
 
@@ -497,7 +700,8 @@ export async function handleOAuthProviderLink(
         sendOAuthError(
           res,
           400,
-          `You have already linked a different ${userData.providerName} account.`
+          `You have already linked a different ${userData.providerName} account.`,
+          outcome
         );
         return;
       }
@@ -514,7 +718,7 @@ export async function handleOAuthProviderLink(
 
       clearOAuthLinkCookie(res);
 
-      sendOAuthError(res, 400, `Unable to link ${userData.providerName} account.`);
+      sendOAuthError(res, 400, `Unable to link ${userData.providerName} account.`, outcome);
       return;
     }
 
@@ -534,8 +738,17 @@ export async function handleOAuthProviderLink(
       );
     }
 
-    // Redirect back to the app after successful link
+    // Redirect back to the app after successful link. On mobile this returns to
+    // the deep link with no code: linking happens for an already-signed-in user,
+    // so there is no new session to hand over.
     clearOAuthLinkCookie(res);
+
+    if (outcome.platform === 'mobile') {
+      res.status(302);
+      res.set('Referrer-Policy', 'no-referrer');
+      res.redirect(buildMobileRedirect(outcome.redirectUri, { linked: userData.providerName }));
+      return;
+    }
 
     res.status(302).redirect('/');
   } catch (error) {
@@ -554,7 +767,8 @@ export async function handleOAuthProviderLink(
       sendOAuthError(
         res,
         400,
-        `This ${userData.providerName} account is already linked to a different user.`
+        `This ${userData.providerName} account is already linked to a different user.`,
+        outcome
       );
       return;
     }

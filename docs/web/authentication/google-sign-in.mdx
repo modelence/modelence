@@ -46,6 +46,12 @@ Before implementing Google Sign-In, you need to:
      - `https://yourdomain.com/api/_internal/auth/google/callback` (for production)
    - Click "Create"
 
+   <Note>
+     This is the only redirect URI you need, including for native apps. React
+     Native sign-in reuses this same callback and returns to your app through a
+     deep link — see [React Native](/react-native#oauth-sign-in).
+   </Note>
+
 5. **Save Credentials**
    - Copy your **Client ID** and **Client Secret**
    - Store them securely (use environment variables or Modelence Cloud config)

@@ -40,6 +40,8 @@ export {
   sendMagicLink,
   loginWithMagicLink,
   loginWithOneTimeCode,
+  signInWithOAuth,
+  loginWithOAuth,
   linkOAuthProvider,
   unlinkOAuthProvider,
   type UserInfo,

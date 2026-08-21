@@ -10,6 +10,7 @@ const mockDigest = vi.fn(() => 'hashed-auth-token');
 const mockUpdate = vi.fn(() => ({ digest: mockDigest }));
 const mockCreateHash = vi.fn(() => ({ update: mockUpdate }));
 const mockDays = vi.fn(() => 7 * 24 * 60 * 60 * 1000);
+const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
 
 vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
@@ -19,6 +20,7 @@ vi.doMock('crypto', () => ({
 vi.doMock('@/time', () => ({
   time: {
     days: mockDays,
+    minutes: mockMinutes,
   },
 }));
 
@@ -27,8 +29,16 @@ vi.doMock('@/config/server', () => ({
 }));
 
 const sessionModule = await import('./session');
-const { createSession, obtainSession, setSessionUser, clearSessionUser, sessionsCollection } =
-  sessionModule;
+const {
+  createSession,
+  obtainSession,
+  setSessionUser,
+  clearSessionUser,
+  sessionsCollection,
+  issueOAuthExchangeCode,
+  consumeOAuthExchangeCode,
+  oauthExchangeCodesCollection,
+} = sessionModule;
 const sessionSystemModule = sessionModule.default;
 
 describe('auth/session', () => {
@@ -245,6 +255,85 @@ describe('auth/session', () => {
           res: null,
         }
       );
+    });
+  });
+
+  describe('OAuth exchange codes', () => {
+    const insertMock: Mock = vi.fn();
+    const findOneAndDeleteMock: Mock = vi.fn();
+
+    beforeEach(() => {
+      (oauthExchangeCodesCollection as unknown as { insertOne: typeof insertMock }).insertOne =
+        insertMock;
+      (
+        oauthExchangeCodesCollection as unknown as {
+          findOneAndDelete: typeof findOneAndDeleteMock;
+        }
+      ).findOneAndDelete = findOneAndDeleteMock;
+    });
+
+    test('issue stores the code hashed, never in the clear', async () => {
+      const code = await issueOAuthExchangeCode('user-id', 'google');
+
+      expect(code).toBe('auth-token');
+      expect(insertMock).toHaveBeenCalledWith({
+        code: 'hashed-auth-token',
+        userId: 'user-id',
+        provider: 'google',
+        expiresAt: expect.any(Date),
+      });
+      // The returned value is the credential; the stored value must differ.
+      expect(insertMock.mock.calls[0][0].code).not.toBe(code);
+    });
+
+    test('issue uses a one-minute TTL', async () => {
+      await issueOAuthExchangeCode('user-id', 'google');
+
+      expect(mockMinutes).toHaveBeenCalledWith(1);
+    });
+
+    test('consume looks up by hash and returns the binding', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'github',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      const result = await consumeOAuthExchangeCode('auth-token');
+
+      expect(findOneAndDeleteMock).toHaveBeenCalledWith({ code: 'hashed-auth-token' });
+      expect(result).toEqual({ userId: 'user-id', provider: 'github' });
+    });
+
+    test('consume returns null for an unknown or already-redeemed code', async () => {
+      findOneAndDeleteMock.mockResolvedValue(null as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token')).toBeNull();
+    });
+
+    // The TTL index only sweeps periodically, so expiry is enforced on read too.
+    test('consume rejects an expired code the TTL index has not swept yet', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        expiresAt: new Date(Date.now() - 1000),
+      } as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token')).toBeNull();
+    });
+
+    test('consume deletes the code, making it single-use', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      await consumeOAuthExchangeCode('auth-token');
+
+      // findOneAndDelete is the atomic commit point: a concurrent second
+      // redemption finds nothing.
+      expect(findOneAndDeleteMock).toHaveBeenCalledTimes(1);
     });
   });
 });

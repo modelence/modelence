@@ -265,6 +265,85 @@ export async function resetPassword(options: { token?: string; password: string 
 }
 
 /**
+ * Start an OAuth sign-in.
+ *
+ * On the web this navigates to the provider and the flow finishes on its own —
+ * the session cookie is set and the browser lands back on your site.
+ *
+ * On React Native (any client configured with `openUrl`) pass `redirectUri`: the
+ * device browser opens the provider, and when the flow completes Modelence
+ * redirects back to that deep link with a single-use `code` query parameter.
+ * Hand that code to {@link loginWithOAuth} to finish signing in. The redirect
+ * target must be listed in the server's `auth.mobile.redirectUrls`, otherwise
+ * the request is rejected before the provider is ever reached.
+ *
+ * @example Web
+ * ```ts
+ * await signInWithOAuth({ provider: 'google' });
+ * ```
+ *
+ * @example React Native
+ * ```ts
+ * await signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+ *
+ * Linking.addEventListener('url', async ({ url }) => {
+ *   const code = new URL(url).searchParams.get('code');
+ *   if (code) await loginWithOAuth({ code });
+ * });
+ * ```
+ * @param options.provider - The OAuth provider to sign in with ('google' or 'github').
+ * @param options.redirectUri - Deep link to return to. Required on React Native.
+ */
+export async function signInWithOAuth(options: {
+  provider: OAuthProvider;
+  redirectUri?: string;
+}): Promise<void> {
+  const { provider, redirectUri } = options;
+  const config = getClientConfig();
+  const baseUrl = config?.baseUrl ?? '';
+
+  if (config?.openUrl) {
+    if (!redirectUri) {
+      throw new Error(
+        'signInWithOAuth requires a redirectUri on React Native, e.g. { redirectUri: "myapp://auth" }.'
+      );
+    }
+    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
+    config.openUrl(url);
+    return;
+  }
+
+  window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
+}
+
+/**
+ * Complete a native OAuth sign-in with the code from the deep link.
+ *
+ * Exchanges the single-use code that {@link signInWithOAuth} delivered to your
+ * app's deep link for a session, stores the auth token, and returns the
+ * signed-in user. Codes are valid for one minute and can only be redeemed once.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithOAuth({ code });
+ * ```
+ * @param options.code - The `code` query parameter from the deep link.
+ */
+export async function loginWithOAuth(options: { code: string }) {
+  const { code } = options;
+  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOAuth',
+    { code }
+  );
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  }
+  const enrichedUser = setCurrentUser(user);
+  return enrichedUser;
+}
+
+/**
  * Link an OAuth provider to the currently signed-in user's account.
  * Redirects the browser to the OAuth provider's authorization page.
  * The provider will redirect back and the account will be linked.
@@ -274,9 +353,15 @@ export async function resetPassword(options: { token?: string; password: string 
  * linkOAuthProvider({ provider: 'google' });
  * ```
  * @param options.provider - The OAuth provider to link ('google' or 'github').
+ * @param options.redirectUri - Deep link to return to once linking completes.
+ *   React Native only; must be listed in the server's `auth.mobile.redirectUrls`.
+ *   Without it the flow ends in the device browser instead of back in the app.
  */
-export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
-  const { provider } = options;
+export async function linkOAuthProvider(options: {
+  provider: OAuthProvider;
+  redirectUri?: string;
+}): Promise<void> {
+  const { provider, redirectUri } = options;
   const config = getClientConfig();
   const baseUrl = config?.baseUrl ?? '';
 
@@ -297,7 +382,10 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
     const { nonce } = await nonceResponse.json();
-    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}`;
+    const mobileParams = redirectUri
+      ? `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`
+      : '';
+    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}${mobileParams}`;
     config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).

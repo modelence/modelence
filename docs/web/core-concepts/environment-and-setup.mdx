@@ -92,6 +92,7 @@ Every `MODELENCE_*` variable (plus the few non-prefixed ones) that the framework
 | `MODELENCE_AUTH_GITHUB_CLIENT_ID` | string | — | `packages/modelence/auth/providers/github.ts` |
 | `MODELENCE_AUTH_GITHUB_CLIENT_SECRET` | string | — | `packages/modelence/auth/providers/github.ts` |
 | `MODELENCE_AUTH_GITHUB_CLIENT_SCOPES` | string (comma-separated) | `read:user,user:email` | `packages/modelence/auth/providers/github.ts` |
+| `MODELENCE_AUTH_MOBILE_REDIRECT_URLS` | string (comma-separated) | — | `packages/modelence/auth/providers/mobileRedirect.ts` (deep links native OAuth may return to, e.g. `myapp://auth`; merged with `auth.mobile.redirectUrls`) |
 
 #### Email providers
 

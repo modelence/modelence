@@ -19,6 +19,7 @@ const mockHandleResetPasswordLanding = vi.fn();
 const mockHandleSendMagicLink = vi.fn();
 const mockHandleLoginWithMagicLink = vi.fn();
 const mockHandleLoginWithOneTimeCode = vi.fn();
+const mockHandleLoginWithOAuth = vi.fn();
 const mockHandleMagicLinkLanding = vi.fn();
 const mockGetOwnProfile = vi.fn();
 const mockHandleUpdateProfile = vi.fn();
@@ -73,6 +74,10 @@ vi.doMock('./magicLink', () => ({
   handleLoginWithMagicLink: mockHandleLoginWithMagicLink,
   handleLoginWithOneTimeCode: mockHandleLoginWithOneTimeCode,
   handleMagicLinkLanding: mockHandleMagicLinkLanding,
+}));
+
+vi.doMock('./loginWithOAuth', () => ({
+  handleLoginWithOAuth: mockHandleLoginWithOAuth,
 }));
 
 const mockTime = {
@@ -223,9 +228,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 20 rules covering all auth buckets', () => {
+    test('produces exactly 22 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(20);
+      expect(rules).toHaveLength(22);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -237,6 +242,7 @@ describe('auth/user', () => {
           'passwordReset',
           'magicLink',
           'oneTimeCode',
+          'oauthExchange',
         ])
       );
     });
