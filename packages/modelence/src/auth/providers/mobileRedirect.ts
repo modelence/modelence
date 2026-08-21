@@ -40,10 +40,11 @@ export function getAllowedMobileRedirectUrls(): string[] {
 /**
  * Whether `url` is an allowed deep-link target for the mobile OAuth flow.
  *
- * Matching compares parsed scheme, host and path — never raw string prefixes,
- * which would let `myapp://authorize.evil` pass against an allowlisted
- * `myapp://auth`. A candidate may add query parameters or a fragment (the
- * callback itself appends `?code=`), but may not change where it points.
+ * Matching compares parsed scheme, host (including port) and path — never raw
+ * string prefixes, which would let `myapp://authorize.evil` pass against an
+ * allowlisted `myapp://auth`. A candidate may add query parameters or a
+ * fragment (the callback itself appends `?code=`), but may not change where it
+ * points.
  */
 export function isAllowedMobileRedirectUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
@@ -51,20 +52,35 @@ export function isAllowedMobileRedirectUrl(url: string): boolean {
   const candidate = parseRedirectUrl(url);
   if (!candidate) return false;
   if (FORBIDDEN_SCHEMES.has(candidate.protocol.toLowerCase())) return false;
+  if (hasUserinfo(candidate)) return false;
 
   return getAllowedMobileRedirectUrls().some((allowed) => {
     const entry = parseRedirectUrl(allowed);
     if (!entry) return false;
     if (FORBIDDEN_SCHEMES.has(entry.protocol.toLowerCase())) return false;
+    if (hasUserinfo(entry)) return false;
 
     return (
       candidate.protocol.toLowerCase() === entry.protocol.toLowerCase() &&
       // Custom schemes (myapp://auth) parse their first segment as the host on
       // some platforms and as the pathname on others, so both must agree.
+      // `host` carries the port, so a differing port fails here too.
       candidate.host.toLowerCase() === entry.host.toLowerCase() &&
       normalizePath(candidate.pathname) === normalizePath(entry.pathname)
     );
   });
+}
+
+/**
+ * Whether a URL carries a `user:password@` prefix.
+ *
+ * Userinfo is not part of the host comparison above — `myapp://evil@auth` and
+ * `myapp://auth` share the host `auth` — but it survives into the redirect that
+ * `buildMobileRedirect` emits. Rejecting it keeps the allowlisted target and
+ * the emitted URL identical.
+ */
+function hasUserinfo(url: URL): boolean {
+  return url.username !== '' || url.password !== '';
 }
 
 function normalizePath(pathname: string): string {

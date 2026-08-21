@@ -91,6 +91,23 @@ describe('auth/providers/mobileRedirect', () => {
       expect(isAllowedMobileRedirectUrl('https://auth')).toBe(false);
     });
 
+    // `myapp://evil@auth` parses to the host `auth`, so it would otherwise match
+    // an allowlisted `myapp://auth` while redirecting somewhere that reads
+    // differently to the OS handling the deep link.
+    test('rejects a candidate carrying userinfo', () => {
+      setAllowlist({ config: 'myapp://auth' });
+
+      expect(isAllowedMobileRedirectUrl('myapp://evil@auth')).toBe(false);
+      expect(isAllowedMobileRedirectUrl('myapp://evil:secret@auth')).toBe(false);
+    });
+
+    test('rejects an allowlist entry carrying userinfo', () => {
+      setAllowlist({ config: 'myapp://evil@auth' });
+
+      expect(isAllowedMobileRedirectUrl('myapp://evil@auth')).toBe(false);
+      expect(isAllowedMobileRedirectUrl('myapp://auth')).toBe(false);
+    });
+
     test('rejects dangerous schemes even if somehow allowlisted', () => {
       setAllowlist({ config: 'javascript:alert(1), data:text/html;base64:x, file:///etc/passwd' });
 
