@@ -68,19 +68,6 @@ function escapeEnvValue(value: string | number): string {
 }
 
 /*
-  Records which app this project belongs to in .modelence/project.json. Unlike
-  .modelence.env this file is meant to be committed (the .modelence/ root holds
-  CLI-managed project state; only designated subdirs like cache/ are
-  temporary), so the whole team gets it. It's a hint in the git-remote sense —
-  connect flows use it to preselect the app, never to block a different
-  choice — which is why failing to write it doesn't fail the setup.
-
-  Only the app goes here: which ENVIRONMENT a working copy connects to is
-  per-developer state, already recorded by .modelence.env, and committing it
-  would make teammates connected to different environments fight over the
-  value.
-*/
-/*
   The app this project was last connected to, if a previous setup (by anyone
   on the team — the file is committed) recorded it. Used only to preselect
   the app on the approval page; anything unreadable means "no hint".
@@ -95,6 +82,19 @@ async function readProjectAppId(): Promise<string | undefined> {
   }
 }
 
+/*
+  Records which app this project belongs to in .modelence/project.json. Unlike
+  .modelence.env this file is meant to be committed (the .modelence/ root holds
+  CLI-managed project state; only designated subdirs like build/, cache/ and
+  tmp/ are temporary), so the whole team gets it. It's a hint in the git-remote
+  sense — connect flows use it to preselect the app, never to block a different
+  choice — which is why failing to write it doesn't fail the setup.
+
+  Only the app goes here: which ENVIRONMENT a working copy connects to is
+  per-developer state, already recorded by .modelence.env, and committing it
+  would make teammates connected to different environments fight over the
+  value.
+*/
 async function recordProjectAppId(appId: string): Promise<void> {
   const dirPath = join(process.cwd(), MODELENCE_DIR);
   const projectPath = join(dirPath, PROJECT_FILE);

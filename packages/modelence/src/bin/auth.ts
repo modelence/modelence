@@ -29,16 +29,24 @@ export async function authenticateCli(
   }
 
   const { code, verificationUrl } = await response.json();
-  const hintParams = new URLSearchParams({
-    ...(pickEnvironment ? { pick: 'environment' } : {}),
-    ...(appId ? { appId } : {}),
-  });
-  const url = hintParams.size > 0 ? `${verificationUrl}&${hintParams}` : verificationUrl;
+  const url = new URL(verificationUrl);
+  if (pickEnvironment) {
+    url.searchParams.set('pick', 'environment');
+  }
+  if (appId) {
+    url.searchParams.set('appId', appId);
+  }
 
   console.log(`Please visit ${url} to authenticate`);
   console.log(`Code: ${code}`);
 
-  await open(url);
+  try {
+    await open(url.toString());
+  } catch {
+    // Headless/SSH/container — no browser to open. The URL and code above
+    // are already printed, so authentication can proceed manually.
+    console.log('Could not open a browser automatically. Please open the URL above manually.');
+  }
 
   const token = await waitForAuth(host, code);
 
