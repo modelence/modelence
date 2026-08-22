@@ -43,12 +43,15 @@ export function getInstanceId(): string {
   return instanceId;
 }
 
-// For runtimes marked by `modelence setup` the container ID is the instance
-// ID; cloud containers keep the Studio-issued MODELENCE_CONTAINER_ID.
-export function getContainerId(): string | undefined {
+// A dev-time instance — a developer machine or a Studio sandbox, as marked by
+// `modelence setup` — as opposed to a deployed cloud container.
+export function isDevRuntime(): boolean {
   const runtime = process.env.MODELENCE_RUNTIME;
-  if (runtime === 'local' || runtime === 'sandbox') {
-    return getInstanceId();
-  }
-  return process.env.MODELENCE_CONTAINER_ID;
+  return runtime === 'local' || runtime === 'sandbox';
+}
+
+// For dev runtimes the container ID is the instance ID; cloud containers keep
+// the Studio-issued MODELENCE_CONTAINER_ID.
+export function getContainerId(): string | undefined {
+  return isDevRuntime() ? getInstanceId() : process.env.MODELENCE_CONTAINER_ID;
 }

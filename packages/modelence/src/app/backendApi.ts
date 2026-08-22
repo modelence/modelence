@@ -82,8 +82,10 @@ export async function fetchConfigs() {
   return callCloudApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
 }
 
+export type CloudSyncResponse = { status: 'ok' } | { status: 'detached'; message?: string };
+
 export async function syncStatus() {
-  const data = await callCloudApi('/api/sync', 'POST', {
+  const data = await callCloudApi<CloudSyncResponse>('/api/sync', 'POST', {
     containerId: getContainerId(),
   });
   return data;
