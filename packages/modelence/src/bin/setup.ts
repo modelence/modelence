@@ -233,7 +233,7 @@ export async function setup(options: { token?: string; host: string }) {
       MODELENCE_SERVICE_ENDPOINT: options.host, // TODO: Replace with config.serviceEndpoint in the future
       MODELENCE_SERVICE_TOKEN: config.serviceToken,
       MODELENCE_CONTAINER_ID: config.containerId,
-      // Where this working copy runs; Studio sandboxes pre-set "sandbox". See startApp.
+      // Where this working copy runs; Studio sandboxes pre-set "sandbox".
       MODELENCE_RUNTIME: process.env.MODELENCE_RUNTIME || 'local',
     };
 

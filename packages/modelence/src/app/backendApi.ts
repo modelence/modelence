@@ -1,4 +1,5 @@
 import os from 'os';
+import { getInstanceId } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
@@ -56,6 +57,8 @@ export async function connectCloudBackend({
 
     const data = await callCloudApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
+      instanceId: getInstanceId(),
+      runtime: process.env.MODELENCE_RUNTIME,
       containerId,
       dataModels: dataStores,
       configSchema,
@@ -83,6 +86,7 @@ export async function fetchConfigs() {
 export async function syncStatus() {
   const data = await callCloudApi('/api/sync', 'POST', {
     containerId: process.env.MODELENCE_CONTAINER_ID,
+    instanceId: getInstanceId(),
   });
   return data;
 }

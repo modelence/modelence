@@ -217,6 +217,7 @@ describe('app/backendApi', () => {
       const body = JSON.parse((requestInit?.body as string) ?? '{}');
       expect(body).toEqual({
         containerId: 'container-123',
+        instanceId: expect.stringMatching(/^[0-9a-f]{32}$/),
       });
     });
   });
