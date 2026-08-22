@@ -29,14 +29,26 @@ function getMachineKey(): string {
   }
 }
 
-// Stable identity of "this working copy on this machine": the same directory
-// reconnecting (e.g. a dev-server restart) presents the same ID.
+// Stable identity of "this working copy connected to this environment": the
+// same directory reconnecting (e.g. a dev-server restart) presents the same
+// ID, while the same directory pointed at a different environment gets a new
+// one — containers.id is unique across environments in Studio.
 export function getInstanceId(): string {
   if (!instanceId) {
     instanceId = createHash('sha256')
-      .update(`${getMachineKey()}\n${process.cwd()}`)
+      .update(`${getMachineKey()}\n${process.cwd()}\n${process.env.MODELENCE_ENVIRONMENT_ID || ''}`)
       .digest('hex')
       .slice(0, 32);
   }
   return instanceId;
+}
+
+// For runtimes marked by `modelence setup` the container ID is the instance
+// ID; cloud containers keep the Studio-issued MODELENCE_CONTAINER_ID.
+export function getContainerId(): string | undefined {
+  const runtime = process.env.MODELENCE_RUNTIME;
+  if (runtime === 'local' || runtime === 'sandbox') {
+    return getInstanceId();
+  }
+  return process.env.MODELENCE_CONTAINER_ID;
 }
