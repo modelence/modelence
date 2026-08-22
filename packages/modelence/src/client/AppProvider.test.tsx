@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server';
 vi.doMock('./session', () => ({
   initSession: vi.fn(async () => undefined),
   isSessionInitialized: vi.fn(() => false),
+  _isSetupRequired: vi.fn(() => false),
 }));
 
 const sessionMod = await import('./session');

@@ -82,5 +82,24 @@ export function getLocalConfigs(
   variant: LocalConfigVariant = 'withoutRemoteServer'
 ): AppConfig[] {
   const configMap = localConfigMap[variant];
-  return getConfigsFromEnvMap(configMap, configSchema);
+  const configs = getConfigsFromEnvMap(configMap, configSchema);
+
+  // Attached local dev (`modelence setup` writes the marker; Studio sandboxes
+  // pre-set "sandbox"): default the site URL to this process instead of the
+  // environment URL from the cloud config, so OAuth callbacks and email links
+  // point at the server actually running. An explicit MODELENCE_SITE_URL wins.
+  if (
+    variant === 'withRemoteServer' &&
+    process.env.MODELENCE_RUNTIME === 'local' &&
+    !configs.some(({ key }) => key === '_system.site.url')
+  ) {
+    const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
+    configs.push({
+      key: '_system.site.url',
+      type: 'string',
+      value: `http://localhost:${port}`,
+    });
+  }
+
+  return configs;
 }

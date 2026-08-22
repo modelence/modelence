@@ -77,7 +77,21 @@ export type SessionInitPayload = {
   configs: Configs;
   session: object & { authToken: string };
   user: object;
+  /*
+    Present (true) only when a development server has no backend at all —
+    neither a Modelence Cloud connection nor a local database. AppProvider
+    then shows setup instructions instead of the app. The server decides this;
+    the client never consults its own build mode.
+  */
+  setupRequired?: boolean;
 };
+
+let setupRequired = false;
+
+/** @internal */
+export function _isSetupRequired(): boolean {
+  return setupRequired;
+}
 
 /** Hydrate session state from the SSR payload, skipping the network round-trip. */
 export function hydrateSession(payload: SessionInitPayload) {
@@ -87,6 +101,7 @@ export function hydrateSession(payload: SessionInitPayload) {
 
   isInitialized = true;
 
+  setupRequired = Boolean(payload.setupRequired);
   _setConfig(payload.configs);
 
   // localStorage token + anonymous SSR payload = server couldn't read the
@@ -136,7 +151,9 @@ export async function initSession() {
 
   isInitialized = true;
 
-  const { configs, session, user } = await callMethod<SessionInitPayload>('_system.session.init');
+  const payload = await callMethod<SessionInitPayload>('_system.session.init');
+  const { configs, session, user } = payload;
+  setupRequired = Boolean(payload.setupRequired);
   _setConfig(configs);
 
   const config = getClientConfig();

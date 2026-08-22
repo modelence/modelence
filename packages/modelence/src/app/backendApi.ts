@@ -1,4 +1,5 @@
 import os from 'os';
+import { getContainerId } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
@@ -38,7 +39,7 @@ export async function connectCloudBackend({
   stores?: Store<ModelSchema, Record<string, never>>[];
   roles?: Record<string, RoleDefinition>;
 }): Promise<CloudBackendConnectOkResponse> {
-  const containerId = process.env.MODELENCE_CONTAINER_ID;
+  const containerId = getContainerId();
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
   }
@@ -56,6 +57,7 @@ export async function connectCloudBackend({
 
     const data = await callCloudApi<CloudBackendConnectResponse>('/api/connect', 'POST', {
       hostname: os.hostname(),
+      runtime: process.env.MODELENCE_RUNTIME,
       containerId,
       dataModels: dataStores,
       configSchema,
@@ -80,9 +82,11 @@ export async function fetchConfigs() {
   return callCloudApi<{ configs: AppConfig[] }>('/api/configs', 'GET');
 }
 
+export type CloudSyncResponse = { status: 'ok' } | { status: 'detached'; message?: string };
+
 export async function syncStatus() {
-  const data = await callCloudApi('/api/sync', 'POST', {
-    containerId: process.env.MODELENCE_CONTAINER_ID,
+  const data = await callCloudApi<CloudSyncResponse>('/api/sync', 'POST', {
+    containerId: getContainerId(),
   });
   return data;
 }
