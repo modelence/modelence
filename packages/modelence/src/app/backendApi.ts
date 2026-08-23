@@ -1,5 +1,5 @@
 import os from 'os';
-import { getContainerId } from './instance';
+import { getContainerId, isDevRuntime } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
@@ -66,13 +66,23 @@ export async function connectCloudBackend({
     });
 
     if (data.status === 'error') {
-      throw new Error(data.error);
+      throw Object.assign(new Error(`Unable to connect to Modelence Cloud: ${data.error}`), {
+        responseBody: data,
+      });
     }
 
     console.log('Successfully connected to Modelence Cloud');
 
     return data;
   } catch (error) {
+    // A refusal the server explained (e.g. another instance already holds
+    // this environment) is an expected condition on a dev machine: print the
+    // message alone and exit instead of an uncaught stack dump.
+    const cloudError = error as { message?: string; status?: number; responseBody?: unknown };
+    if (isDevRuntime() && (cloudError?.status ?? cloudError?.responseBody) !== undefined) {
+      console.error(cloudError.message);
+      process.exit(1);
+    }
     console.error('Unable to connect to Modelence Cloud:', error);
     throw error;
   }
