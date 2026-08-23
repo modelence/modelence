@@ -47,13 +47,12 @@ export async function handleSignupWithPassword(
     );
 
     if (existingUser) {
-      const existingEmail = existingUser.emails?.find((e) => e.address.toLowerCase() === email);
       if (existingUser.status === 'disabled') {
         throw new Error(
           `User is marked for deletion, please contact support if you want to restore the account.`
         );
       }
-      throw new Error(`User with email already exists: ${existingEmail?.address}`);
+      throw new Error('Unable to create account');
     }
 
     await authConfig.onBeforeSignup?.({
@@ -143,7 +142,7 @@ export async function handleSignupWithPassword(
         // A concurrent signup won the race between the findOne check above and
         // this insert; the unique emails.address index rejected the duplicate.
         // Surface the same message the pre-check would have.
-        throw new Error(`User with email already exists: ${email}`);
+        throw new Error('Unable to create account');
       }
       throw error;
     }
