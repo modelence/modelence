@@ -70,45 +70,57 @@ Learn more about working with Stores in the [Stores documentation](/stores).
 
 ## Authentication & Authorization
 
-You can restrict access to queries and mutations using authentication requirements:
+<Warning>
+Every query and mutation you define is publicly callable over the network.
+There is no declarative `auth` or `authorize` option on a method definition —
+authentication and authorization must be enforced inside the handler.
+</Warning>
+
+Read `user` from the handler context and check it explicitly. For an
+unauthenticated caller, `user` is `null`:
 
 ```typescript
+import { Module, ObjectId } from 'modelence/server';
+import { AuthError } from 'modelence';
+import { dbTodos } from './db';
+
 export default new Module('todo', {
   queries: {
-    getAll: {
-      // Require authentication for this query
-      auth: true,
-      async handler({}, { user }) {
-        // user is guaranteed to exist here
-        return await dbTodos.fetch({ userId: user.id });
+    // Requires a signed-in user
+    async getAll({}, { user }) {
+      if (!user) {
+        throw new AuthError('Not authenticated');
       }
+
+      return await dbTodos.fetch({ userId: user.id });
     },
 
-    getPublic: {
-      // No authentication required
-      auth: false,
-      async handler() {
-        return await dbTodos.fetch({ isPublic: true });
-      }
+    // Public: no user check
+    async getPublic() {
+      return await dbTodos.fetch({ isPublic: true });
     }
   },
 
   mutations: {
-    adminDelete: {
-      // Custom authorization check
-      auth: true,
-      authorize: ({ user }) => {
-        if (!user.roles?.includes('admin')) {
-          throw new Error('Admin access required');
-        }
-      },
-      async handler({ id }) {
-        return await dbTodos.deleteOne({ _id: new ObjectId(id) });
+    // Admin only
+    async adminDelete({ id }, { user }) {
+      if (!user) {
+        throw new AuthError('Not authenticated');
       }
+
+      // Throws if the user doesn't have the "admin" role
+      user.requireRole('admin');
+
+      return await dbTodos.deleteOne({ _id: new ObjectId(id) });
     }
   }
 });
 ```
+
+<Tip>
+See [Roles](/roles) for defining roles, assigning them to users, and using
+`user.hasRole` / `user.requireRole`.
+</Tip>
 
 ## Queries
 
@@ -257,31 +269,37 @@ export default new Module('todo', {
 });
 ```
 
-### 5. Use TypeScript Types
+### 5. Validate Method Arguments
 
-Leverage TypeScript for type safety across your modules:
+Method arguments arrive from the client untyped and unvalidated — there is no
+`input` option on a method definition. Parse them at the top of the handler to
+get validation and types in one step:
 
 ```typescript
-import { schema } from 'modelence/server';
+import { Module, schema } from 'modelence/server';
+import { AuthError } from 'modelence';
 
-type TodoPriority = 'low' | 'medium' | 'high';
+const createArgs = schema.object({
+  title: schema.string().min(1),
+  priority: schema.enum(['low', 'medium', 'high'])
+});
 
 export default new Module('todo', {
   mutations: {
-    create: {
-      input: {
-        title: schema.string(),
-        priority: schema.enum<TodoPriority>(['low', 'medium', 'high'])
-      },
-      async handler(input, { user }) {
-        // input is fully typed
-        const { insertedId } = await dbTodos.insertOne({
-          ...input,
-          userId: user.id,
-          createdAt: new Date()
-        });
-        return insertedId;
+    async create(args, { user }) {
+      if (!user) {
+        throw new AuthError('Not authenticated');
       }
+
+      // Throws on invalid input; `input` is fully typed from here on
+      const input = createArgs.parse(args);
+
+      const { insertedId } = await dbTodos.insertOne({
+        ...input,
+        userId: user.id,
+        createdAt: new Date()
+      });
+      return insertedId;
     }
   }
 });
