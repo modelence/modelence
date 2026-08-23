@@ -41,7 +41,7 @@ export async function connectCloudBackend(
     stores?: Store<ModelSchema, Record<string, never>>[];
     roles?: Record<string, RoleDefinition>;
   },
-  options?: { isTakeoverRetry?: boolean }
+  options?: { force?: boolean }
 ): Promise<CloudBackendConnectOkResponse> {
   const containerId = getContainerId();
   if (!containerId) {
@@ -63,6 +63,7 @@ export async function connectCloudBackend(
       hostname: os.hostname(),
       runtime: process.env.MODELENCE_RUNTIME,
       containerId,
+      ...(options?.force ? { force: true } : {}),
       dataModels: dataStores,
       configSchema,
       cronJobsMetadata,
@@ -82,25 +83,20 @@ export async function connectCloudBackend(
     const cloudError = error as { message?: string; status?: number; responseBody?: unknown };
 
     // /api/connect's only 409 is "another instance already holds this
-    // environment". On an interactive dev machine, offer a takeover: Studio
-    // stops the holder (pausing the sandbox, or detaching another dev
-    // instance) and the connect is retried once.
-    if (
-      isDevRuntime() &&
-      cloudError?.status === 409 &&
-      !options?.isTakeoverRetry &&
-      process.stdin.isTTY
-    ) {
+    // environment". On an interactive dev machine, offer a takeover: the
+    // connect is retried once with `force`, which makes Studio stop the
+    // holder (pausing a sandbox, or detaching another dev instance) and hand
+    // over the lease in that same request.
+    if (isDevRuntime() && cloudError?.status === 409 && !options?.force && process.stdin.isTTY) {
       const detail =
         (cloudError.responseBody as { error?: string } | undefined)?.error ?? cloudError.message;
       const takeover = await promptYesNo(
         `${detail}\nDisconnect it and connect this instance instead? [Y/n] `
       );
       if (takeover) {
-        await callCloudApi('/api/disconnect-holder', 'POST');
         return connectCloudBackend(
           { configSchema, cronJobsMetadata, stores, roles },
-          { isTakeoverRetry: true }
+          { force: true }
         );
       }
       console.error('Leaving the existing instance connected.');
