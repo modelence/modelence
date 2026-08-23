@@ -1,4 +1,5 @@
 import os from 'os';
+import readline from 'readline/promises';
 import { getContainerId, isDevRuntime } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
@@ -28,17 +29,20 @@ export type CloudBackendConnectResponse =
   | CloudBackendConnectOkResponse
   | CloudBackendConnectErrorResponse;
 
-export async function connectCloudBackend({
-  configSchema,
-  cronJobsMetadata,
-  stores,
-  roles,
-}: {
-  configSchema?: ConfigSchema;
-  cronJobsMetadata?: CronJobMetadata[];
-  stores?: Store<ModelSchema, Record<string, never>>[];
-  roles?: Record<string, RoleDefinition>;
-}): Promise<CloudBackendConnectOkResponse> {
+export async function connectCloudBackend(
+  {
+    configSchema,
+    cronJobsMetadata,
+    stores,
+    roles,
+  }: {
+    configSchema?: ConfigSchema;
+    cronJobsMetadata?: CronJobMetadata[];
+    stores?: Store<ModelSchema, Record<string, never>>[];
+    roles?: Record<string, RoleDefinition>;
+  },
+  options?: { isTakeoverRetry?: boolean }
+): Promise<CloudBackendConnectOkResponse> {
   const containerId = getContainerId();
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
@@ -75,16 +79,53 @@ export async function connectCloudBackend({
 
     return data;
   } catch (error) {
+    const cloudError = error as { message?: string; status?: number; responseBody?: unknown };
+
+    // /api/connect's only 409 is "another instance already holds this
+    // environment". On an interactive dev machine, offer a takeover: Studio
+    // stops the holder (pausing the sandbox, or detaching another dev
+    // instance) and the connect is retried once.
+    if (
+      isDevRuntime() &&
+      cloudError?.status === 409 &&
+      !options?.isTakeoverRetry &&
+      process.stdin.isTTY
+    ) {
+      const detail =
+        (cloudError.responseBody as { error?: string } | undefined)?.error ?? cloudError.message;
+      const takeover = await promptYesNo(
+        `${detail}\nDisconnect it and connect this instance instead? [Y/n] `
+      );
+      if (takeover) {
+        await callCloudApi('/api/disconnect-holder', 'POST');
+        return connectCloudBackend(
+          { configSchema, cronJobsMetadata, stores, roles },
+          { isTakeoverRetry: true }
+        );
+      }
+      console.error('Leaving the existing instance connected.');
+      process.exit(1);
+    }
+
     // A refusal the server explained (e.g. another instance already holds
     // this environment) is an expected condition on a dev machine: print the
     // message alone and exit instead of an uncaught stack dump.
-    const cloudError = error as { message?: string; status?: number; responseBody?: unknown };
     if (isDevRuntime() && (cloudError?.status ?? cloudError?.responseBody) !== undefined) {
       console.error(cloudError.message);
       process.exit(1);
     }
     console.error('Unable to connect to Modelence Cloud:', error);
     throw error;
+  }
+}
+
+async function promptYesNo(question: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(question)).trim().toLowerCase();
+    return answer === '' || answer === 'y' || answer === 'yes';
+  } finally {
+    rl.close();
   }
 }
 
