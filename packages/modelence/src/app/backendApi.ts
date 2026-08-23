@@ -1,5 +1,5 @@
 import os from 'os';
-import readline from 'readline/promises';
+import readline from 'node:readline/promises';
 import { getContainerId, isDevRuntime } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
