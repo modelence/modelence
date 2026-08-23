@@ -377,6 +377,21 @@ describe('auth/signup', () => {
     expect(authConfig.signup.onError).toHaveBeenCalled();
   });
 
+  test('returns a generic error for disabled accounts without revealing their status', async () => {
+    mockFindOne.mockResolvedValueOnce({
+      _id: createObjectId('disabled'),
+      handle: 'disableduser',
+      createdAt: new Date(),
+      authMethods: {},
+      status: 'disabled',
+      emails: [{ address: 'test@example.com', verified: true }],
+    } as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Unable to create account');
+  });
+
   test('throws already-exists when a concurrent signup wins the race and the unique index rejects the insert', async () => {
     // The findOne pre-check sees nothing (concurrent request has not inserted yet)...
     mockFindOne.mockResolvedValueOnce(null as never);

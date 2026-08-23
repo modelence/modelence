@@ -48,9 +48,7 @@ export async function handleSignupWithPassword(
 
     if (existingUser) {
       if (existingUser.status === 'disabled') {
-        throw new Error(
-          `User is marked for deletion, please contact support if you want to restore the account.`
-        );
+        throw new Error('Unable to create account');
       }
       throw new Error('Unable to create account');
     }
