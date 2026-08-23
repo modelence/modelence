@@ -50,6 +50,12 @@ export function isDevRuntime(): boolean {
   return runtime === 'local' || runtime === 'sandbox';
 }
 
+// A developer's own machine — the only runtime that may force-take an
+// environment lease held by another instance.
+export function isLocalRuntime(): boolean {
+  return process.env.MODELENCE_RUNTIME === 'local';
+}
+
 // For dev runtimes the container ID is the instance ID; cloud containers keep
 // the Studio-issued MODELENCE_CONTAINER_ID.
 export function getContainerId(): string | undefined {

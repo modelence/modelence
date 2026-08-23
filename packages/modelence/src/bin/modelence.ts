@@ -51,9 +51,13 @@ program
 program
   .command('dev')
   .description('Start development server')
-  .action(async () => {
+  .option(
+    '--takeover',
+    'Disconnect any instance currently holding the environment and connect this one'
+  )
+  .action(async (options) => {
     await loadEnv();
-    dev();
+    dev(options);
   });
 
 program

@@ -1,6 +1,5 @@
 import os from 'os';
-import readline from 'node:readline/promises';
-import { getContainerId, isDevRuntime } from './instance';
+import { getContainerId, isDevRuntime, isLocalRuntime } from './instance';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
@@ -29,24 +28,27 @@ export type CloudBackendConnectResponse =
   | CloudBackendConnectOkResponse
   | CloudBackendConnectErrorResponse;
 
-export async function connectCloudBackend(
-  {
-    configSchema,
-    cronJobsMetadata,
-    stores,
-    roles,
-  }: {
-    configSchema?: ConfigSchema;
-    cronJobsMetadata?: CronJobMetadata[];
-    stores?: Store<ModelSchema, Record<string, never>>[];
-    roles?: Record<string, RoleDefinition>;
-  },
-  options?: { force?: boolean }
-): Promise<CloudBackendConnectOkResponse> {
+export async function connectCloudBackend({
+  configSchema,
+  cronJobsMetadata,
+  stores,
+  roles,
+}: {
+  configSchema?: ConfigSchema;
+  cronJobsMetadata?: CronJobMetadata[];
+  stores?: Store<ModelSchema, Record<string, never>>[];
+  roles?: Record<string, RoleDefinition>;
+}): Promise<CloudBackendConnectOkResponse> {
   const containerId = getContainerId();
   if (!containerId) {
     throw new Error('Unable to connect to Modelence Cloud: MODELENCE_CONTAINER_ID is not set');
   }
+
+  // Set by `modelence dev --takeover`: Studio disconnects whoever holds the
+  // environment (pausing a sandbox, or detaching another dev instance) and
+  // hands over the lease in the same connect request. Only the `local`
+  // runtime may take over — Studio enforces the same rule server-side.
+  const takeover = isLocalRuntime() && process.env.MODELENCE_TAKEOVER === '1';
 
   try {
     const dataStores = (stores ?? []).map((store) => ({
@@ -63,7 +65,7 @@ export async function connectCloudBackend(
       hostname: os.hostname(),
       runtime: process.env.MODELENCE_RUNTIME,
       containerId,
-      ...(options?.force ? { force: true } : {}),
+      ...(takeover ? { force: true } : {}),
       dataModels: dataStores,
       configSchema,
       cronJobsMetadata,
@@ -83,23 +85,14 @@ export async function connectCloudBackend(
     const cloudError = error as { message?: string; status?: number; responseBody?: unknown };
 
     // /api/connect's only 409 is "another instance already holds this
-    // environment". On an interactive dev machine, offer a takeover: the
-    // connect is retried once with `force`, which makes Studio stop the
-    // holder (pausing a sandbox, or detaching another dev instance) and hand
-    // over the lease in that same request.
-    if (isDevRuntime() && cloudError?.status === 409 && !options?.force && process.stdin.isTTY) {
+    // environment" — point a developer at the takeover flag.
+    if (isLocalRuntime() && cloudError?.status === 409 && !takeover) {
       const detail =
         (cloudError.responseBody as { error?: string } | undefined)?.error ?? cloudError.message;
-      const takeover = await promptYesNo(
-        `${detail}\nDisconnect it and connect this instance instead? [Y/n] `
+      console.error(
+        `${detail}\nRe-run with the --takeover flag (e.g. npm run dev -- --takeover) to ` +
+          'disconnect it and connect this instance instead.'
       );
-      if (takeover) {
-        return connectCloudBackend(
-          { configSchema, cronJobsMetadata, stores, roles },
-          { force: true }
-        );
-      }
-      console.error('Leaving the existing instance connected.');
       process.exit(1);
     }
 
@@ -112,16 +105,6 @@ export async function connectCloudBackend(
     }
     console.error('Unable to connect to Modelence Cloud:', error);
     throw error;
-  }
-}
-
-async function promptYesNo(question: string): Promise<boolean> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = (await rl.question(question)).trim().toLowerCase();
-    return answer === '' || answer === 'y' || answer === 'yes';
-  } finally {
-    rl.close();
   }
 }
 
