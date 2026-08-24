@@ -1,5 +1,6 @@
 import os from 'os';
 import { getContainerId, isDevRuntime, isLocalRuntime } from './instance';
+import { getLocalSiteUrl } from '../config/local';
 import { ConfigSchema } from '../config/types';
 import { CronJobMetadata } from '../cron/types';
 import { RoleDefinition } from '../auth/types';
@@ -65,6 +66,7 @@ export async function connectCloudBackend({
       hostname: os.hostname(),
       runtime: process.env.MODELENCE_RUNTIME,
       containerId,
+      ...(isLocalRuntime() ? { localSiteUrl: getLocalSiteUrl() } : {}),
       ...(takeover ? { force: true } : {}),
       dataModels: dataStores,
       configSchema,

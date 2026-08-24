@@ -266,6 +266,12 @@ export async function setup(options: { token?: string; host: string }) {
           'an AI coding agent, reconnect its Modelence MCP server (in Claude Code: /mcp) or start a new session.'
       );
     }
+
+    if (newEnv.MODELENCE_RUNTIME === 'local') {
+      console.log('\nNext step — run the app on this machine:\n');
+      console.log("  npm install   (if you haven't already)");
+      console.log('  npm run dev   (starts the app)\n');
+    }
   } catch (error: unknown) {
     console.error(`Setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     process.exit(1);

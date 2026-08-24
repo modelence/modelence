@@ -77,6 +77,14 @@ function getConfigsFromEnvMap(
   return configs;
 }
 
+// Where an attached local dev server actually serves: the default for
+// `_system.site.url`, and what Studio shows when it has to tell someone the
+// environment is running on a developer's machine instead of in the cloud.
+export function getLocalSiteUrl(): string {
+  const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
+  return process.env.MODELENCE_SITE_URL || `http://localhost:${port}`;
+}
+
 export function getLocalConfigs(
   configSchema: ConfigSchema,
   variant: LocalConfigVariant = 'withoutRemoteServer'
@@ -93,11 +101,10 @@ export function getLocalConfigs(
     process.env.MODELENCE_RUNTIME === 'local' &&
     !configs.some(({ key }) => key === '_system.site.url')
   ) {
-    const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
     configs.push({
       key: '_system.site.url',
       type: 'string',
-      value: `http://localhost:${port}`,
+      value: getLocalSiteUrl(),
     });
   }
 

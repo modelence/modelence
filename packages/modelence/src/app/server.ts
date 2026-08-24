@@ -21,6 +21,7 @@ import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
+import { getLocalSiteUrl } from '@/config/local';
 import { issueLinkNonce } from '@/auth/session';
 
 function getBodyParserMiddleware(config?: {
@@ -197,7 +198,7 @@ export async function startServer(
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
-    const siteUrl = getConfig('_system.site.url') || `http://localhost:${port}`;
+    const siteUrl = getConfig('_system.site.url') || getLocalSiteUrl();
     console.log(`\nApplication started on ${siteUrl}\n`);
 
     // The browser shows the setup screen in this state (see
