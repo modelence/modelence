@@ -82,6 +82,9 @@ function getConfigsFromEnvMap(
 // environment is running on a developer's machine instead of in the cloud.
 export function getLocalSiteUrl(): string {
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
+  // Reads the env var directly on purpose: this is what *produces* the
+  // `_system.site.url` config below, so getConfig would be circular.
+  // eslint-disable-next-line no-restricted-syntax
   return process.env.MODELENCE_SITE_URL || `http://localhost:${port}`;
 }
 
