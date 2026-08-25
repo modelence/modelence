@@ -267,7 +267,9 @@ export async function setup(options: { token?: string; host: string }) {
       );
     }
 
-    if (newEnv.MODELENCE_RUNTIME === 'local') {
+    // Only for a first-time setup: re-running it on an existing file already
+    // told them to restart the dev server they're running.
+    if (!fileExisted && newEnv.MODELENCE_RUNTIME === 'local') {
       console.log('\nNext step — run the app on this machine:\n');
       console.log("  npm install   (if you haven't already)");
       console.log('  npm run dev   (starts the app)\n');
