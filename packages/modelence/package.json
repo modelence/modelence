@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.22.3",
+  "version": "0.23.0",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -22,6 +22,9 @@
   ],
   "bin": {
     "modelence": "./dist/bin/modelence.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsup",

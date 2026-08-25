@@ -15,11 +15,13 @@ import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
 import { ModelenceError } from '../error';
 import { Module } from './module';
+import { isSetupRequired } from './setupStatus';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
+import { getLocalSiteUrl } from '@/config/local';
 import { issueLinkNonce } from '@/auth/session';
 
 function getBodyParserMiddleware(config?: {
@@ -196,8 +198,19 @@ export async function startServer(
   const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
   httpServer.listen(port, () => {
     logInfo(`Application started`, { source: 'app' });
-    const siteUrl = getConfig('_system.site.url') || `http://localhost:${port}`;
+    const siteUrl = getConfig('_system.site.url') || getLocalSiteUrl();
     console.log(`\nApplication started on ${siteUrl}\n`);
+
+    // The browser shows the setup screen in this state (see
+    // client/SetupScreen); say the same thing here for anyone who only sees
+    // the terminal — a developer glancing at logs, or a coding agent running
+    // the dev server.
+    if (isSetupRequired()) {
+      console.log(
+        'This project is not connected to a backend yet, so the app serves setup instructions instead of its UI.\n' +
+          'To connect it to Modelence Cloud, run `npx modelence setup` and restart the dev server.\n'
+      );
+    }
   });
 }
 
