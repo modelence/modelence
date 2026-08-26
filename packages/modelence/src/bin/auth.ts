@@ -1,10 +1,25 @@
 import open from 'open';
-import { writeFileSync } from 'fs';
-import { join } from 'path';
 
-export async function authenticateCli(host: string) {
-  // TODO: check if a token already exists in .modelence/auth.json
+/*
+  Browser device authorization. The returned token is short-lived and
+  user-scoped; commands re-authorize on every run, so no credential is ever
+  stored on disk.
 
+  With `pickEnvironment`, the approval page also asks the user to choose an
+  environment. The choice never travels back through the CLI — the server
+  stamps it on the token itself, and /api/setup derives the target from
+  there, so the authorization is only good for the environment the user
+  approved.
+
+  `appId` is the hint from .modelence/project.json: the approval page uses it
+  to preselect the app this project was last connected to. Purely a
+  convenience for the picker — the user can still choose any app, and an
+  unresolvable ID is simply ignored.
+*/
+export async function authenticateCli(
+  host: string,
+  { pickEnvironment = false, appId }: { pickEnvironment?: boolean; appId?: string } = {}
+): Promise<{ token: string }> {
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
   });
@@ -14,15 +29,26 @@ export async function authenticateCli(host: string) {
   }
 
   const { code, verificationUrl } = await response.json();
+  const url = new URL(verificationUrl);
+  if (pickEnvironment) {
+    url.searchParams.set('pick', 'environment');
+  }
+  if (appId) {
+    url.searchParams.set('appId', appId);
+  }
 
-  console.log(`Please visit ${verificationUrl} to authenticate`);
+  console.log(`Please visit ${url} to authenticate`);
   console.log(`Code: ${code}`);
 
-  await open(verificationUrl);
+  try {
+    await open(url.toString());
+  } catch {
+    // Headless/SSH/container — no browser to open. The URL and code above
+    // are already printed, so authentication can proceed manually.
+    console.log('Could not open a browser automatically. Please open the URL above manually.');
+  }
 
   const token = await waitForAuth(host, code);
-
-  writeFileSync(join(process.cwd(), '.modelence', 'auth.json'), JSON.stringify({ token }));
 
   return { token };
 }

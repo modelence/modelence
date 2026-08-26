@@ -2,7 +2,7 @@ import { getServerPath } from './config';
 import { execSync } from 'child_process';
 import path from 'path';
 
-export function dev() {
+export function dev(options: { takeover?: boolean } = {}) {
   console.log('Starting Modelence dev server...');
 
   const serverPath = getServerPath();
@@ -11,6 +11,10 @@ export function dev() {
   execSync(`"${tsxPath}" watch --ignore "vite.config.ts.timestamp-*" "${serverPath}"`, {
     stdio: 'inherit',
     cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: 'development' },
+    env: {
+      ...process.env,
+      NODE_ENV: 'development',
+      ...(options.takeover ? { MODELENCE_TAKEOVER: '1' } : {}),
+    },
   });
 }

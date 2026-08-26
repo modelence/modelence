@@ -23,7 +23,7 @@ const program = new Command()
 program
   .command('setup')
   .description('Setup Modelence environment variables')
-  .requiredOption('-t, --token <token>', 'Modelence setup token')
+  .option('-t, --token <token>', 'Modelence setup token (omit to authorize in the browser)')
   .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     await setup(options);
@@ -51,9 +51,13 @@ program
 program
   .command('dev')
   .description('Start development server')
-  .action(async () => {
+  .option(
+    '--takeover',
+    'Disconnect any instance currently holding the environment and connect this one'
+  )
+  .action(async (options) => {
     await loadEnv();
-    dev();
+    dev(options);
   });
 
 program

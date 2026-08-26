@@ -1,5 +1,6 @@
 import { time } from '../time';
 import { fetchConfigs, syncStatus } from '../app/backendApi';
+import { isDevRuntime } from '../app/instance';
 import { getLocalConfigs } from './local';
 import { loadConfigs, getSchema } from './server';
 import { AppConfig } from './types';
@@ -18,7 +19,15 @@ export function startConfigSync() {
 
     // TODO: move this sync outside of config
     try {
-      await syncStatus();
+      const sync = await syncStatus();
+      // Another instance took over this environment. The dev-runtime guard
+      // makes sure a Studio bug can never take down cloud containers.
+      if (sync?.status === 'detached' && isDevRuntime()) {
+        console.error(
+          `Detached from Modelence Cloud: ${sync.message ?? 'this environment is now connected from another instance.'}`
+        );
+        process.exit(1);
+      }
     } catch (error) {
       console.error('Error syncing status', error);
     }

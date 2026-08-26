@@ -78,10 +78,39 @@ function getConfigsFromEnvMap(
   return configs;
 }
 
+// Where an attached local dev server actually serves: the default for
+// `_system.site.url`, and what Studio shows when it has to tell someone the
+// environment is running on a developer's machine instead of in the cloud.
+export function getLocalSiteUrl(): string {
+  const port = process.env.MODELENCE_PORT || process.env.PORT || 3000;
+  // Reads the env var directly on purpose: this is what *produces* the
+  // `_system.site.url` config below, so getConfig would be circular.
+  // eslint-disable-next-line no-restricted-syntax
+  return process.env.MODELENCE_SITE_URL || `http://localhost:${port}`;
+}
+
 export function getLocalConfigs(
   configSchema: ConfigSchema,
   variant: LocalConfigVariant = 'withoutRemoteServer'
 ): AppConfig[] {
   const configMap = localConfigMap[variant];
-  return getConfigsFromEnvMap(configMap, configSchema);
+  const configs = getConfigsFromEnvMap(configMap, configSchema);
+
+  // Attached local dev (`modelence setup` writes the marker; Studio sandboxes
+  // pre-set "sandbox"): default the site URL to this process instead of the
+  // environment URL from the cloud config, so OAuth callbacks and email links
+  // point at the server actually running. An explicit MODELENCE_SITE_URL wins.
+  if (
+    variant === 'withRemoteServer' &&
+    process.env.MODELENCE_RUNTIME === 'local' &&
+    !configs.some(({ key }) => key === '_system.site.url')
+  ) {
+    configs.push({
+      key: '_system.site.url',
+      type: 'string',
+      value: getLocalSiteUrl(),
+    });
+  }
+
+  return configs;
 }
