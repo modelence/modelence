@@ -229,6 +229,26 @@ describe('auth/client — OAuth sign-in', () => {
       expect(url.searchParams.get('redirectUri')).toBe('myapp://auth');
     });
 
+    /**
+     * Intentionally diverges from signInWithOAuth, which routes its web URL
+     * through openUrl. This path authenticates with the httpOnly oauthLinkToken
+     * cookie just set on this origin, so it must stay in the same cookie jar —
+     * openUrl would hand it to a system browser that never received the cookie.
+     */
+    test('does not route the browser path through openUrl', async () => {
+      useNativeClient();
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ ok: true }), { status: 200 })
+        ) as typeof fetch;
+
+      await authClient.linkOAuthProvider({ provider: 'google' });
+
+      expect(mockOpenUrl).not.toHaveBeenCalled();
+      expect(window.location.href).toContain('mode=link');
+    });
+
     // Without a redirectUri there is no deep link to come back to, so linking
     // takes the browser path — same rule as signInWithOAuth.
     test('takes the browser path when no redirectUri is given', async () => {

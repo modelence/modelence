@@ -395,14 +395,22 @@ export async function loginWithOAuth(options: { code: string }) {
  * Redirects the browser to the OAuth provider's authorization page.
  * The provider will redirect back and the account will be linked.
  *
+ * Without `redirectUri` this navigates the current context and authenticates
+ * with an httpOnly cookie, so it only works where the navigation stays in the
+ * same cookie jar — a browser, or a webview that navigates in place. Clients
+ * whose `openUrl` opens an external browser (Electron, Capacitor) must pass a
+ * `redirectUri`: that flow carries a single-use nonce in the URL and does not
+ * depend on cookies.
+ *
  * @example
  * ```ts
  * linkOAuthProvider({ provider: 'google' });
  * ```
  * @param options.provider - The OAuth provider to link ('google' or 'github').
  * @param options.redirectUri - Deep link to return to once linking completes.
- *   React Native only; must be listed in the server's `auth.mobile.redirectUrls`.
- *   Without it the flow ends in the device browser instead of back in the app.
+ *   Required for React Native and any client that opens URLs externally; must be
+ *   listed in the server's `auth.mobile.redirectUrls`. Without it the flow ends
+ *   wherever the navigation lands rather than back in the app.
  */
 export async function linkOAuthProvider(options: {
   provider: OAuthProvider;
@@ -454,6 +462,15 @@ export async function linkOAuthProvider(options: {
         throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
       }
     }
+    // Deliberately a same-context navigation, not `config.openUrl` — unlike the
+    // web path of `signInWithOAuth`, which is stateless and works in any
+    // browser. This flow authenticates via the httpOnly `oauthLinkToken` cookie
+    // just set on this origin, so the navigation that follows must come from the
+    // same cookie jar. Handing the URL to `openUrl` would, in an Electron or
+    // Capacitor client, open a system browser that never received that cookie,
+    // and linking would fail as unauthenticated. Such clients should pass a
+    // `redirectUri` and use the nonce-based flow above, whose credential travels
+    // in the URL and is therefore jar-independent.
     window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
   }
 }
