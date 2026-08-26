@@ -758,7 +758,8 @@ function describeRejectedRedirectUri(redirectUri: string): string {
  */
 export function resolveMobileRedirectRequest(
   req: Request,
-  res: Response
+  res: Response,
+  mode: string
 ): { ok: true; redirectUri: string | null; codeChallenge: string | null } | { ok: false } {
   if (req.query.platform !== 'mobile') {
     return { ok: true, redirectUri: null, codeChallenge: null };
@@ -790,13 +791,16 @@ export function resolveMobileRedirectRequest(
     return { ok: false };
   }
 
-  // Required: an omitted challenge would mint an unbound code, redeemable by
-  // anyone — including a victim mid-flow whose verifier the server would then
-  // ignore. The charset is constrained because a colon would corrupt the
-  // delimiter-separated state cookie.
   const rawChallenge = typeof req.query.codeChallenge === 'string' ? req.query.codeChallenge : '';
+  const hasValidChallenge = /^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge);
 
-  if (!/^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge)) {
+  // Only a login mints an exchange code, so only a login needs the binding. An
+  // omitted challenge there would produce an unbound code, redeemable by anyone
+  // — including a victim mid-flow whose verifier the server would then ignore.
+  // Linking redirects with `linked=<provider>` and no credential, so there is
+  // nothing to bind. The charset is constrained because a colon would corrupt
+  // the delimiter-separated state cookie.
+  if (mode !== 'link' && !hasValidChallenge) {
     sendOAuthError(
       res,
       400,
@@ -806,7 +810,7 @@ export function resolveMobileRedirectRequest(
     return { ok: false };
   }
 
-  return { ok: true, redirectUri, codeChallenge: rawChallenge };
+  return { ok: true, redirectUri, codeChallenge: hasValidChallenge ? rawChallenge : null };
 }
 
 /**
@@ -828,7 +832,7 @@ export async function prepareOAuthInitiation(
 
   // Validate the mobile deep link before leaving the app, so a bad target
   // fails here rather than after the user has granted consent.
-  const mobileRequest = resolveMobileRedirectRequest(req, res);
+  const mobileRequest = resolveMobileRedirectRequest(req, res, mode);
   if (!mobileRequest.ok) return null;
   const { redirectUri: mobileRedirectUri, codeChallenge } = mobileRequest;
 

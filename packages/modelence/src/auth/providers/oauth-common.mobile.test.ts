@@ -254,7 +254,11 @@ describe('auth/providers/oauth-common — mobile', () => {
 
   describe('resolveMobileRedirectRequest', () => {
     test('passes through a non-mobile request', () => {
-      const result = oauth.resolveMobileRedirectRequest({ query: {} } as unknown as Request, res);
+      const result = oauth.resolveMobileRedirectRequest(
+        { query: {} } as unknown as Request,
+        res,
+        'login'
+      );
 
       expect(result).toEqual({ ok: true, redirectUri: null, codeChallenge: null });
     });
@@ -268,7 +272,8 @@ describe('auth/providers/oauth-common — mobile', () => {
             codeChallenge: 'a'.repeat(64),
           },
         } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       expect(result).toEqual({
@@ -283,10 +288,51 @@ describe('auth/providers/oauth-common — mobile', () => {
      * an unbound code, and an unbound code is redeemable by any client —
      * including a victim mid-flow whose verifier the server would then ignore.
      */
+    /**
+     * Linking redirects with `linked=<provider>` and mints no exchange code, so
+     * there is no credential to bind. Requiring a challenge here broke native
+     * provider linking outright — the request failed before the consent screen.
+     */
+    describe('link mode does not require a challenge', () => {
+      test('accepts a mobile link initiation with no challenge', () => {
+        const result = oauth.resolveMobileRedirectRequest(
+          { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
+          res,
+          'link'
+        );
+
+        expect(result).toEqual({
+          ok: true,
+          redirectUri: ALLOWED_DEEP_LINK,
+          codeChallenge: null,
+        });
+      });
+
+      test('a login initiation with no challenge is still rejected', () => {
+        const result = oauth.resolveMobileRedirectRequest(
+          { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
+          res,
+          'login'
+        );
+
+        expect(result).toEqual({ ok: false });
+      });
+
+      // Belt and braces: even if a challenge-less mobile state reached the
+      // sign-in path, it is downgraded to web rather than minting an unbound
+      // code — so relaxing the check for linking cannot reopen the bypass.
+      test('a challenge-less mobile state never yields a mobile outcome', () => {
+        expect(
+          oauth.toOAuthOutcome({ platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK })
+        ).toEqual({ platform: 'web' });
+      });
+    });
+
     test('rejects a mobile request with no challenge', () => {
       const result = oauth.resolveMobileRedirectRequest(
         { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       expect(result).toEqual({ ok: false });
@@ -302,7 +348,8 @@ describe('auth/providers/oauth-common — mobile', () => {
             codeChallenge: 'has:colons',
           },
         } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       expect(result).toEqual({ ok: false });
@@ -313,7 +360,8 @@ describe('auth/providers/oauth-common — mobile', () => {
     test('rejects a target that is not allowlisted', () => {
       const result = oauth.resolveMobileRedirectRequest(
         { query: { platform: 'mobile', redirectUri: 'evil://auth' } } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       expect(result).toEqual({ ok: false });
@@ -330,7 +378,8 @@ describe('auth/providers/oauth-common — mobile', () => {
       function messageFor(redirectUri: string): string {
         oauth.resolveMobileRedirectRequest(
           { query: { platform: 'mobile', redirectUri } } as unknown as Request,
-          res
+          res,
+          'login'
         );
         return (res.json as unknown as { mock: { calls: [{ error: string }][] } }).mock.calls[0][0]
           .error;
@@ -379,7 +428,8 @@ describe('auth/providers/oauth-common — mobile', () => {
 
       oauth.resolveMobileRedirectRequest(
         { query: { platform: 'mobile', redirectUri: 'myapp://auth' } } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       const message = (res.json as unknown as { mock: { calls: [{ error: string }][] } }).mock
@@ -390,7 +440,8 @@ describe('auth/providers/oauth-common — mobile', () => {
     test('rejects a mobile request with no target', () => {
       const result = oauth.resolveMobileRedirectRequest(
         { query: { platform: 'mobile' } } as unknown as Request,
-        res
+        res,
+        'login'
       );
 
       expect(result).toEqual({ ok: false });
@@ -730,6 +781,37 @@ describe('auth/providers/oauth-common — mobile', () => {
             codeChallenge: 'has:colons:and:more',
           },
         } as unknown as Request,
+        res,
+        'authStateGoogle'
+      );
+
+      expect(result).toBeNull();
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    // The regression this guards: linkOAuthProvider sends platform=mobile with a
+    // linkNonce and no challenge, which a blanket requirement rejected before
+    // the user ever saw a consent screen.
+    test('a mobile link initiation succeeds without a challenge', async () => {
+      const result = await oauth.prepareOAuthInitiation(
+        {
+          query: {
+            mode: 'link',
+            platform: 'mobile',
+            redirectUri: ALLOWED_DEEP_LINK,
+          },
+        } as unknown as Request,
+        res,
+        'authStateGoogle'
+      );
+
+      expect(result).toEqual({ state: expect.any(String), mode: 'link' });
+      expect(res.cookie).toHaveBeenCalled();
+    });
+
+    test('a mobile login initiation without a challenge is rejected', async () => {
+      const result = await oauth.prepareOAuthInitiation(
+        { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
         res,
         'authStateGoogle'
       );
