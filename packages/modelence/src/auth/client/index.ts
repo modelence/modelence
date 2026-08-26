@@ -345,8 +345,14 @@ export async function signInWithOAuth(options: {
  * app's deep link for a session, stores the auth token, and returns the
  * signed-in user. Codes are valid for one minute and can only be redeemed once.
  *
+ * Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
+ * a code back to your app. It works on native and under Expo Web, where the
+ * verifier is kept in `sessionStorage` so it survives the navigation to the
+ * provider. A plain web app that calls `signInWithOAuth({ provider })` with no
+ * `redirectUri` is signed in by a session cookie and never needs this.
+ *
  * The verifier minted by `signInWithOAuth` is replayed here, which is what
- * makes a code usable only by the device that started the flow. Calling this
+ * makes a code usable only by the client that started the flow. Calling this
  * without a preceding `signInWithOAuth` — as a crafted deep link would — fails
  * before the code is ever sent.
  *
@@ -361,9 +367,20 @@ export async function loginWithOAuth(options: { code: string }) {
 
   const codeVerifier = consumeOAuthVerifier();
   if (!codeVerifier) {
-    throw new Error(
-      'No sign-in is in progress. Call signInWithOAuth before redeeming an OAuth code.'
+    // Thrown mid-flow, after the user has pressed a button, so apps surface it in
+    // the UI — keep the thrown message something an end user can act on and put
+    // the integration cause in the console for whoever is debugging it.
+    console.error(
+      '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
+        'Either signInWithOAuth was never called on this client, or the code came ' +
+        'from somewhere other than a flow this client started. On native, the app ' +
+        'process must survive the round trip; in a browser the verifier is kept in ' +
+        'sessionStorage, so a new tab or a cleared session also produces this. ' +
+        'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
+        'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
     );
+
+    throw new Error('This sign-in link is no longer valid. Please sign in again.');
   }
 
   const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(

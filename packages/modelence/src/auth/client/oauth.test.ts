@@ -150,9 +150,28 @@ describe('auth/client — OAuth sign-in', () => {
       useNativeClient();
 
       await expect(authClient.loginWithOAuth({ code: 'attacker-code' })).rejects.toThrow(
-        /No sign-in is in progress/
+        /sign in again/i
       );
       expect(mockCallMethod).not.toHaveBeenCalled();
+    });
+
+    // Apps surface this mid-flow error in their UI, so the thrown message must
+    // read as end-user copy; the integration cause goes to the console instead.
+    test('throws user-facing copy and logs the developer cause separately', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await expect(authClient.loginWithOAuth({ code: 'any-code' })).rejects.toThrow(
+        'This sign-in link is no longer valid. Please sign in again.'
+      );
+
+      // No API names or integration instructions in what the user sees.
+      const message = await authClient
+        .loginWithOAuth({ code: 'any-code' })
+        .catch((err: Error) => err.message);
+      expect(message).not.toMatch(/loginWithOAuth|signInWithOAuth|verifier/);
+
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('no sign-in in progress'));
+      consoleError.mockRestore();
     });
 
     // The verifier is single-use, so a deep link firing twice cannot replay it.
@@ -163,7 +182,7 @@ describe('auth/client — OAuth sign-in', () => {
       await authClient.loginWithOAuth({ code: 'exchange-code' });
 
       await expect(authClient.loginWithOAuth({ code: 'exchange-code' })).rejects.toThrow(
-        /No sign-in is in progress/
+        /sign in again/i
       );
     });
 

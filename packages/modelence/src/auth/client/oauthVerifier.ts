@@ -30,12 +30,45 @@ const VERIFIER_BYTES = 32;
 /**
  * The verifier for the in-flight sign-in.
  *
- * Deliberately module-scoped memory rather than persistent storage: the flow is
- * a foreground round trip measured in seconds, and a verifier that outlives the
- * app process is a credential sitting on disk for no benefit. An app killed
- * mid-flow simply restarts the sign-in.
+ * Module-scoped memory is enough on native, where the app stays alive in the
+ * background while the system browser is in front. It is *not* enough in a
+ * browser — including Expo Web, where the same code runs and `Linking.openURL`
+ * is a same-tab navigation — because leaving the page tears down this module
+ * and the return trip starts a fresh one.
  */
 let pendingVerifier: string | null = null;
+
+/**
+ * Where a browser keeps the verifier across the navigation to the provider.
+ *
+ * `sessionStorage` rather than `localStorage`: it is scoped to the one tab
+ * running the flow and is discarded when that tab closes, which suits a
+ * credential whose useful life is the ~60 seconds of a redirect round trip.
+ * Absent on native, where the in-memory value already survives.
+ */
+const STORAGE_KEY = 'modelence.oauth.verifier';
+
+/**
+ * Returns `sessionStorage` when it is usable, else null.
+ *
+ * Access itself can throw — Safari in private mode historically did, and some
+ * embedded webviews disable storage entirely — so this must never be assumed
+ * to work. When it is unavailable the flow still works everywhere the in-memory
+ * value survives, which is every native runtime.
+ */
+function getSessionStorage(): Storage | null {
+  try {
+    const storage = (globalThis as { sessionStorage?: Storage }).sessionStorage;
+    if (!storage) return null;
+    // Probe: presence is not the same as usability.
+    const probe = `${STORAGE_KEY}.probe`;
+    storage.setItem(probe, '1');
+    storage.removeItem(probe);
+    return storage;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Random hex string, using the best source the runtime offers.
@@ -74,6 +107,15 @@ function randomHex(byteLength: number): string {
  */
 export function startOAuthVerifier(): string {
   pendingVerifier = randomHex(VERIFIER_BYTES);
+
+  // Mirrored so a browser flow survives the navigation to the provider. Failure
+  // to persist is not fatal: native runtimes rely on the in-memory copy.
+  try {
+    getSessionStorage()?.setItem(STORAGE_KEY, pendingVerifier);
+  } catch {
+    // Storage full or blocked mid-flow; the in-memory value still applies.
+  }
+
   return pendingVerifier;
 }
 
@@ -82,12 +124,29 @@ export function startOAuthVerifier(): string {
  * at most once even if the deep link fires twice.
  */
 export function consumeOAuthVerifier(): string | null {
-  const verifier = pendingVerifier;
-  pendingVerifier = null;
+  // In-memory first: it is authoritative on native and identical on web when
+  // the page was never replaced.
+  const verifier = pendingVerifier ?? getSessionStorage()?.getItem(STORAGE_KEY) ?? null;
+  resetOAuthVerifier();
   return verifier;
+}
+
+/**
+ * Drops only the in-memory copy, leaving any persisted one intact.
+ *
+ * Exists to let tests reproduce a page navigation, which is precisely the case
+ * the persisted copy exists for: the module is rebuilt, storage is not.
+ */
+export function __resetInMemoryVerifierForTests(): void {
+  pendingVerifier = null;
 }
 
 /** Clears any pending verifier. Exposed for tests and for abandoning a flow. */
 export function resetOAuthVerifier(): void {
   pendingVerifier = null;
+  try {
+    getSessionStorage()?.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing to do — a verifier that cannot be cleared still expires with the tab.
+  }
 }

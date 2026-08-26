@@ -280,6 +280,73 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
+    /**
+     * The rejection message is the developer's only feedback here, and the
+     * previous wording ("add it to auth.mobile.redirectUrls") was the right fix
+     * for only one of these cases — following it for a browser URL silences the
+     * error and moves the failure downstream.
+     */
+    describe('rejection message explains the actual problem', () => {
+      function messageFor(redirectUri: string): string {
+        oauth.resolveMobileRedirectRequest(
+          { query: { platform: 'mobile', redirectUri } } as unknown as Request,
+          res
+        );
+        return (res.json as unknown as { mock: { calls: [{ error: string }][] } }).mock.calls[0][0]
+          .error;
+      }
+
+      // An https target is how the app is served under Expo Web, so the message
+      // must not call it a mistake — it just needs its own allowlist entry.
+      test('an https target is treated as a legitimate target', () => {
+        const message = messageFor('https://mobile-host.example.com/auth');
+
+        expect(message).toContain('auth.mobile.redirectUrls');
+        expect(message).toContain('Linking.createURL');
+        expect(message).not.toMatch(/not at your app|points at a browser/);
+      });
+
+      test('an exp: target gets the same per-build-target hint', () => {
+        const message = messageFor('exp://192.168.1.5:8081/--/auth');
+
+        expect(message).toContain('Expo Go');
+        expect(message).not.toMatch(/not at your app|points at a browser/);
+      });
+
+      test('a custom scheme is told to add the entry verbatim', () => {
+        const message = messageFor('otherapp://auth');
+
+        expect(message).toContain('auth.mobile.redirectUrls');
+        expect(message).toContain('scheme, host and path');
+      });
+
+      test('an unparseable value is named as such', () => {
+        expect(messageFor('not a url')).toContain('not a valid URL');
+      });
+
+      // Attacker-controlled input; the message reaches errorComponent, which
+      // renders unescaped HTML.
+      test('never echoes the rejected URI back into the response', () => {
+        const message = messageFor('https://evil.example.com/<script>alert(1)</script>');
+
+        expect(message).not.toContain('evil.example.com');
+        expect(message).not.toContain('<script>');
+      });
+    });
+
+    test('an empty allowlist says mobile sign-in is unconfigured', () => {
+      mockGetConfig.mockImplementation(() => undefined);
+
+      oauth.resolveMobileRedirectRequest(
+        { query: { platform: 'mobile', redirectUri: 'myapp://auth' } } as unknown as Request,
+        res
+      );
+
+      const message = (res.json as unknown as { mock: { calls: [{ error: string }][] } }).mock
+        .calls[0][0].error;
+      expect(message).toContain('not configured');
+    });
+
     test('rejects a mobile request with no target', () => {
       const result = oauth.resolveMobileRedirectRequest(
         { query: { platform: 'mobile' } } as unknown as Request,

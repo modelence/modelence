@@ -15,7 +15,11 @@ import { time } from '@/time';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
-import { isAllowedMobileRedirectUrl, buildMobileRedirect } from './mobileRedirect';
+import {
+  isAllowedMobileRedirectUrl,
+  buildMobileRedirect,
+  getAllowedMobileRedirectUrls,
+} from './mobileRedirect';
 
 /** Which kind of client started an OAuth flow. */
 export type OAuthPlatform = 'web' | 'mobile';
@@ -692,6 +696,57 @@ export function resolveMobileOutcomeFromCookie(
 }
 
 /**
+ * Explains *why* a redirect URI was rejected, in terms of what the developer
+ * should change.
+ *
+ * All schemes are treated as legitimate targets: an https URL is how the app is
+ * served under Expo Web, and exp:// is how it is served in Expo Go, so neither
+ * is evidence of a mistake. What differs between them is only the hint about
+ * why the value changes between build targets.
+ *
+ * Deliberately classifies rather than echoes. The URI is caller-controlled and
+ * the message reaches `authConfig.errorComponent`, which renders unescaped HTML.
+ */
+function describeRejectedRedirectUri(redirectUri: string): string {
+  const configured = getAllowedMobileRedirectUrls();
+
+  if (configured.length === 0) {
+    return (
+      'Mobile sign-in is not configured: auth.mobile.redirectUrls is empty. ' +
+      "Add your app's deep link (e.g. 'myapp://auth') to enable it."
+    );
+  }
+
+  let protocol: string;
+  try {
+    protocol = new URL(redirectUri).protocol.toLowerCase();
+  } catch {
+    return (
+      "This redirectUri is not a valid URL. Pass your app's deep link, " +
+      "e.g. 'myapp://auth', and list it in auth.mobile.redirectUrls."
+    );
+  }
+
+  // http(s) and exp: are legitimate targets — Expo Web serves the app over
+  // https and Expo Go over exp:, and Linking.createURL returns those there — so
+  // the advice is the same as for any other scheme, with a note about why the
+  // value may differ between builds.
+  if (protocol === 'http:' || protocol === 'https:' || protocol === 'exp:') {
+    return (
+      'This redirectUri is not in auth.mobile.redirectUrls. Add it verbatim. ' +
+      'Note that Linking.createURL returns a different value per build target — ' +
+      "your app's scheme in a native build, an https URL on Expo Web, an exp:// URL " +
+      'in Expo Go — so each one you test needs its own entry.'
+    );
+  }
+
+  return (
+    'This redirectUri is not in auth.mobile.redirectUrls. Add it verbatim — ' +
+    'entries match on scheme, host and path, so a differing path or port is a different target.'
+  );
+}
+
+/**
  * Reads and validates the mobile handoff parameters from an OAuth initiation
  * request. Returns null when the request is not a mobile flow.
  *
@@ -715,10 +770,20 @@ export function resolveMobileRedirectRequest(
   }
 
   if (!isAllowedMobileRedirectUrl(redirectUri)) {
+    // The full value goes to the log, not the response: `errorMessage` reaches
+    // `authConfig.errorComponent`, whose HTML is sent unescaped, so echoing
+    // caller-controlled text back would hand app authors an XSS foot-gun.
+    console.error(
+      `[modelence] Rejected mobile OAuth redirectUri: ${JSON.stringify(redirectUri)}. ` +
+        `Allowed: ${JSON.stringify(getAllowedMobileRedirectUrls())}`
+    );
+
     sendOAuthError(
       res,
       400,
-      'This redirectUri is not allowed. Add it to auth.mobile.redirectUrls to enable mobile sign-in.'
+      describeRejectedRedirectUri(redirectUri),
+      undefined,
+      'invalid_redirect'
     );
     return { ok: false };
   }
