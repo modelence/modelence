@@ -173,4 +173,42 @@ describe('auth/providers/mobileRedirect', () => {
       expect(new URL(url).searchParams.getAll('code')).toEqual(['fresh']);
     });
   });
+  /**
+   * The allowlist matches scheme, host and path only, so a configured target may
+   * legitimately carry query parameters — including one this module owns. A
+   * `redirectUri` of `myapp://auth?error=...` passes the allowlist, and without
+   * this reset a successful sign-in would deep-link back still carrying it and
+   * read as failed to the app.
+   */
+  describe('outcome parameters are reset, never inherited', () => {
+    test('drops a pre-existing error on the success path', () => {
+      const result = buildMobileRedirect('myapp://auth?error=stale', { code: 'abc' });
+
+      expect(result).not.toContain('error=stale');
+      expect(new URL(result).searchParams.get('code')).toBe('abc');
+      expect(new URL(result).searchParams.get('error')).toBeNull();
+    });
+
+    test('drops a pre-existing code on the error path', () => {
+      const result = buildMobileRedirect('myapp://auth?code=stale', { error: 'Nope' });
+
+      expect(new URL(result).searchParams.get('code')).toBeNull();
+      expect(new URL(result).searchParams.get('error')).toBe('Nope');
+    });
+
+    test('drops a stale linked marker', () => {
+      const result = buildMobileRedirect('myapp://auth?linked=github', { code: 'abc' });
+
+      expect(new URL(result).searchParams.get('linked')).toBeNull();
+    });
+
+    // Only the parameters this module owns are touched; the app's own state
+    // survives the round trip.
+    test('preserves unrelated parameters the app put there', () => {
+      const result = buildMobileRedirect('myapp://auth?returnTo=%2Fsettings', { code: 'abc' });
+
+      expect(new URL(result).searchParams.get('returnTo')).toBe('/settings');
+      expect(new URL(result).searchParams.get('code')).toBe('abc');
+    });
+  });
 });

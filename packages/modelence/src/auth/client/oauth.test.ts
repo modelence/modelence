@@ -16,6 +16,7 @@ vi.doMock('../../client/localStorage', () => ({ getLocalStorageSession: vi.fn() 
 vi.doMock('../../client/clientConfig', () => ({ getClientConfig: mockGetClientConfig }));
 
 const authClient = await import('./index');
+const { resetOAuthVerifier } = await import('./oauthVerifier');
 
 Object.defineProperty(globalThis, 'window', {
   value: { location: { href: '' } },
@@ -40,6 +41,9 @@ describe('auth/client — OAuth sign-in', () => {
     vi.clearAllMocks();
     window.location.href = '';
     mockGetClientConfig.mockReturnValue(null);
+    // The verifier is module-scoped, so a flow started by one test would
+    // otherwise be redeemable by the next.
+    resetOAuthVerifier();
   });
 
   describe('signInWithOAuth', () => {
@@ -76,14 +80,36 @@ describe('auth/client — OAuth sign-in', () => {
       expect(mockOpenUrl.mock.calls[0][0]).toContain('/api/_internal/auth/github');
     });
 
-    // Failing loudly here beats a flow that silently dead-ends in the browser.
-    test('throws when a native client omits redirectUri', async () => {
+    // `redirectUri` — not `openUrl` — selects the native flow, so an Electron or
+    // Capacitor client that sets openUrl purely to control link opening still
+    // completes the ordinary cookie-based web flow.
+    test('runs the web flow when a client with openUrl omits redirectUri', async () => {
       useNativeClient();
 
-      await expect(authClient.signInWithOAuth({ provider: 'google' })).rejects.toThrow(
-        /requires a redirectUri/
-      );
-      expect(mockOpenUrl).not.toHaveBeenCalled();
+      await authClient.signInWithOAuth({ provider: 'google' });
+
+      expect(mockOpenUrl).toHaveBeenCalledTimes(1);
+      const url = new URL(mockOpenUrl.mock.calls[0][0] as string);
+      expect(url.searchParams.get('platform')).toBeNull();
+      expect(url.searchParams.get('codeChallenge')).toBeNull();
+    });
+
+    // A redirectUri asks for the native flow, which cannot work without a way
+    // to open the device browser.
+    test('throws when a redirectUri is given but the client cannot open URLs', async () => {
+      await expect(
+        authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' })
+      ).rejects.toThrow(/openUrl/);
+    });
+
+    // The device binding that makes an intercepted code useless.
+    test('sends a code challenge with the mobile handoff', async () => {
+      useNativeClient();
+
+      await authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+
+      const url = new URL(mockOpenUrl.mock.calls[0][0] as string);
+      expect(url.searchParams.get('codeChallenge')).toMatch(/^[0-9a-f]{64}$/);
     });
 
     test('navigates the browser with no mobile params when unconfigured', async () => {
@@ -104,19 +130,48 @@ describe('auth/client — OAuth sign-in', () => {
 
     test('exchanges the code and stores the returned token', async () => {
       useNativeClient();
+      await authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+      const challenge = new URL(mockOpenUrl.mock.calls[0][0] as string).searchParams.get(
+        'codeChallenge'
+      );
 
       await authClient.loginWithOAuth({ code: 'exchange-code' });
 
       expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithOAuth', {
         code: 'exchange-code',
+        codeVerifier: challenge,
       });
       expect(mockSetAuthToken).toHaveBeenCalledWith('new-token');
+    });
+
+    // Without this, a crafted myapp://auth?code=... handed to the device would
+    // redeem an attacker's code against the victim's session.
+    test('refuses a code when no sign-in was started on this device', async () => {
+      useNativeClient();
+
+      await expect(authClient.loginWithOAuth({ code: 'attacker-code' })).rejects.toThrow(
+        /No sign-in is in progress/
+      );
+      expect(mockCallMethod).not.toHaveBeenCalled();
+    });
+
+    // The verifier is single-use, so a deep link firing twice cannot replay it.
+    test('does not reuse the verifier for a second redemption', async () => {
+      useNativeClient();
+      await authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+
+      await authClient.loginWithOAuth({ code: 'exchange-code' });
+
+      await expect(authClient.loginWithOAuth({ code: 'exchange-code' })).rejects.toThrow(
+        /No sign-in is in progress/
+      );
     });
 
     // This is what closes the useSession gap that previously forced an
     // updateProfile({}) call to refresh the store.
     test('updates the session store so useSession re-renders', async () => {
       useNativeClient();
+      await authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
       mockSetCurrentUser.mockReturnValue({ id: 'u1', handle: 'user' });
 
       const user = await authClient.loginWithOAuth({ code: 'exchange-code' });
@@ -127,6 +182,7 @@ describe('auth/client — OAuth sign-in', () => {
 
     test('propagates a rejected exchange without storing a token', async () => {
       useNativeClient();
+      await authClient.signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
       mockCallMethod.mockRejectedValue(new Error('Invalid or expired sign-in code'));
 
       await expect(authClient.loginWithOAuth({ code: 'spent' })).rejects.toThrow(
@@ -154,7 +210,9 @@ describe('auth/client — OAuth sign-in', () => {
       expect(url.searchParams.get('redirectUri')).toBe('myapp://auth');
     });
 
-    test('omits them when no redirectUri is given, preserving existing behaviour', async () => {
+    // Without a redirectUri there is no deep link to come back to, so linking
+    // takes the browser path — same rule as signInWithOAuth.
+    test('takes the browser path when no redirectUri is given', async () => {
       useNativeClient();
       globalThis.fetch = vi
         .fn()
@@ -164,9 +222,8 @@ describe('auth/client — OAuth sign-in', () => {
 
       await authClient.linkOAuthProvider({ provider: 'google' });
 
-      const url = new URL(mockOpenUrl.mock.calls[0][0] as string);
-      expect(url.searchParams.get('platform')).toBeNull();
-      expect(url.searchParams.get('redirectUri')).toBeNull();
+      expect(mockOpenUrl).not.toHaveBeenCalled();
+      expect(window.location.href).toContain('mode=link');
     });
   });
 });

@@ -217,6 +217,7 @@
                       "api-reference/modelence/client/functions/modelenceMutation",
                       "api-reference/modelence/client/functions/modelenceQuery",
                       "api-reference/modelence/client/functions/ModelenceQueryProvider",
+                      "api-reference/modelence/client/functions/parseDeepLinkParams",
                       "api-reference/modelence/client/functions/renderApp",
                       "api-reference/modelence/client/functions/resendEmailVerification",
                       "api-reference/modelence/client/functions/resetPassword",

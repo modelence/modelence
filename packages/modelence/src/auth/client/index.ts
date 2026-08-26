@@ -4,6 +4,7 @@ import { getLocalStorageSession } from '@/client/localStorage';
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
+import { consumeOAuthVerifier, startOAuthVerifier } from './oauthVerifier';
 
 export type UserInfo = {
   id: string;
@@ -24,6 +25,21 @@ type RawUserData = {
   lastName?: string;
   avatarUrl?: string;
 };
+
+/**
+ * Stores the session from a completed sign-in and returns the enriched user.
+ *
+ * Every login method ends the same way — persist the auth token through the
+ * client config, then publish the user to the reactive session store. Kept in
+ * one place so a new sign-in method cannot half-implement it.
+ */
+function completeLogin(result: { user: RawUserData; session: { authToken: string } }) {
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(result.session.authToken);
+  }
+  return setCurrentUser(result.user);
+}
 
 /**
  * Sign up a new user with an email and password.
@@ -71,19 +87,14 @@ export async function signupWithPassword(options: {
  */
 export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithPassword',
     {
       email,
       password,
     }
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -205,15 +216,10 @@ export async function sendMagicLink(options: { email: string }) {
  * ```
  */
 export async function loginWithMagicLink() {
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithMagicLink'
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -234,16 +240,11 @@ export async function loginWithMagicLink() {
  */
 export async function loginWithOneTimeCode(options: { email: string; code: string }) {
   const { email, code } = options;
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithOneTimeCode',
     { email, code }
   );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
-  }
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -270,12 +271,16 @@ export async function resetPassword(options: { token?: string; password: string 
  * On the web this navigates to the provider and the flow finishes on its own —
  * the session cookie is set and the browser lands back on your site.
  *
- * On React Native (any client configured with `openUrl`) pass `redirectUri`: the
- * device browser opens the provider, and when the flow completes Modelence
- * redirects back to that deep link with a single-use `code` query parameter.
- * Hand that code to {@link loginWithOAuth} to finish signing in. The redirect
- * target must be listed in the server's `auth.mobile.redirectUrls`, otherwise
- * the request is rejected before the provider is ever reached.
+ * Pass `redirectUri` to run the native flow: the device browser opens the
+ * provider, and when the flow completes Modelence redirects back to that deep
+ * link with a single-use `code` query parameter. Hand that code to
+ * {@link loginWithOAuth} to finish signing in. The redirect target must be
+ * listed in the server's `auth.mobile.redirectUrls`, otherwise the request is
+ * rejected before the provider is ever reached.
+ *
+ * The native flow additionally binds the sign-in to this device: a verifier is
+ * held in memory here and replayed by `loginWithOAuth`, so a `code` delivered
+ * to the app from outside this flow cannot be redeemed.
  *
  * @example Web
  * ```ts
@@ -284,10 +289,12 @@ export async function resetPassword(options: { token?: string; password: string 
  *
  * @example React Native
  * ```ts
+ * import { parseDeepLinkParams } from 'modelence/client';
+ *
  * await signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
  *
  * Linking.addEventListener('url', async ({ url }) => {
- *   const code = new URL(url).searchParams.get('code');
+ *   const { code } = parseDeepLinkParams(url);
  *   if (code) await loginWithOAuth({ code });
  * });
  * ```
@@ -302,18 +309,33 @@ export async function signInWithOAuth(options: {
   const config = getClientConfig();
   const baseUrl = config?.baseUrl ?? '';
 
-  if (config?.openUrl) {
-    if (!redirectUri) {
+  // `redirectUri` — not the presence of `openUrl` — decides the flow. An
+  // Electron or Capacitor client may set `openUrl` purely to control how links
+  // open while still completing the ordinary cookie-based web flow.
+  if (redirectUri) {
+    if (!config?.openUrl) {
       throw new Error(
-        'signInWithOAuth requires a redirectUri on React Native, e.g. { redirectUri: "myapp://auth" }.'
+        'signInWithOAuth was given a redirectUri but the client has no openUrl. ' +
+          'Configure openUrl (e.g. (url) => Linking.openURL(url)) to use the native flow.'
       );
     }
-    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
+
+    const codeChallenge = startOAuthVerifier();
+    const url =
+      `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile` +
+      `&redirectUri=${encodeURIComponent(redirectUri)}` +
+      `&codeChallenge=${encodeURIComponent(codeChallenge)}`;
     config.openUrl(url);
     return;
   }
 
-  window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
+  const webUrl = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
+  if (config?.openUrl) {
+    config.openUrl(webUrl);
+    return;
+  }
+
+  window.location.href = webUrl;
 }
 
 /**
@@ -323,6 +345,11 @@ export async function signInWithOAuth(options: {
  * app's deep link for a session, stores the auth token, and returns the
  * signed-in user. Codes are valid for one minute and can only be redeemed once.
  *
+ * The verifier minted by `signInWithOAuth` is replayed here, which is what
+ * makes a code usable only by the device that started the flow. Calling this
+ * without a preceding `signInWithOAuth` — as a crafted deep link would — fails
+ * before the code is ever sent.
+ *
  * @example
  * ```ts
  * const user = await loginWithOAuth({ code });
@@ -331,16 +358,19 @@ export async function signInWithOAuth(options: {
  */
 export async function loginWithOAuth(options: { code: string }) {
   const { code } = options;
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
-    '_system.user.loginWithOAuth',
-    { code }
-  );
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(session.authToken);
+
+  const codeVerifier = consumeOAuthVerifier();
+  if (!codeVerifier) {
+    throw new Error(
+      'No sign-in is in progress. Call signInWithOAuth before redeeming an OAuth code.'
+    );
   }
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOAuth',
+    { code, codeVerifier }
+  );
+  return completeLogin(result);
 }
 
 /**
@@ -365,7 +395,13 @@ export async function linkOAuthProvider(options: {
   const config = getClientConfig();
   const baseUrl = config?.baseUrl ?? '';
 
-  if (config?.openUrl) {
+  if (redirectUri) {
+    if (!config?.openUrl) {
+      throw new Error(
+        'linkOAuthProvider was given a redirectUri but the client has no openUrl. ' +
+          'Configure openUrl (e.g. (url) => Linking.openURL(url)) to use the native flow.'
+      );
+    }
     // React Native: exchange authToken for a single-use nonce via an authenticated
     // request, then put the nonce in the URL. A crafted external link can't work
     // because the nonce is bound to this session and consumed on first use.
@@ -382,10 +418,10 @@ export async function linkOAuthProvider(options: {
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
     const { nonce } = await nonceResponse.json();
-    const mobileParams = redirectUri
-      ? `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`
-      : '';
-    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}${mobileParams}`;
+    const url =
+      `${baseUrl}/api/_internal/auth/${provider}?mode=link` +
+      `&linkNonce=${encodeURIComponent(nonce)}` +
+      `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
     config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).

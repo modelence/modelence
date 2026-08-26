@@ -6,8 +6,19 @@ const mockRandomBytes = vi.fn(() => ({
   toString: () => 'auth-token',
 }));
 
-const mockDigest = vi.fn(() => 'hashed-auth-token');
-const mockUpdate = vi.fn(() => ({ digest: mockDigest }));
+// Input-sensitive only for the verifier values used by the exchange-code
+// binding tests; every other input keeps the single fixed digest the rest of
+// this suite is written against.
+const VERIFIER_HASHES: Record<string, string> = {
+  'right-verifier': 'hashed-right-verifier',
+  'wrong-verifier': 'hashed-wrong-verifier',
+};
+let lastHashInput = '';
+const mockDigest = vi.fn(() => VERIFIER_HASHES[lastHashInput] ?? 'hashed-auth-token');
+const mockUpdate = vi.fn((value: string) => {
+  lastHashInput = value;
+  return { digest: mockDigest };
+});
 const mockCreateHash = vi.fn(() => ({ update: mockUpdate }));
 const mockDays = vi.fn(() => 7 * 24 * 60 * 60 * 1000);
 const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
@@ -15,6 +26,7 @@ const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
 vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
   createHash: mockCreateHash,
+  timingSafeEqual: (a: Buffer, b: Buffer) => a.equals(b),
 }));
 
 vi.doMock('@/time', () => ({
@@ -284,6 +296,90 @@ describe('auth/session', () => {
       });
       // The returned value is the credential; the stored value must differ.
       expect(insertMock.mock.calls[0][0].code).not.toBe(code);
+    });
+
+    test('issue binds the device challenge, stored hashed', async () => {
+      await issueOAuthExchangeCode('user-id', 'google', 'right-verifier');
+
+      expect(insertMock).toHaveBeenCalledWith(
+        expect.objectContaining({ codeChallenge: 'hashed-right-verifier' })
+      );
+      // The challenge is a bearer secret until redemption, so it must not be
+      // readable from the database.
+      expect(insertMock.mock.calls[0][0].codeChallenge).not.toBe('right-verifier');
+    });
+
+    test('issue omits the challenge when the client did not send one', async () => {
+      await issueOAuthExchangeCode('user-id', 'google');
+
+      expect(insertMock.mock.calls[0][0]).not.toHaveProperty('codeChallenge');
+    });
+
+    // The attack this closes: a code minted by an attacker's flow, delivered to
+    // the victim's device via a crafted myapp://auth?code=... deep link.
+    test('consume rejects a code whose challenge the verifier does not match', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        codeChallenge: 'hashed-right-verifier',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token', 'wrong-verifier')).toBeNull();
+    });
+
+    test('consume accepts a code whose challenge the verifier matches', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        codeChallenge: 'hashed-right-verifier',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token', 'right-verifier')).toEqual({
+        userId: 'user-id',
+        provider: 'google',
+      });
+    });
+
+    test('consume rejects a bound code when no verifier is supplied', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        codeChallenge: 'hashed-right-verifier',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token')).toBeNull();
+    });
+
+    // A wrong verifier still burns the code, so it cannot be guessed at twice.
+    test('consume burns the code even when the verifier is wrong', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        codeChallenge: 'hashed-right-verifier',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      await consumeOAuthExchangeCode('auth-token', 'wrong-verifier');
+
+      expect(findOneAndDeleteMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Keeps codes minted by a previous-version instance redeemable while a
+    // rolling deploy is in flight.
+    test('consume accepts an unbound code with no verifier', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      expect(await consumeOAuthExchangeCode('auth-token')).toEqual({
+        userId: 'user-id',
+        provider: 'google',
+      });
     });
 
     test('issue uses a one-minute TTL', async () => {

@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 import { type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
@@ -57,6 +57,15 @@ export const oauthExchangeCodesCollection = new Store('_modelenceOAuthExchangeCo
     code: schema.string(),
     userId: schema.string(),
     provider: schema.string(),
+    /**
+     * Hash of the PKCE-style verifier held by the device that started the flow.
+     *
+     * Optional only so that codes minted by an instance running the previous
+     * version stay redeemable across a rolling deploy. A code carrying no
+     * challenge is redeemable without one; a code carrying one requires a
+     * matching verifier.
+     */
+    codeChallenge: schema.string().optional(),
     expiresAt: schema.date(),
   },
   indexes: [
@@ -69,13 +78,17 @@ const OAUTH_EXCHANGE_CODE_TTL_MINUTES = 1;
 
 export async function issueOAuthExchangeCode(
   userId: string,
-  provider: OAuthProvider
+  provider: OAuthProvider,
+  codeChallenge?: string | null
 ): Promise<string> {
   const code = randomBytes(32).toString('hex');
   await oauthExchangeCodesCollection.insertOne({
     code: hashToken(code),
     userId,
     provider,
+    // Stored hashed for the same reason the code is: it is a bearer secret at
+    // rest until the flow completes.
+    ...(codeChallenge ? { codeChallenge: hashToken(codeChallenge) } : {}),
     expiresAt: new Date(Date.now() + time.minutes(OAUTH_EXCHANGE_CODE_TTL_MINUTES)),
   });
   return code;
@@ -83,19 +96,36 @@ export async function issueOAuthExchangeCode(
 
 /**
  * Consumes a single-use OAuth exchange code; returns the bound user and provider,
- * or null when the code is unknown, already redeemed, or expired.
+ * or null when the code is unknown, already redeemed, expired, or not matched by
+ * the verifier of the device that started the flow.
  *
  * The delete is the commit point: concurrent redemptions of the same code resolve
  * to exactly one winner. Expiry is checked explicitly rather than relying on the
  * TTL index, which only sweeps periodically.
+ *
+ * The verifier check happens after the delete, so a wrong verifier still burns
+ * the code rather than leaving it available for another guess.
  */
 export async function consumeOAuthExchangeCode(
-  code: string
+  code: string,
+  codeVerifier?: string | null
 ): Promise<{ userId: string; provider: OAuthProvider } | null> {
   const entry = await oauthExchangeCodesCollection.findOneAndDelete({ code: hashToken(code) });
   if (!entry) return null;
   if (entry.expiresAt < new Date()) return null;
+
+  if (entry.codeChallenge) {
+    if (!codeVerifier) return null;
+    if (!timingSafeEqualHex(hashToken(codeVerifier), entry.codeChallenge)) return null;
+  }
+
   return { userId: entry.userId, provider: entry.provider as OAuthProvider };
+}
+
+/** Constant-time comparison of two hex digests of equal expected length. */
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
 }
 
 export const sessionsCollection = new Store('_modelenceSessions', {

@@ -57,12 +57,32 @@ describe('auth/loginWithOAuth', () => {
   test('redeems a valid code and binds the session to the user', async () => {
     const result = await handleLoginWithOAuth({ code: 'valid-code' }, makeContext());
 
-    expect(mockConsumeOAuthExchangeCode).toHaveBeenCalledWith('valid-code');
+    expect(mockConsumeOAuthExchangeCode).toHaveBeenCalledWith('valid-code', undefined);
     expect(mockSetSessionUser).toHaveBeenCalledWith('session-token', USER_ID);
     expect(result).toEqual({
       user: expect.objectContaining({ id: USER_ID, handle: 'user' }),
       session: { authToken: 'session-token' },
     });
+  });
+
+  test('forwards the code verifier so the device binding can be checked', async () => {
+    await handleLoginWithOAuth(
+      { code: 'valid-code', codeVerifier: 'device-verifier' },
+      makeContext()
+    );
+
+    expect(mockConsumeOAuthExchangeCode).toHaveBeenCalledWith('valid-code', 'device-verifier');
+  });
+
+  // Mirrors handleLoginWithPassword: an authenticated session must not be
+  // silently rebound to another account by a code arriving from anywhere.
+  test('refuses to rebind an already-authenticated session', async () => {
+    await expect(
+      handleLoginWithOAuth({ code: 'valid-code' }, makeContext({ user: userDoc }))
+    ).rejects.toThrow('User is already authenticated');
+
+    expect(mockConsumeOAuthExchangeCode).not.toHaveBeenCalled();
+    expect(mockSetSessionUser).not.toHaveBeenCalled();
   });
 
   test('excludes deleted and disabled users from the lookup', async () => {

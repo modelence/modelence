@@ -1,6 +1,4 @@
 import { getConfig } from '@/server';
-import { time } from '@/time';
-import { randomBytes } from 'crypto';
 import {
   Router,
   type Request,
@@ -16,10 +14,9 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
-  resolveUserIdFromLinkNonce,
   sendOAuthError,
-  encodeOAuthState,
-  resolveMobileRedirectRequest,
+  prepareOAuthInitiation,
+  resolveMobileOutcomeFromCookie,
   toOAuthOutcome,
 } from './oauth-common';
 
@@ -117,7 +114,16 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
   if (!code) {
-    sendOAuthError(res, 400, 'Missing authorization code');
+    // No usable state to validate yet (a declined consent screen sends none),
+    // but the state cookie still records where the app lives, so this can be
+    // reported into the app instead of as JSON in the device browser.
+    sendOAuthError(
+      res,
+      400,
+      'Missing authorization code',
+      resolveMobileOutcomeFromCookie(req, 'authStateGithub') ?? undefined,
+      'missing_code'
+    );
     return;
   }
 
@@ -219,39 +225,9 @@ function getRouter(): ExpressRouter {
             .join(' ')
         : 'user:email';
 
-      const state = randomBytes(32).toString('hex');
-
-      const mode = req.query.mode === 'link' ? 'link' : 'login';
-
-      // Validate the mobile deep link before leaving the app, so a bad target
-      // fails here rather than after the user has granted consent.
-      const mobileRequest = resolveMobileRedirectRequest(req, res);
-      if (!mobileRequest.ok) return;
-      const mobileRedirectUri = mobileRequest.redirectUri;
-
-      // React Native: consume single-use nonce and embed resolved userId in state cookie.
-      let linkedUserId: string | null = null;
-      if (mode === 'link' && req.query.linkNonce) {
-        linkedUserId = await resolveUserIdFromLinkNonce(req.query.linkNonce as string);
-        if (!linkedUserId) {
-          sendOAuthError(res, 401, 'Invalid or expired link nonce for OAuth linking.');
-          return;
-        }
-      }
-
-      const stateValue = encodeOAuthState({
-        state,
-        mode,
-        linkedUserId,
-        platform: mobileRedirectUri ? 'mobile' : 'web',
-        redirectUri: mobileRedirectUri,
-      });
-      res.cookie('authStateGithub', stateValue, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: time.minutes(10), // 10 minutes
-      });
+      const initiation = await prepareOAuthInitiation(req, res, 'authStateGithub');
+      if (!initiation) return;
+      const { state } = initiation;
 
       const authUrl = new URL('https://github.com/login/oauth/authorize');
       authUrl.searchParams.append('client_id', githubClientId);

@@ -94,6 +94,18 @@ function normalizePath(pathname: string): string {
 }
 
 /**
+ * Query parameters this module owns on a deep link.
+ *
+ * The allowlist matches on scheme, host and path only, so a configured target
+ * is free to carry query parameters of its own — including, accidentally or
+ * deliberately, one of these. Any that the caller does not set are removed, so
+ * the app reads the outcome of *this* flow rather than a value baked into the
+ * allowlisted URL. Without that, `redirectUri=myapp://auth?error=nope` would
+ * make a successful sign-in look failed.
+ */
+const OUTCOME_PARAMS = ['code', 'error', 'errorCode', 'linked'] as const;
+
+/**
  * Appends query parameters to an already-allowlisted deep link.
  *
  * Callers must have validated `redirectUri` with {@link isAllowedMobileRedirectUrl}
@@ -101,6 +113,11 @@ function normalizePath(pathname: string): string {
  */
 export function buildMobileRedirect(redirectUri: string, params: Record<string, string>): string {
   const url = new URL(redirectUri);
+
+  for (const key of OUTCOME_PARAMS) {
+    url.searchParams.delete(key);
+  }
+
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }

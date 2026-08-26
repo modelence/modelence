@@ -118,7 +118,7 @@ describe('auth/providers/oauth-common', () => {
           path: '/',
         })
       );
-      expect(res.status).toHaveBeenCalledWith(302);
+      // res.redirect sets 302 itself; asserting the redirect is the contract.
       expect(res.redirect).toHaveBeenCalledWith('/');
     });
   });
@@ -901,7 +901,7 @@ describe('auth/providers/oauth-common', () => {
           user: updatedUser,
         })
       );
-      expect(res.status).toHaveBeenCalledWith(302);
+      // res.redirect sets 302 itself; asserting the redirect is the contract.
       expect(res.redirect).toHaveBeenCalledWith('/');
     });
 
@@ -927,7 +927,7 @@ describe('auth/providers/oauth-common', () => {
 
       // Should still proceed and update (idempotent)
       expect(mockUsersUpdateOne).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(302);
+      expect(res.redirect).toHaveBeenCalledWith('/');
     });
 
     test('does not crash if onOAuthLinkError throws', async () => {

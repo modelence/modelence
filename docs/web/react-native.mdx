@@ -200,18 +200,17 @@ Google and GitHub sign-in run in the device browser and hand the result back to 
     When the flow finishes, Modelence redirects to `myapp://auth?code=...`. Exchange that code for a session:
 
     ```typescript
-    import { loginWithOAuth } from 'modelence/client';
+    import { loginWithOAuth, parseDeepLinkParams } from 'modelence/client';
     import { Linking } from 'react-native';
     import { useEffect } from 'react';
 
     useEffect(() => {
       const subscription = Linking.addEventListener('url', async ({ url }) => {
-        const { searchParams } = new URL(url);
-        const code = searchParams.get('code');
-        const error = searchParams.get('error');
+        const { code, error, errorCode } = parseDeepLinkParams(url);
 
         if (error) {
-          // Sign-in failed — show this to the user.
+          // Sign-in failed. `errorCode` is stable and safe to branch on
+          // (e.g. 'missing_code', 'invalid_state'); `error` is display text.
           return;
         }
         if (code) {
@@ -224,6 +223,12 @@ Google and GitHub sign-in run in the device browser and hand the result back to 
     }, []);
     ```
 
+    <Note>
+      Use `parseDeepLinkParams` rather than `new URL(url).searchParams`. React
+      Native's built-in `URL` is a partial implementation that throws on
+      `searchParams`; Expo only works because it installs a polyfill.
+    </Note>
+
     Handle the cold-start case too — if the app was closed, the deep link arrives via `Linking.getInitialURL()` rather than the `url` event.
   </Step>
 </Steps>
@@ -231,6 +236,8 @@ Google and GitHub sign-in run in the device browser and hand the result back to 
 ### Why a code instead of a token
 
 The deep link carries a single-use code valid for one minute, not the session token. Custom URL schemes can be registered by more than one app on a device, so a token in the redirect could be picked up by an app that isn't yours. The code is exchanged for the real session over HTTPS in `loginWithOAuth`, and it cannot be redeemed twice.
+
+The code is also bound to the device that started the flow. `signInWithOAuth` keeps a verifier in memory and `loginWithOAuth` replays it, so a `myapp://auth?code=...` link handed to your app from anywhere else is rejected before the code is ever sent. This means `loginWithOAuth` must be called from the same app process that called `signInWithOAuth` — if the app is killed mid-flow, start the sign-in again.
 
 ### Linking a provider to an existing account
 

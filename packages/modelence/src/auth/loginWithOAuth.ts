@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { getAuthConfig } from '@/app/authConfig';
 import { consumeRateLimit } from '@/server';
-import { AuthError } from '../error';
+import { AuthError, ValidationError } from '../error';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { consumeOAuthExchangeCode, setSessionUser } from './session';
@@ -29,7 +29,7 @@ function invalidCodeError() {
  * than in the callback, so a code that is intercepted but never redeemed never
  * corresponds to a live session.
  */
-export async function handleLoginWithOAuth(args: Args, { session, connectionInfo }: Context) {
+export async function handleLoginWithOAuth(args: Args, { user, session, connectionInfo }: Context) {
   // Known only after the code is redeemed; until then a failure can't be
   // attributed to a specific provider.
   let provider: OAuthProvider | undefined;
@@ -37,6 +37,12 @@ export async function handleLoginWithOAuth(args: Args, { session, connectionInfo
   try {
     if (!session) {
       throw new Error('Session is not initialized');
+    }
+
+    // Matches handleLoginWithPassword: an authenticated session must not be
+    // silently rebound to another account by a code arriving from anywhere.
+    if (user) {
+      throw new ValidationError('User is already authenticated', 'ALREADY_AUTHENTICATED');
     }
 
     const ip = connectionInfo?.ip;
@@ -50,8 +56,19 @@ export async function handleLoginWithOAuth(args: Args, { session, connectionInfo
 
     const code = z.string().min(1).parse(args.code);
 
+    // Optional at the schema level so a code minted by a previous-version
+    // instance mid-deploy is still redeemable; whether it is actually required
+    // is decided by the challenge stored with the code.
+    const codeVerifier = z
+      .string()
+      .min(1)
+      .optional()
+      .parse(args.codeVerifier ?? undefined);
+
     // Commit point: single-use, so concurrent redemptions resolve to one winner.
-    const claimed = await consumeOAuthExchangeCode(code);
+    // Also where the device binding is enforced — a code minted against another
+    // device's challenge does not survive this call.
+    const claimed = await consumeOAuthExchangeCode(code, codeVerifier);
     if (!claimed || !ObjectId.isValid(claimed.userId)) {
       throw invalidCodeError();
     }

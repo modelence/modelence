@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { type Request, type Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
 import { usersCollection } from '@/auth/db';
@@ -10,6 +11,7 @@ import {
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { time } from '@/time';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
@@ -26,16 +28,49 @@ export type OAuthPlatform = 'web' | 'mobile';
  * single-use exchange code the app redeems for a session (see
  * `issueOAuthExchangeCode`).
  */
-export type OAuthOutcome = { platform: 'web' } | { platform: 'mobile'; redirectUri: string };
+export type OAuthOutcome =
+  | { platform: 'web' }
+  | {
+      platform: 'mobile';
+      redirectUri: string;
+      /**
+       * PKCE-style challenge from the device that started the flow, bound to the
+       * exchange code so only that device can redeem it. Absent for a client on
+       * a version that predates the binding.
+       */
+      codeChallenge?: string;
+    };
 
 /** Resolves the outcome for a validated OAuth state. */
 export function toOAuthOutcome(
-  state: Pick<OAuthStateResult, 'platform' | 'redirectUri'>
+  state: Pick<OAuthStateResult, 'platform' | 'redirectUri' | 'codeChallenge'>
 ): OAuthOutcome {
   if (state.platform === 'mobile' && state.redirectUri) {
-    return { platform: 'mobile', redirectUri: state.redirectUri };
+    return {
+      platform: 'mobile',
+      redirectUri: state.redirectUri,
+      ...(state.codeChallenge ? { codeChallenge: state.codeChallenge } : {}),
+    };
   }
   return { platform: 'web' };
+}
+
+/**
+ * Whether the callback should fire the *login* hooks itself.
+ *
+ * On mobile it must not: the callback runs in the device browser against a
+ * throwaway guest session, and the sign-in is only real once the app redeems the
+ * exchange code. `handleLoginWithOAuth` fires them there, with the session that
+ * actually belongs to the user. Firing in both places delivered `onAfterLogin`
+ * and `login.onSuccess` twice per mobile sign-in, the first time with the wrong
+ * session.
+ *
+ * Signup hooks are deliberately *not* gated: they describe account creation,
+ * which genuinely happens here, they already fire exactly once, and the
+ * redemption path cannot tell a new account from a returning one.
+ */
+function shouldFireLoginHooks(outcome: OAuthOutcome): boolean {
+  return outcome.platform !== 'mobile';
 }
 
 export interface OAuthUserData {
@@ -55,6 +90,23 @@ export async function resolveUserIdFromLinkNonce(
   return consumeLinkNonce(nonce);
 }
 
+/**
+ * Machine-readable failure reasons handed to a native app alongside the
+ * human-readable message, so the app can branch on the outcome without parsing
+ * English prose.
+ */
+export type OAuthErrorCode =
+  | 'missing_code'
+  | 'invalid_state'
+  | 'invalid_redirect'
+  | 'invalid_link_nonce'
+  | 'account_inactive'
+  | 'email_exists'
+  | 'email_required'
+  | 'link_failed'
+  | 'not_signed_in'
+  | 'oauth_failed';
+
 /*
  * Sends OAuth error response.
  * If `errorComponent` is configured, renders HTML.
@@ -69,12 +121,16 @@ export function sendOAuthError(
   res: Response,
   statusCode: number,
   errorMessage: string,
-  outcome: OAuthOutcome = { platform: 'web' }
+  outcome: OAuthOutcome = { platform: 'web' },
+  errorCode: OAuthErrorCode = 'oauth_failed'
 ) {
   if (outcome.platform === 'mobile') {
-    res.status(302);
+    // The human-readable message is for display; `errorCode` is what an app
+    // should branch on, since the message text is not a stable contract.
     res.set('Referrer-Policy', 'no-referrer');
-    return res.redirect(buildMobileRedirect(outcome.redirectUri, { error: errorMessage }));
+    return res.redirect(
+      buildMobileRedirect(outcome.redirectUri, { error: errorMessage, errorCode })
+    );
   }
 
   const authConfig = getAuthConfig();
@@ -102,9 +158,8 @@ export async function authenticateUser(
     // it carries only a single-use code. The session is minted when the app
     // redeems that code over TLS, which means an intercepted-but-unredeemed code
     // never corresponds to a live session.
-    const code = await issueOAuthExchangeCode(userId.toString(), provider);
+    const code = await issueOAuthExchangeCode(userId.toString(), provider, outcome.codeChallenge);
 
-    res.status(302);
     // The deep link carries a credential; keep it out of any Referer header.
     res.set('Referrer-Policy', 'no-referrer');
     res.redirect(buildMobileRedirect(outcome.redirectUri, { code }));
@@ -114,7 +169,6 @@ export async function authenticateUser(
   const { authToken } = await createSession(userId);
 
   setAuthTokenCookie(res, authToken);
-  res.status(302);
   res.redirect('/');
 }
 
@@ -155,13 +209,16 @@ async function handleExistingProviderLogin(
     }
 
     await authenticateUser(res, existingUser._id, userData.providerName, outcome);
-    authConfig.onAfterLogin?.({
-      provider: userData.providerName,
-      user,
-      session,
-      connectionInfo,
-    });
-    authConfig.login?.onSuccess?.(user);
+
+    if (shouldFireLoginHooks(outcome)) {
+      authConfig.onAfterLogin?.({
+        provider: userData.providerName,
+        user,
+        session,
+        connectionInfo,
+      });
+      authConfig.login?.onSuccess?.(user);
+    }
   } catch (error) {
     if (error instanceof Error) {
       authConfig.login?.onError?.(error);
@@ -265,13 +322,15 @@ async function handleExistingEmailLogin(
         },
       };
 
-      authConfig.onAfterLogin?.({
-        provider: userData.providerName,
-        user: updatedUser,
-        session,
-        connectionInfo,
-      });
-      authConfig.login?.onSuccess?.(updatedUser);
+      if (shouldFireLoginHooks(outcome)) {
+        authConfig.onAfterLogin?.({
+          provider: userData.providerName,
+          user: updatedUser,
+          session,
+          connectionInfo,
+        });
+        authConfig.login?.onSuccess?.(updatedUser);
+      }
 
       return;
     } catch (error) {
@@ -481,6 +540,8 @@ export interface OAuthStateResult {
   platform: OAuthPlatform;
   /** Deep link to return to. Set only when `platform` is 'mobile'. */
   redirectUri?: string;
+  /** Device binding for the exchange code. Set only when `platform` is 'mobile'. */
+  codeChallenge?: string;
 }
 
 /**
@@ -498,8 +559,9 @@ export function encodeOAuthState(params: {
   linkedUserId?: string | null;
   platform?: OAuthPlatform;
   redirectUri?: string | null;
+  codeChallenge?: string | null;
 }): string {
-  const { state, mode, linkedUserId, platform = 'web', redirectUri } = params;
+  const { state, mode, linkedUserId, platform = 'web', redirectUri, codeChallenge } = params;
   const fields = [state, mode, linkedUserId ?? ''];
 
   // Only extend the cookie when there is something to say — a web flow keeps
@@ -507,6 +569,7 @@ export function encodeOAuthState(params: {
   if (platform !== 'web' || redirectUri) {
     fields.push(platform);
     fields.push(redirectUri ? Buffer.from(redirectUri, 'utf8').toString('base64url') : '');
+    fields.push(codeChallenge ?? '');
   }
 
   return fields.join(':');
@@ -518,10 +581,11 @@ function decodeOAuthState(storedState: string): {
   linkedUserId?: string;
   platform: OAuthPlatform;
   redirectUri?: string;
+  codeChallenge?: string;
 } {
-  const [stateValue, mode, linkedUserId, platform, encodedRedirectUri] = (storedState || '').split(
-    ':'
-  );
+  const [stateValue, mode, linkedUserId, platform, encodedRedirectUri, codeChallenge] = (
+    storedState || ''
+  ).split(':');
 
   // Never throws: invalid base64url decodes to garbage rather than raising, and
   // garbage is rejected by the allowlist check in the caller.
@@ -535,6 +599,7 @@ function decodeOAuthState(storedState: string): {
     ...(linkedUserId ? { linkedUserId } : {}),
     platform: platform === 'mobile' ? 'mobile' : 'web',
     ...(redirectUri ? { redirectUri } : {}),
+    ...(codeChallenge ? { codeChallenge } : {}),
   };
 }
 
@@ -548,22 +613,38 @@ export function validateOAuthStateAndGetMode(
 
   const decoded = decodeOAuthState(storedState || '');
 
+  // Re-check the target against the current allowlist before using it for
+  // anything. The cookie is httpOnly, but the allowlist may have changed while
+  // the user was on the provider's consent screen — and a redirect target is
+  // worth validating on both sides of a round trip.
+  const mobileOutcome = resolveDecodedMobileOutcome(decoded);
+
   if (!state || !storedState || state !== decoded.stateValue) {
-    sendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
+    // A state mismatch still deep-links back when the decoded target survives
+    // re-validation, rather than stranding the user on JSON in the device
+    // browser. The target is only trusted because the allowlist just approved
+    // it — not because the cookie said so.
+    sendOAuthError(
+      res,
+      400,
+      'Invalid OAuth state - possible CSRF attack',
+      mobileOutcome ?? { platform: 'web' },
+      'invalid_state'
+    );
     return null;
   }
 
   res.clearCookie(stateCookieName);
 
-  // Re-check the target against the current allowlist. The cookie is httpOnly
-  // and integrity-checked by the state comparison above, but the allowlist may
-  // have changed while the user was on the provider's consent screen — and a
-  // redirect target is worth validating on both sides of a round trip.
-  if (decoded.platform === 'mobile') {
-    if (!decoded.redirectUri || !isAllowedMobileRedirectUrl(decoded.redirectUri)) {
-      sendOAuthError(res, 400, 'Invalid OAuth redirect target.');
-      return null;
-    }
+  if (decoded.platform === 'mobile' && !mobileOutcome) {
+    sendOAuthError(
+      res,
+      400,
+      'Invalid OAuth redirect target.',
+      { platform: 'web' },
+      'invalid_redirect'
+    );
+    return null;
   }
 
   return {
@@ -571,7 +652,43 @@ export function validateOAuthStateAndGetMode(
     ...(decoded.linkedUserId ? { linkedUserId: decoded.linkedUserId } : {}),
     platform: decoded.platform,
     ...(decoded.redirectUri ? { redirectUri: decoded.redirectUri } : {}),
+    ...(decoded.codeChallenge ? { codeChallenge: decoded.codeChallenge } : {}),
   };
+}
+
+/**
+ * Mobile outcome for an already-decoded state cookie, or null when the flow is
+ * not mobile or its target no longer passes the allowlist.
+ *
+ * Used to answer "can this failure be deep-linked back into the app?" on error
+ * paths that run before — or instead of — a successful state validation.
+ */
+function resolveDecodedMobileOutcome(decoded: {
+  platform: OAuthPlatform;
+  redirectUri?: string;
+  codeChallenge?: string;
+}): OAuthOutcome | null {
+  if (decoded.platform !== 'mobile') return null;
+  if (!decoded.redirectUri || !isAllowedMobileRedirectUrl(decoded.redirectUri)) return null;
+
+  return {
+    platform: 'mobile',
+    redirectUri: decoded.redirectUri,
+    ...(decoded.codeChallenge ? { codeChallenge: decoded.codeChallenge } : {}),
+  };
+}
+
+/**
+ * Mobile outcome recovered from the raw state cookie, for failures that happen
+ * before the state is validated at all — a missing `code`, or a consent screen
+ * the user declined. The provider sends those back to the same callback with no
+ * usable query state, but the cookie still says where the app lives.
+ */
+export function resolveMobileOutcomeFromCookie(
+  req: Request,
+  stateCookieName: string
+): OAuthOutcome | null {
+  return resolveDecodedMobileOutcome(decodeOAuthState(req.cookies?.[stateCookieName] || ''));
 }
 
 /**
@@ -585,9 +702,9 @@ export function validateOAuthStateAndGetMode(
 export function resolveMobileRedirectRequest(
   req: Request,
   res: Response
-): { ok: true; redirectUri: string | null } | { ok: false } {
+): { ok: true; redirectUri: string | null; codeChallenge: string | null } | { ok: false } {
   if (req.query.platform !== 'mobile') {
-    return { ok: true, redirectUri: null };
+    return { ok: true, redirectUri: null, codeChallenge: null };
   }
 
   const redirectUri = typeof req.query.redirectUri === 'string' ? req.query.redirectUri : '';
@@ -606,7 +723,74 @@ export function resolveMobileRedirectRequest(
     return { ok: false };
   }
 
-  return { ok: true, redirectUri };
+  // Optional so a client on an older SDK still signs in; when present it binds
+  // the resulting exchange code to this device. Colons would corrupt the
+  // delimiter-separated state cookie, so a malformed value is dropped rather
+  // than trusted.
+  const rawChallenge = typeof req.query.codeChallenge === 'string' ? req.query.codeChallenge : '';
+  const codeChallenge = /^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge) ? rawChallenge : null;
+
+  return { ok: true, redirectUri, codeChallenge };
+}
+
+/**
+ * Everything an OAuth initiation route needs to do between "auth is configured"
+ * and "redirect the user to the provider": validate the mobile handoff, resolve
+ * a link nonce, and build the state cookie value.
+ *
+ * Shared so a newly added provider cannot quietly ship a mobile flow that skips
+ * redirect validation or device binding. Returns null when a response has
+ * already been sent.
+ */
+export async function prepareOAuthInitiation(
+  req: Request,
+  res: Response,
+  stateCookieName: string
+): Promise<{ state: string; mode: string } | null> {
+  const state = randomBytes(32).toString('hex');
+  const mode = req.query.mode === 'link' ? 'link' : 'login';
+
+  // Validate the mobile deep link before leaving the app, so a bad target
+  // fails here rather than after the user has granted consent.
+  const mobileRequest = resolveMobileRedirectRequest(req, res);
+  if (!mobileRequest.ok) return null;
+  const { redirectUri: mobileRedirectUri, codeChallenge } = mobileRequest;
+
+  // React Native: consume single-use nonce and embed resolved userId in state cookie.
+  let linkedUserId: string | null = null;
+  if (mode === 'link' && req.query.linkNonce) {
+    linkedUserId = await resolveUserIdFromLinkNonce(req.query.linkNonce as string);
+    if (!linkedUserId) {
+      // The redirect target was validated just above, so an expired nonce can
+      // be reported into the app rather than as JSON in the device browser.
+      sendOAuthError(
+        res,
+        401,
+        'Invalid or expired link nonce for OAuth linking.',
+        mobileRedirectUri ? { platform: 'mobile', redirectUri: mobileRedirectUri } : undefined,
+        'invalid_link_nonce'
+      );
+      return null;
+    }
+  }
+
+  const stateValue = encodeOAuthState({
+    state,
+    mode,
+    linkedUserId,
+    platform: mobileRedirectUri ? 'mobile' : 'web',
+    redirectUri: mobileRedirectUri,
+    codeChallenge,
+  });
+
+  res.cookie(stateCookieName, stateValue, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: time.minutes(10),
+  });
+
+  return { state, mode };
 }
 
 export async function handleOAuthProviderLink(
@@ -744,13 +928,12 @@ export async function handleOAuthProviderLink(
     clearOAuthLinkCookie(res);
 
     if (outcome.platform === 'mobile') {
-      res.status(302);
       res.set('Referrer-Policy', 'no-referrer');
       res.redirect(buildMobileRedirect(outcome.redirectUri, { linked: userData.providerName }));
       return;
     }
 
-    res.status(302).redirect('/');
+    res.redirect('/');
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) {
       safelyCallHook(() =>
