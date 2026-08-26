@@ -74,16 +74,15 @@ export function toOAuthOutcome(
 /**
  * Whether the callback should fire the *login* hooks itself.
  *
- * On mobile it must not: the callback runs in the device browser against a
- * throwaway guest session, and the sign-in is only real once the app redeems the
- * exchange code. `handleLoginWithOAuth` fires them there, with the session that
- * actually belongs to the user. Firing in both places delivered `onAfterLogin`
- * and `login.onSuccess` twice per mobile sign-in, the first time with the wrong
- * session.
+ * On mobile it must not: this runs in the device browser against a throwaway
+ * guest session, and the sign-in is only real once the app redeems the code.
+ * `handleLoginWithOAuth` fires them there with the user's real session. Firing
+ * in both places delivered every login hook twice, the first time with the
+ * wrong session.
  *
- * Signup hooks are deliberately *not* gated: they describe account creation,
- * which genuinely happens here, they already fire exactly once, and the
- * redemption path cannot tell a new account from a returning one.
+ * Signup hooks are deliberately not gated: account creation genuinely happens
+ * here, fires once, and redemption cannot tell a new account from a returning
+ * one.
  */
 function shouldFireLoginHooks(outcome: OAuthOutcome): boolean {
   return outcome.platform !== 'mobile';
@@ -171,11 +170,10 @@ export async function authenticateUser(
   outcome: OAuthOutcome = { platform: 'web' }
 ) {
   if (outcome.platform === 'mobile') {
-    // Deliberately no session and no cookie here: the deep link is the weakest
-    // hop in the chain (a custom scheme can be claimed by any installed app), so
-    // it carries only a single-use code. The session is minted when the app
-    // redeems that code over TLS, which means an intercepted-but-unredeemed code
-    // never corresponds to a live session.
+    // Deliberately no session and no cookie: the deep link is the weakest hop (a
+    // custom scheme can be claimed by any installed app), so it carries only a
+    // single-use code. The session is minted at redemption over TLS, so an
+    // intercepted-but-unredeemed code never corresponds to a live session.
     const code = await issueOAuthExchangeCode(userId.toString(), provider, outcome.codeChallenge);
 
     // The deep link carries a credential; keep it out of any Referer header.
@@ -631,17 +629,15 @@ export function validateOAuthStateAndGetMode(
 
   const decoded = decodeOAuthState(storedState || '');
 
-  // Re-check the target against the current allowlist before using it for
-  // anything. The cookie is httpOnly, but the allowlist may have changed while
-  // the user was on the provider's consent screen — and a redirect target is
-  // worth validating on both sides of a round trip.
+  // Re-check against the current allowlist: it may have changed while the user
+  // was on the consent screen, and a redirect target is worth validating on both
+  // sides of a round trip.
   const mobileOutcome = resolveDecodedMobileOutcome(decoded);
 
   if (!state || !storedState || state !== decoded.stateValue) {
-    // A state mismatch still deep-links back when the decoded target survives
-    // re-validation, rather than stranding the user on JSON in the device
-    // browser. The target is only trusted because the allowlist just approved
-    // it — not because the cookie said so.
+    // Deep-link the failure back when the decoded target survives re-validation,
+    // rather than stranding the user on JSON. Trusted because the allowlist just
+    // approved it, not because the cookie said so.
     sendOAuthError(
       res,
       400,
@@ -706,16 +702,13 @@ export function resolveMobileOutcomeFromCookie(
 }
 
 /**
- * Explains *why* a redirect URI was rejected, in terms of what the developer
- * should change.
+ * Explains why a redirect URI was rejected, in terms of what to change.
  *
- * All schemes are treated as legitimate targets: an https URL is how the app is
- * served under Expo Web, and exp:// is how it is served in Expo Go, so neither
- * is evidence of a mistake. What differs between them is only the hint about
- * why the value changes between build targets.
+ * Every scheme is a legitimate target — Expo Web serves the app over https,
+ * Expo Go over exp:// — so the scheme only selects which hint to add.
  *
- * Deliberately classifies rather than echoes. The URI is caller-controlled and
- * the message reaches `authConfig.errorComponent`, which renders unescaped HTML.
+ * Classifies rather than echoes: the URI is caller-controlled and this message
+ * reaches `authConfig.errorComponent`, which renders unescaped HTML.
  */
 function describeRejectedRedirectUri(redirectUri: string): string {
   const configured = getAllowedMobileRedirectUrls();
@@ -737,10 +730,9 @@ function describeRejectedRedirectUri(redirectUri: string): string {
     );
   }
 
-  // http(s) and exp: are legitimate targets — Expo Web serves the app over
-  // https and Expo Go over exp:, and Linking.createURL returns those there — so
-  // the advice is the same as for any other scheme, with a note about why the
-  // value may differ between builds.
+  // http(s) and exp: are legitimate — Expo Web and Expo Go serve the app over
+  // them — so the advice matches any other scheme, plus a note on why the value
+  // differs between build targets.
   if (protocol === 'http:' || protocol === 'https:' || protocol === 'exp:') {
     return (
       'This redirectUri is not in auth.mobile.redirectUrls. Add it verbatim. ' +
@@ -798,14 +790,10 @@ export function resolveMobileRedirectRequest(
     return { ok: false };
   }
 
-  // Required, not optional. An optional challenge is no challenge at all: a
-  // caller that simply omits it mints an unbound code, and an unbound code is
-  // redeemable by any client — including a victim who is mid-flow and dutifully
-  // sending a verifier the server would then ignore. Rejecting here is what
-  // makes the binding a guarantee rather than a default.
-  //
-  // Colons would corrupt the delimiter-separated state cookie, so the charset is
-  // constrained rather than merely non-empty.
+  // Required: an omitted challenge would mint an unbound code, redeemable by
+  // anyone — including a victim mid-flow whose verifier the server would then
+  // ignore. The charset is constrained because a colon would corrupt the
+  // delimiter-separated state cookie.
   const rawChallenge = typeof req.query.codeChallenge === 'string' ? req.query.codeChallenge : '';
 
   if (!/^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge)) {

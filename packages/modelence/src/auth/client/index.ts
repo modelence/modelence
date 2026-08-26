@@ -367,9 +367,8 @@ export async function loginWithOAuth(options: { code: string }) {
 
   const codeVerifier = consumeOAuthVerifier();
   if (!codeVerifier) {
-    // Thrown mid-flow, after the user has pressed a button, so apps surface it in
-    // the UI — keep the thrown message something an end user can act on and put
-    // the integration cause in the console for whoever is debugging it.
+    // Thrown mid-flow, so apps surface it in the UI: the thrown message is for
+    // the end user, the console line for whoever is debugging.
     console.error(
       '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
         'Either signInWithOAuth was never called on this client, or the code came ' +
@@ -462,15 +461,11 @@ export async function linkOAuthProvider(options: {
         throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
       }
     }
-    // Deliberately a same-context navigation, not `config.openUrl` — unlike the
-    // web path of `signInWithOAuth`, which is stateless and works in any
-    // browser. This flow authenticates via the httpOnly `oauthLinkToken` cookie
-    // just set on this origin, so the navigation that follows must come from the
-    // same cookie jar. Handing the URL to `openUrl` would, in an Electron or
-    // Capacitor client, open a system browser that never received that cookie,
-    // and linking would fail as unauthenticated. Such clients should pass a
-    // `redirectUri` and use the nonce-based flow above, whose credential travels
-    // in the URL and is therefore jar-independent.
+    // Same-context navigation, not `config.openUrl`: this authenticates with the
+    // httpOnly cookie just set on this origin, and `openUrl` may open a system
+    // browser that never received it. (`signInWithOAuth` can use `openUrl` on
+    // its web path because that path is stateless.) Clients that open externally
+    // should pass a `redirectUri` and take the nonce flow above.
     window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
   }
 }

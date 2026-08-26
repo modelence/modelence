@@ -30,37 +30,24 @@ const VERIFIER_BYTES = 32;
 /**
  * The verifier for the in-flight sign-in.
  *
- * Module-scoped memory is enough on native, where the app stays alive in the
- * background while the system browser is in front. It is *not* enough in a
- * browser — including Expo Web, where the same code runs and `Linking.openURL`
- * is a same-tab navigation — because leaving the page tears down this module
- * and the return trip starts a fresh one.
+ * Memory suffices on native, where the app survives in the background. A
+ * browser — including Expo Web, where `Linking.openURL` navigates the same tab —
+ * tears down this module on the way to the provider, so it is mirrored into
+ * `sessionStorage`: tab-scoped and discarded on close, which fits a credential
+ * that lives for one redirect round trip.
  */
 let pendingVerifier: string | null = null;
-
-/**
- * Where a browser keeps the verifier across the navigation to the provider.
- *
- * `sessionStorage` rather than `localStorage`: it is scoped to the one tab
- * running the flow and is discarded when that tab closes, which suits a
- * credential whose useful life is the ~60 seconds of a redirect round trip.
- * Absent on native, where the in-memory value already survives.
- */
 const STORAGE_KEY = 'modelence.oauth.verifier';
 
 /**
- * Returns `sessionStorage` when it is usable, else null.
- *
- * Access itself can throw — Safari in private mode historically did, and some
- * embedded webviews disable storage entirely — so this must never be assumed
- * to work. When it is unavailable the flow still works everywhere the in-memory
- * value survives, which is every native runtime.
+ * Returns `sessionStorage` when it is usable, else null. Access can throw
+ * outright (Safari private mode, webviews with storage disabled), and presence
+ * does not imply usability — hence the probe.
  */
 function getSessionStorage(): Storage | null {
   try {
     const storage = (globalThis as { sessionStorage?: Storage }).sessionStorage;
     if (!storage) return null;
-    // Probe: presence is not the same as usability.
     const probe = `${STORAGE_KEY}.probe`;
     storage.setItem(probe, '1');
     storage.removeItem(probe);
@@ -71,14 +58,11 @@ function getSessionStorage(): Storage | null {
 }
 
 /**
- * Random hex string, using the best source the runtime offers.
+ * Random hex string from the best source the runtime offers.
  *
- * `crypto.getRandomValues` exists in browsers, Expo (via `expo-crypto`'s global
- * install) and Hermes with a polyfill; bare React Native has none of them, so
- * `Math.random` is the documented fallback. That fallback is weaker than a CSPRNG,
- * but the verifier only needs to be unguessable by an attacker who cannot read
- * the device's memory — and an attacker who can read process memory has already
- * won regardless of the entropy source.
+ * Bare React Native has no `crypto.getRandomValues`, so `Math.random` is the
+ * fallback. It is weaker than a CSPRNG, but the verifier only needs to resist an
+ * attacker who cannot read process memory — and one who can has already won.
  */
 function randomHex(byteLength: number): string {
   const bytes = new Uint8Array(byteLength);
