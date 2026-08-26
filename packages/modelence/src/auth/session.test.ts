@@ -285,13 +285,14 @@ describe('auth/session', () => {
     });
 
     test('issue stores the code hashed, never in the clear', async () => {
-      const code = await issueOAuthExchangeCode('user-id', 'google');
+      const code = await issueOAuthExchangeCode('user-id', 'google', 'right-verifier');
 
       expect(code).toBe('auth-token');
       expect(insertMock).toHaveBeenCalledWith({
         code: 'hashed-auth-token',
         userId: 'user-id',
         provider: 'google',
+        codeChallenge: 'hashed-right-verifier',
         expiresAt: expect.any(Date),
       });
       // The returned value is the credential; the stored value must differ.
@@ -309,10 +310,18 @@ describe('auth/session', () => {
       expect(insertMock.mock.calls[0][0].codeChallenge).not.toBe('right-verifier');
     });
 
-    test('issue omits the challenge when the client did not send one', async () => {
-      await issueOAuthExchangeCode('user-id', 'google');
+    // Fail closed: an entry with no challenge cannot be verified, so it must be
+    // refused rather than accepted unbound. Treating "no challenge" as "no check
+    // needed" would let anyone able to mint an unbound code bypass the binding.
+    test('consume refuses a stored entry that carries no challenge', async () => {
+      findOneAndDeleteMock.mockResolvedValue({
+        userId: 'user-id',
+        provider: 'google',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
 
-      expect(insertMock.mock.calls[0][0]).not.toHaveProperty('codeChallenge');
+      expect(await consumeOAuthExchangeCode('auth-token', 'right-verifier')).toBeNull();
+      expect(await consumeOAuthExchangeCode('auth-token')).toBeNull();
     });
 
     // The attack this closes: a code minted by an attacker's flow, delivered to
@@ -367,23 +376,8 @@ describe('auth/session', () => {
       expect(findOneAndDeleteMock).toHaveBeenCalledTimes(1);
     });
 
-    // Keeps codes minted by a previous-version instance redeemable while a
-    // rolling deploy is in flight.
-    test('consume accepts an unbound code with no verifier', async () => {
-      findOneAndDeleteMock.mockResolvedValue({
-        userId: 'user-id',
-        provider: 'google',
-        expiresAt: new Date(Date.now() + 60_000),
-      } as never);
-
-      expect(await consumeOAuthExchangeCode('auth-token')).toEqual({
-        userId: 'user-id',
-        provider: 'google',
-      });
-    });
-
     test('issue uses a one-minute TTL', async () => {
-      await issueOAuthExchangeCode('user-id', 'google');
+      await issueOAuthExchangeCode('user-id', 'google', 'right-verifier');
 
       expect(mockMinutes).toHaveBeenCalledWith(1);
     });
@@ -392,10 +386,11 @@ describe('auth/session', () => {
       findOneAndDeleteMock.mockResolvedValue({
         userId: 'user-id',
         provider: 'github',
+        codeChallenge: 'hashed-right-verifier',
         expiresAt: new Date(Date.now() + 60_000),
       } as never);
 
-      const result = await consumeOAuthExchangeCode('auth-token');
+      const result = await consumeOAuthExchangeCode('auth-token', 'right-verifier');
 
       expect(findOneAndDeleteMock).toHaveBeenCalledWith({ code: 'hashed-auth-token' });
       expect(result).toEqual({ userId: 'user-id', provider: 'github' });

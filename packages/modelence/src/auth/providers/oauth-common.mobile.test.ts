@@ -55,7 +55,11 @@ function makeRes() {
   } as unknown as Response;
 }
 
-const MOBILE_OUTCOME = { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } as const;
+const MOBILE_OUTCOME = {
+  platform: 'mobile',
+  redirectUri: ALLOWED_DEEP_LINK,
+  codeChallenge: 'device-challenge',
+} as const;
 
 describe('auth/providers/oauth-common — mobile', () => {
   let res: Response;
@@ -87,7 +91,7 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(
         userId.toString(),
         'google',
-        undefined
+        'device-challenge'
       );
       expect(res.redirect).toHaveBeenCalledWith('myapp://auth?code=exchange-code');
     });
@@ -114,7 +118,7 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(
         expect.any(String),
         'github',
-        undefined
+        'device-challenge'
       );
     });
 
@@ -255,17 +259,53 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(result).toEqual({ ok: true, redirectUri: null, codeChallenge: null });
     });
 
-    test('accepts an allowlisted target', () => {
+    test('accepts an allowlisted target with a challenge', () => {
       const result = oauth.resolveMobileRedirectRequest(
-        { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
+        {
+          query: {
+            platform: 'mobile',
+            redirectUri: ALLOWED_DEEP_LINK,
+            codeChallenge: 'a'.repeat(64),
+          },
+        } as unknown as Request,
         res
       );
 
       expect(result).toEqual({
         ok: true,
         redirectUri: ALLOWED_DEEP_LINK,
-        codeChallenge: null,
+        codeChallenge: 'a'.repeat(64),
       });
+    });
+
+    /**
+     * An optional challenge is no challenge: a caller that simply omits it mints
+     * an unbound code, and an unbound code is redeemable by any client —
+     * including a victim mid-flow whose verifier the server would then ignore.
+     */
+    test('rejects a mobile request with no challenge', () => {
+      const result = oauth.resolveMobileRedirectRequest(
+        { query: { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK } } as unknown as Request,
+        res
+      );
+
+      expect(result).toEqual({ ok: false });
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    test('rejects a malformed challenge rather than dropping it', () => {
+      const result = oauth.resolveMobileRedirectRequest(
+        {
+          query: {
+            platform: 'mobile',
+            redirectUri: ALLOWED_DEEP_LINK,
+            codeChallenge: 'has:colons',
+          },
+        } as unknown as Request,
+        res
+      );
+
+      expect(result).toEqual({ ok: false });
     });
 
     // Fails before the provider redirect, so the user never reaches a consent
@@ -379,7 +419,7 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(
         userId.toString(),
         'google',
-        undefined
+        'device-challenge'
       );
       expect(res.redirect).toHaveBeenCalledWith('myapp://auth?code=exchange-code');
     });
@@ -401,7 +441,7 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(mockIssueOAuthExchangeCode).toHaveBeenCalledWith(
         insertedId.toString(),
         'google',
-        undefined
+        'device-challenge'
       );
     });
 
@@ -679,10 +719,10 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(cookieValue).toContain('a'.repeat(64));
     });
 
-    // Colons are the state cookie's field delimiter, so a value carrying one
-    // would corrupt the decode rather than bind anything.
-    test('drops a malformed challenge instead of trusting it', async () => {
-      await oauth.prepareOAuthInitiation(
+    // Colons are the state cookie's field delimiter. Previously such a value was
+    // silently dropped, which minted an unbound code; now it fails the request.
+    test('rejects a malformed challenge instead of dropping it', async () => {
+      const result = await oauth.prepareOAuthInitiation(
         {
           query: {
             platform: 'mobile',
@@ -694,9 +734,8 @@ describe('auth/providers/oauth-common — mobile', () => {
         'authStateGoogle'
       );
 
-      const cookieValue = (res.cookie as unknown as { mock: { calls: string[][] } }).mock
-        .calls[0][1];
-      expect(cookieValue).not.toContain('has:colons');
+      expect(result).toBeNull();
+      expect(res.cookie).not.toHaveBeenCalled();
     });
 
     test('rejects a target that is not allowlisted before reaching the provider', async () => {
@@ -721,6 +760,7 @@ describe('auth/providers/oauth-common — mobile', () => {
             linkNonce: 'expired-nonce',
             platform: 'mobile',
             redirectUri: ALLOWED_DEEP_LINK,
+            codeChallenge: 'a'.repeat(64),
           },
         } as unknown as Request,
         res,

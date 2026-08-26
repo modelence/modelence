@@ -39,21 +39,33 @@ export type OAuthOutcome =
       redirectUri: string;
       /**
        * PKCE-style challenge from the device that started the flow, bound to the
-       * exchange code so only that device can redeem it. Absent for a client on
-       * a version that predates the binding.
+       * exchange code so only that device can redeem it. Required: an initiation
+       * without one is rejected, so a mobile outcome always carries it.
        */
-      codeChallenge?: string;
+      codeChallenge: string;
     };
+
+/**
+ * Where an *error* should be delivered.
+ *
+ * Distinct from {@link OAuthOutcome}: a failure carries no exchange code, so it
+ * needs a destination but no device binding. Keeping the types separate means a
+ * value recovered on an error path can never be passed somewhere that mints a
+ * code — the compiler rejects it for lack of a `codeChallenge`.
+ */
+export type OAuthErrorTarget = { platform: 'web' } | { platform: 'mobile'; redirectUri: string };
 
 /** Resolves the outcome for a validated OAuth state. */
 export function toOAuthOutcome(
   state: Pick<OAuthStateResult, 'platform' | 'redirectUri' | 'codeChallenge'>
 ): OAuthOutcome {
-  if (state.platform === 'mobile' && state.redirectUri) {
+  // A mobile state cookie without a challenge cannot produce a redeemable code,
+  // so it is not treated as a mobile outcome at all.
+  if (state.platform === 'mobile' && state.redirectUri && state.codeChallenge) {
     return {
       platform: 'mobile',
       redirectUri: state.redirectUri,
-      ...(state.codeChallenge ? { codeChallenge: state.codeChallenge } : {}),
+      codeChallenge: state.codeChallenge,
     };
   }
   return { platform: 'web' };
@@ -125,7 +137,9 @@ export function sendOAuthError(
   res: Response,
   statusCode: number,
   errorMessage: string,
-  outcome: OAuthOutcome = { platform: 'web' },
+  // Only a destination is needed to report a failure; an OAuthOutcome is
+  // accepted too, since it is a strict subtype.
+  outcome: OAuthErrorTarget = { platform: 'web' },
   errorCode: OAuthErrorCode = 'oauth_failed'
 ) {
   if (outcome.platform === 'mobile') {
@@ -671,15 +685,11 @@ function resolveDecodedMobileOutcome(decoded: {
   platform: OAuthPlatform;
   redirectUri?: string;
   codeChallenge?: string;
-}): OAuthOutcome | null {
+}): OAuthErrorTarget | null {
   if (decoded.platform !== 'mobile') return null;
   if (!decoded.redirectUri || !isAllowedMobileRedirectUrl(decoded.redirectUri)) return null;
 
-  return {
-    platform: 'mobile',
-    redirectUri: decoded.redirectUri,
-    ...(decoded.codeChallenge ? { codeChallenge: decoded.codeChallenge } : {}),
-  };
+  return { platform: 'mobile', redirectUri: decoded.redirectUri };
 }
 
 /**
@@ -691,7 +701,7 @@ function resolveDecodedMobileOutcome(decoded: {
 export function resolveMobileOutcomeFromCookie(
   req: Request,
   stateCookieName: string
-): OAuthOutcome | null {
+): OAuthErrorTarget | null {
   return resolveDecodedMobileOutcome(decodeOAuthState(req.cookies?.[stateCookieName] || ''));
 }
 
@@ -788,14 +798,27 @@ export function resolveMobileRedirectRequest(
     return { ok: false };
   }
 
-  // Optional so a client on an older SDK still signs in; when present it binds
-  // the resulting exchange code to this device. Colons would corrupt the
-  // delimiter-separated state cookie, so a malformed value is dropped rather
-  // than trusted.
+  // Required, not optional. An optional challenge is no challenge at all: a
+  // caller that simply omits it mints an unbound code, and an unbound code is
+  // redeemable by any client — including a victim who is mid-flow and dutifully
+  // sending a verifier the server would then ignore. Rejecting here is what
+  // makes the binding a guarantee rather than a default.
+  //
+  // Colons would corrupt the delimiter-separated state cookie, so the charset is
+  // constrained rather than merely non-empty.
   const rawChallenge = typeof req.query.codeChallenge === 'string' ? req.query.codeChallenge : '';
-  const codeChallenge = /^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge) ? rawChallenge : null;
 
-  return { ok: true, redirectUri, codeChallenge };
+  if (!/^[A-Za-z0-9._~-]{16,256}$/.test(rawChallenge)) {
+    sendOAuthError(
+      res,
+      400,
+      'This sign-in request is missing a valid codeChallenge. Update the Modelence ' +
+        'client package — signInWithOAuth generates it automatically.'
+    );
+    return { ok: false };
+  }
+
+  return { ok: true, redirectUri, codeChallenge: rawChallenge };
 }
 
 /**

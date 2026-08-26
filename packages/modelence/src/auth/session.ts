@@ -60,10 +60,11 @@ export const oauthExchangeCodesCollection = new Store('_modelenceOAuthExchangeCo
     /**
      * Hash of the PKCE-style verifier held by the device that started the flow.
      *
-     * Optional only so that codes minted by an instance running the previous
-     * version stay redeemable across a rolling deploy. A code carrying no
-     * challenge is redeemable without one; a code carrying one requires a
-     * matching verifier.
+     * Always written: `resolveMobileRedirectRequest` rejects an initiation that
+     * does not carry a challenge, so every code minted by this version is bound.
+     * Kept optional in the schema only to describe rows that may still exist
+     * from before the field was introduced — `consumeOAuthExchangeCode` refuses
+     * those rather than treating a missing challenge as "no binding required".
      */
     codeChallenge: schema.string().optional(),
     expiresAt: schema.date(),
@@ -79,7 +80,7 @@ const OAUTH_EXCHANGE_CODE_TTL_MINUTES = 1;
 export async function issueOAuthExchangeCode(
   userId: string,
   provider: OAuthProvider,
-  codeChallenge?: string | null
+  codeChallenge: string
 ): Promise<string> {
   const code = randomBytes(32).toString('hex');
   await oauthExchangeCodesCollection.insertOne({
@@ -88,7 +89,7 @@ export async function issueOAuthExchangeCode(
     provider,
     // Stored hashed for the same reason the code is: it is a bearer secret at
     // rest until the flow completes.
-    ...(codeChallenge ? { codeChallenge: hashToken(codeChallenge) } : {}),
+    codeChallenge: hashToken(codeChallenge),
     expiresAt: new Date(Date.now() + time.minutes(OAUTH_EXCHANGE_CODE_TTL_MINUTES)),
   });
   return code;
@@ -114,10 +115,12 @@ export async function consumeOAuthExchangeCode(
   if (!entry) return null;
   if (entry.expiresAt < new Date()) return null;
 
-  if (entry.codeChallenge) {
-    if (!codeVerifier) return null;
-    if (!timingSafeEqualHex(hashToken(codeVerifier), entry.codeChallenge)) return null;
-  }
+  // Fail closed. A stored entry with no challenge cannot be verified, so it is
+  // rejected rather than accepted unbound: treating "no challenge" as "no check
+  // needed" would let anyone who can mint an unbound code bypass the binding
+  // entirely, which is the whole point of having one.
+  if (!entry.codeChallenge || !codeVerifier) return null;
+  if (!timingSafeEqualHex(hashToken(codeVerifier), entry.codeChallenge)) return null;
 
   return { userId: entry.userId, provider: entry.provider as OAuthProvider };
 }
