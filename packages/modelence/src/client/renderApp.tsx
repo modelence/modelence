@@ -49,6 +49,12 @@ export interface RenderAppOptions {
   favicon?: string;
   errorHandler?: ErrorHandler;
   router?: SsrRouter;
+  /*
+    Replaces the built-in setup screen shown when a development server has no
+    backend yet (no Modelence Cloud connection, no local database). Pass
+    `null` to disable the screen entirely.
+  */
+  setupElement?: React.ReactNode;
 }
 
 // Shared via globalThis: ssrLoadModule loads the user's entry in a separate
@@ -74,7 +80,7 @@ export function renderApp(options: RenderAppOptions) {
     return;
   }
 
-  const { loadingElement, routesElement, favicon, errorHandler, router } = options;
+  const { loadingElement, routesElement, favicon, errorHandler, router, setupElement } = options;
 
   if (errorHandler) {
     setErrorHandler(errorHandler);
@@ -116,7 +122,9 @@ export function renderApp(options: RenderAppOptions) {
 
   const tree = (
     <React.StrictMode>
-      <AppProvider loadingElement={loadingElement}>{appTree}</AppProvider>
+      <AppProvider loadingElement={loadingElement} setupElement={setupElement}>
+        {appTree}
+      </AppProvider>
     </React.StrictMode>
   );
 

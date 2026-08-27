@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
+import { isSetupRequired } from '../app/setupStatus';
 import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
@@ -176,6 +177,10 @@ export default new Module('_system.session', {
         session,
         user,
         configs: getPublicConfigs(),
+        // Only ever true in development (see isSetupRequired); rides on the
+        // init payload so the client learns it without an extra request and
+        // without consulting its own build mode.
+        ...(isSetupRequired() ? { setupRequired: true } : {}),
       };
     },
     heartbeat: async function (args, { session }) {
