@@ -318,13 +318,23 @@ describe('auth/providers/oauth-common — mobile', () => {
         expect(result).toEqual({ ok: false });
       });
 
-      // Belt and braces: even if a challenge-less mobile state reached the
-      // sign-in path, it is downgraded to web rather than minting an unbound
-      // code — so relaxing the check for linking cannot reopen the bypass.
-      test('a challenge-less mobile state never yields a mobile outcome', () => {
+      // A link callback must still deep-link back into the app. Downgrading it
+      // to web would redirect to `/` in the device browser and leave the native
+      // client with no `linked=` callback at all.
+      test('a challenge-less mobile state stays mobile', () => {
         expect(
           oauth.toOAuthOutcome({ platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK })
-        ).toEqual({ platform: 'web' });
+        ).toEqual({ platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK });
+      });
+
+      // Minting is gated at the point of minting instead, so relaxing the
+      // initiation check for linking cannot reopen the unbound-code bypass.
+      test('only a challenge-bearing outcome is eligible to mint a code', () => {
+        expect(
+          oauth.isBoundMobileOutcome({ platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK })
+        ).toBe(false);
+        expect(oauth.isBoundMobileOutcome(MOBILE_OUTCOME)).toBe(true);
+        expect(oauth.isBoundMobileOutcome({ platform: 'web' })).toBe(false);
       });
     });
 
@@ -901,6 +911,108 @@ describe('auth/providers/oauth-common — mobile', () => {
       expect(oauth.encodeOAuthState({ state: 'state-abc', mode: 'login' })).toBe(
         'state-abc:login:'
       );
+    });
+  });
+  /**
+   * Mobile linking carries no exchange code, so it has no challenge — but it
+   * must still return the user to the app. Treating "no challenge" as "not
+   * mobile" sent it to `/` in the device browser instead.
+   */
+  describe('mobile linking without a challenge', () => {
+    const userId = new ObjectId();
+
+    beforeEach(() => {
+      mockGetCallContext.mockResolvedValue({
+        session: { authToken: 'token', userId },
+        connectionInfo: { ip: '1.1.1.1' },
+      } as never);
+      mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
+      mockUsersFindOne.mockResolvedValue({
+        _id: userId,
+        handle: 'demo',
+        authMethods: { google: { id: 'google-id' } },
+      } as never);
+    });
+
+    // Goes through toOAuthOutcome the way a real callback does, so a regression
+    // in that mapping is caught here and not only by its unit test.
+    test('a link state cookie survives the round trip as a mobile outcome', async () => {
+      const stateValue = oauth.encodeOAuthState({
+        state: 'state-abc',
+        mode: 'link',
+        platform: 'mobile',
+        redirectUri: ALLOWED_DEEP_LINK,
+      });
+
+      const stateResult = oauth.validateOAuthStateAndGetMode(
+        {
+          query: { state: 'state-abc' },
+          cookies: { authStateGoogle: stateValue },
+        } as unknown as Request,
+        res,
+        'authStateGoogle'
+      );
+
+      await oauth.handleOAuthProviderLink(
+        {} as Request,
+        res,
+        {
+          id: 'google-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'google',
+        },
+        undefined,
+        oauth.toOAuthOutcome(stateResult!)
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith('myapp://auth?linked=google');
+    });
+
+    test('deep-links the linked marker back into the app', async () => {
+      await oauth.handleOAuthProviderLink(
+        {} as Request,
+        res,
+        {
+          id: 'google-id',
+          email: 'user@example.com',
+          emailVerified: true,
+          providerName: 'google',
+        },
+        undefined,
+        { platform: 'mobile', redirectUri: ALLOWED_DEEP_LINK }
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith('myapp://auth?linked=google');
+      // Never the web fallback.
+      expect(res.redirect).not.toHaveBeenCalledWith('/');
+    });
+  });
+
+  /**
+   * Initiation rejects a challenge-less sign-in, so reaching authenticateUser
+   * without one means the state was tampered with or truncated. Falling through
+   * to a cookie session would strand the native app at `/`.
+   */
+  describe('challenge-less sign-in fails closed', () => {
+    test('does not mint a code or create a browser session', async () => {
+      await oauth.authenticateUser(res, new ObjectId(), 'google', {
+        platform: 'mobile',
+        redirectUri: ALLOWED_DEEP_LINK,
+      });
+
+      expect(mockIssueOAuthExchangeCode).not.toHaveBeenCalled();
+      expect(mockCreateSession).not.toHaveBeenCalled();
+      expect(mockSetAuthTokenCookie).not.toHaveBeenCalled();
+    });
+
+    test('reports the failure into the app rather than redirecting to /', async () => {
+      await oauth.authenticateUser(res, new ObjectId(), 'google', {
+        platform: 'mobile',
+        redirectUri: ALLOWED_DEEP_LINK,
+      });
+
+      expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('errorCode=invalid_state'));
     });
   });
 });

@@ -38,37 +38,61 @@ export type OAuthOutcome =
       platform: 'mobile';
       redirectUri: string;
       /**
-       * PKCE-style challenge from the device that started the flow, bound to the
-       * exchange code so only that device can redeem it. Required: an initiation
-       * without one is rejected, so a mobile outcome always carries it.
+       * PKCE-style challenge from the device that started the flow.
+       *
+       * Present for a sign-in, where it binds the exchange code to that device.
+       * Absent for linking, which redirects with `linked=<provider>` and mints
+       * no credential — so there is nothing to bind. `authenticateUser` is the
+       * only caller that mints a code, and it requires
+       * {@link BoundMobileOutcome}, so an unbound value cannot reach it.
        */
-      codeChallenge: string;
+      codeChallenge?: string;
     };
+
+/**
+ * A mobile outcome that is allowed to mint an exchange code.
+ *
+ * Narrower than {@link OAuthOutcome}: `codeChallenge` is required, so the
+ * compiler — not a runtime check — rejects any attempt to mint a code for a
+ * flow that carries no device binding.
+ */
+export type BoundMobileOutcome = {
+  platform: 'mobile';
+  redirectUri: string;
+  codeChallenge: string;
+};
 
 /**
  * Where an *error* should be delivered.
  *
- * Distinct from {@link OAuthOutcome}: a failure carries no exchange code, so it
- * needs a destination but no device binding. Keeping the types separate means a
- * value recovered on an error path can never be passed somewhere that mints a
- * code — the compiler rejects it for lack of a `codeChallenge`.
+ * A failure carries no credential, so it needs a destination but no binding.
  */
 export type OAuthErrorTarget = { platform: 'web' } | { platform: 'mobile'; redirectUri: string };
 
-/** Resolves the outcome for a validated OAuth state. */
+/**
+ * Resolves the outcome for a validated OAuth state.
+ *
+ * A mobile state stays mobile whether or not it carries a challenge: dropping to
+ * web here would strand a native client in the device browser at `/` instead of
+ * deep-linking back. Whether a code may be minted is decided at the point of
+ * minting, by {@link isBoundMobileOutcome}.
+ */
 export function toOAuthOutcome(
   state: Pick<OAuthStateResult, 'platform' | 'redirectUri' | 'codeChallenge'>
 ): OAuthOutcome {
-  // A mobile state cookie without a challenge cannot produce a redeemable code,
-  // so it is not treated as a mobile outcome at all.
-  if (state.platform === 'mobile' && state.redirectUri && state.codeChallenge) {
+  if (state.platform === 'mobile' && state.redirectUri) {
     return {
       platform: 'mobile',
       redirectUri: state.redirectUri,
-      codeChallenge: state.codeChallenge,
+      ...(state.codeChallenge ? { codeChallenge: state.codeChallenge } : {}),
     };
   }
   return { platform: 'web' };
+}
+
+/** Whether a mobile outcome carries the binding required to mint a code. */
+export function isBoundMobileOutcome(outcome: OAuthOutcome): outcome is BoundMobileOutcome {
+  return outcome.platform === 'mobile' && typeof outcome.codeChallenge === 'string';
 }
 
 /**
@@ -170,6 +194,21 @@ export async function authenticateUser(
   outcome: OAuthOutcome = { platform: 'web' }
 ) {
   if (outcome.platform === 'mobile') {
+    // Fail closed rather than falling through to a cookie session: a mobile
+    // sign-in always carries a challenge (initiation rejects it otherwise), so
+    // reaching here without one means the state was tampered with or truncated.
+    // Silently issuing a browser session instead would strand the app at `/`.
+    if (!isBoundMobileOutcome(outcome)) {
+      sendOAuthError(
+        res,
+        400,
+        'This sign-in could not be completed. Please try signing in again.',
+        outcome,
+        'invalid_state'
+      );
+      return;
+    }
+
     // Deliberately no session and no cookie: the deep link is the weakest hop (a
     // custom scheme can be claimed by any installed app), so it carries only a
     // single-use code. The session is minted at redemption over TLS, so an
