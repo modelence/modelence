@@ -55,6 +55,8 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'oneTimeCode', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'oneTimeCode', type: 'email', window: time.hours(1), limit: 10 },
     { bucket: 'oneTimeCode', type: 'email', window: time.days(1), limit: 20 },
+    { bucket: 'updateProfile', type: 'user', window: time.minutes(15), limit: 30 },
+    { bucket: 'updateProfile', type: 'user', window: time.days(1), limit: 200 },
   ];
 }
 
@@ -69,6 +71,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'passwordReset',
     'magicLink',
     'oneTimeCode',
+    'updateProfile',
   ];
 
   for (const bucket of buckets) {
