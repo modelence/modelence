@@ -47,9 +47,6 @@ export async function handleSignupWithPassword(
     );
 
     if (existingUser) {
-      if (existingUser.status === 'disabled') {
-        throw new Error('Unable to create account');
-      }
       throw new Error('Unable to create account');
     }
 
