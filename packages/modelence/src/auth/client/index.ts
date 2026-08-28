@@ -1,6 +1,10 @@
 import { setCurrentUser } from '@/client/session';
 import { callMethod } from '@/client/method';
-import { getLocalStorageSession } from '@/client/localStorage';
+import {
+  clearLocalStorageSession,
+  getLocalStorageSession,
+  setLocalStorageSession,
+} from '@/client/localStorage';
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
@@ -26,18 +30,24 @@ type RawUserData = {
   avatarUrl?: string;
 };
 
+function persistSession(session: { authToken: string }) {
+  const config = getClientConfig();
+  if (config) {
+    config.setAuthToken(session.authToken);
+  } else {
+    setLocalStorageSession(session);
+  }
+}
+
 /**
  * Stores the session from a completed sign-in and returns the enriched user.
  *
- * Every login method ends the same way — persist the auth token through the
- * client config, then publish the user to the reactive session store. Kept in
- * one place so a new sign-in method cannot half-implement it.
+ * Every login method ends the same way — persist the auth token, then publish
+ * the user to the reactive session store. Kept in one place so a new sign-in
+ * method cannot half-implement it.
  */
 function completeLogin(result: { user: RawUserData; session: { authToken: string } }) {
-  const config = getClientConfig();
-  if (config) {
-    config.setAuthToken(result.session.authToken);
-  }
+  persistSession(result.session);
   return setCurrentUser(result.user);
 }
 
@@ -162,6 +172,7 @@ export async function resendEmailVerification(options: { email: string }) {
  */
 export async function logout() {
   await callMethod('_system.user.logout');
+  clearLocalStorageSession();
   const config = getClientConfig();
   if (config) {
     config.setAuthToken(null);

@@ -3,6 +3,7 @@ import { Args, Context, UpdateProfileProps } from '../methods/types';
 import { serializeUserForClient } from './utils';
 import { validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
+import { consumeRateLimit } from '../rate-limit/rules';
 
 export async function getOwnProfile(props: Args, { user }: Context) {
   if (!user) {
@@ -49,6 +50,8 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
 
   //Update profile
   if (Object.keys(update).length > 0) {
+    await consumeRateLimit({ bucket: 'updateProfile', type: 'user', value: user.id });
+
     const setFields: Record<string, unknown> = {}; //Used to set the fields
     const unsetFields: Record<string, ''> = {}; //Used to clear the fields the mongodb, because mongodb rejects undefined values when updating fields
 

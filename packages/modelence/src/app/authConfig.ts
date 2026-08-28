@@ -87,6 +87,8 @@ export type AuthRateLimitsConfig = {
   oneTimeCode?: AuthRateLimitOverride[];
   /** Rate limits for redeeming a mobile OAuth exchange code. */
   oauthExchange?: AuthRateLimitOverride[];
+  /** Per-user rate limits for profile updates. */
+  updateProfile?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {

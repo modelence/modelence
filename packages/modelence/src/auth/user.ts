@@ -60,6 +60,8 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     // minute, so this guards against bulk guessing rather than a targeted one.
     { bucket: 'oauthExchange', type: 'ip', window: time.minutes(15), limit: 30 },
     { bucket: 'oauthExchange', type: 'ip', window: time.days(1), limit: 300 },
+    { bucket: 'updateProfile', type: 'user', window: time.minutes(15), limit: 30 },
+    { bucket: 'updateProfile', type: 'user', window: time.days(1), limit: 200 },
   ];
 }
 
@@ -75,6 +77,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'magicLink',
     'oneTimeCode',
     'oauthExchange',
+    'updateProfile',
   ];
 
   for (const bucket of buckets) {
