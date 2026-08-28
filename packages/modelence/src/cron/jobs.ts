@@ -129,17 +129,16 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   state.startTs = Date.now();
 
-  await cronJobsCollection.upsertOne(
-    { alias },
-    {
-      $set: { lastStartDate: new Date(state.startTs) },
-      $setOnInsert: { alias },
-    }
-  );
-
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
   try {
+    await cronJobsCollection.upsertOne(
+      { alias },
+      {
+        $set: { lastStartDate: new Date(state.startTs) },
+        $setOnInsert: { alias },
+      }
+    );
     await handler();
     handleCronJobCompletion(state, params);
     transaction.end('success');
