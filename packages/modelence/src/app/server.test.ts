@@ -275,11 +275,12 @@ describe('app/server getCallContext', () => {
     expect(ctx.clientInfo.screenWidth).toBe(100);
   });
 
-  test('falls back to unauthenticated context when database missing', async () => {
+  test('does not trust X-Forwarded-For when the request IP is direct', async () => {
     const req = createRequest({
       body: {
         authToken: 'body-token',
       },
+      ip: '::ffff:192.0.2.10',
       headers: {
         'x-forwarded-for': '10.0.0.1, 2.2.2.2',
         host: 'localhost',
@@ -292,7 +293,7 @@ describe('app/server getCallContext', () => {
 
     expect(ctx.session).toBeNull();
     expect(ctx.roles).toEqual(['guest']);
-    expect(ctx.connectionInfo.ip).toBe('10.0.0.1');
+    expect(ctx.connectionInfo.ip).toBe('192.0.2.10');
   });
 
   test('normalizes direct IP addresses without proxy headers', async () => {
@@ -378,8 +379,11 @@ describe('app/server getCallContext', () => {
     });
   });
 
-  test('handles X-Forwarded-For with multiple IPs', async () => {
+  test('uses the IP resolved by Express for a trusted proxy chain', async () => {
     const req = createRequest({
+      // Express resolves this from the socket and X-Forwarded-For according to
+      // the configured trusted proxy addresses.
+      ip: '5.6.7.8',
       headers: {
         'x-forwarded-for': '1.2.3.4, 5.6.7.8, 9.10.11.12',
         host: 'localhost',
@@ -389,10 +393,10 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+    expect(ctx.connectionInfo.ip).toBe('5.6.7.8');
   });
 
-  test('handles X-Forwarded-For as array', async () => {
+  test('ignores X-Forwarded-For when Express resolves no forwarded IP', async () => {
     const req = createRequest({
       headers: { host: 'localhost' },
     });
@@ -401,7 +405,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+    expect(ctx.connectionInfo.ip).toBeUndefined();
   });
 
   test('uses socket remoteAddress when ip is not available', async () => {
@@ -525,6 +529,58 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self'"
     );
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'SAMEORIGIN');
+  });
+
+  test('preserves the legacy trust-all proxy behavior by default', async () => {
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
+  });
+
+  test('configures only the explicitly trusted proxy addresses', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['loopback', '10.0.0.0/8'],
+    });
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', ['loopback', '10.0.0.0/8']);
+  });
+
+  test('configures trusted proxies from MODELENCE_TRUSTED_PROXIES', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = 'loopback,linklocal,uniquelocal';
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', 'loopback,linklocal,uniquelocal');
+  });
+
+  test('MODELENCE_TRUSTED_PROXIES overrides the application security config', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = '10.0.0.0/8';
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['loopback'],
+    });
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', '10.0.0.0/8');
   });
 
   test('sets custom frame-ancestors and omits X-Frame-Options', async () => {

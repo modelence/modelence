@@ -66,3 +66,34 @@ await consumeRateLimit({
 });
 ```
 
+## Reverse Proxy Deployments
+
+For backward compatibility, Modelence trusts the complete `X-Forwarded-For`
+chain when no proxy configuration is present. This preserves existing client IP
+behavior during upgrades, but callers can supply their own value. Production
+deployments should list only the proxy addresses or networks they control:
+
+```typescript
+import { startApp } from 'modelence/server';
+
+startApp({
+  security: {
+    trustedProxies: ['loopback', '10.0.0.0/8'],
+  },
+});
+```
+
+For hosted deployments, the equivalent environment variable takes precedence
+over the `startApp()` setting:
+
+```bash
+MODELENCE_TRUSTED_PROXIES="loopback,10.0.0.0/8"
+```
+
+`trustedProxies` accepts IP addresses, CIDR ranges, and the Express named ranges
+`loopback`, `linklocal`, and `uniquelocal`. Modelence then walks the forwarded
+chain from the app toward the client and uses the first untrusted address.
+Forged values prepended by a caller do not become the IP rate-limit key.
+
+Configure the edge proxy to overwrite or append the actual peer address, and
+prevent untrusted clients from connecting directly to the application port.

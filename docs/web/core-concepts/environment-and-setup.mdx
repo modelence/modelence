@@ -66,6 +66,7 @@ Every `MODELENCE_*` variable (plus the few non-prefixed ones) that the framework
 | `MODELENCE_SITE_URL` | string | — | `packages/modelence` (public site URL, used by auth callbacks and emails) |
 | `PORT` | number | `3000` | `packages/modelence/app/server.ts` |
 | `MODELENCE_PORT` | number | falls back to `PORT` | `packages/modelence/app/server.ts` |
+| `MODELENCE_TRUSTED_PROXIES` | string (comma-separated addresses/ranges) | all proxies trusted for backward compatibility | `packages/modelence/app/server.ts` |
 | `NODE_ENV` | `development` \| `production` | `development` | Build pipeline, cookie `secure` flag, Vite dev server |
 | `MODELENCE_LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` | `info` | `packages/modelence/telemetry` |
 | `MODELENCE_ENV_TYPE` | string | — | `packages/modelence/config` (`_system.env.type`) |

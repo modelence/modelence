@@ -91,6 +91,19 @@ export async function startServer(
 ) {
   const app = express();
 
+  // Express's proxy-addr implementation walks X-Forwarded-For from the socket
+  // toward the client and stops at the first untrusted hop.
+  // This is important for IP rate limits: selecting the left-most value would
+  // let a caller evade them by prepending an arbitrary address.
+  const { trustedProxies } = getSecurityConfig();
+  const envTrustedProxies = process.env.MODELENCE_TRUSTED_PROXIES?.trim();
+  // Keep the historical trust-all behavior when neither setting is present so
+  // upgrading does not collapse every client behind a reverse proxy into one
+  // rate-limit identity. Modelence-hosted environments set the trusted proxy
+  // ranges before rolling out this framework version.
+  const trustProxy = envTrustedProxies || trustedProxies;
+  app.set('trust proxy', trustProxy === undefined ? true : trustProxy);
+
   app.use(cookieParser());
 
   app.use(securityHeadersMiddleware());
@@ -368,13 +381,9 @@ function getRequestBaseUrl(req: Request): string {
 }
 
 function getClientIp(req: Request): string | undefined {
-  // On Heroku and other proxies, X-Forwarded-For contains the real client IP
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    const firstIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor.split(',')[0];
-    return firstIp.trim();
-  }
-
+  // `req.ip` only incorporates X-Forwarded-For according to the application's
+  // `trust proxy` setting. Never parse the header directly: its left-most value
+  // is controlled by the caller unless every ingress proxy overwrites it.
   const directIp = req.ip || req.socket?.remoteAddress;
   if (directIp) {
     // Remove IPv6-to-IPv4 mapping prefix
