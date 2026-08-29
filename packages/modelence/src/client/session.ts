@@ -4,6 +4,7 @@ import { callMethod } from './method';
 import { _setConfig } from '../config/client';
 import { getLocalStorageSession, setLocalStorageSession } from './localStorage';
 import { getClientConfig } from './clientConfig';
+import { revalidateModelenceQueries } from './query';
 import { time } from '../time';
 import { Configs } from '../config/types';
 
@@ -166,6 +167,28 @@ export async function initSession() {
   useSessionStore.getState().setUser(parseUser(user));
 
   await loopSessionHeartbeat();
+}
+
+/** Revalidate session on pageshow when restored from BFCache (`event.persisted === true`). */
+export async function revalidateSessionOnPageShow() {
+  try {
+    const payload = await callMethod<SessionInitPayload>('_system.session.init');
+    const { configs, session, user } = payload;
+    setupRequired = Boolean(payload.setupRequired);
+    _setConfig(configs);
+
+    const config = getClientConfig();
+    if (config) {
+      config.setAuthToken(session.authToken);
+    } else {
+      setLocalStorageSession(session);
+    }
+
+    useSessionStore.getState().setUser(parseUser(user));
+    revalidateModelenceQueries();
+  } catch (error) {
+    console.error('Modelence: session revalidation failed on pageshow', error);
+  }
 }
 
 /** Idempotent, client-only. Auto-started by `initSession`; call explicitly after `hydrateSession`. */

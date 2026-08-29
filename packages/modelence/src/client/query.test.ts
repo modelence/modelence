@@ -11,7 +11,12 @@ vi.doMock('../websocket/client', () => ({
   subscribeLiveQuery: mockSubscribeLiveQuery,
 }));
 
-const { modelenceLiveQuery, disconnectModelenceQueryClient } = await import('./query');
+const {
+  modelenceLiveQuery,
+  disconnectModelenceQueryClient,
+  connectModelenceQueryClient,
+  revalidateModelenceQueries,
+} = await import('./query');
 
 describe('modelenceLiveQuery', () => {
   const originalWindow = globalThis.window;
@@ -23,6 +28,19 @@ describe('modelenceLiveQuery', () => {
 
   afterEach(() => {
     globalThis.window = originalWindow;
+  });
+
+  test('revalidateModelenceQueries invalidates queries on connected QueryClient', () => {
+    const mockInvalidateQueries = vi.fn();
+    const fakeQueryClient = {
+      getQueryCache: () => ({ subscribe: vi.fn() }),
+      invalidateQueries: mockInvalidateQueries,
+    } as unknown as Parameters<typeof connectModelenceQueryClient>[0];
+
+    connectModelenceQueryClient(fakeQueryClient);
+    revalidateModelenceQueries();
+
+    expect(mockInvalidateQueries).toHaveBeenCalledTimes(1);
   });
 
   test('queryFn returns a never-resolving promise on the server (no window)', async () => {
