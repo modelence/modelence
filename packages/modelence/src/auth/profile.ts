@@ -29,7 +29,14 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
 
   let profile = await usersCollection.requireById(user.id);
 
-  const update = validateProfileFields(props as UpdateProfileProps);
+  const rawProps = props as UpdateProfileProps;
+  const isHandleUnchanged =
+    typeof rawProps.handle === 'string' && rawProps.handle.trim() === profile.handle;
+
+  const { handle: _ignoredHandle, ...propsWithoutHandle } = rawProps;
+  const update = validateProfileFields(
+    isHandleUnchanged ? (propsWithoutHandle as UpdateProfileProps) : rawProps
+  );
 
   await getAuthConfig().validateProfileUpdate?.(update);
 
