@@ -145,14 +145,7 @@ export function _isReconciliationPending(): boolean {
   return pendingReconciliation;
 }
 
-export async function initSession() {
-  if (isInitialized) {
-    return;
-  }
-
-  isInitialized = true;
-
-  const payload = await callMethod<SessionInitPayload>('_system.session.init');
+function applySessionPayload(payload: SessionInitPayload) {
   const { configs, session, user } = payload;
   setupRequired = Boolean(payload.setupRequired);
   _setConfig(configs);
@@ -165,29 +158,36 @@ export async function initSession() {
   }
 
   useSessionStore.getState().setUser(parseUser(user));
+}
+
+export async function initSession() {
+  if (isInitialized) {
+    return;
+  }
+
+  isInitialized = true;
+
+  const payload = await callMethod<SessionInitPayload>('_system.session.init');
+  applySessionPayload(payload);
 
   await loopSessionHeartbeat();
 }
 
 /** Revalidate session on pageshow when restored from BFCache (`event.persisted === true`). */
 export async function revalidateSessionOnPageShow() {
+  if (heartbeatTimer !== null) {
+    clearTimeout(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
   try {
     const payload = await callMethod<SessionInitPayload>('_system.session.init');
-    const { configs, session, user } = payload;
-    setupRequired = Boolean(payload.setupRequired);
-    _setConfig(configs);
-
-    const config = getClientConfig();
-    if (config) {
-      config.setAuthToken(session.authToken);
-    } else {
-      setLocalStorageSession(session);
-    }
-
-    useSessionStore.getState().setUser(parseUser(user));
+    applySessionPayload(payload);
     revalidateModelenceQueries();
   } catch (error) {
     console.error('Modelence: session revalidation failed on pageshow', error);
+  } finally {
+    void loopSessionHeartbeat();
   }
 }
 
