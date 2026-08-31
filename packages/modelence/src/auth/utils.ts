@@ -159,7 +159,9 @@ export async function resolveUniqueHandle(
   }
 
   // Derive handle from the email local-part (everything before '@').
+  // Sanitize non-alphanumeric/underscore/hyphen characters to satisfy HANDLE_REGEX.
   // Truncate to MAX_HANDLE_LENGTH since RFC 5321 allows local parts up to 64 chars.
-  const baseHandle = email.split('@')[0].padEnd(MIN_HANDLE_LENGTH, '_').slice(0, MAX_HANDLE_LENGTH);
+  const rawBase = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '_');
+  const baseHandle = rawBase.padEnd(MIN_HANDLE_LENGTH, '_').slice(0, MAX_HANDLE_LENGTH);
   return findAvailableHandle(baseHandle);
 }

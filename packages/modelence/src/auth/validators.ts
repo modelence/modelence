@@ -4,6 +4,7 @@ import { ValidationError } from '../error';
 
 export const MIN_HANDLE_LENGTH = 3;
 export const MAX_HANDLE_LENGTH = 50;
+export const HANDLE_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 128;
@@ -26,13 +27,20 @@ const trimmedOptionalString = (opts: { max: number }) =>
     .transform((val) => (val === '' ? undefined : val))
     .optional();
 
+const handleSchema = trimmedNonEmptyString({
+  min: MIN_HANDLE_LENGTH,
+  max: MAX_HANDLE_LENGTH,
+}).regex(HANDLE_REGEX, {
+  message: 'must contain only letters, numbers, underscores, and hyphens',
+});
+
 // Base schema (used for both full & partial validation)
 const profileFieldsSchema = z
   .object({
     firstName: trimmedOptionalString({ max: 50 }),
     lastName: trimmedOptionalString({ max: 50 }),
     avatarUrl: trimmedOptionalString({ max: 400 }),
-    handle: trimmedNonEmptyString({ min: MIN_HANDLE_LENGTH, max: MAX_HANDLE_LENGTH }),
+    handle: handleSchema,
   })
   .strict();
 
@@ -85,5 +93,5 @@ export function validateEmail(value: string) {
 }
 
 export function validateHandle(value: string) {
-  return trimmedNonEmptyString({ min: MIN_HANDLE_LENGTH, max: MAX_HANDLE_LENGTH }).parse(value);
+  return handleSchema.parse(value);
 }

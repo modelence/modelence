@@ -124,5 +124,19 @@ describe('auth/profile', () => {
       });
       expect(mockUpdateOne).toHaveBeenCalled();
     });
+
+    it('allows legacy users with invalid handle characters to update other fields when handle is unchanged', async () => {
+      mockRequireById.mockResolvedValueOnce({
+        _id: 'legacy-1',
+        handle: 'legacy.user',
+      });
+
+      await handleUpdateProfile(
+        { handle: 'legacy.user', firstName: 'Updated' },
+        authenticatedContext
+      );
+
+      expect(mockValidateProfileFields).toHaveBeenCalledWith({ firstName: 'Updated' });
+    });
   });
 });
