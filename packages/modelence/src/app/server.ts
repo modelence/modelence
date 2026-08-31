@@ -370,8 +370,17 @@ function corsMiddleware(): express.RequestHandler {
       // browsers on credentialed requests, which the cookie-based web flows use.
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      // Reflect what the preflight asked for, falling back to the only header
+      // method calls send. A custom route taking e.g. Authorization would
+      // otherwise be blocked before its handler ever ran.
+      const requestedHeaders = req.headers['access-control-request-headers'];
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        typeof requestedHeaders === 'string' ? requestedHeaders : 'Content-Type'
+      );
+      // Covers every verb RouteDefinition's HttpMethod allows, so a custom
+      // route is not silently blocked by a preflight the framework rejects.
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
       // The response body varies by Origin, so a shared cache must not reuse
       // one origin's response for another.
       res.setHeader('Vary', 'Origin');

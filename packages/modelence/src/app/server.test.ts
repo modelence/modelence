@@ -609,6 +609,11 @@ describe('app/server startServer', () => {
       'http://localhost:8081'
     );
     expect(mockRes.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Credentials', 'true');
+    // Every verb RouteDefinition's HttpMethod allows, so custom routes work.
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Access-Control-Allow-Methods',
+      'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'
+    );
     // Vary: Origin keeps a cache from serving one origin's response to another.
     expect(mockRes.setHeader).toHaveBeenCalledWith('Vary', 'Origin');
     expect(next).toHaveBeenCalled();
@@ -645,6 +650,32 @@ describe('app/server startServer', () => {
 
     expect(mockRes.sendStatus).toHaveBeenCalledWith(204);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  test('reflects the headers a preflight asks for', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!(
+      {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'http://localhost:8081',
+          'access-control-request-headers': 'content-type, authorization',
+        },
+      },
+      mockRes,
+      vi.fn()
+    );
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Access-Control-Allow-Headers',
+      'content-type, authorization'
+    );
   });
 
   test('rejects a preflight from a disallowed origin', async () => {
