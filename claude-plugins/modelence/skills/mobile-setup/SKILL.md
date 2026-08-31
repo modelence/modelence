@@ -319,8 +319,14 @@ A `200` means the server itself is answering, so move on to the client-side chec
 
    ```bash
    curl -s "http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true" \
-     | grep -oE 'https?://[^"]+:[0-9]+' | sort -u
+     | grep -c 'your-app.modelence.app'
    ```
+
+   Grep for the exact host from `mobile/.env` — substitute it for the example above —
+   rather than listing every URL in the bundle: a deployed host carries no port, and the
+   bundle is full of Metro's own `localhost:8081` URLs either way. A non-zero count means
+   the new value landed; `0` means the bundle is still stale. To confirm the OLD value is
+   gone, grep for that host too and expect `0`.
 
    If the old URL is still there, clear the Metro file maps (see the Metro section).
 
