@@ -144,6 +144,22 @@ function findSecurityMiddleware(app: MockExpressApp): MiddlewareFn | undefined {
   return undefined;
 }
 
+// Identifies the CORS middleware by probing with an origin the test has
+// configured as allowed — the middleware only sets headers on a match.
+function findCorsMiddleware(app: MockExpressApp, allowedOrigin: string): MiddlewareFn | undefined {
+  for (const call of app.use.mock.calls) {
+    const fn = call[0];
+    if (typeof fn !== 'function') continue;
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    (fn as MiddlewareFn)({ method: 'POST', headers: { origin: allowedOrigin } }, mockRes, () => {});
+    const setsCors = mockRes.setHeader.mock.calls.some(
+      (args: unknown[]) => args[0] === 'Access-Control-Allow-Origin'
+    );
+    if (setsCors) return fn as MiddlewareFn;
+  }
+  return undefined;
+}
+
 const getRegisteredMethodHandler = (app: MockExpressApp) => {
   const call = app.post.mock.calls.find(([path]) =>
     String(path).includes('/api/_internal/method/')
@@ -550,6 +566,118 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self' https://modelence.com https://example.com"
     );
     expect(mockRes.setHeader).not.toHaveBeenCalledWith('X-Frame-Options', expect.anything());
+  });
+
+  test('does not register CORS headers when allowedOrigins is unset', async () => {
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    // Nothing may emit Access-Control-Allow-Origin: sandboxes rely on their
+    // router's header being the only one, and a duplicate is invalid to browsers.
+    for (const call of mockApp.use.mock.calls) {
+      const fn = call[0];
+      if (typeof fn !== 'function') continue;
+      const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+      (fn as MiddlewareFn)(
+        { method: 'POST', headers: { origin: 'http://localhost:8081' } },
+        mockRes,
+        () => {}
+      );
+      expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+        'Access-Control-Allow-Origin',
+        expect.anything()
+      );
+    }
+  });
+
+  test('echoes an allowed origin instead of a wildcard', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    expect(middleware).toBeDefined();
+
+    const next = vi.fn();
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'POST', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Access-Control-Allow-Origin',
+      'http://localhost:8081'
+    );
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Access-Control-Allow-Credentials', 'true');
+    // Vary: Origin keeps a cache from serving one origin's response to another.
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Vary', 'Origin');
+    expect(next).toHaveBeenCalled();
+  });
+
+  test('sends no CORS headers for an origin not in the list', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const next = vi.fn();
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'POST', headers: { origin: 'http://evil.example' } }, mockRes, next);
+
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+      'Access-Control-Allow-Origin',
+      expect.anything()
+    );
+    expect(next).toHaveBeenCalled();
+  });
+
+  test('answers a preflight from an allowed origin without calling next', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const next = vi.fn();
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+
+    expect(mockRes.sendStatus).toHaveBeenCalledWith(204);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('rejects a preflight from a disallowed origin', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const next = vi.fn();
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'OPTIONS', headers: { origin: 'http://evil.example' } }, mockRes, next);
+
+    expect(mockRes.sendStatus).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('ignores same-origin requests that carry no Origin header', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const next = vi.fn();
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'POST', headers: {} }, mockRes, next);
+
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+      'Access-Control-Allow-Origin',
+      expect.anything()
+    );
+    expect(next).toHaveBeenCalled();
   });
 
   test('initializes express app with middleware', async () => {

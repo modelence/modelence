@@ -16,6 +16,17 @@
  *   },
  * });
  * ```
+ *
+ * @example
+ * ```typescript
+ * // Allow a browser client on another origin to call the API (e.g. Expo Web,
+ * // which Metro serves on :8081 while the API runs on :3000).
+ * startApp({
+ *   security: {
+ *     allowedOrigins: ['http://localhost:8081'],
+ *   },
+ * });
+ * ```
  */
 export type SecurityConfig = {
   /**
@@ -26,6 +37,26 @@ export type SecurityConfig = {
    * When set, `X-Frame-Options` is omitted since it cannot express multiple origins.
    */
   frameAncestors?: string[];
+  /**
+   * Origins allowed to call this app's API from a browser (CORS).
+   *
+   * Browsers block a cross-origin `fetch` unless the response carries a
+   * matching `Access-Control-Allow-Origin`. The common case is Expo Web, which
+   * Metro serves on a different port from the API — a different port is a
+   * different origin, so every method call is blocked without this.
+   *
+   * Each entry must be an exact origin (`scheme://host[:port]`); patterns and
+   * wildcards are not supported, since the response header carries one concrete
+   * origin. The matched origin is echoed back rather than `*`, so credentialed
+   * requests keep working.
+   *
+   * Opt-in by design: when unset, no CORS headers are sent at all. Deployments
+   * that already add CORS at a proxy or router therefore stay untouched — a
+   * duplicated `Access-Control-Allow-Origin` is invalid and would break them.
+   *
+   * Native iOS/Android do not enforce CORS and never need this.
+   */
+  allowedOrigins?: string[];
 };
 
 let securityConfig: SecurityConfig = Object.freeze({});

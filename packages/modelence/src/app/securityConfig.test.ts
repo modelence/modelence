@@ -45,6 +45,31 @@ describe('securityConfig', () => {
     expect(Object.isFrozen(updatedConfig)).toBe(true);
   });
 
+  test('sets and retrieves allowedOrigins', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ allowedOrigins: ['http://localhost:8081'] });
+
+    expect(getSecurityConfig().allowedOrigins).toEqual(['http://localhost:8081']);
+  });
+
+  test('allowedOrigins is undefined by default', async () => {
+    const { getSecurityConfig } = await import('./securityConfig');
+
+    expect(getSecurityConfig().allowedOrigins).toBeUndefined();
+  });
+
+  test('frameAncestors and allowedOrigins are independent', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ frameAncestors: ['https://modelence.com'] });
+    setSecurityConfig({ allowedOrigins: ['http://localhost:8081'] });
+
+    const config = getSecurityConfig();
+    expect(config.frameAncestors).toEqual(['https://modelence.com']);
+    expect(config.allowedOrigins).toEqual(['http://localhost:8081']);
+  });
+
   test('supports multiple frame ancestors', async () => {
     const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
 

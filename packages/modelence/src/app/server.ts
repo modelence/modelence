@@ -94,6 +94,7 @@ export async function startServer(
   app.use(cookieParser());
 
   app.use(securityHeadersMiddleware());
+  app.use(corsMiddleware());
 
   // Register module routes first (with per-route body parser config)
   registerModuleRoutes(app, combinedModules);
@@ -344,6 +345,44 @@ function securityHeadersMiddleware(): express.RequestHandler {
     if (!hasCustomAncestors) {
       res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     }
+    next();
+  };
+}
+
+function corsMiddleware(): express.RequestHandler {
+  const { allowedOrigins } = getSecurityConfig();
+  const allowed = new Set(allowedOrigins ?? []);
+
+  return (req, res, next) => {
+    // Opt-in only. With no configured origins this is a no-op, so deployments
+    // that add CORS at a proxy/router keep exactly one Access-Control-Allow-Origin
+    // header — a duplicate is invalid and browsers reject the response outright.
+    if (allowed.size === 0) {
+      next();
+      return;
+    }
+
+    const origin = req.headers.origin;
+    const isAllowed = typeof origin === 'string' && allowed.has(origin);
+
+    if (isAllowed) {
+      // Echo the matched origin rather than '*': a wildcard is rejected by
+      // browsers on credentialed requests, which the cookie-based web flows use.
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      // The response body varies by Origin, so a shared cache must not reuse
+      // one origin's response for another.
+      res.setHeader('Vary', 'Origin');
+    }
+
+    // Answer preflights here — they must never reach route handlers.
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(isAllowed ? 204 : 403);
+      return;
+    }
+
     next();
   };
 }
