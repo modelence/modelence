@@ -153,7 +153,7 @@ async function runCronJob(job: CronJob) {
 }
 
 function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
-  state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
+  state.scheduledRunTs = (state.startTs ?? Date.now()) + params.interval;
   state.startTs = undefined;
   state.isRunning = false;
 }
