@@ -349,8 +349,8 @@ describe('auth/signup', () => {
     ).rejects.toThrow('Please use a permanent email address');
   });
 
-  test('throws when user already exists', async () => {
-    mockFindOne.mockResolvedValueOnce({
+  test('returns a generic error when the email is already registered', async () => {
+    mockFindOne.mockResolvedValue({
       _id: createObjectId('existing'),
       handle: 'existinguser',
       createdAt: new Date(),
@@ -361,10 +361,35 @@ describe('auth/signup', () => {
 
     await expect(
       handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
-    ).rejects.toThrow('User with email already exists: test@example.com');
+    ).rejects.toThrow('Unable to create account');
+
+    await expect(
+      handleSignupWithPassword({ email: 'TEST@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Unable to create account');
+
+    expect(authConfig.onSignupError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: 'Unable to create account' }),
+      })
+    );
 
     expect(authConfig.onSignupError).toHaveBeenCalled();
     expect(authConfig.signup.onError).toHaveBeenCalled();
+  });
+
+  test('returns a generic error for disabled accounts without revealing their status', async () => {
+    mockFindOne.mockResolvedValueOnce({
+      _id: createObjectId('disabled'),
+      handle: 'disableduser',
+      createdAt: new Date(),
+      authMethods: {},
+      status: 'disabled',
+      emails: [{ address: 'test@example.com', verified: true }],
+    } as never);
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow('Unable to create account');
   });
 
   test('throws already-exists when a concurrent signup wins the race and the unique index rejects the insert', async () => {
@@ -378,7 +403,7 @@ describe('auth/signup', () => {
 
     await expect(
       handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
-    ).rejects.toThrow('User with email already exists: test@example.com');
+    ).rejects.toThrow('Unable to create account');
 
     expect(authConfig.onSignupError).toHaveBeenCalled();
     expect(mockSendVerificationEmail).not.toHaveBeenCalled();
@@ -456,7 +481,7 @@ describe('auth/signup', () => {
 
     await expect(
       handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
-    ).rejects.toThrow('User with email already exists');
+    ).rejects.toThrow('Unable to create account');
 
     expect(authConfig.onBeforeSignup).not.toHaveBeenCalled();
   });
