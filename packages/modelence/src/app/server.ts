@@ -381,6 +381,10 @@ function corsMiddleware(): express.RequestHandler {
       // Covers every verb RouteDefinition's HttpMethod allows, so a custom
       // route is not silently blocked by a preflight the framework rejects.
       res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
+      // Browsers expose only a small safelist of response headers to JS. Without
+      // this the error-code header is hidden cross-origin, so MethodError.code
+      // silently becomes undefined and clients cannot branch on the error kind.
+      res.setHeader('Access-Control-Expose-Headers', 'X-Modelence-Error-Code');
       // The response body varies by Origin, so a shared cache must not reuse
       // one origin's response for another.
       res.setHeader('Vary', 'Origin');

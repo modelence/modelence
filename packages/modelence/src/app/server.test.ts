@@ -619,6 +619,24 @@ describe('app/server startServer', () => {
     expect(next).toHaveBeenCalled();
   });
 
+  test('exposes X-Modelence-Error-Code to cross-origin clients', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const mockRes = { setHeader: vi.fn(), sendStatus: vi.fn() };
+    middleware!({ method: 'POST', headers: { origin: 'http://localhost:8081' } }, mockRes, vi.fn());
+
+    // Without this the browser hides the header from JS, so MethodError.code
+    // comes back undefined and clients cannot branch on the error kind.
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Access-Control-Expose-Headers',
+      'X-Modelence-Error-Code'
+    );
+  });
+
   test('sends no CORS headers for an origin not in the list', async () => {
     mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
 
