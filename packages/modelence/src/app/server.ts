@@ -64,14 +64,26 @@ function getBodyParserMiddleware(config?: {
   return middlewares;
 }
 
-function registerModuleRoutes(app: express.Application, modules: Module[]) {
+function registerModuleRoutes(
+  app: express.Application,
+  modules: Module[],
+  cors: express.RequestHandler
+) {
   for (const module of modules) {
     for (const route of module.routes) {
       const { path, handlers, body } = route;
       const middlewares = getBodyParserMiddleware(body);
 
       Object.entries(handlers).forEach(([method, handler]) => {
-        app[method as HttpMethod](path, ...middlewares, createRouteHandler(method, path, handler));
+        // CORS first: it only sets response headers and always calls next(), so
+        // it must not sit behind a body parser that could reject the request
+        // before the headers are attached.
+        app[method as HttpMethod](
+          path,
+          cors,
+          ...middlewares,
+          createRouteHandler(method, path, handler)
+        );
       });
     }
   }
@@ -93,21 +105,30 @@ export async function startServer(
 
   app.use(cookieParser());
 
+  // CSP and X-Frame-Options belong on every response, SSR pages included, so
+  // this one stays global.
   app.use(securityHeadersMiddleware());
-  app.use(corsMiddleware());
+  // Preflights only. The matching response headers are attached per-route below,
+  // which keeps SSR pages and static assets out of CORS scope.
+  app.use(corsPreflightMiddleware());
+
+  const cors = corsRouteMiddleware();
 
   // Register module routes first (with per-route body parser config)
-  registerModuleRoutes(app, combinedModules);
+  registerModuleRoutes(app, combinedModules, cors);
 
   // Apply global body parsing for remaining routes
   app.use(express.json({ limit: '16mb' }));
   app.use(express.urlencoded({ extended: true, limit: '16mb' }));
 
+  // Both OAuth routers register only under this prefix, so one mount covers
+  // every route they add, including the callbacks.
+  app.use('/api/_internal/auth', cors);
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
   // Browser OAuth linking: set httpOnly cookie so the authToken never travels in a URL.
-  app.post('/api/_internal/auth/set-link-cookie', async (req: Request, res: Response) => {
+  app.post('/api/_internal/auth/set-link-cookie', cors, async (req: Request, res: Response) => {
     const { session } = await getCallContext(req, res);
 
     if (!session?.userId) {
@@ -127,7 +148,7 @@ export async function startServer(
   });
 
   // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
-  app.post('/api/_internal/auth/issue-link-nonce', async (req: Request, res: Response) => {
+  app.post('/api/_internal/auth/issue-link-nonce', cors, async (req: Request, res: Response) => {
     const { session } = await getCallContext(req, res);
 
     if (!session?.userId) {
@@ -139,7 +160,7 @@ export async function startServer(
     res.json({ nonce });
   });
 
-  app.post('/api/_internal/method/:methodName(*)', async (req: Request, res: Response) => {
+  app.post('/api/_internal/method/:methodName(*)', cors, async (req: Request, res: Response) => {
     const methodName = req.params.methodName as string;
     const context = await getCallContext(req, res);
 
@@ -349,7 +370,68 @@ function securityHeadersMiddleware(): express.RequestHandler {
   };
 }
 
-function corsMiddleware(): express.RequestHandler {
+/**
+ * Applies the CORS response headers for a single request, returning whether the
+ * request's Origin is allowed.
+ *
+ * Shared by the preflight and per-route middlewares so an allowed origin gets
+ * exactly the same headers whether the browser is preflighting or making the
+ * real call — a mismatch between the two is invisible in tests and shows up as
+ * an intermittent browser-only failure.
+ */
+function applyCorsHeaders(
+  req: express.Request,
+  res: express.Response,
+  allowed: Set<string>
+): boolean {
+  // Set before the match check, not inside it: a response sent to a
+  // disallowed origin (or to a request with no Origin at all) still depends on
+  // Origin, and without Vary a CDN or shared proxy may cache that
+  // header-less response and later replay it to an allowed origin.
+  // res.vary appends and dedupes, so a Vary set by static/compression
+  // middleware further down the stack survives — setHeader would clobber it.
+  res.vary('Origin');
+
+  const origin = req.headers.origin;
+  const isAllowed = typeof origin === 'string' && allowed.has(origin);
+  if (!isAllowed) {
+    return false;
+  }
+
+  // Echo the matched origin rather than '*': a wildcard is rejected by
+  // browsers on credentialed requests, which the cookie-based web flows use.
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // Reflect what the preflight asked for, falling back to the only header
+  // method calls send. A custom route taking e.g. Authorization would
+  // otherwise be blocked before its handler ever ran.
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    typeof requestedHeaders === 'string' ? requestedHeaders : 'Content-Type'
+  );
+  // Covers every verb RouteDefinition's HttpMethod allows, so a custom
+  // route is not silently blocked by a preflight the framework rejects.
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
+  // Browsers expose only a small safelist of response headers to JS. Without
+  // this the error-code header is hidden cross-origin, so MethodError.code
+  // silently becomes undefined and clients cannot branch on the error kind.
+  res.setHeader('Access-Control-Expose-Headers', 'X-Modelence-Error-Code');
+  return true;
+}
+
+/**
+ * Answers CORS preflights. Mounted globally, unlike the per-route header
+ * middleware: a preflight must be answered before route dispatch, and Express
+ * does not reliably match `OPTIONS /todos` against a `.get('/todos')`
+ * registration. Scoping this per-route would leave those preflights to fall
+ * through to the SSR catch-all, which answers them with HTML.
+ *
+ * It only ever handles OPTIONS, so it never adds headers to a real response —
+ * that stays the per-route middleware's job, which is what keeps SSR and static
+ * responses out of scope.
+ */
+function corsPreflightMiddleware(): express.RequestHandler {
   const { allowedOrigins } = getSecurityConfig();
   const allowed = new Set(allowedOrigins ?? []);
 
@@ -357,61 +439,46 @@ function corsMiddleware(): express.RequestHandler {
     // Opt-in only. With no configured origins this is a no-op, so deployments
     // that add CORS at a proxy/router keep exactly one Access-Control-Allow-Origin
     // header — a duplicate is invalid and browsers reject the response outright.
-    if (allowed.size === 0) {
+    if (allowed.size === 0 || req.method !== 'OPTIONS') {
       next();
       return;
     }
 
-    // Set before the match check, not inside it: a response sent to a
-    // disallowed origin (or to a request with no Origin at all) still depends on
-    // Origin, and without Vary a CDN or shared proxy may cache that
-    // header-less response and later replay it to an allowed origin.
-    // res.vary appends and dedupes, so a Vary set by static/compression
-    // middleware further down the stack survives — setHeader would clobber it.
-    res.vary('Origin');
-
-    const origin = req.headers.origin;
-    const isAllowed = typeof origin === 'string' && allowed.has(origin);
-
+    const isAllowed = applyCorsHeaders(req, res, allowed);
+    // Allow-Headers is reflected from the request, so the preflight result
+    // depends on this header too and must not be cached across requests that
+    // ask for different ones.
+    res.vary('Access-Control-Request-Headers');
     if (isAllowed) {
-      // Echo the matched origin rather than '*': a wildcard is rejected by
-      // browsers on credentialed requests, which the cookie-based web flows use.
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      // Reflect what the preflight asked for, falling back to the only header
-      // method calls send. A custom route taking e.g. Authorization would
-      // otherwise be blocked before its handler ever ran.
-      const requestedHeaders = req.headers['access-control-request-headers'];
-      res.setHeader(
-        'Access-Control-Allow-Headers',
-        typeof requestedHeaders === 'string' ? requestedHeaders : 'Content-Type'
-      );
-      // Covers every verb RouteDefinition's HttpMethod allows, so a custom
-      // route is not silently blocked by a preflight the framework rejects.
-      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
-      // Browsers expose only a small safelist of response headers to JS. Without
-      // this the error-code header is hidden cross-origin, so MethodError.code
-      // silently becomes undefined and clients cannot branch on the error kind.
-      res.setHeader('Access-Control-Expose-Headers', 'X-Modelence-Error-Code');
+      // Every method call sends Content-Type: application/json, so every one
+      // is preflighted. Without Max-Age browsers re-preflight constantly
+      // (Chrome defaults to 5s), doubling the request count. 600s is under
+      // Chrome's 7200s cap and Firefox's 86400s cap, so it applies as given.
+      res.setHeader('Access-Control-Max-Age', '600');
     }
+    res.sendStatus(isAllowed ? 204 : 403);
+  };
+}
 
-    // Answer preflights here — they must never reach route handlers.
-    if (req.method === 'OPTIONS') {
-      // Allow-Headers above is reflected from the request, so the preflight
-      // result depends on this header too and must not be cached across
-      // requests that ask for different ones.
-      res.vary('Access-Control-Request-Headers');
-      if (isAllowed) {
-        // Every method call sends Content-Type: application/json, so every one
-        // is preflighted. Without Max-Age browsers re-preflight constantly
-        // (Chrome defaults to 5s), doubling the request count. 600s is under
-        // Chrome's 7200s cap and Firefox's 86400s cap, so it applies as given.
-        res.setHeader('Access-Control-Max-Age', '600');
-      }
-      res.sendStatus(isAllowed ? 204 : 403);
-      return;
+/**
+ * Adds CORS headers to a real (non-preflight) response.
+ *
+ * Attached to the app's route surface — module routes and the framework's own
+ * API routes — rather than mounted globally, so an allowlisted origin can call
+ * the API without also being able to read SSR pages and static assets with
+ * credentials. The scope is derived from the routes actually registered rather
+ * than matched by path pattern: module routes carry no framework-imposed prefix
+ * (the docs' example mounts `/todos` at the root), so no pattern could express
+ * "the API" without silently missing user-defined routes.
+ */
+function corsRouteMiddleware(): express.RequestHandler {
+  const { allowedOrigins } = getSecurityConfig();
+  const allowed = new Set(allowedOrigins ?? []);
+
+  return (req, res, next) => {
+    if (allowed.size > 0) {
+      applyCorsHeaders(req, res, allowed);
     }
-
     next();
   };
 }

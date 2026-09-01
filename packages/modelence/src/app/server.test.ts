@@ -151,18 +151,45 @@ function createMockRes() {
   return { setHeader: vi.fn(), sendStatus: vi.fn(), vary: vi.fn() };
 }
 
-// Identifies the CORS middleware by probing with an origin the test has
-// configured as allowed — the middleware only sets headers on a match.
-function findCorsMiddleware(app: MockExpressApp, allowedOrigin: string): MiddlewareFn | undefined {
+// Locates the global preflight middleware: the only `app.use` entry that
+// answers an OPTIONS request itself instead of delegating to next().
+function findCorsPreflightMiddleware(
+  app: MockExpressApp,
+  allowedOrigin: string
+): MiddlewareFn | undefined {
   for (const call of app.use.mock.calls) {
     const fn = call[0];
     if (typeof fn !== 'function') continue;
     const mockRes = createMockRes();
-    (fn as MiddlewareFn)({ method: 'POST', headers: { origin: allowedOrigin } }, mockRes, () => {});
-    const setsCors = mockRes.setHeader.mock.calls.some(
-      (args: unknown[]) => args[0] === 'Access-Control-Allow-Origin'
+    (fn as MiddlewareFn)(
+      { method: 'OPTIONS', headers: { origin: allowedOrigin } },
+      mockRes,
+      () => {}
     );
-    if (setsCors) return fn as MiddlewareFn;
+    if (mockRes.sendStatus.mock.calls.length > 0) return fn as MiddlewareFn;
+  }
+  return undefined;
+}
+
+// Locates the per-route CORS middleware by pulling it off a registered route
+// rather than off `app.use` — it is no longer mounted globally, which is the
+// whole point of scoping CORS to the API surface.
+function findCorsRouteMiddleware(
+  app: MockExpressApp,
+  allowedOrigin: string
+): MiddlewareFn | undefined {
+  const registrations = [...app.post.mock.calls, ...app.get.mock.calls];
+  for (const call of registrations) {
+    for (const arg of call.slice(1)) {
+      if (typeof arg !== 'function') continue;
+      const mockRes = createMockRes();
+      const next = vi.fn();
+      (arg as MiddlewareFn)({ method: 'POST', headers: { origin: allowedOrigin } }, mockRes, next);
+      const setsCors = mockRes.setHeader.mock.calls.some(
+        (args: unknown[]) => args[0] === 'Access-Control-Allow-Origin'
+      );
+      if (setsCors) return arg as MiddlewareFn;
+    }
   }
   return undefined;
 }
@@ -174,7 +201,9 @@ const getRegisteredMethodHandler = (app: MockExpressApp) => {
   if (!call) {
     throw new Error('Method handler not registered');
   }
-  return call[1] as (req: Request, res: Response) => Promise<unknown>;
+  // The route handler is always registered last, after any middleware
+  // (CORS, body parsers), so index from the end rather than a fixed position.
+  return call[call.length - 1] as (req: Request, res: Response) => Promise<unknown>;
 };
 
 const getRegisteredSetLinkCookieHandler = (app: MockExpressApp) => {
@@ -184,7 +213,9 @@ const getRegisteredSetLinkCookieHandler = (app: MockExpressApp) => {
   if (!call) {
     throw new Error('Set-link-cookie handler not registered');
   }
-  return call[1] as (req: Request, res: Response) => Promise<unknown>;
+  // The route handler is always registered last, after any middleware
+  // (CORS, body parsers), so index from the end rather than a fixed position.
+  return call[call.length - 1] as (req: Request, res: Response) => Promise<unknown>;
 };
 
 vi.doMock('express', () => {
@@ -582,9 +613,15 @@ describe('app/server startServer', () => {
 
     // Nothing may emit Access-Control-Allow-Origin: sandboxes rely on their
     // router's header being the only one, and a duplicate is invalid to browsers.
-    for (const call of mockApp.use.mock.calls) {
-      const fn = call[0];
-      if (typeof fn !== 'function') continue;
+    // Covers per-route registrations too, not just app.use — CORS is attached to
+    // routes now, so scanning only the global stack would miss a leak.
+    const everyRegisteredFn = [
+      ...mockApp.use.mock.calls,
+      ...mockApp.post.mock.calls,
+      ...mockApp.get.mock.calls,
+    ].flatMap((call) => call.filter((arg: unknown) => typeof arg === 'function'));
+
+    for (const fn of everyRegisteredFn) {
       const mockRes = createMockRes();
       (fn as MiddlewareFn)(
         { method: 'POST', headers: { origin: 'http://localhost:8081' } },
@@ -598,13 +635,129 @@ describe('app/server startServer', () => {
     }
   });
 
+  test('applies CORS to a module route defined outside /api', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+    mockCreateRouteHandler.mockReturnValue(vi.fn() as unknown as ExpressRouteHandler);
+
+    // The documented example mounts a module route at the root, so a path-prefix
+    // scope would silently drop CORS from exactly the routes users write.
+    const mockModule = new Module('todos', {
+      routes: [
+        {
+          path: '/todos',
+          handlers: { get: vi.fn<RouteHandler>(() => ({ status: 200, data: {} })) },
+        },
+      ],
+    });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [mockModule], channels: [] });
+
+    const registration = mockApp.get.mock.calls.find(([path]) => path === '/todos');
+    expect(registration).toBeDefined();
+
+    const corsArg = registration!.slice(1).find((arg: unknown) => {
+      if (typeof arg !== 'function') return false;
+      const probe = createMockRes();
+      (arg as MiddlewareFn)(
+        { method: 'GET', headers: { origin: 'http://localhost:8081' } },
+        probe,
+        vi.fn()
+      );
+      return probe.setHeader.mock.calls.some(
+        (args: unknown[]) => args[0] === 'Access-Control-Allow-Origin'
+      );
+    });
+
+    expect(corsArg).toBeDefined();
+  });
+
+  test('does not apply CORS to the SSR catch-all', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    // An allowlisted origin may call the API but must not be able to read
+    // rendered pages with credentials.
+    //
+    // Replays what Express actually does for `GET /some-ssr-page`: run every
+    // globally-mounted middleware in order, then the catch-all. Inspecting the
+    // catch-all's own arguments alone would pass even with CORS mounted
+    // globally, since the headers would come from an earlier app.use entry.
+    const catchAll = mockApp.all.mock.calls.find(([path]) => path === '*');
+    expect(catchAll).toBeDefined();
+
+    const globalStack = mockApp.use.mock.calls
+      .filter((call) => typeof call[0] === 'function')
+      .map((call) => call[0] as MiddlewareFn);
+    const catchAllHandlers = catchAll!
+      .slice(1)
+      .filter((arg: unknown) => typeof arg === 'function') as MiddlewareFn[];
+
+    const mockRes = createMockRes();
+    const req = { method: 'GET', headers: { origin: 'http://localhost:8081' } };
+    for (const fn of [...globalStack, ...catchAllHandlers]) {
+      let advanced = false;
+      fn(req, mockRes, () => {
+        advanced = true;
+      });
+      // A middleware that answered the request itself ends the chain.
+      if (!advanced) break;
+    }
+
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+      'Access-Control-Allow-Origin',
+      expect.anything()
+    );
+  });
+
+  test('preflights a module route before it reaches a handler', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    // Preflight handling stays global: OPTIONS /todos would otherwise fall
+    // through to the SSR catch-all and be answered with HTML.
+    const preflight = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
+    expect(preflight).toBeDefined();
+
+    const next = vi.fn();
+    const mockRes = createMockRes();
+    preflight!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+
+    expect(mockRes.sendStatus).toHaveBeenCalledWith(204);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('preflight middleware ignores non-OPTIONS requests', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const preflight = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
+    const next = vi.fn();
+    const mockRes = createMockRes();
+    preflight!({ method: 'POST', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+
+    // A real response must get its headers from the per-route middleware, or a
+    // globally-mounted one would put them back on SSR responses.
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+      'Access-Control-Allow-Origin',
+      expect.anything()
+    );
+    expect(next).toHaveBeenCalled();
+  });
+
   test('echoes an allowed origin instead of a wildcard', async () => {
     mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
 
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     expect(middleware).toBeDefined();
 
     const next = vi.fn();
@@ -633,7 +786,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!({ method: 'POST', headers: { origin: 'http://localhost:8081' } }, mockRes, vi.fn());
 
@@ -651,7 +804,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
     middleware!({ method: 'POST', headers: { origin: 'http://evil.example' } }, mockRes, next);
@@ -669,7 +822,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!({ method: 'POST', headers: { origin: 'http://evil.example' } }, mockRes, vi.fn());
 
@@ -684,7 +837,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!({ method: 'POST', headers: {} }, mockRes, vi.fn());
 
@@ -697,7 +850,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!(
       { method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } },
@@ -719,7 +872,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!(
       { method: 'OPTIONS', headers: { origin: 'http://evil.example' } },
@@ -736,7 +889,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
     middleware!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
@@ -751,7 +904,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!(
       {
@@ -777,7 +930,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
     middleware!({ method: 'OPTIONS', headers: { origin: 'http://evil.example' } }, mockRes, next);
@@ -792,7 +945,7 @@ describe('app/server startServer', () => {
     const mockServer = createMockServer();
     await startServer(mockServer, { combinedModules: [], channels: [] });
 
-    const middleware = findCorsMiddleware(mockApp, 'http://localhost:8081');
+    const middleware = findCorsRouteMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
     middleware!({ method: 'POST', headers: {} }, mockRes, next);
@@ -843,8 +996,11 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
+    // CORS sits between the path and the handler: the API surface opts in
+    // per-route, rather than CORS being applied globally.
     expect(mockApp.post).toHaveBeenCalledWith(
       '/api/_internal/method/:methodName(*)',
+      expect.any(Function),
       expect.any(Function)
     );
   });
@@ -996,12 +1152,14 @@ describe('app/server startServer', () => {
     // Routes now include body parser middleware
     expect(mockApp.get).toHaveBeenCalledWith(
       '/api/test',
+      expect.any(Function),
       'json-middleware',
       'urlencoded-middleware',
       mockRouteHandler
     );
     expect(mockApp.post).toHaveBeenCalledWith(
       '/api/test',
+      expect.any(Function),
       'json-middleware',
       'urlencoded-middleware',
       mockRouteHandler
@@ -1040,12 +1198,14 @@ describe('app/server startServer', () => {
     // Routes now include body parser middleware
     expect(mockApp.get).toHaveBeenCalledWith(
       '/api/foo',
+      expect.any(Function),
       'json-middleware',
       'urlencoded-middleware',
       expect.any(Function)
     );
     expect(mockApp.post).toHaveBeenCalledWith(
       '/api/bar',
+      expect.any(Function),
       'json-middleware',
       'urlencoded-middleware',
       expect.any(Function)
