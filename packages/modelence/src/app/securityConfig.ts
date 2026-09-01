@@ -14,6 +14,7 @@
  *   security: {
  *     frameAncestors: ['https://modelence.com', 'https://app.example.com'],
  *     trustedProxies: ['loopback', 'linklocal', 'uniquelocal'],
+ *     clientIpHeader: 'cf-connecting-ip',
  *   },
  * });
  * ```
@@ -49,6 +50,30 @@ export type SecurityConfig = {
    * ```
    */
   trustedProxies?: string | string[];
+
+  /**
+   * Name of a single-value header the trusted proxy sets to the originating
+   * client IP, used instead of walking the `X-Forwarded-For` chain.
+   *
+   * Cloudflare recommends reading `CF-Connecting-IP` (or `True-Client-IP` on
+   * Enterprise plans) rather than `X-Forwarded-For`, because Cloudflare
+   * *appends* to an inbound `X-Forwarded-For` instead of overwriting it, while
+   * these headers always carry exactly one address.
+   *
+   * This header is only read when the immediate peer is a trusted proxy, so
+   * `trustedProxies` (or `MODELENCE_TRUSTED_PROXIES`) must also be configured
+   * with the proxy's addresses. Without that, a direct caller could set the
+   * header themselves and choose their own rate-limit identity. When the peer
+   * is untrusted or the header is absent, the IP falls back to the normal
+   * `trust proxy` resolution.
+   *
+   * @example
+   * ```typescript
+   * // Behind Cloudflare, with Cloudflare's published ranges trusted:
+   * clientIpHeader: 'cf-connecting-ip'
+   * ```
+   */
+  clientIpHeader?: string;
 };
 
 let securityConfig: SecurityConfig = Object.freeze({});

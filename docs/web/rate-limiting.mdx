@@ -97,3 +97,36 @@ Forged values prepended by a caller do not become the IP rate-limit key.
 
 Configure the edge proxy to overwrite or append the actual peer address, and
 prevent untrusted clients from connecting directly to the application port.
+
+### Cloudflare
+
+Cloudflare *appends* to an inbound `X-Forwarded-For` header rather than
+overwriting it, so its left-most value is chosen by the caller. Cloudflare
+therefore [recommends](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
+reading `CF-Connecting-IP`, which always holds exactly one address. Set
+`clientIpHeader` to use it:
+
+```typescript
+startApp({
+  security: {
+    trustedProxies: [/* Cloudflare's published IP ranges */],
+    clientIpHeader: 'cf-connecting-ip',
+  },
+});
+```
+
+`clientIpHeader` is only read when the connecting peer matches `trustedProxies`,
+so it must be configured alongside them with Cloudflare's
+[published IP ranges](https://www.cloudflare.com/ips/). Two caveats:
+
+- With the default trust-all behavior (neither `trustedProxies` nor
+  `MODELENCE_TRUSTED_PROXIES` set), every peer counts as trusted, so anyone able
+  to reach the application port directly could set the header themselves. Always
+  pair `clientIpHeader` with an explicit trusted proxy list.
+- If the trusted list does not cover the full Cloudflare edge, requests through
+  uncovered addresses fall back to the peer address, collapsing many clients
+  onto a single rate-limit key.
+
+`True-Client-IP` works the same way, but is Enterprise-only and must be enabled
+via a Managed Transform. Cloudflare warns that in a stacked-CDN setup its value
+can be spoofed unless your own edge sets it.

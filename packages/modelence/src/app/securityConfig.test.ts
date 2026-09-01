@@ -65,4 +65,12 @@ describe('securityConfig', () => {
 
     expect(getSecurityConfig().trustedProxies).toEqual(['loopback', '10.0.0.0/8']);
   });
+
+  test('stores the client IP header', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ clientIpHeader: 'cf-connecting-ip' });
+
+    expect(getSecurityConfig().clientIpHeader).toBe('cf-connecting-ip');
+  });
 });
