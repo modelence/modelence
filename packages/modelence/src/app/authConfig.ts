@@ -308,8 +308,10 @@ export type AuthConfig = {
    * Custom handle generator. If provided, overrides the default behavior
    * (which derives the handle from the email local-part). Receives
    * `{ email, firstName?, lastName? }` and returns the desired handle
-   * synchronously or as a `Promise<string>`. If the returned handle collides
-   * with an existing one, Modelence appends a numeric suffix automatically.
+   * synchronously or as a `Promise<string>`. The returned handle must contain
+   * only letters, numbers, underscores, and hyphens (matching `HANDLE_REGEX`).
+   * If the returned handle collides with an existing one, Modelence appends
+   * a numeric suffix automatically.
    */
   generateHandle?: (props: GenerateHandleProps) => Promise<string> | string;
 
