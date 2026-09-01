@@ -151,8 +151,17 @@ function createMockRes() {
   return { setHeader: vi.fn(), sendStatus: vi.fn(), vary: vi.fn() };
 }
 
+// A preflight is OPTIONS *plus* Access-Control-Request-Method — the middleware
+// discriminates on both, so tests must send both to exercise it.
+function preflightReq(headers: Record<string, string> = {}) {
+  return {
+    method: 'OPTIONS',
+    headers: { 'access-control-request-method': 'POST', ...headers },
+  };
+}
+
 // Locates the global preflight middleware: the only `app.use` entry that
-// answers an OPTIONS request itself instead of delegating to next().
+// answers a preflight itself instead of delegating to next().
 function findCorsPreflightMiddleware(
   app: MockExpressApp,
   allowedOrigin: string
@@ -161,11 +170,7 @@ function findCorsPreflightMiddleware(
     const fn = call[0];
     if (typeof fn !== 'function') continue;
     const mockRes = createMockRes();
-    (fn as MiddlewareFn)(
-      { method: 'OPTIONS', headers: { origin: allowedOrigin } },
-      mockRes,
-      () => {}
-    );
+    (fn as MiddlewareFn)(preflightReq({ origin: allowedOrigin }), mockRes, () => {});
     if (mockRes.sendStatus.mock.calls.length > 0) return fn as MiddlewareFn;
   }
   return undefined;
@@ -725,10 +730,45 @@ describe('app/server startServer', () => {
 
     const next = vi.fn();
     const mockRes = createMockRes();
-    preflight!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+    preflight!(preflightReq({ origin: 'http://localhost:8081' }), mockRes, next);
 
     expect(mockRes.sendStatus).toHaveBeenCalledWith(204);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  test('passes a plain OPTIONS request through to user-defined routes', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const preflight = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
+    const mockRes = createMockRes();
+    const next = vi.fn();
+    // No Access-Control-Request-Method: not a preflight. HttpMethod lets a
+    // module register an `options` handler, and this middleware is mounted
+    // ahead of it, so swallowing this would make that route unreachable.
+    preflight!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockRes.sendStatus).not.toHaveBeenCalled();
+  });
+
+  test('does not reject an originless OPTIONS request', async () => {
+    mockGetSecurityConfig.mockReturnValue({ allowedOrigins: ['http://localhost:8081'] });
+
+    const mockServer = createMockServer();
+    await startServer(mockServer, { combinedModules: [], channels: [] });
+
+    const preflight = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
+    const mockRes = createMockRes();
+    const next = vi.fn();
+    // Non-browser clients (curl, health probes, API discovery) send OPTIONS
+    // with no Origin. Answering 403 would break them.
+    preflight!({ method: 'OPTIONS', headers: {} }, mockRes, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockRes.sendStatus).not.toHaveBeenCalledWith(403);
   });
 
   test('preflight middleware ignores non-OPTIONS requests', async () => {
@@ -852,11 +892,7 @@ describe('app/server startServer', () => {
 
     const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
-    middleware!(
-      { method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } },
-      mockRes,
-      vi.fn()
-    );
+    middleware!(preflightReq({ origin: 'http://localhost:8081' }), mockRes, vi.fn());
 
     // Every method call is preflighted (Content-Type: application/json), so
     // without this the browser re-preflights and doubles the request count.
@@ -874,11 +910,7 @@ describe('app/server startServer', () => {
 
     const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
-    middleware!(
-      { method: 'OPTIONS', headers: { origin: 'http://evil.example' } },
-      mockRes,
-      vi.fn()
-    );
+    middleware!(preflightReq({ origin: 'http://evil.example' }), mockRes, vi.fn());
 
     expect(mockRes.setHeader).not.toHaveBeenCalledWith('Access-Control-Max-Age', expect.anything());
   });
@@ -892,7 +924,7 @@ describe('app/server startServer', () => {
     const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
-    middleware!({ method: 'OPTIONS', headers: { origin: 'http://localhost:8081' } }, mockRes, next);
+    middleware!(preflightReq({ origin: 'http://localhost:8081' }), mockRes, next);
 
     expect(mockRes.sendStatus).toHaveBeenCalledWith(204);
     expect(next).not.toHaveBeenCalled();
@@ -907,13 +939,10 @@ describe('app/server startServer', () => {
     const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const mockRes = createMockRes();
     middleware!(
-      {
-        method: 'OPTIONS',
-        headers: {
-          origin: 'http://localhost:8081',
-          'access-control-request-headers': 'content-type, authorization',
-        },
-      },
+      preflightReq({
+        origin: 'http://localhost:8081',
+        'access-control-request-headers': 'content-type, authorization',
+      }),
       mockRes,
       vi.fn()
     );
@@ -933,7 +962,7 @@ describe('app/server startServer', () => {
     const middleware = findCorsPreflightMiddleware(mockApp, 'http://localhost:8081');
     const next = vi.fn();
     const mockRes = createMockRes();
-    middleware!({ method: 'OPTIONS', headers: { origin: 'http://evil.example' } }, mockRes, next);
+    middleware!(preflightReq({ origin: 'http://evil.example' }), mockRes, next);
 
     expect(mockRes.sendStatus).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();

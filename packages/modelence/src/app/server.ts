@@ -427,7 +427,7 @@ function applyCorsHeaders(
  * registration. Scoping this per-route would leave those preflights to fall
  * through to the SSR catch-all, which answers them with HTML.
  *
- * It only ever handles OPTIONS, so it never adds headers to a real response —
+ * It only ever handles preflights, so it never adds headers to a real response —
  * that stays the per-route middleware's job, which is what keeps SSR and static
  * responses out of scope.
  */
@@ -439,7 +439,15 @@ function corsPreflightMiddleware(): express.RequestHandler {
     // Opt-in only. With no configured origins this is a no-op, so deployments
     // that add CORS at a proxy/router keep exactly one Access-Control-Allow-Origin
     // header — a duplicate is invalid and browsers reject the response outright.
-    if (allowed.size === 0 || req.method !== 'OPTIONS') {
+    //
+    // A preflight is OPTIONS *plus* Access-Control-Request-Method. Matching on
+    // the method alone would swallow every other OPTIONS request: HttpMethod
+    // lets a module register an `options` (or `all`/`use`) handler, and this is
+    // mounted ahead of those routes, so a plain OPTIONS must fall through to
+    // them rather than be answered here.
+    const isPreflight =
+      req.method === 'OPTIONS' && typeof req.headers['access-control-request-method'] === 'string';
+    if (allowed.size === 0 || !isPreflight) {
       next();
       return;
     }
