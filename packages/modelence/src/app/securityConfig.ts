@@ -47,8 +47,18 @@ export type SecurityConfig = {
    *
    * Each entry must be an exact origin (`scheme://host[:port]`); patterns and
    * wildcards are not supported, since the response header carries one concrete
-   * origin. The matched origin is echoed back rather than `*`, so credentialed
-   * requests keep working.
+   * origin. Entries are normalized (trimmed, lowercased, default port and
+   * trailing slash dropped) to match what browsers send, and anything that is
+   * not a valid origin throws at startup rather than silently never matching.
+   *
+   * The matched origin is echoed back rather than `*`, and
+   * `Access-Control-Allow-Credentials` is sent, so the browser will expose a
+   * credentialed response to JS. Note this only covers same-site requests: the
+   * auth cookie is `SameSite=Lax`, so a genuinely cross-site caller
+   * (`app.example.com` → `api.other.com`) never has the cookie attached in the
+   * first place, regardless of this setting. The Expo Web case works because
+   * `localhost:8081` and `localhost:3000` differ only by port, and port is not
+   * part of a site.
    *
    * Opt-in by design: when unset, no CORS headers are sent at all. Deployments
    * that already add CORS at a proxy or router therefore stay untouched — a
@@ -61,8 +71,105 @@ export type SecurityConfig = {
 
 let securityConfig: SecurityConfig = Object.freeze({});
 
+/**
+ * Canonicalizes a configured origin into the form browsers actually send in the
+ * `Origin` header, so the middleware can match it with a plain string compare.
+ *
+ * Browsers lowercase the scheme and host, omit the default port, and never
+ * include a path — so `http://LOCALHOST:8081` and `http://localhost:8081/` must
+ * both collapse to `http://localhost:8081` or they would silently never match.
+ *
+ * Throws rather than skipping a bad entry: a typo here surfaces to the developer
+ * as an opaque CORS failure in the browser with nothing logged server-side, so
+ * failing at startup is the only place it is cheap to diagnose.
+ */
+function normalizeOrigin(entry: string): string {
+  if (typeof entry !== 'string' || entry.trim() === '') {
+    throw new Error(
+      `Invalid security.allowedOrigins entry: expected a non-empty string, received ${JSON.stringify(entry)}.`
+    );
+  }
+
+  const trimmed = entry.trim();
+
+  // Called out separately from the generic parse failure below: '*' is a
+  // plausible guess that would parse as neither an origin nor a URL, and the
+  // reason it is unsupported (credentialed requests) is worth stating.
+  if (trimmed === '*') {
+    throw new Error(
+      "Invalid security.allowedOrigins entry '*': wildcards are not supported, since the " +
+        'response echoes one concrete origin to keep credentialed requests working. ' +
+        'List each allowed origin explicitly.'
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: expected an origin of the ` +
+        "form 'scheme://host[:port]' (for example 'http://localhost:8081')."
+    );
+  }
+
+  // URL keeps userinfo and a query/fragment out of `origin`, so they would be
+  // silently dropped rather than rejected. Reject them: they signal the author
+  // meant something the allowlist cannot express.
+  if (url.username || url.password) {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: an origin must not carry credentials.`
+    );
+  }
+  if (url.search || url.hash) {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: an origin must not carry a query or fragment.`
+    );
+  }
+  // Checked before the path rule below: for a non-special scheme the whole
+  // opaque body lands in `pathname`, so the path rule would fire first and
+  // suggest the useless 'null' origin. `localhost:8081` (no scheme) parses this
+  // way too, which is exactly the typo worth naming clearly.
+  //
+  // Non-special schemes (and opaque ones like `data:`) serialize as 'null',
+  // which would otherwise match the opaque origin sandboxed iframes send.
+  if (url.origin === 'null') {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: expected an origin of the ` +
+        "form 'scheme://host[:port]' (for example 'http://localhost:8081'). " +
+        `Scheme ${JSON.stringify(url.protocol.replace(':', ''))} does not form a comparable origin.`
+    );
+  }
+  // A bare origin parses with pathname '/' — anything longer is a real path.
+  if (url.pathname !== '/') {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: an origin must not include a path. ` +
+        `Use ${JSON.stringify(url.origin)} instead.`
+    );
+  }
+
+  // `URL.origin` is exactly the serialization browsers send: lowercased, default
+  // port dropped, no trailing slash.
+  return url.origin;
+}
+
+function normalizeAllowedOrigins(allowedOrigins: string[]): string[] {
+  if (!Array.isArray(allowedOrigins)) {
+    throw new Error(
+      `Invalid security.allowedOrigins: expected an array of origin strings, received ${JSON.stringify(allowedOrigins)}.`
+    );
+  }
+  return allowedOrigins.map(normalizeOrigin);
+}
+
 export function setSecurityConfig(newSecurityConfig: SecurityConfig) {
-  securityConfig = Object.freeze(Object.assign({}, securityConfig, newSecurityConfig));
+  const validated = newSecurityConfig.allowedOrigins
+    ? {
+        ...newSecurityConfig,
+        allowedOrigins: normalizeAllowedOrigins(newSecurityConfig.allowedOrigins),
+      }
+    : newSecurityConfig;
+  securityConfig = Object.freeze(Object.assign({}, securityConfig, validated));
 }
 
 export function getSecurityConfig() {

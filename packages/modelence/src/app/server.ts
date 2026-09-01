@@ -362,6 +362,14 @@ function corsMiddleware(): express.RequestHandler {
       return;
     }
 
+    // Set before the match check, not inside it: a response sent to a
+    // disallowed origin (or to a request with no Origin at all) still depends on
+    // Origin, and without Vary a CDN or shared proxy may cache that
+    // header-less response and later replay it to an allowed origin.
+    // res.vary appends and dedupes, so a Vary set by static/compression
+    // middleware further down the stack survives — setHeader would clobber it.
+    res.vary('Origin');
+
     const origin = req.headers.origin;
     const isAllowed = typeof origin === 'string' && allowed.has(origin);
 
@@ -385,13 +393,21 @@ function corsMiddleware(): express.RequestHandler {
       // this the error-code header is hidden cross-origin, so MethodError.code
       // silently becomes undefined and clients cannot branch on the error kind.
       res.setHeader('Access-Control-Expose-Headers', 'X-Modelence-Error-Code');
-      // The response body varies by Origin, so a shared cache must not reuse
-      // one origin's response for another.
-      res.setHeader('Vary', 'Origin');
     }
 
     // Answer preflights here — they must never reach route handlers.
     if (req.method === 'OPTIONS') {
+      // Allow-Headers above is reflected from the request, so the preflight
+      // result depends on this header too and must not be cached across
+      // requests that ask for different ones.
+      res.vary('Access-Control-Request-Headers');
+      if (isAllowed) {
+        // Every method call sends Content-Type: application/json, so every one
+        // is preflighted. Without Max-Age browsers re-preflight constantly
+        // (Chrome defaults to 5s), doubling the request count. 600s is under
+        // Chrome's 7200s cap and Firefox's 86400s cap, so it applies as given.
+        res.setHeader('Access-Control-Max-Age', '600');
+      }
       res.sendStatus(isAllowed ? 204 : 403);
       return;
     }
