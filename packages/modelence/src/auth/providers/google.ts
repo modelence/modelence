@@ -1,6 +1,4 @@
 import { getConfig } from '@/server';
-import { time } from '@/time';
-import { randomBytes } from 'crypto';
 import {
   Router,
   type Request,
@@ -16,8 +14,10 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
-  resolveUserIdFromLinkNonce,
   sendOAuthError,
+  prepareOAuthInitiation,
+  resolveMobileOutcomeFromCookie,
+  toOAuthOutcome,
 } from './oauth-common';
 
 interface GoogleTokenResponse {
@@ -83,13 +83,23 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
   if (!code) {
-    sendOAuthError(res, 400, 'Missing authorization code');
+    // No usable state to validate yet (a declined consent screen sends none),
+    // but the state cookie still records where the app lives, so this can be
+    // reported into the app instead of as JSON in the device browser.
+    sendOAuthError(
+      res,
+      400,
+      'Missing authorization code',
+      resolveMobileOutcomeFromCookie(req, 'authStateGoogle') ?? undefined,
+      'missing_code'
+    );
     return;
   }
 
   const stateResult = validateOAuthStateAndGetMode(req, res, 'authStateGoogle');
   if (!stateResult) return;
   const { mode, linkedUserId } = stateResult;
+  const outcome = toOAuthOutcome(stateResult);
 
   const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
   const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
@@ -117,16 +127,16 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       avatarUrl: googleUser.picture || undefined,
     };
     if (mode === 'link') {
-      await handleOAuthProviderLink(req, res, userData, linkedUserId);
+      await handleOAuthProviderLink(req, res, userData, linkedUserId, outcome);
     } else {
-      await handleOAuthUserAuthentication(req, res, userData);
+      await handleOAuthUserAuthentication(req, res, userData, outcome);
     }
   } catch (error) {
     console.error('Google OAuth error:', error);
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
-    sendOAuthError(res, 500, 'Authentication failed');
+    sendOAuthError(res, 500, 'Authentication failed', outcome);
   }
 }
 
@@ -155,27 +165,9 @@ function getRouter(): ExpressRouter {
       const googleClientId = String(getConfig('_system.user.auth.google.clientId'));
       const redirectUri = getRedirectUri('google');
 
-      const state = randomBytes(32).toString('hex');
-
-      const mode = req.query.mode === 'link' ? 'link' : 'login';
-
-      // React Native: consume single-use nonce and embed resolved userId in state cookie.
-      let linkedUserId: string | null = null;
-      if (mode === 'link' && req.query.linkNonce) {
-        linkedUserId = await resolveUserIdFromLinkNonce(req.query.linkNonce as string);
-        if (!linkedUserId) {
-          sendOAuthError(res, 401, 'Invalid or expired link nonce for OAuth linking.');
-          return;
-        }
-      }
-
-      const stateValue = linkedUserId ? `${state}:${mode}:${linkedUserId}` : `${state}:${mode}`;
-      res.cookie('authStateGoogle', stateValue, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: time.minutes(10), // 10 minutes
-      });
+      const initiation = await prepareOAuthInitiation(req, res, 'authStateGoogle');
+      if (!initiation) return;
+      const { state } = initiation;
 
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.append('client_id', googleClientId);

@@ -40,10 +40,13 @@ export {
   sendMagicLink,
   loginWithMagicLink,
   loginWithOneTimeCode,
+  signInWithOAuth,
+  loginWithOAuth,
   linkOAuthProvider,
   unlinkOAuthProvider,
   type UserInfo,
 } from './auth/client';
+export { parseDeepLinkParams } from './auth/client/deepLink';
 export {
   getWebsocketClientProvider,
   setWebsocketClientProvider,

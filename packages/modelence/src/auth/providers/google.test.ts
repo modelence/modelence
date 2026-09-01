@@ -30,6 +30,13 @@ const mockClearOAuthLinkCookie = vi.fn();
 const mockValidateOAuthStateAndGetMode =
   vi.fn<(req: Request, res: Response, cookieName: string) => string | null>();
 const mockSendOAuthError = vi.fn();
+const mockResolveMobileOutcomeFromCookie = vi.fn<() => unknown>(() => null);
+const mockPrepareOAuthInitiation = vi.fn(
+  async (_req: Request, res: Response, stateCookieName: string) => {
+    res.cookie(stateCookieName, 'state-value:login:', {});
+    return { state: 'test-state', mode: 'login' };
+  }
+);
 
 vi.doMock('./oauth-common', () => ({
   getRedirectUri: mockGetRedirectUri,
@@ -39,6 +46,15 @@ vi.doMock('./oauth-common', () => ({
   validateOAuthStateAndGetMode: mockValidateOAuthStateAndGetMode,
   clearOAuthLinkCookie: mockClearOAuthLinkCookie,
   sendOAuthError: mockSendOAuthError,
+  // Mirrors the real helper: the assertions below check that the router writes
+  // a state cookie and forwards the same state to the provider, so a stub that
+  // skipped the cookie would test nothing.
+  toOAuthOutcome: (state: { platform?: string; redirectUri?: string }) =>
+    state.platform === 'mobile' && state.redirectUri
+      ? { platform: 'mobile', redirectUri: state.redirectUri }
+      : { platform: 'web' },
+  prepareOAuthInitiation: mockPrepareOAuthInitiation,
+  resolveMobileOutcomeFromCookie: mockResolveMobileOutcomeFromCookie,
 }));
 
 const fetchMock = vi.fn();
@@ -105,14 +121,14 @@ describe('auth/providers/google', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('auth route redirects to Google OAuth when configured', () => {
+  test('auth route redirects to Google OAuth when configured', async () => {
     const route = findRoute('/api/_internal/auth/google');
     const handler = route.handlers[1];
     const redirectMock = vi.fn();
     const cookieMock = vi.fn();
     const res = { redirect: redirectMock, cookie: cookieMock } as unknown as Response;
 
-    handler({ query: {} } as Request, res);
+    await handler({ query: {} } as Request, res);
 
     expect(cookieMock).toHaveBeenCalledWith(
       'authStateGoogle',
@@ -185,7 +201,8 @@ describe('auth/providers/google', () => {
         firstName: 'User',
         lastName: 'Test',
         avatarUrl: 'pic',
-      }
+      },
+      { platform: 'web' }
     );
   });
 
@@ -197,7 +214,13 @@ describe('auth/providers/google', () => {
 
     await handler({ query: {}, cookies: {} } as unknown as Request, res);
 
-    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 400, 'Missing authorization code');
+    expect(mockSendOAuthError).toHaveBeenCalledWith(
+      res,
+      400,
+      'Missing authorization code',
+      undefined,
+      'missing_code'
+    );
   });
 
   test('callback handler returns 400 when state invalid', async () => {
@@ -247,7 +270,9 @@ describe('auth/providers/google', () => {
       res
     );
 
-    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed');
+    expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed', {
+      platform: 'web',
+    });
     consoleError.mockRestore();
   });
 });
