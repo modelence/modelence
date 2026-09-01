@@ -228,8 +228,8 @@ export default new Module('_system.user', {
       isPublic: false,
       default: '',
     },
-    // Comma-separated deep links the mobile OAuth callback may redirect to,
-    // e.g. "myapp://auth". Merged with `AuthConfig.mobile.redirectUrls`.
+    // Deep links the mobile OAuth callback may redirect to, e.g. "myapp://auth",
+    // separated by commas or newlines. Merged with `AuthConfig.mobile.redirectUrls`.
     // Not public: the client names its own redirect target, and publishing the
     // allowlist would only advertise what an attacker needs to guess.
     'auth.mobile.redirectUrls': {

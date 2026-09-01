@@ -18,15 +18,21 @@ function parseRedirectUrl(url: string): URL | null {
 
 /**
  * Deep links the mobile OAuth flow may redirect back to, from both sources:
- * the `auth.mobile.redirectUrls` config value (comma-separated, Studio- and
- * env-manageable) and the typed `AuthConfig.mobile.redirectUrls` array.
+ * the `auth.mobile.redirectUrls` config value (Studio- and env-manageable) and
+ * the typed `AuthConfig.mobile.redirectUrls` array.
+ *
+ * The config value is declared `type: 'text'`, so the Cloud dashboard renders a
+ * textarea and one-URL-per-line is as natural to write as a comma-separated
+ * list. Both separators are accepted: splitting on commas alone would read a
+ * newline-delimited value as a single unparseable entry, silently emptying the
+ * allowlist and rejecting every mobile sign-in.
  *
  * There is no default. An empty result disables mobile OAuth entirely rather
  * than falling back to something permissive.
  */
 export function getAllowedMobileRedirectUrls(): string[] {
   const fromConfig = String(getConfig('_system.user.auth.mobile.redirectUrls') ?? '')
-    .split(',')
+    .split(/[\n,]/)
     .map((url) => url.trim())
     .filter(Boolean);
 

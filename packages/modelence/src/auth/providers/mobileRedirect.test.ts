@@ -47,6 +47,22 @@ describe('auth/providers/mobileRedirect', () => {
       expect(getAllowedMobileRedirectUrls()).toEqual(['myapp://auth', 'other://cb']);
     });
 
+    test('splits a newline-delimited config value', () => {
+      // `auth.mobile.redirectUrls` is `type: 'text'`, so the Cloud dashboard
+      // renders a textarea and one URL per line is the natural way to write it.
+      // Splitting on commas alone read the whole value as one unparseable entry,
+      // emptying the allowlist and rejecting every mobile sign-in.
+      setAllowlist({ config: 'myapp://auth\nother://cb\n' });
+
+      expect(getAllowedMobileRedirectUrls()).toEqual(['myapp://auth', 'other://cb']);
+    });
+
+    test('accepts commas and newlines mixed in one value', () => {
+      setAllowlist({ config: 'myapp://auth, other://cb\r\nthird://x' });
+
+      expect(getAllowedMobileRedirectUrls()).toEqual(['myapp://auth', 'other://cb', 'third://x']);
+    });
+
     test('is empty when neither source is configured', () => {
       expect(getAllowedMobileRedirectUrls()).toEqual([]);
     });
