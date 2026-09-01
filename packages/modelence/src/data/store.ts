@@ -34,10 +34,17 @@ import {
   ChangeStreamOptions,
   DistinctOptions,
 } from 'mongodb';
-import { ModelSchema, InferDocumentType } from './types';
+import {
+  ModelSchema,
+  InferDocumentType,
+  InferFetchedDocumentType,
+  InferSelectedDocumentType,
+  extractPrivateFieldPaths,
+} from './types';
 import { serializeModelSchema } from './schemaSerializer';
 import { applyDefaultsToModelSchema } from './schemaDefaults';
 import { isUniqueIndexViolation, formatUniqueIndexViolationReport } from './indexErrors';
+import { isProjectionInclusionValue, hasContainerAtPath, deletePath } from './projectionHelpers';
 
 /**
  * Result of {@link Store.findOneAndUpsert}: the post-op document plus whether
@@ -50,6 +57,156 @@ export type UpsertResult<TDoc> = {
   doc: TDoc | null;
   /** True exactly when this call inserted the document. */
   isNew: boolean;
+};
+
+/**
+ * Helper type to extract string key selections for a schema.
+ * Accepts any top-level key of TSchema or any dot-notation path starting with a top-level key of TSchema (e.g. 'groupInfo.users').
+ */
+export type SelectKey<TSchema extends ModelSchema> =
+  | (keyof TSchema & string)
+  | `${keyof TSchema & string}.${string}`;
+
+// IsInclusionValue: returns true if V is an inclusion projection value (1, true, number, boolean, or operator object)
+type IsInclusionValue<V> = V extends 0 | false ? false : true;
+
+// IsExclusionValue: returns true if V is explicitly 0 or false (exclusion)
+type IsExclusionValue<V> = number extends V
+  ? false
+  : boolean extends V
+    ? false
+    : V extends 0 | false
+      ? true
+      : false;
+
+// Determines whether the given projection object is an Inclusion projection
+type IsInclusionProjection<TProj> =
+  TProj extends Record<string, unknown>
+    ? [
+        {
+          [K in keyof TProj]: IsInclusionValue<TProj[K]> extends true ? true : never;
+        }[keyof TProj],
+      ] extends [never]
+      ? false
+      : true
+    : false;
+
+// Extracts only the keys that are explicitly included in an inclusion projection
+type ExtractInclusionKeys<TProj> =
+  TProj extends Record<string, unknown>
+    ? {
+        [K in keyof TProj & string]: IsInclusionValue<TProj[K]> extends true ? K : never;
+      }[keyof TProj & string]
+    : never;
+
+// Extracts the keys that are explicitly excluded in an exclusion projection (e.g. { title: 0 })
+type ExtractExclusionKeys<TProj> = [TProj] extends [undefined]
+  ? never
+  : IsInclusionProjection<TProj> extends true
+    ? never
+    : TProj extends Record<string, unknown>
+      ? {
+          [K in keyof TProj & string]: IsExclusionValue<TProj[K]> extends true ? K : never;
+        }[keyof TProj & string]
+      : never;
+
+/**
+ * ExtractProjectionVisibleKeys: Extracts private field keys explicitly included with 1 or true in an inclusion projection.
+ * Exclusion projections (e.g. { active: 0 }) do not un-hide private fields — private fields remain hidden by default.
+ */
+type ExtractProjectionVisibleKeys<TProj> =
+  IsInclusionProjection<TProj> extends true ? ExtractInclusionKeys<TProj> : never;
+
+/**
+ * Removes excluded keys from a document type.
+ * - When KExclusions = never (inclusion projection or no projection), returns T unchanged so
+ *   `this["_fetchedDoc"]` assignability is preserved.
+ * - When there are exclusions, uses TypeScript key remapping (`as` clause).
+ */
+type OmitExclusions<T, KExclusions> = [KExclusions] extends [never]
+  ? T
+  : { [K in keyof T as K extends KExclusions ? never : K]: T[K] };
+
+/**
+ * Reusable type helper representing the document returned by store read operations.
+ * Excludes private fields by default unless in `KSelect` or inclusion `KProjection`,
+ * and omits fields explicitly set to 0 or false in an exclusion projection.
+ */
+export type FetchedDoc<
+  TSchema extends ModelSchema,
+  TMethods = Record<string, never>,
+  KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
+> = OmitExclusions<
+  WithId<
+    [KProjection] extends [undefined]
+      ? [KSelect] extends [never]
+        ? InferFetchedDocumentType<TSchema>
+        : InferSelectedDocumentType<TSchema, KSelect>
+      : InferSelectedDocumentType<TSchema, KSelect | ExtractProjectionVisibleKeys<KProjection>>
+  > &
+    TMethods,
+  ExtractExclusionKeys<KProjection>
+>;
+
+/**
+ * Options for MongoDB `find` operations with support for making private fields visible via `select` or `projection`.
+ */
+export type FindOptionsWithSelect<
+  TSchema extends ModelSchema,
+  KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
+> = FindOptions & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<InferDocumentType<TSchema>> & {
+      [K in keyof KProjection]: K extends
+        | keyof WithId<InferDocumentType<TSchema>>
+        | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
+};
+
+/**
+ * Options for Store `fetch` operations with support for un-hiding private fields via `select` or `projection`.
+ */
+export type FetchOptionsWithSelect<
+  TSchema extends ModelSchema,
+  TDoc = InferDocumentType<TSchema>,
+  KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
+> = FetchOptions<TDoc> & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<TDoc> & {
+      [K in keyof KProjection]: K extends keyof WithId<TDoc> | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
+};
+
+/**
+ * Options for `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, and `findOneAndUpsert`
+ * that add typed `select` and `projection` support so the return type correctly reflects which
+ * fields are visible (public-only by default, private fields un-hidden via `select` or inclusion
+ * `projection`, excluded fields removed via exclusion `projection`).
+ */
+export type FindOneAndModifyOptionsWithSelect<
+  TBaseOptions,
+  TSchema extends ModelSchema,
+  KSelect extends SelectKey<TSchema> = never,
+  KProjection = undefined,
+> = Omit<TBaseOptions, 'includeResultMetadata'> & {
+  select?: KSelect[];
+  projection?: KProjection &
+    TypedProjection<InferDocumentType<TSchema>> & {
+      [K in keyof KProjection]: K extends
+        | keyof WithId<InferDocumentType<TSchema>>
+        | `${string}.${string}`
+        ? KProjection[K]
+        : never;
+    };
 };
 
 /**
@@ -394,7 +551,15 @@ export class Store<
   /** @internal */
   readonly _doc!: this['_rawDoc'] & TMethods;
 
+  /** @internal */
+  readonly _fetchedType!: InferFetchedDocumentType<TSchema>;
+  /** @internal */
+  readonly _fetchedRawDoc!: WithId<this['_fetchedType']>;
+  /** @internal */
+  readonly _fetchedDoc!: this['_fetchedRawDoc'] & TMethods;
+
   readonly Doc!: this['_doc'];
+  readonly FetchedDoc!: this['_fetchedDoc'];
 
   private name: string;
   private readonly schema: TSchema;
@@ -402,6 +567,7 @@ export class Store<
   private readonly indexes: IndexDescription[];
   private readonly searchIndexes: SearchIndexDescription[];
   private readonly indexCreationMode: IndexCreationMode;
+  private readonly privateFields: string[];
   private collection?: Collection<this['_type']>;
   private client?: MongoClient;
 
@@ -437,6 +603,7 @@ export class Store<
     this.indexes = options.indexes.map(normalizeIndexName);
     this.searchIndexes = options.searchIndexes || [];
     this.indexCreationMode = options.indexCreationMode ?? 'background';
+    this.privateFields = extractPrivateFieldPaths(options.schema);
   }
 
   getName() {
@@ -766,6 +933,22 @@ export class Store<
     return result as this['_doc'];
   }
 
+  private wrapFetchedDocument<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
+    document: this['_rawDoc'],
+    options?: {
+      projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+      select?: SelectKey<TSchema>[];
+    }
+  ): FetchedDoc<TSchema, TMethods, KSelect, KProjection> {
+    this.stripPrivateFields(document, options);
+    return this.wrapDocument(document) as unknown as FetchedDoc<
+      TSchema,
+      TMethods,
+      KSelect,
+      KProjection
+    >;
+  }
+
   /**
    * For convenience, to also allow directy passing a string or ObjectId as the selector
    */
@@ -800,6 +983,125 @@ export class Store<
   }
 
   /**
+   * Strips unselected private fields from a fetched document in-place.
+   *
+   * @param doc - The raw document from MongoDB (mutated in-place)
+   * @param options - Options containing caller-provided `select` and `projection`
+   */
+  private stripPrivateFields(
+    doc: Document,
+    options?: {
+      projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+      select?: SelectKey<TSchema>[];
+    }
+  ): void {
+    if (this.privateFields.length === 0) return;
+
+    const selectedFields = (options?.select || []) as string[];
+    const proj = (options?.projection || {}) as Record<string, unknown>;
+
+    // Fast O(1) lookups for selected and projection-included fields
+    const selectedSet = new Set<string>(selectedFields);
+    const projInclusionSet = new Set<string>();
+
+    for (const key of Object.keys(proj)) {
+      if (isProjectionInclusionValue(proj[key])) {
+        projInclusionSet.add(key);
+      }
+    }
+
+    // Active selection set combining select and projection inclusions
+    const activeSelectionsSet = new Set<string>([...selectedSet, ...projInclusionSet]);
+
+    // Sub-path selection prefixes (e.g., 'user.profile' in activeSelectionsSet)
+    const activeSelectionList = Array.from(activeSelectionsSet);
+
+    // Helper: Checks if a private field (or sub-path inside an object/array container) is explicitly selected/projected.
+    const isFieldKept = (field: string, fieldParts: string[]): boolean => {
+      if (activeSelectionsSet.has(field)) return true;
+
+      const prefix = `${field}.`;
+      if (activeSelectionList.some((s) => s.startsWith(prefix))) {
+        return hasContainerAtPath(doc, fieldParts);
+      }
+      return false;
+    };
+
+    for (const field of this.privateFields) {
+      const fieldParts = field.split('.');
+      if (isFieldKept(field, fieldParts)) continue;
+
+      deletePath(doc, fieldParts);
+    }
+  }
+
+  /**
+   * Constructs the MongoDB projection options for read queries.
+   * If caller passes an inclusion projection and select array together,
+   * selected fields are added to the projection without causing MongoDB path collision errors.
+   */
+  private getMongoProjection(options?: {
+    projection?: TypedProjection<InferDocumentType<TSchema>> | Document;
+    select?: SelectKey<TSchema>[];
+  }): Document | undefined {
+    if (!options?.projection) {
+      return undefined;
+    }
+
+    const proj: Document = { ...(options.projection as Document) };
+    const values = Object.values(proj);
+    const isInclusion = values.some((val) => isProjectionInclusionValue(val));
+
+    if (isInclusion && options?.select && options.select.length > 0) {
+      for (const key of options.select) {
+        // Skip adding key if key itself or a parent path is already included in projection
+        const parts = key.split('.');
+        let parentAlreadyIncluded = false;
+        for (let i = 1; i <= parts.length; i++) {
+          const parentPath = parts.slice(0, i).join('.');
+          if (isProjectionInclusionValue(proj[parentPath])) {
+            parentAlreadyIncluded = true;
+            break;
+          }
+        }
+
+        if (!parentAlreadyIncluded) {
+          // Remove any existing child paths in proj that are covered by this broader key
+          const prefix = `${key}.`;
+          for (const k of Object.keys(proj)) {
+            if (k.startsWith(prefix)) {
+              delete proj[k];
+            }
+          }
+          proj[key] = 1;
+        }
+      }
+    }
+
+    return proj;
+  }
+
+  /**
+   * Constructs clean options for MongoDB driver operations by stripping Modelence-specific options
+   * like `select` to prevent leaking them to the MongoDB driver, and attaching the resolved
+   * MongoDB projection if present.
+   */
+  private cleanDriverOptions<T extends { select?: unknown; projection?: unknown }>(
+    options?: T
+  ): Omit<T, 'select'> | undefined {
+    if (!options) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { select, ...rest } = options;
+    const projection = this.getMongoProjection(
+      options as Parameters<typeof this.getMongoProjection>[0]
+    );
+    if (projection) {
+      return { ...rest, projection } as Omit<T, 'select'>;
+    }
+    return Object.keys(rest).length > 0 ? (rest as Omit<T, 'select'>) : undefined;
+  }
+
+  /*
    * Finds a single document matching the query
    *
    * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
@@ -811,6 +1113,7 @@ export class Store<
    * // ✅ Valid queries:
    * await store.findOne({ name: 'John' })
    * await store.findOne({ age: { $gt: 18 } })
+   * await store.findOne({ customerId: 25062006 },{ select: ['password'] })
    * await store.findOne({ _id: new ObjectId('...') })
    * await store.findOne({ tags: { $in: ['typescript', 'mongodb'] } })
    * await store.findOne({ $or: [{ name: 'John' }, { name: 'Jane' }] })
@@ -820,39 +1123,75 @@ export class Store<
    * await store.findOne({ id: '123' })
    * ```
    */
-  async findOne(query: TypedFilter<this['_type']>, options?: FindOptions) {
+  /**
+   * Finds a single document matching the query
+   *
+   * @param query - Type-safe query filter. Only schema fields, MongoDB operators, and dot notation are allowed.
+   * @param options - Find options, including optional `select` array to un-hide private fields {@link FindOptionsWithSelect}
+   * @returns The document, or null if not found
+   *
+   * @example
+   * ```ts
+   * // ✅ Valid queries:
+   * await store.findOne({ name: 'John' })
+   * await store.findOne({ name: 'John' }, { select: ['password'] })
+   * ```
+   */
+  async findOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
+    query: TypedFilter<this['_type']>,
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
+    const driverOptions = this.cleanDriverOptions(options);
     const document = await this.requireCollection().findOne<this['_rawDoc']>(
       query as Filter<this['_type']>,
-      options
+      driverOptions
     );
-    return document ? this.wrapDocument(document) : null;
+    return document ? this.wrapFetchedDocument<KSelect, KProjection>(document, options) : null;
   }
 
-  async requireOne(
+  private normalizeRequireOptions<T extends object>(
+    optionsOrHandler?: T | (() => Error),
+    handler?: () => Error
+  ): { options?: T; errorHandler?: () => Error } {
+    if (typeof optionsOrHandler === 'function') {
+      return { errorHandler: optionsOrHandler as () => Error };
+    }
+    return { options: optionsOrHandler, errorHandler: handler };
+  }
+
+  /**
+   * Finds a single document matching the query, or throws an error if not found
+   */
+  async requireOne<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FindOptions,
+    optionsOrHandler?: FindOptionsWithSelect<TSchema, KSelect, KProjection> | (() => Error),
     errorHandler?: () => Error
-  ): Promise<this['_doc']> {
-    const result = await this.findOne(query, options);
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const { options, errorHandler: errHandler } = this.normalizeRequireOptions(
+      optionsOrHandler,
+      errorHandler
+    );
+    const result = await this.findOne<KSelect, KProjection>(query, options);
     if (!result) {
-      throw errorHandler ? errorHandler() : new Error(`Record not found in ${this.name}`);
+      throw errHandler ? errHandler() : new Error(`Record not found in ${this.name}`);
     }
     return result;
   }
 
   private find(query: TypedFilter<this['_type']>, options?: FetchOptions<this['_type']>) {
-    const cursor = this.requireCollection().find(
-      query as Filter<this['_type']>,
-      options?.projection ? { projection: options.projection } : undefined
-    );
-    if (options?.sort) {
-      cursor.sort(options.sort);
+    const { sort, limit, skip, ...driverCompatibleOptions } = options ?? {};
+    const driverOptions = this.cleanDriverOptions(
+      driverCompatibleOptions as Parameters<typeof this.cleanDriverOptions>[0]
+    ) as FindOptions | undefined;
+    const cursor = this.requireCollection().find(query as Filter<this['_type']>, driverOptions);
+    if (sort) {
+      cursor.sort(sort);
     }
-    if (options?.limit) {
-      cursor.limit(options.limit);
+    if (limit) {
+      cursor.limit(limit);
     }
-    if (options?.skip) {
-      cursor.skip(options.skip);
+    if (skip) {
+      cursor.skip(skip);
     }
     return cursor;
   }
@@ -861,26 +1200,40 @@ export class Store<
    * Fetches a single document by its ID
    *
    * @param id - The ID of the document to find
+   * @param options - Optional find options with `select` array {@link FindOptionsWithSelect}
    * @returns The document, or null if not found
    */
-  async findById(id: string | ObjectId): Promise<this['_doc'] | null> {
+  async findById<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
+    id: string | ObjectId,
+    options?: FindOptionsWithSelect<TSchema, KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
     const idSelector = typeof id === 'string' ? { _id: new ObjectId(id) } : { _id: id };
-    return await this.findOne(idSelector as TypedFilter<this['_type']>);
+    return await this.findOne<KSelect, KProjection>(
+      idSelector as TypedFilter<this['_type']>,
+      options
+    );
   }
 
   /**
    * Fetches a single document by its ID, or throws an error if not found
    *
    * @param id - The ID of the document to find
+   * @param optionsOrHandler - Optional find options with `select` array or errorHandler callback
    * @param errorHandler - Optional error handler to return a custom error if the document is not found
    * @returns The document
    */
-  async requireById(id: string | ObjectId, errorHandler?: () => Error): Promise<this['_doc']> {
-    const result = await this.findById(id);
+  async requireById<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
+    id: string | ObjectId,
+    optionsOrHandler?: FindOptionsWithSelect<TSchema, KSelect, KProjection> | (() => Error),
+    errorHandler?: () => Error
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>> {
+    const { options, errorHandler: errHandler } = this.normalizeRequireOptions(
+      optionsOrHandler,
+      errorHandler
+    );
+    const result = await this.findById<KSelect, KProjection>(id, options);
     if (!result) {
-      throw errorHandler
-        ? errorHandler()
-        : new Error(`Record with id ${id} not found in ${this.name}`);
+      throw errHandler ? errHandler() : new Error(`Record with id ${id} not found in ${this.name}`);
     }
     return result;
   }
@@ -921,12 +1274,14 @@ export class Store<
    * );
    * ```
    */
-  async fetch(
+  async fetch<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     query: TypedFilter<this['_type']>,
-    options?: FetchOptions<this['_type']>
-  ): Promise<this['_doc'][]> {
+    options?: FetchOptionsWithSelect<TSchema, this['_type'], KSelect, KProjection>
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection>[]> {
     const cursor = this.find(query, options);
-    return (await cursor.toArray()).map(this.wrapDocument.bind(this));
+    return (await cursor.toArray()).map((doc) =>
+      this.wrapFetchedDocument<KSelect, KProjection>(doc, options)
+    );
   }
 
   /**
@@ -1088,20 +1443,29 @@ export class Store<
    *
    * @param selector - The selector to find the document
    * @param update - The update to apply
-   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`,
+   *   `select` (un-hide private fields by name), and `projection` (include/exclude specific fields).
    * @returns The document (before or after update, depending on options), or null if not found
    */
-  async findOneAndUpdate(
+  async findOneAndUpdate<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndUpdateOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
-      options ?? {}
+      driverOptions ?? {}
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**
@@ -1130,23 +1494,31 @@ export class Store<
    * @returns `{ doc, isNew }` — `doc` is null only when `upsert: false` and
    *   nothing matched; `isNew` is `true` exactly when this call inserted the doc.
    */
-  async findOneAndUpsert(
+  async findOneAndUpsert<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     update: UpdateFilter<this['_type']>,
-    options?: Omit<FindOneAndUpdateOptions, 'includeResultMetadata' | 'returnDocument'>
-  ): Promise<UpsertResult<this['_doc']>> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      Omit<FindOneAndUpdateOptions, 'returnDocument'>,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<UpsertResult<FetchedDoc<TSchema, TMethods, KSelect, KProjection>>> {
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndUpdate(
       this.getSelector(selector),
       update,
       {
         upsert: true,
-        ...options,
+        ...driverOptions,
         // Always request the post-op doc and the metadata carrying `upserted`.
         returnDocument: 'after',
         includeResultMetadata: true,
       }
     );
-    const doc = result.value ? this.wrapDocument(result.value as this['_rawDoc']) : null;
+    const doc = result.value
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result.value as this['_rawDoc'], options)
+      : null;
     return { doc, isNew: Boolean(result.lastErrorObject?.upserted) };
   }
 
@@ -1154,18 +1526,26 @@ export class Store<
    * Atomically finds a document and deletes it, returning the deleted document
    *
    * @param selector - The selector to find the document
-   * @param options - Options including `session`, `projection`, etc.
+   * @param options - Options including `session`, `projection`, `select`, etc.
    * @returns The deleted document, or null if not found
    */
-  async findOneAndDelete(
+  async findOneAndDelete<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
-    options?: Omit<FindOneAndDeleteOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndDeleteOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndDelete(
       this.getSelector(selector),
-      options ?? {}
+      driverOptions ?? {}
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**
@@ -1173,20 +1553,29 @@ export class Store<
    *
    * @param selector - The selector to find the document
    * @param replacement - The replacement document
-   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`, etc.
+   * @param options - Options including `returnDocument` ('before' or 'after'), `upsert`, `session`,
+   *   `select` (un-hide private fields by name), and `projection` (include/exclude specific fields).
    * @returns The document (before or after replacement, depending on options), or null if not found
    */
-  async findOneAndReplace(
+  async findOneAndReplace<KSelect extends SelectKey<TSchema> = never, KProjection = undefined>(
     selector: TypedFilter<this['_type']> | string | ObjectId,
     replacement: WithoutId<this['_type']>,
-    options?: Omit<FindOneAndReplaceOptions, 'includeResultMetadata'>
-  ): Promise<this['_doc'] | null> {
+    options?: FindOneAndModifyOptionsWithSelect<
+      FindOneAndReplaceOptions,
+      TSchema,
+      KSelect,
+      KProjection
+    >
+  ): Promise<FetchedDoc<TSchema, TMethods, KSelect, KProjection> | null> {
+    const driverOptions = this.cleanDriverOptions(options);
     const result = await this.requireCollection().findOneAndReplace(
       this.getSelector(selector),
       replacement,
-      options ?? {}
+      driverOptions ?? {}
     );
-    return result ? this.wrapDocument(result as this['_rawDoc']) : null;
+    return result
+      ? this.wrapFetchedDocument<KSelect, KProjection>(result as this['_rawDoc'], options)
+      : null;
   }
 
   /**

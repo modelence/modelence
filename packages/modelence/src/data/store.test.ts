@@ -56,6 +56,86 @@ function assertFetchOptionTypeSafety() {
 }
 void assertFetchOptionTypeSafety;
 
+function assertInclusionProjectionWidenedTypeSafety() {
+  const store = new Store('projectionStore', {
+    schema: {
+      name: schema.string(),
+      age: schema.number(),
+      secret: schema.string().private(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  async function testWidenedProjection() {
+    // When projection is passed with fresh literal or number type (e.g. { name: 1 })
+    const doc = await store.findOne({ name: 'john' }, { projection: { name: 1 } });
+    void doc?.name; // ✅ name must NOT be omitted or typed as undefined
+    void doc?.age; // ✅ age preserved
+  }
+  void testWidenedProjection;
+
+  async function testInclusionUnHidesPrivateField() {
+    // Inclusion projection with secret: 1 un-hides secret
+    const doc = await store.findOne({ name: 'john' }, { projection: { secret: 1 } });
+    void doc?.secret; // ✅ secret is un-hidden by inclusion projection
+  }
+  void testInclusionUnHidesPrivateField;
+}
+void assertInclusionProjectionWidenedTypeSafety;
+
+function assertFindOneAndUpdateTypeSafety() {
+  const privateStore = new Store('privateStore', {
+    schema: {
+      title: schema.string(),
+      secret: schema.string().private(),
+    },
+    indexes: [],
+    methods: undefined,
+  });
+
+  // No options: returns FetchedDoc (public fields only by default)
+  async function noOptions() {
+    const doc = await privateStore.findOneAndUpdate({ title: 'x' }, { $set: { title: 'y' } });
+    void doc?.title; // ✅ public field is accessible
+  }
+  void noOptions;
+
+  // With select: ['secret']: secret becomes visible in the return type
+  async function withSelect() {
+    const doc = await privateStore.findOneAndUpdate(
+      { title: 'x' },
+      { $set: { title: 'y' } },
+      { select: ['secret'] }
+    );
+    void doc?.secret; // ✅ no error — secret is un-hidden by select
+    void doc?.title; // ✅ public field always present
+  }
+  void withSelect;
+
+  // @ts-expect-error unknown projection field should be rejected
+  void privateStore.findOneAndDelete({ title: 'x' }, { projection: { unknownField: 0 } });
+
+  void privateStore.findOneAndReplace(
+    { title: 'x' },
+    { title: 'y', secret: 's' },
+    // @ts-expect-error unknown projection field should be rejected
+    { projection: { unknownField: 1 } }
+  );
+
+  // findOneAndUpsert: doc inside UpsertResult also reflects KSelect
+  async function upsertWithSelect() {
+    const { doc } = await privateStore.findOneAndUpsert(
+      { title: 'x' },
+      { $setOnInsert: { title: 'x', secret: 's' } },
+      { select: ['secret'] }
+    );
+    void doc?.secret; // ✅ un-hidden via select
+  }
+  void upsertWithSelect;
+}
+void assertFindOneAndUpdateTypeSafety;
+
 function assertExtendedStoreDotNotationTypeSafety() {
   const baseStore = new Store('baseStore', {
     schema: {
@@ -1357,6 +1437,879 @@ describe('data/store', () => {
       expect(calledFilter?.$and).toBeDefined();
       expect(calledFilter?.$comment).toBe('Complex query');
       expect(calledFilter?.$expr).toEqual({ $gt: ['$value', 10] });
+    });
+  });
+
+  describe('private fields and options.select', () => {
+    const createPrivateStore = () =>
+      new Store('private_users', {
+        schema: {
+          name: schema.string(),
+          email: schema.string(),
+          password: schema.string().private(),
+          pin: schema.number().private(),
+        },
+        indexes: [],
+      });
+
+    test('should exclude private fields by default on findOne and fetch', async () => {
+      const store = createPrivateStore();
+      const toArrayMock = vi
+        .fn()
+        .mockResolvedValue([{ _id: new ObjectId(), name: 'Alice', email: 'alice@test.com' }]);
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockResolvedValue({ _id: new ObjectId(), name: 'Alice', email: 'alice@test.com' }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOne({ name: 'Alice' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
+
+      await store.fetch({ name: 'Alice' });
+      expect(collectionMock.find).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
+    });
+
+    test('store.findOne and store.fetch with options.select should un-hide selected private fields', async () => {
+      const store = createPrivateStore();
+      const toArrayMock = vi
+        .fn()
+        .mockResolvedValue([
+          { _id: new ObjectId(), name: 'Alice', email: 'alice@test.com', password: 'hash' },
+        ]);
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          name: 'Alice',
+          email: 'alice@test.com',
+          password: 'hash',
+        }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.findOne({ name: 'Alice' }, { select: ['password'] });
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
+
+      await store.fetch({ name: 'Alice' }, { select: ['password', 'pin'] });
+      expect(collectionMock.find).toHaveBeenCalledWith({ name: 'Alice' }, undefined);
+    });
+
+    test('should NOT un-hide private primitive fields when invalid sub-path like password.foo is selected', async () => {
+      const store = createPrivateStore();
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          name: 'Alice',
+          email: 'alice@test.com',
+          password: 'hash',
+        }),
+      };
+
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      // Select 'password.foo' (which starts with 'password.') on primitive field 'password'
+      const doc = await store.findOne({ name: 'Alice' }, { select: ['password.foo'] });
+
+      // password must be stripped and not leaked!
+      expect(doc).not.toHaveProperty('password');
+    });
+
+    test('should NOT treat Date or ObjectId instances as sub-path container objects', async () => {
+      const dateStore = new Store('dateStore', {
+        schema: {
+          title: schema.string(),
+          secretDate: schema.date().private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Event',
+          secretDate: new Date(),
+        }),
+      };
+      (dateStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await dateStore.findOne({ title: 'Event' }, { select: ['secretDate.foo'] });
+      expect(doc).not.toHaveProperty('secretDate');
+    });
+
+    test('should NOT treat an array of primitive strings as a container when invalid sub-path is selected', async () => {
+      const tokenStore = new Store('tokenStore', {
+        schema: {
+          title: schema.string(),
+          secretTokens: schema.array(schema.string()).private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Tokens',
+          secretTokens: ['token_1', 'token_2'],
+        }),
+      };
+      (tokenStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      const doc = await tokenStore.findOne({ title: 'Tokens' }, { select: ['secretTokens.foo'] });
+      expect(doc).not.toHaveProperty('secretTokens');
+    });
+
+    test('should preserve private fields when MongoDB projection operators like $slice are used', async () => {
+      const commentStore = new Store('commentStore', {
+        schema: {
+          title: schema.string(),
+          comments: schema
+            .array(
+              schema.object({
+                text: schema.string(),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Post',
+          comments: [{ text: 'Great post!' }],
+        }),
+      };
+      (commentStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await commentStore.findOne(
+        { title: 'Post' },
+        { projection: { comments: { $slice: 1 } } }
+      );
+      expect(doc?.comments).toBeDefined();
+      expect(doc?.comments[0].text).toBe('Great post!');
+    });
+
+    test('should preserve private empty array container when selecting sub-path', async () => {
+      const emptyArrayStore = new Store('emptyArrayStore', {
+        schema: {
+          title: schema.string(),
+          players: schema
+            .array(
+              schema.object({
+                profile: schema.object({ email: schema.string() }),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          title: 'Empty Game',
+          players: [],
+        }),
+      };
+      (emptyArrayStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await emptyArrayStore.findOne(
+        { title: 'Empty Game' },
+        { select: ['players.profile.email'] }
+      );
+
+      // Empty array players must be preserved as [] and not deleted!
+      expect(doc?.players).toBeDefined();
+      expect(doc?.players).toEqual([]);
+    });
+
+    test('store.findOne and store.fetch with nested and parent private fields should hide/un-hide correctly', async () => {
+      const profileStore = new Store('userProfiles', {
+        schema: {
+          username: schema.string(),
+          metadata: schema.object({
+            internal: schema.object({
+              pin: schema.number().private(),
+              score: schema.number(),
+            }),
+          }),
+          securityCredentials: schema
+            .object({
+              token: schema.string(),
+            })
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const toArrayMock = vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          username: 'alice',
+          metadata: { internal: { score: 100 } },
+        },
+      ]);
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue({
+          _id: new ObjectId(),
+          username: 'alice',
+          metadata: { internal: { score: 100 } },
+        }),
+        find: vi.fn().mockReturnValue({ toArray: toArrayMock }),
+      };
+
+      (profileStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // By default without select: nested private field and parent private field are excluded
+      await profileStore.findOne({ username: 'alice' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ username: 'alice' }, undefined);
+
+      // With select for nested private field: metadata.internal.pin is un-hidden
+      await profileStore.findOne({ username: 'alice' }, { select: ['metadata.internal.pin'] });
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ username: 'alice' }, undefined);
+
+      // With select for parent private field: securityCredentials is un-hidden
+      await profileStore.fetch({ username: 'alice' }, { select: ['securityCredentials'] });
+      expect(collectionMock.find).toHaveBeenCalledWith({ username: 'alice' }, undefined);
+
+      // With select for all private fields: projection is undefined (no fields hidden)
+      await profileStore.fetch(
+        { username: 'alice' },
+        { select: ['metadata.internal.pin', 'securityCredentials'] }
+      );
+      expect(collectionMock.find).toHaveBeenCalledWith({ username: 'alice' }, undefined);
+    });
+
+    test('store.findOne and store.fetch: selecting nested array private field returns full received data', async () => {
+      const organizationStore = new Store('organizations', {
+        schema: {
+          name: schema.string(),
+          active: schema.boolean(),
+          apiKey: schema.string().private(),
+          teamSettings: schema.object({
+            memberEmails: schema.array(schema.string()).private(),
+            maxQuota: schema.number(),
+            region: schema.string(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com', 'dev@acme.com'],
+          maxQuota: 500,
+          region: 'us-east',
+        },
+      };
+
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)))),
+        find: vi.fn().mockReturnValue({
+          toArray: vi
+            .fn()
+            .mockImplementation(() =>
+              Promise.resolve([JSON.parse(JSON.stringify(rawDocFromMongo))])
+            ),
+        }),
+      };
+
+      (organizationStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // 1. By default with no select option: apiKey and teamSettings.memberEmails are stripped by app code
+      const fetchedDefault = await organizationStore.findOne({ name: 'Acme Corp' });
+      expect(collectionMock.findOne).toHaveBeenCalledWith({ name: 'Acme Corp' }, undefined);
+      expect(fetchedDefault).toBeDefined();
+      expect(fetchedDefault?.name).toBe('Acme Corp');
+      expect(fetchedDefault?.teamSettings?.maxQuota).toBe(500);
+      expect(fetchedDefault).not.toHaveProperty('apiKey');
+      expect(fetchedDefault?.teamSettings).not.toHaveProperty('memberEmails');
+
+      // 2. Fetching with select for apiKey and teamSettings.memberEmails:
+      const selectedOrgs = await organizationStore.fetch(
+        {},
+        { select: ['apiKey', 'teamSettings.memberEmails'] }
+      );
+
+      // Verify MongoDB call options are passed cleanly:
+      expect(collectionMock.find).toHaveBeenCalledWith({}, undefined);
+
+      // Verify RECEIVED data in response:
+      expect(selectedOrgs).toHaveLength(1);
+      const receivedDoc = selectedOrgs[0];
+      expect(receivedDoc.apiKey).toBe('key_live_12345');
+      expect(receivedDoc.teamSettings.memberEmails).toEqual(['admin@acme.com', 'dev@acme.com']);
+      expect(receivedDoc.teamSettings.maxQuota).toBe(500);
+      expect(receivedDoc.teamSettings.region).toBe('us-east');
+    });
+
+    test('should preserve non-private parent object containers when stripping inner private fields', async () => {
+      const nestedPrivateStore = new Store('nestedPrivateStore', {
+        schema: {
+          title: schema.string(),
+          secretDetails: schema.object({
+            credentials: schema.object({
+              token: schema.string().private(),
+            }),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        title: 'App Secrets',
+        secretDetails: {
+          credentials: {
+            token: 'secret_token_abc',
+          },
+        },
+      };
+
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)))),
+      };
+
+      (nestedPrivateStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      const doc = await nestedPrivateStore.findOne({ title: 'App Secrets' });
+
+      expect(doc).toBeDefined();
+      expect(doc?.title).toBe('App Secrets');
+      // Parent objects defined in schema (secretDetails and credentials) must be preserved
+      expect(doc?.secretDetails).toBeDefined();
+      expect(doc?.secretDetails.credentials).toBeDefined();
+      // Only the inner private token field should be stripped
+      expect(doc?.secretDetails.credentials).not.toHaveProperty('token');
+    });
+
+    test('branded private fields (schema.string().private().brand()) are stripped by default and un-hidden when in select', async () => {
+      const brandedStore = new Store('brandedStore', {
+        schema: {
+          username: schema.string(),
+          brandedToken: schema.string().private().brand<'TokenBrand'>(),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        username: 'alice',
+        brandedToken: 'secret_branded_123',
+      };
+
+      const collectionMock = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)))),
+      };
+
+      (brandedStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // 1. Without select: brandedToken MUST be stripped at runtime
+      const defaultDoc = await brandedStore.findOne({ username: 'alice' });
+      expect(defaultDoc).toBeDefined();
+      expect(defaultDoc?.username).toBe('alice');
+      expect(defaultDoc).not.toHaveProperty('brandedToken');
+
+      // 2. With select: brandedToken MUST be preserved at runtime
+      const selectedDoc = await brandedStore.findOne(
+        { username: 'alice' },
+        { select: ['brandedToken'] }
+      );
+      expect(selectedDoc).toBeDefined();
+      expect(selectedDoc?.username).toBe('alice');
+      expect(selectedDoc?.brandedToken).toBe('secret_branded_123');
+    });
+
+    test('store read methods with projection containing private fields un-hide private fields cleanly', async () => {
+      const organizationStore = new Store('organizationsProj', {
+        schema: {
+          name: schema.string(),
+          active: schema.boolean(),
+          apiKey: schema.string().private(),
+          teamSettings: schema.object({
+            memberEmails: schema.array(schema.string()).private(),
+            maxQuota: schema.number(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDocFromMongo = {
+        _id: new ObjectId(),
+        name: 'Acme Corp',
+        active: true,
+        apiKey: 'key_live_12345',
+        teamSettings: {
+          memberEmails: ['admin@acme.com'],
+          maxQuota: 500,
+        },
+      };
+
+      const collectionMock = {
+        findOne: vi.fn().mockImplementation((_query, _opts) => {
+          return Promise.resolve(JSON.parse(JSON.stringify(rawDocFromMongo)));
+        }),
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([JSON.parse(JSON.stringify(rawDocFromMongo))]),
+        }),
+      };
+
+      (organizationStore as unknown as { collection: typeof collectionMock }).collection =
+        collectionMock;
+
+      // Projection passed to findOne:
+      const doc = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 1, name: 1 } }
+      );
+      expect(doc?.apiKey).toBe('key_live_12345');
+      expect(collectionMock.findOne).toHaveBeenCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 1, name: 1 } }
+      );
+
+      // Both projection and select passed together merge cleanly:
+      await organizationStore.fetch(
+        { name: 'Acme Corp' },
+        { projection: { name: 1 }, select: ['apiKey'] }
+      );
+      expect(collectionMock.find).toHaveBeenCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { name: 1, apiKey: 1 } }
+      );
+
+      // Parent projection + child select does NOT produce path collision:
+      await organizationStore.fetch(
+        { name: 'Acme Corp' },
+        { projection: { teamSettings: 1 } as const, select: ['teamSettings.memberEmails'] }
+      );
+      expect(collectionMock.find).toHaveBeenLastCalledWith(
+        { name: 'Acme Corp' },
+        { projection: { teamSettings: 1 } }
+      );
+
+      // Exclusion projection excluding a public field ({ active: 0 }): private fields remain hidden by default
+      const resExclPublic = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { active: 0 } }
+      );
+      expect(resExclPublic).not.toHaveProperty('apiKey');
+      expect(resExclPublic?.teamSettings).not.toHaveProperty('memberEmails');
+
+      // Exclusion projection excluding one private field ({ apiKey: 0 }): all private fields remain hidden by default
+      const resExclPrivate = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { apiKey: 0 } as const }
+      );
+      expect(resExclPrivate).not.toHaveProperty('apiKey');
+      expect(resExclPrivate?.teamSettings).not.toHaveProperty('memberEmails');
+
+      // Exclusion projection with select: select explicitly un-hides selected private field (apiKey) while unselected stay hidden
+      const resSelect = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { active: 0 } as const, select: ['apiKey'] }
+      );
+      expect(resSelect?.apiKey).toBe('key_live_12345');
+      expect(resSelect?.teamSettings).not.toHaveProperty('memberEmails');
+
+      // Inclusion projection including a parent object: public sub-fields stay, private sub-fields are stripped
+      const resParent = await organizationStore.findOne(
+        { name: 'Acme Corp' },
+        { projection: { teamSettings: 1 } as const }
+      );
+      expect(resParent?.teamSettings?.maxQuota).toBe(500);
+      expect(resParent?.teamSettings).not.toHaveProperty('memberEmails');
+    });
+
+    it('should exclude nested private field when only private parent object is selected', async () => {
+      const profileStore = new Store('userProfilesNested', {
+        schema: {
+          name: schema.string(),
+          credentials: schema
+            .object({
+              password: schema.string().private(),
+              emails: schema.string(),
+            })
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        name: 'Alice',
+        credentials: {
+          emails: 'alice@example.com',
+          password: 'supersecret',
+        },
+      };
+
+      const mockCol = {
+        findOne: vi.fn().mockImplementation((_query, _opts) => {
+          return Promise.resolve(JSON.parse(JSON.stringify(rawDoc)));
+        }),
+      };
+
+      (profileStore as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const result = await profileStore.findOne({ name: 'Alice' }, { select: ['credentials'] });
+      expect(result?.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials and was not explicitly selected
+      expect(result?.credentials.password).toBeUndefined();
+
+      // Selecting both credentials and credentials.password retains password
+      const resultBoth = await profileStore.findOne(
+        { name: 'Alice' },
+        { select: ['credentials', 'credentials.password'] }
+      );
+      expect(resultBoth?.credentials.emails).toBe('alice@example.com');
+      expect(resultBoth?.credentials.password).toBe('supersecret');
+
+      // Inclusion projection for private parent object (credentials: 1) strips private sub-fields (password)
+      const resultParentProj = await profileStore.findOne(
+        { name: 'Alice' },
+        { projection: { credentials: 1 } as const }
+      );
+      expect(resultParentProj?.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials
+      expect(resultParentProj?.credentials.password).toBeUndefined();
+
+      // Inclusion projection with select: ['credentials'] strips unselected private fields
+      const resultProjSelect = await profileStore.findOne(
+        { name: 'Alice' },
+        { projection: { name: 1 }, select: ['credentials'] }
+      );
+      expect(resultProjSelect?.credentials.emails).toBe('alice@example.com');
+      // @ts-expect-error password is private inside credentials
+      expect(resultProjSelect?.credentials.password).toBeUndefined();
+    });
+
+    it('should correctly strip/un-hide private fields inside nested arrays of objects', async () => {
+      const gameStore = new Store('games', {
+        schema: {
+          title: schema.string(),
+          players: schema
+            .array(
+              schema
+                .object({
+                  id: schema.string().private(),
+                  username: schema.string(),
+                  profile: schema
+                    .array(
+                      schema.object({
+                        displayName: schema.string(),
+                        email: schema.string().private(),
+                      })
+                    )
+                    .private(),
+                })
+                .private()
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const rawGameDoc = {
+        _id: new ObjectId(),
+        title: 'Cyberpunk',
+        players: [
+          {
+            id: 'player_123',
+            username: 'cyber_sam',
+            profile: [
+              {
+                displayName: 'Samurai',
+                email: 'sam@cyber.com',
+              },
+            ],
+          },
+        ],
+      };
+
+      const mockCol = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawGameDoc)))),
+      };
+      (gameStore as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      // 1. By default: players array is private -> stripped completely
+      const defaultDoc = await gameStore.findOne({ title: 'Cyberpunk' });
+      expect(defaultDoc?.title).toBe('Cyberpunk');
+      expect(defaultDoc).not.toHaveProperty('players');
+
+      // 2. Selecting players, players.id, and players.profile:
+      //    players.username is public (kept), players.id (kept), players.profile.displayName (kept), players.profile.email (stripped)
+      const selectedDoc = await gameStore.findOne(
+        { title: 'Cyberpunk' },
+        { select: ['players', 'players.id', 'players.profile'] }
+      );
+      expect(selectedDoc?.players).toBeDefined();
+      expect(selectedDoc?.players?.[0].id).toBe('player_123');
+      expect(selectedDoc?.players?.[0].username).toBe('cyber_sam');
+      expect(selectedDoc?.players?.[0].profile?.[0].displayName).toBe('Samurai');
+      expect(selectedDoc?.players?.[0].profile?.[0]).not.toHaveProperty('email');
+
+      // 3. Selecting players.profile.email as well un-hides email:
+      const fullDoc = await gameStore.findOne(
+        { title: 'Cyberpunk' },
+        { select: ['players', 'players.id', 'players.profile', 'players.profile.email'] }
+      );
+      expect(fullDoc?.players?.[0].profile?.[0].email).toBe('sam@cyber.com');
+    });
+
+    test('should preserve intermediate private array container when selecting deep child path', async () => {
+      const gameStore = new Store('gamesDeepSelect', {
+        schema: {
+          title: schema.string(),
+          players: schema
+            .array(
+              schema.object({
+                id: schema.string(),
+                profile: schema
+                  .array(
+                    schema.object({
+                      displayName: schema.string(),
+                      email: schema.string().private(),
+                    })
+                  )
+                  .private(),
+              })
+            )
+            .private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        title: 'Cyberpunk',
+        players: [
+          {
+            id: 'p1',
+            profile: [{ displayName: 'Sam', email: 'sam@cyber.com' }],
+          },
+        ],
+      };
+
+      const collectionMock = {
+        findOne: vi.fn().mockResolvedValue(rawDoc),
+      };
+      (gameStore as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      // Select ONLY deep path 'players.profile.displayName'
+      const doc = await gameStore.findOne(
+        { title: 'Cyberpunk' },
+        { select: ['players.profile.displayName'] }
+      );
+
+      // Intermediate private container players.profile must NOT be deleted!
+      expect(doc?.players?.[0]?.profile).toBeDefined();
+      expect(doc?.players?.[0]?.profile?.[0]?.displayName).toBe('Sam');
+      // Private leaf email must be stripped!
+      expect(doc?.players?.[0]?.profile?.[0]).not.toHaveProperty('email');
+    });
+
+    test('atomic mutation methods (findOneAndUpdate, findOneAndUpsert, findOneAndDelete, findOneAndReplace) should hide private fields by default and un-hide via select', async () => {
+      const mutStore = new Store('mutationTest', {
+        schema: {
+          title: schema.string(),
+          secret: schema.string().private(),
+          audit: schema.object({
+            createdBy: schema.string().private(),
+          }),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = {
+        _id: new ObjectId(),
+        title: 'Project Alpha',
+        secret: 'shhh',
+        audit: { createdBy: 'admin' },
+      };
+
+      const mockCollection = {
+        findOneAndUpdate: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+        findOneAndDelete: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+        findOneAndReplace: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+      };
+
+      (mutStore as unknown as { collection: typeof mockCollection }).collection = mockCollection;
+
+      // 1. findOneAndUpdate by default hides secret & audit.createdBy
+      const doc1 = await mutStore.findOneAndUpdate(
+        { title: 'Project Alpha' },
+        { $set: { title: 'Updated' } }
+      );
+      expect(doc1?.title).toBe('Project Alpha');
+      expect(doc1).not.toHaveProperty('secret');
+      expect(doc1?.audit).not.toHaveProperty('createdBy');
+
+      // 2. findOneAndUpdate with select un-hides secret
+      const doc2 = await mutStore.findOneAndUpdate(
+        { title: 'Project Alpha' },
+        { $set: { title: 'Updated' } },
+        { select: ['secret'] }
+      );
+      expect(doc2?.secret).toBe('shhh');
+      expect(doc2?.audit).not.toHaveProperty('createdBy');
+
+      // 3. findOneAndUpsert by default hides secret inside UpsertResult doc
+      mockCollection.findOneAndUpdate.mockResolvedValueOnce({
+        value: JSON.parse(JSON.stringify(rawDoc)),
+        lastErrorObject: { upserted: new ObjectId() },
+      });
+      const upsertRes1 = await mutStore.findOneAndUpsert(
+        { title: 'Project Alpha' },
+        { $setOnInsert: { title: 'Project Alpha', secret: 'shhh' } }
+      );
+      expect(upsertRes1.isNew).toBe(true);
+      expect(upsertRes1.doc?.title).toBe('Project Alpha');
+      expect(upsertRes1.doc).not.toHaveProperty('secret');
+
+      // 4. findOneAndUpsert with select un-hides secret inside UpsertResult doc
+      mockCollection.findOneAndUpdate.mockResolvedValueOnce({
+        value: JSON.parse(JSON.stringify(rawDoc)),
+        lastErrorObject: { upserted: new ObjectId() },
+      });
+      const upsertRes2 = await mutStore.findOneAndUpsert(
+        { title: 'Project Alpha' },
+        { $setOnInsert: { title: 'Project Alpha', secret: 'shhh' } },
+        { select: ['secret'] }
+      );
+      expect(upsertRes2.doc?.secret).toBe('shhh');
+
+      // 5. findOneAndDelete with select un-hides secret
+      const deletedDoc = await mutStore.findOneAndDelete(
+        { title: 'Project Alpha' },
+        { select: ['secret'] }
+      );
+      expect(deletedDoc?.secret).toBe('shhh');
+
+      // 6. findOneAndReplace with select un-hides secret
+      const replacedDoc = await mutStore.findOneAndReplace(
+        { title: 'Project Alpha' },
+        { title: 'Project Alpha', secret: 'shhh', audit: { createdBy: 'admin' } },
+        { select: ['secret'] }
+      );
+      expect(replacedDoc?.secret).toBe('shhh');
+    });
+
+    it('should hide private fields by default on requireById and requireOne, and un-hide only when select is passed', async () => {
+      const store = new Store('reqTest', {
+        schema: {
+          title: schema.string(),
+          secret: schema.string().private(),
+        },
+        indexes: [],
+      });
+
+      const rawDoc = { _id: new ObjectId(), title: 'Test', secret: 'hidden_val' };
+      const mockCol = {
+        findOne: vi
+          .fn()
+          .mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(rawDoc)))),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      // 1. requireById & requireOne without options: secret is HIDDEN by default
+      const defaultDocById = await store.requireById(rawDoc._id);
+      expect(defaultDocById.title).toBe('Test');
+      expect(defaultDocById).not.toHaveProperty('secret');
+
+      const defaultDocByOne = await store.requireOne({ title: 'Test' });
+      expect(defaultDocByOne.title).toBe('Test');
+      expect(defaultDocByOne).not.toHaveProperty('secret');
+
+      // 2. requireById & requireOne with select option: secret is UN-HIDDEN
+      const selectedDocById = await store.requireById(rawDoc._id, { select: ['secret'] });
+      expect(selectedDocById.secret).toBe('hidden_val');
+
+      const selectedDocByOne = await store.requireOne({ title: 'Test' }, { select: ['secret'] });
+      expect(selectedDocByOne.secret).toBe('hidden_val');
+    });
+  });
+
+  describe('requireById and requireOne custom error handler support', () => {
+    class CustomNotFoundError extends Error {
+      constructor(msg: string) {
+        super(msg);
+        this.name = 'CustomNotFoundError';
+      }
+    }
+
+    it('should invoke custom errorHandler when passed as 2nd argument', async () => {
+      const store = new Store('test', { schema: { name: schema.string() }, indexes: [] });
+      const mockCol = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const id = new ObjectId();
+
+      // requireById with errorHandler as 2nd arg
+      await expect(
+        store.requireById(id, () => new CustomNotFoundError('Custom ID error'))
+      ).rejects.toThrow(CustomNotFoundError);
+
+      // requireOne with errorHandler as 2nd arg
+      await expect(
+        store.requireOne({ name: 'missing' }, () => new CustomNotFoundError('Custom query error'))
+      ).rejects.toThrow(CustomNotFoundError);
+    });
+
+    it('should invoke custom errorHandler when passed as 3rd argument with options', async () => {
+      const store = new Store('test', { schema: { name: schema.string() }, indexes: [] });
+      const mockCol = {
+        findOne: vi.fn().mockResolvedValue(null),
+      };
+      (store as unknown as { collection: typeof mockCol }).collection = mockCol;
+
+      const id = new ObjectId();
+
+      // requireById with options and errorHandler
+      await expect(
+        store.requireById(id, {}, () => new CustomNotFoundError('Custom ID error with options'))
+      ).rejects.toThrow(CustomNotFoundError);
+
+      // requireOne with options and errorHandler
+      await expect(
+        store.requireOne(
+          { name: 'missing' },
+          {},
+          () => new CustomNotFoundError('Custom query error with options')
+        )
+      ).rejects.toThrow(CustomNotFoundError);
     });
   });
 });

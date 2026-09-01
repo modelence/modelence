@@ -172,7 +172,9 @@
                     "group": "Namespaces",
                     "pages": [
                       "api-reference/modelence/server/namespaces/schema/index",
-                      "api-reference/modelence/server/namespaces/schema/type-aliases/infer"
+                      "api-reference/modelence/server/namespaces/schema/type-aliases/infer",
+                      "api-reference/modelence/server/namespaces/schema/type-aliases/inferFetched",
+                      "api-reference/modelence/server/namespaces/schema/type-aliases/inferSelected"
                     ]
                   }
                 ]
