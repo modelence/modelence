@@ -19,8 +19,9 @@
  *
  * @example
  * ```typescript
- * // Allow a browser client on another origin to call the API (e.g. Expo Web,
- * // which Metro serves on :8081 while the API runs on :3000).
+ * // Allow a browser client on another origin to call this app (e.g. Expo Web,
+ * // which Metro serves on :8081 while the API runs on :3000). Listed origins
+ * // may read any route the app serves, not just API routes.
  * startApp({
  *   security: {
  *     allowedOrigins: ['http://localhost:8081'],
@@ -38,12 +39,22 @@ export type SecurityConfig = {
    */
   frameAncestors?: string[];
   /**
-   * Origins allowed to call this app's API from a browser (CORS).
+   * Origins allowed to read this app's responses from a browser (CORS).
    *
    * Browsers block a cross-origin `fetch` unless the response carries a
    * matching `Access-Control-Allow-Origin`. The common case is Expo Web, which
    * Metro serves on a different port from the API — a different port is a
    * different origin, so every method call is blocked without this.
+   *
+   * Scope: this applies to every route the app serves, not only API routes —
+   * method calls, custom module routes, and SSR/static responses alike. That is
+   * deliberate. Module routes carry no framework-imposed prefix (the docs' own
+   * example mounts `/todos` at the root) and `HttpMethod` includes `'use'`, so
+   * there is no path pattern that reliably means "the API" and nothing else;
+   * restricting by prefix would silently drop CORS from the user-defined routes
+   * that most need it. A listed origin can therefore also read SSR pages, with
+   * credentials — so list only origins you would trust with the whole app, not
+   * merely with its API.
    *
    * Each entry must be an exact origin (`scheme://host[:port]`); patterns and
    * wildcards are not supported, since the response header carries one concrete
