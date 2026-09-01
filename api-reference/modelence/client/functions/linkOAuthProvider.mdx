@@ -7,11 +7,18 @@ title: linkOAuthProvider
 
 > **linkOAuthProvider**(`options`): `Promise`\<`void`\>
 
-Defined in: [packages/modelence/src/auth/client/index.ts:283](https://github.com/modelence/modelence/blob/24ed11776f0d157e559834c800a9333d0af28f69/packages/modelence/src/auth/client/index.ts#L283)
+Defined in: [packages/modelence/src/auth/client/index.ts:425](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/auth/client/index.ts#L425)
 
 Link an OAuth provider to the currently signed-in user's account.
 Redirects the browser to the OAuth provider's authorization page.
 The provider will redirect back and the account will be linked.
+
+Without `redirectUri` this navigates the current context and authenticates
+with an httpOnly cookie, so it only works where the navigation stays in the
+same cookie jar — a browser, or a webview that navigates in place. Clients
+whose `openUrl` opens an external browser (Electron, Capacitor) must pass a
+`redirectUri`: that flow carries a single-use nonce in the URL and does not
+depend on cookies.
 
 ## Example
 
@@ -23,8 +30,9 @@ linkOAuthProvider({ provider: 'google' });
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
-| `options` | \{ `provider`: `"google"` \| `"github"`; \} | - |
+| `options` | \{ `provider`: `"google"` \| `"github"`; `redirectUri?`: `string`; \} | - |
 | `options.provider` | `"google"` \| `"github"` | The OAuth provider to link ('google' or 'github'). |
+| `options.redirectUri?` | `string` | Deep link to return to once linking completes. Required for React Native and any client that opens URLs externally; must be listed in the server's `auth.mobile.redirectUrls`. Without it the flow ends wherever the navigation lands rather than back in the app. |
 
 ## Returns
 

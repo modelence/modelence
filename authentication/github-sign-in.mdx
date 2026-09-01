@@ -30,6 +30,12 @@ Before implementing GitHub Sign-In, you need to:
      - For local development: `http://localhost:3000/api/_internal/auth/github/callback`
      - For production: `https://yourdomain.com/api/_internal/auth/github/callback`
 
+   <Note>
+     GitHub allows only one callback URL per OAuth App, and that is all Modelence
+     needs. React Native sign-in reuses this same callback and returns to your app
+     through a deep link — see [React Native](/react-native#oauth-sign-in).
+   </Note>
+
 3. **Register Application**
    - Click "Register application"
 

@@ -1,0 +1,55 @@
+---
+sidebar_position: 1
+title: signInWithOAuth
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / signInWithOAuth
+
+> **signInWithOAuth**(`options`): `Promise`\<`void`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:315](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/auth/client/index.ts#L315)
+
+Start an OAuth sign-in.
+
+On the web this navigates to the provider and the flow finishes on its own —
+the session cookie is set and the browser lands back on your site.
+
+Pass `redirectUri` to run the native flow: the device browser opens the
+provider, and when the flow completes Modelence redirects back to that deep
+link with a single-use `code` query parameter. Hand that code to
+[loginWithOAuth](/api-reference/modelence/client/functions/loginWithOAuth) to finish signing in. The redirect target must be
+listed in the server's `auth.mobile.redirectUrls`, otherwise the request is
+rejected before the provider is ever reached.
+
+The native flow additionally binds the sign-in to this device: a verifier is
+held in memory here and replayed by `loginWithOAuth`, so a `code` delivered
+to the app from outside this flow cannot be redeemed.
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `provider`: `"google"` \| `"github"`; `redirectUri?`: `string`; \} | - |
+| `options.provider` | `"google"` \| `"github"` | The OAuth provider to sign in with ('google' or 'github'). |
+| `options.redirectUri?` | `string` | Deep link to return to. Required on React Native. |
+
+## Returns
+
+`Promise`\<`void`\>
+
+## Examples
+
+```ts
+await signInWithOAuth({ provider: 'google' });
+```
+
+```ts
+import { parseDeepLinkParams } from 'modelence/client';
+
+await signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+
+Linking.addEventListener('url', async ({ url }) => {
+  const { code } = parseDeepLinkParams(url);
+  if (code) await loginWithOAuth({ code });
+});
+```

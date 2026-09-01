@@ -1,0 +1,44 @@
+---
+sidebar_position: 1
+title: loginWithOAuth
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / loginWithOAuth
+
+> **loginWithOAuth**(`options`): `Promise`\<`null` \| `User`\>
+
+Defined in: [packages/modelence/src/auth/client/index.ts:376](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/auth/client/index.ts#L376)
+
+Complete a native OAuth sign-in with the code from the deep link.
+
+Exchanges the single-use code that [signInWithOAuth](/api-reference/modelence/client/functions/signInWithOAuth) delivered to your
+app's deep link for a session, stores the auth token, and returns the
+signed-in user. Codes are valid for one minute and can only be redeemed once.
+
+Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
+a code back to your app. It works on native and under Expo Web, where the
+verifier is kept in `sessionStorage` so it survives the navigation to the
+provider. A plain web app that calls `signInWithOAuth({ provider })` with no
+`redirectUri` is signed in by a session cookie and never needs this.
+
+The verifier minted by `signInWithOAuth` is replayed here, which is what
+makes a code usable only by the client that started the flow. Calling this
+without a preceding `signInWithOAuth` — as a crafted deep link would — fails
+before the code is ever sent.
+
+## Example
+
+```ts
+const user = await loginWithOAuth({ code });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `code`: `string`; \} | - |
+| `options.code` | `string` | The `code` query parameter from the deep link. |
+
+## Returns
+
+`Promise`\<`null` \| `User`\>

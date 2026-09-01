@@ -1,0 +1,27 @@
+---
+sidebar_position: 1
+title: parseDeepLinkParams
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / parseDeepLinkParams
+
+> **parseDeepLinkParams**(`url`): `Record`\<`string`, `string`\>
+
+Defined in: [packages/modelence/src/auth/client/deepLink.ts:18](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/auth/client/deepLink.ts#L18)
+
+Reads query parameters out of a deep link such as `myapp://auth?code=abc`.
+
+Only the query component is considered — everything from the first `?` up to
+an optional `#` fragment. Values are percent-decoded, with `+` treated as a
+space to match `application/x-www-form-urlencoded`, which is how the server's
+`URL.searchParams.set` encodes them.
+
+## Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `url` | `string` |
+
+## Returns
+
+`Record`\<`string`, `string`\>
