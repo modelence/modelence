@@ -18,7 +18,7 @@ import {
   prepareOAuthInitiation,
   resolveMobileOutcomeFromCookie,
   toOAuthOutcome,
-} from './oauth-common';
+} from './oauthCommon';
 
 interface GitHubTokenResponse {
   access_token: string;

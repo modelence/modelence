@@ -20,6 +20,7 @@ import {
   buildMobileRedirect,
   getAllowedMobileRedirectUrls,
 } from './mobileRedirect';
+import { buildOAuthErrorRedirect } from './oauthErrorRedirect';
 
 /** Which kind of client started an OAuth flow. */
 export type OAuthPlatform = 'web' | 'mobile';
@@ -148,8 +149,9 @@ export type OAuthErrorCode =
 
 /*
  * Sends OAuth error response.
- * If `errorComponent` is configured, renders HTML.
- * Otherwise falls back to JSON.
+ * If `oauthErrorRedirectUrl` is configured, redirects there with the failure
+ * in the query string. Otherwise, if `errorComponent` is configured, renders
+ * HTML. Otherwise falls back to JSON.
  *
  * On a mobile flow, an HTML or JSON body would strand the user in the device
  * browser with no route back into the app, so the error is delivered as a
@@ -175,6 +177,17 @@ export function sendOAuthError(
   }
 
   const authConfig = getAuthConfig();
+
+  if (authConfig.oauthErrorRedirectUrl) {
+    // Same shape as the mobile deep link, so a client can handle both alike.
+    // The message is not a credential, but it is user-facing text about a
+    // failed sign-in; keep it out of Referer like the mobile branch does.
+    res.set('Referrer-Policy', 'no-referrer');
+    return res.redirect(
+      buildOAuthErrorRedirect(authConfig.oauthErrorRedirectUrl, { error: errorMessage, errorCode })
+    );
+  }
+
   const response = res.status(statusCode);
   if (authConfig.errorComponent) {
     try {

@@ -38,7 +38,7 @@ const mockPrepareOAuthInitiation = vi.fn(
   }
 );
 
-vi.doMock('./oauth-common', () => ({
+vi.doMock('./oauthCommon', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
   handleOAuthProviderLink: mockHandleOAuthProviderLink,

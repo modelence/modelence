@@ -50,9 +50,9 @@ vi.doMock('../utils', () => ({
   resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
-const moduleExports = await import('./oauth-common');
+const moduleExports = await import('./oauthCommon');
 
-describe('auth/providers/oauth-common', () => {
+describe('auth/providers/oauthCommon', () => {
   const res = {
     cookie: vi.fn(),
     status: vi.fn().mockReturnThis(),
@@ -1027,6 +1027,89 @@ describe('auth/providers/oauth-common', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Server error' });
+    });
+
+    describe('oauthErrorRedirectUrl', () => {
+      const redirectRes = () =>
+        ({
+          set: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          redirect: vi.fn(),
+          json: vi.fn(),
+          send: vi.fn(),
+        }) as unknown as Response;
+
+      test('redirects to the configured URL with error and errorCode', () => {
+        const webRes = redirectRes();
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(
+          webRes,
+          400,
+          'Auth failed',
+          { platform: 'web' },
+          'email_exists'
+        );
+
+        expect(webRes.redirect).toHaveBeenCalledWith(
+          '/login?error=Auth+failed&errorCode=email_exists'
+        );
+        expect(webRes.status).not.toHaveBeenCalled();
+        expect(webRes.json).not.toHaveBeenCalled();
+        expect(webRes.send).not.toHaveBeenCalled();
+      });
+
+      test('defaults errorCode to oauth_failed', () => {
+        const webRes = redirectRes();
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(webRes, 500, 'Auth failed');
+
+        expect(webRes.redirect).toHaveBeenCalledWith(
+          '/login?error=Auth+failed&errorCode=oauth_failed'
+        );
+      });
+
+      test('keeps the message out of the Referer header', () => {
+        const webRes = redirectRes();
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(webRes, 400, 'Auth failed');
+
+        expect(webRes.set).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
+      });
+
+      test('takes precedence over errorComponent', () => {
+        const webRes = redirectRes();
+        const mockErrorComponent = vi.fn().mockReturnValue('<html></html>');
+        mockGetAuthConfig.mockReturnValue({
+          oauthErrorRedirectUrl: '/login',
+          errorComponent: mockErrorComponent,
+        });
+
+        moduleExports.sendOAuthError(webRes, 400, 'Auth failed');
+
+        expect(webRes.redirect).toHaveBeenCalled();
+        expect(mockErrorComponent).not.toHaveBeenCalled();
+        expect(webRes.send).not.toHaveBeenCalled();
+      });
+
+      test('does not apply to mobile flows, which use the deep link', () => {
+        const mobileRes = redirectRes();
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(
+          mobileRes,
+          400,
+          'Auth failed',
+          { platform: 'mobile', redirectUri: 'myapp://auth' },
+          'invalid_state'
+        );
+
+        expect(mobileRes.redirect).toHaveBeenCalledTimes(1);
+        const target = (mobileRes.redirect as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+        expect(target.startsWith('myapp://auth')).toBe(true);
+      });
     });
   });
 });

@@ -34,7 +34,7 @@ vi.doMock('@/app/server', () => ({ getCallContext: mockGetCallContext }));
 vi.doMock('@/config/server', () => ({ getConfig: mockGetConfig }));
 vi.doMock('../utils', () => ({ resolveUniqueHandle: vi.fn(async () => 'demo') }));
 
-const oauth = await import('./oauth-common');
+const oauth = await import('./oauthCommon');
 
 function makeRes() {
   return {
@@ -80,7 +80,7 @@ async function roundTrip(query: Record<string, string>, res: Response) {
  * derived from it — because the regressions this feature actually shipped all
  * lived in the seams between those steps, not inside any one of them.
  */
-describe('oauth-common — mobile end-to-end invariants', () => {
+describe('oauthCommon — mobile end-to-end invariants', () => {
   let res: Response;
 
   beforeEach(() => {
@@ -251,7 +251,7 @@ describe('oauth-common — mobile end-to-end invariants', () => {
  * integrity-checked, but these confirm that a value which nonetheless reaches
  * the decoder cannot escalate into a minted credential.
  */
-describe('oauth-common — mobile state tampering', () => {
+describe('oauthCommon — mobile state tampering', () => {
   let res: Response;
   beforeEach(() => {
     vi.clearAllMocks();

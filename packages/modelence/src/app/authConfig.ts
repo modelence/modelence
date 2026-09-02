@@ -362,8 +362,38 @@ export type AuthConfig = {
    * (or `null`/`undefined` to fall back to the default JSON response).
    *
    * Always escape interpolated values to prevent XSS.
+   *
+   * @deprecated Use {@link AuthConfig.oauthErrorRedirectUrl} instead. It sends
+   * the browser back into the app, where the error can be shown on a real page
+   * with the app's own UI; this only ever renders a standalone document at the
+   * callback URL. Ignored when `oauthErrorRedirectUrl` is set.
    */
   errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
+
+  /**
+   * Where a failed web OAuth flow sends the browser. A path (`'/login'`) or an
+   * absolute URL. The failure is appended as `?error=<message>&errorCode=<code>`,
+   * the same contract a mobile flow delivers on its deep link, so the app can
+   * show the message on a real page instead of the raw callback response.
+   *
+   * OAuth errors surface at the provider callback URL, outside any client
+   * bundle, so nothing there can render app UI. Without this (or
+   * {@link AuthConfig.errorComponent}) the user lands on a JSON body with no
+   * way back. When both are set, the redirect wins and `errorComponent` is not
+   * called.
+   *
+   * `error` is for display and its wording may change; branch on `errorCode`.
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   auth: {
+   *     oauthErrorRedirectUrl: '/login',
+   *   },
+   * });
+   * ```
+   */
+  oauthErrorRedirectUrl?: string;
 
   /**
    * Overrides the built-in rate limits for authentication endpoints. Each rule
