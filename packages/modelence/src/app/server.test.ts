@@ -206,6 +206,30 @@ function createRequest(overrides: Partial<Request> & { headers?: Record<string, 
   } as Request;
 }
 
+function createTrustingApp(trusted: string[]) {
+  // Mirrors how Express exposes its compiled `trust proxy` predicate on
+  // `req.app`. Only the exact addresses/ranges used by these tests are matched.
+  const trustFn = (addr: string) =>
+    trusted.some((entry) => {
+      if (entry === 'loopback') {
+        return addr === '127.0.0.1' || addr === '::1';
+      }
+      const [subnet, bits] = entry.split('/');
+      if (!bits) {
+        return addr === subnet;
+      }
+      const prefix = subnet
+        .split('.')
+        .slice(0, Math.floor(Number(bits) / 8))
+        .join('.');
+      return addr.startsWith(`${prefix}.`);
+    });
+
+  return {
+    get: (name: string) => (name === 'trust proxy fn' ? trustFn : undefined),
+  } as unknown as Request['app'];
+}
+
 function createResponse(): Response {
   const res = {
     json: vi.fn(),
@@ -222,6 +246,7 @@ function createResponse(): Response {
 describe('app/server getCallContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSecurityConfig.mockReturnValue({});
     mockAuthenticate.mockResolvedValue({ session: null, user: null, roles: [] } as never);
     mockGetUnauthenticatedRoles.mockReturnValue(['guest']);
     mockGetMongodbUri.mockReturnValue(undefined);
@@ -275,11 +300,12 @@ describe('app/server getCallContext', () => {
     expect(ctx.clientInfo.screenWidth).toBe(100);
   });
 
-  test('falls back to unauthenticated context when database missing', async () => {
+  test('does not trust X-Forwarded-For when the request IP is direct', async () => {
     const req = createRequest({
       body: {
         authToken: 'body-token',
       },
+      ip: '::ffff:192.0.2.10',
       headers: {
         'x-forwarded-for': '10.0.0.1, 2.2.2.2',
         host: 'localhost',
@@ -292,7 +318,7 @@ describe('app/server getCallContext', () => {
 
     expect(ctx.session).toBeNull();
     expect(ctx.roles).toEqual(['guest']);
-    expect(ctx.connectionInfo.ip).toBe('10.0.0.1');
+    expect(ctx.connectionInfo.ip).toBe('192.0.2.10');
   });
 
   test('normalizes direct IP addresses without proxy headers', async () => {
@@ -378,8 +404,11 @@ describe('app/server getCallContext', () => {
     });
   });
 
-  test('handles X-Forwarded-For with multiple IPs', async () => {
+  test('uses the IP resolved by Express for a trusted proxy chain', async () => {
     const req = createRequest({
+      // Express resolves this from the socket and X-Forwarded-For according to
+      // the configured trusted proxy addresses.
+      ip: '5.6.7.8',
       headers: {
         'x-forwarded-for': '1.2.3.4, 5.6.7.8, 9.10.11.12',
         host: 'localhost',
@@ -389,10 +418,10 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+    expect(ctx.connectionInfo.ip).toBe('5.6.7.8');
   });
 
-  test('handles X-Forwarded-For as array', async () => {
+  test('ignores X-Forwarded-For when Express resolves no forwarded IP', async () => {
     const req = createRequest({
       headers: { host: 'localhost' },
     });
@@ -401,7 +430,91 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(ctx.connectionInfo.ip).toBe('1.2.3.4');
+    expect(ctx.connectionInfo.ip).toBeUndefined();
+  });
+
+  test('prefers the configured client IP header from a trusted peer', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['10.0.0.0/8'],
+      clientIpHeader: 'CF-Connecting-IP',
+    });
+    const req = createRequest({
+      // Cloudflare appends to X-Forwarded-For rather than overwriting it, so
+      // its left-most value is caller-controlled and must not win.
+      ip: '203.0.113.9',
+      headers: {
+        'cf-connecting-ip': '198.51.100.7',
+        'x-forwarded-for': '1.2.3.4, 203.0.113.9',
+        host: 'localhost',
+      },
+    });
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.ip).toBe('198.51.100.7');
+  });
+
+  test('ignores the client IP header when the peer is not a trusted proxy', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['10.0.0.0/8'],
+      clientIpHeader: 'CF-Connecting-IP',
+    });
+    const req = createRequest({
+      ip: '203.0.113.9',
+      headers: {
+        // Forged by a caller connecting directly to the application port.
+        'cf-connecting-ip': '198.51.100.7',
+        host: 'localhost',
+      },
+    });
+    req.socket = { remoteAddress: '203.0.113.9' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.ip).toBe('203.0.113.9');
+  });
+
+  test('falls back to req.ip when the client IP header is absent', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['10.0.0.0/8'],
+      clientIpHeader: 'CF-Connecting-IP',
+    });
+    const req = createRequest({
+      ip: '203.0.113.9',
+      headers: { host: 'localhost' },
+    });
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.ip).toBe('203.0.113.9');
+  });
+
+  test('normalizes an IPv4-mapped address from the client IP header', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['10.0.0.0/8'],
+      clientIpHeader: 'cf-connecting-ip',
+    });
+    const req = createRequest({
+      headers: {
+        'cf-connecting-ip': '::ffff:198.51.100.7',
+        host: 'localhost',
+      },
+    });
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.ip).toBe('198.51.100.7');
   });
 
   test('uses socket remoteAddress when ip is not available', async () => {
@@ -424,7 +537,8 @@ describe('app/server getCallContext', () => {
         'x-forwarded-host': 'tenant-sandbox-3cus3.sandbox.modelence.app',
         'x-forwarded-proto': 'https',
       },
-      protocol: 'http',
+      // Express resolves `protocol` from X-Forwarded-Proto for a trusted proxy.
+      protocol: 'https',
     });
     mockGetMongodbUri.mockReturnValue('');
 
@@ -433,12 +547,30 @@ describe('app/server getCallContext', () => {
     expect(ctx.connectionInfo.baseUrl).toBe('https://tenant-sandbox-3cus3.sandbox.modelence.app');
   });
 
-  test('uses the first value of comma-separated forwarded headers', async () => {
+  test('uses the first value of a comma-separated X-Forwarded-Host', async () => {
     const req = createRequest({
       headers: {
         host: '10.1.118.6:3000',
         'x-forwarded-host': 'public.example.com, internal.example.com',
         'x-forwarded-proto': 'https, http',
+      },
+      // Express already takes the left-most X-Forwarded-Proto value itself.
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('https://public.example.com');
+  });
+
+  test('ignores X-Forwarded-Proto that Express did not trust', async () => {
+    const req = createRequest({
+      headers: {
+        host: 'app.example.com',
+        // A direct caller can send this, but Express leaves `protocol` alone
+        // when the peer is not a trusted proxy.
+        'x-forwarded-proto': 'https',
       },
       protocol: 'http',
     });
@@ -446,7 +578,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(ctx.connectionInfo.baseUrl).toBe('https://public.example.com');
+    expect(ctx.connectionInfo.baseUrl).toBe('http://app.example.com');
   });
 
   test('falls back to direct host and protocol without forwarded headers', async () => {
@@ -525,6 +657,89 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self'"
     );
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'SAMEORIGIN');
+  });
+
+  test('preserves the legacy trust-all proxy behavior by default', async () => {
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
+  });
+
+  test('configures only the explicitly trusted proxy addresses', async () => {
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['loopback', '10.0.0.0/8'],
+    });
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', ['loopback', '10.0.0.0/8']);
+  });
+
+  test('configures trusted proxies from MODELENCE_TRUSTED_PROXIES', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = 'loopback,linklocal,uniquelocal';
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', [
+      'loopback',
+      'linklocal',
+      'uniquelocal',
+    ]);
+  });
+
+  test('MODELENCE_TRUSTED_PROXIES overrides the application security config', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = '10.0.0.0/8';
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['loopback'],
+    });
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', ['10.0.0.0/8']);
+  });
+
+  test('trims whitespace around MODELENCE_TRUSTED_PROXIES entries', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = ' loopback , 10.0.0.0/8 ';
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', ['loopback', '10.0.0.0/8']);
+  });
+
+  test('falls back to the security config when MODELENCE_TRUSTED_PROXIES is blank', async () => {
+    process.env.MODELENCE_TRUSTED_PROXIES = '   ';
+    mockGetSecurityConfig.mockReturnValue({
+      trustedProxies: ['loopback'],
+    });
+    const mockServer = createMockServer();
+
+    await startServer(mockServer, {
+      combinedModules: [],
+      channels: [],
+    });
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', ['loopback']);
   });
 
   test('sets custom frame-ancestors and omits X-Frame-Options', async () => {

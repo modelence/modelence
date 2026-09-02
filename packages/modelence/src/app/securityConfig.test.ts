@@ -57,4 +57,20 @@ describe('securityConfig', () => {
       'https://app.modelence.com',
     ]);
   });
+
+  test('stores trusted proxy addresses', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ trustedProxies: ['loopback', '10.0.0.0/8'] });
+
+    expect(getSecurityConfig().trustedProxies).toEqual(['loopback', '10.0.0.0/8']);
+  });
+
+  test('stores the client IP header', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ clientIpHeader: 'cf-connecting-ip' });
+
+    expect(getSecurityConfig().clientIpHeader).toBe('cf-connecting-ip');
+  });
 });
