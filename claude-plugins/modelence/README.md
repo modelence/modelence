@@ -10,6 +10,9 @@ email, cron jobs, and cloud deployment.
   blocks: `Module`, `Store`, queries, mutations, `configSchema`, cron jobs, and React
   pages using `modelenceQuery`/`modelenceMutation`. Claude loads it automatically when
   creating or modifying any of these.
+- **`mobile-setup` skill** — how to add or repair an Expo (React Native) app under
+  `mobile/`: scaffolding from the official template, dependency pinning, root postinstall
+  wiring, and the Android package / iOS bundle id rules.
 - **`expo-router` skill** — Expo Router rules for Modelence mobile apps: URL and group
   segment semantics, the canonical tabs layout, and a pre-completion checklist that
   prevents "Unmatched Route" errors type-checking can't catch.
@@ -38,6 +41,7 @@ The skills and output style activate on their own inside a Modelence project —
 nothing to invoke. To browse them explicitly:
 
 - `/modelence:modelence-patterns` — reference implementations for framework patterns
+- `/modelence:mobile-setup` — adding or repairing the Expo mobile app
 - `/modelence:expo-router` — mobile routing rules
 
 ## Authentication
