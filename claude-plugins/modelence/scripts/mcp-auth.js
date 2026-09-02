@@ -9,19 +9,61 @@
 //
 // When no token is found, emits no headers at all: the server then responds
 // 401 with an OAuth challenge, and Claude Code offers the normal sign-in flow.
+// Claude Code discards this process's stderr, so every outcome is instead
+// appended to ~/.modelence/mcp-auth.log — otherwise a helper that bailed and a
+// helper that never ran look identical from the session.
 //
 // Usage: node mcp-auth.js <project-dir>   (the plugin passes ${CLAUDE_PROJECT_DIR})
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
+const LOG_PATH = path.join(os.homedir(), '.modelence', 'mcp-auth.log');
+const LOG_MAX_BYTES = 64 * 1024;
+
+// Never throws and never records the token itself: a log problem must not cost
+// the session its credentials.
+function log(reason) {
+  try {
+    fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+    let size = 0;
+    try {
+      size = fs.statSync(LOG_PATH).size;
+    } catch {
+      // No log yet.
+    }
+    fs.writeFileSync(LOG_PATH, `${new Date().toISOString()} ${reason}\n`, {
+      flag: size > LOG_MAX_BYTES ? 'w' : 'a',
+    });
+  } catch {
+    // Unwritable home — the headers below still matter.
+  }
+}
+
+// The config-level ${CLAUDE_PROJECT_DIR} substitution and the variable reaching
+// this process are separate mechanisms, so try the argument then the env var.
+function resolveProjectDir(argDir) {
+  const candidates = [
+    ['argv', argDir],
+    ['CLAUDE_PROJECT_DIR', process.env.CLAUDE_PROJECT_DIR],
+  ];
+  for (const [source, dir] of candidates) {
+    if (dir && fs.existsSync(path.join(dir, '.modelence.env'))) {
+      return { dir, source };
+    }
+  }
+  const tried = candidates.map(([source, dir]) => `${source}=${dir || '<empty>'}`).join(' ');
+  return { dir: null, tried };
+}
+
 function readToken(projectDir) {
-  if (!projectDir) return null;
+  const file = path.join(projectDir, '.modelence.env');
   let content;
   try {
-    content = fs.readFileSync(path.join(projectDir, '.modelence.env'), 'utf8');
-  } catch {
-    return null;
+    content = fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    return { error: `${file} unreadable (${error.code})` };
   }
 
   // KEY=value or KEY="value", last assignment wins — mirrors dotenv closely
@@ -31,7 +73,7 @@ function readToken(projectDir) {
     const match = line.match(/^\s*MODELENCE_SERVICE_TOKEN\s*=\s*("?)(.*)\1\s*$/);
     if (match && match[2]) token = match[2];
   }
-  return token;
+  return token ? { token } : { error: `no MODELENCE_SERVICE_TOKEN in ${file}` };
 }
 
 // MODELENCE_MCP_URL redirects the plugin's MCP entry to a development server
@@ -48,14 +90,39 @@ function isLocalUrl(rawUrl) {
   }
 }
 
-const override = process.env.MODELENCE_MCP_URL;
-if (override && !isLocalUrl(override)) {
-  process.stdout.write(JSON.stringify({}));
-  process.exit(0);
+function main() {
+  const override = process.env.MODELENCE_MCP_URL;
+  if (override && !isLocalUrl(override)) {
+    return { headers: {}, reason: `no headers: non-local MODELENCE_MCP_URL (${override})` };
+  }
+
+  const { dir, source, tried } = resolveProjectDir(process.argv[2]);
+  if (!dir) {
+    return { headers: {}, reason: `no headers: no .modelence.env found (${tried})` };
+  }
+
+  const { token, error } = readToken(dir);
+  if (!token) {
+    return { headers: {}, reason: `no headers: ${error}` };
+  }
+
+  // Tokens are hex; anything with characters invalid in an HTTP header value is
+  // treated as absent rather than sent.
+  if (!/^[\x21-\x7e]+$/.test(token)) {
+    return { headers: {}, reason: `no headers: token in ${dir} has invalid characters` };
+  }
+
+  return {
+    headers: { 'X-Modelence-Service-Token': token },
+    reason: `sent token (${token.length} chars) from ${dir} via ${source}`,
+  };
 }
 
-const token = readToken(process.argv[2]);
-// Tokens are hex; anything with characters invalid in an HTTP header value is
-// treated as absent rather than sent.
-const valid = token && /^[\x21-\x7e]+$/.test(token);
-process.stdout.write(JSON.stringify(valid ? { 'X-Modelence-Service-Token': token } : {}));
+let result;
+try {
+  result = main();
+} catch (error) {
+  result = { headers: {}, reason: `no headers: unexpected error: ${error && error.message}` };
+}
+log(result.reason);
+process.stdout.write(JSON.stringify(result.headers));

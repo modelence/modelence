@@ -56,7 +56,9 @@ The `modelence` cloud server authenticates in one of two ways:
   Claude Code offers the normal `/mcp` sign-in flow.
 
 The helper never edits `.modelence.env` and sends nothing anywhere except the MCP
-endpoint it authenticates.
+endpoint it authenticates. Each outcome is logged to `~/.modelence/mcp-auth.log`
+(never the token itself), which is the place to look if the server asks you to sign
+in when it shouldn't.
 
 ## Requirements
 
