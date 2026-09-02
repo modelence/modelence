@@ -18,7 +18,7 @@ import {
   prepareOAuthInitiation,
   resolveMobileOutcomeFromCookie,
   toOAuthOutcome,
-} from './oauth-common';
+} from './oauthCommon';
 
 interface GoogleTokenResponse {
   access_token: string;

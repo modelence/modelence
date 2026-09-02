@@ -20,6 +20,7 @@ import {
   buildMobileRedirect,
   getAllowedMobileRedirectUrls,
 } from './mobileRedirect';
+import { buildOAuthErrorRedirect } from './oauthErrorRedirect';
 
 /** Which kind of client started an OAuth flow. */
 export type OAuthPlatform = 'web' | 'mobile';
@@ -148,8 +149,9 @@ export type OAuthErrorCode =
 
 /*
  * Sends OAuth error response.
- * If `errorComponent` is configured, renders HTML.
- * Otherwise falls back to JSON.
+ * If `oauthErrorRedirectUrl` is configured, redirects there with the failure
+ * in the query string. Otherwise, if `errorComponent` is configured, renders
+ * HTML. Otherwise falls back to JSON.
  *
  * On a mobile flow, an HTML or JSON body would strand the user in the device
  * browser with no route back into the app, so the error is delivered as a
@@ -175,6 +177,23 @@ export function sendOAuthError(
   }
 
   const authConfig = getAuthConfig();
+
+  if (authConfig.oauthErrorRedirectUrl) {
+    // Same shape as the mobile deep link, so a client can handle both alike.
+    // The message is not a credential, but it is user-facing text about a
+    // failed sign-in; keep it out of Referer like the mobile branch does.
+    res.set('Referrer-Policy', 'no-referrer');
+    // Always set by the time a callback runs: `getRedirectUri` needs it to
+    // start the flow at all.
+    const siteUrl = getConfig('_system.site.url') as string;
+    return res.redirect(
+      buildOAuthErrorRedirect(siteUrl, authConfig.oauthErrorRedirectUrl, {
+        error: errorMessage,
+        errorCode,
+      })
+    );
+  }
+
   const response = res.status(statusCode);
   if (authConfig.errorComponent) {
     try {
@@ -184,6 +203,7 @@ export function sendOAuthError(
       console.error('Unhandled error in authConfig.errorComponent:', err);
     }
   }
+
   return response.json({ error: errorMessage });
 }
 
@@ -677,10 +697,17 @@ export function validateOAuthStateAndGetMode(
     // Deep-link the failure back when the decoded target survives re-validation,
     // rather than stranding the user on JSON. Trusted because the allowlist just
     // approved it, not because the cookie said so.
+    //
+    // The message says "sign in again" rather than naming CSRF: the overwhelming
+    // majority of the users who see it are victims of an expired cookie, a stale
+    // bookmarked callback, or a back button — not of an attack. Someone actually
+    // forging a state learns nothing from being told so, while everyone else is
+    // handed an accusation instead of the one action that fixes it. `invalid_state`
+    // still identifies the case precisely for anything branching on it.
     sendOAuthError(
       res,
       400,
-      'Invalid OAuth state - possible CSRF attack',
+      'Your sign-in session has expired. Please sign in again.',
       mobileOutcome ?? { platform: 'web' },
       'invalid_state'
     );

@@ -241,15 +241,41 @@ startApp({
 });
 ```
 
-## Error Rendering
+## Error Handling
 
-### `errorComponent`
+OAuth errors surface at the provider callback URL (`/api/_internal/auth/...`), which is a server route outside your client bundle. Nothing there can render your app's UI, so by default the user lands on a JSON body with no way back. Two options change that.
 
-Use `errorComponent` to customize how OAuth authentication errors are rendered. 
+### `oauthErrorRedirectUrl`
 
-By default, OAuth errors are returned as JSON. Providing `errorComponent` allows you to return a custom HTML response instead. 
+Use `oauthErrorRedirectUrl` to send the browser back into your app when a web OAuth flow fails. It accepts a path, resolved against your site URL (`MODELENCE_SITE_URL`), or an absolute URL. The failure is appended as `?error=<message>&errorCode=<code>`, the same contract a mobile flow delivers on its deep link, so your app can show it on a real page.
 
-This is useful when OAuth flows are triggered in a browser context.
+```typescript
+startApp({
+  auth: {
+    oauthErrorRedirectUrl: '/login',
+  },
+});
+```
+
+Then read the params on that page:
+
+```tsx
+import { useSearchParams } from 'react-router';
+
+function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const oauthError = searchParams.get('error');
+  // ...render oauthError inline in the form
+}
+```
+
+`error` is for display and its wording may change. Branch on `errorCode` (`invalid_state`, `email_exists`, `account_inactive`, ...) for anything programmatic.
+
+When both `oauthErrorRedirectUrl` and `errorComponent` are set, the redirect wins and `errorComponent` is not called.
+
+### `errorComponent` (deprecated)
+
+`errorComponent` is deprecated in favor of `oauthErrorRedirectUrl`. It renders OAuth errors as a standalone HTML document at the callback URL instead of JSON, which means the page cannot use your app's UI. It is still honored for existing apps, but is ignored whenever `oauthErrorRedirectUrl` is set.
 
 ```typescript
 startApp({
@@ -307,12 +333,7 @@ startApp({
       }
       return email.split('@')[0];
     },
-    errorComponent: ({ error, statusCode }) => {
-      const escapeHtml = (str: string | number) => String(str).replace(/[&<>"']/g, m => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-      })[m as any] || m);
-      return `<html><body><h1>Error ${escapeHtml(statusCode)}</h1><p>${escapeHtml(error)}</p></body></html>`;
-    },
+    oauthErrorRedirectUrl: '/login',
     onAfterSignup: ({ user }) => {
       console.log('Welcome!', user.handle);
     },
