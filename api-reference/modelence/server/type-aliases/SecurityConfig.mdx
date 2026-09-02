@@ -7,7 +7,7 @@ title: SecurityConfig
 
 > **SecurityConfig** = `object`
 
-Defined in: [packages/modelence/src/app/securityConfig.ts:20](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/app/securityConfig.ts#L20)
+Defined in: [packages/modelence/src/app/securityConfig.ts:22](https://github.com/modelence/modelence/blob/b5106e18e14b5f640b7178d8c98e5db7519d020e/packages/modelence/src/app/securityConfig.ts#L22)
 
 Security configuration for the application
 
@@ -24,6 +24,8 @@ import { startApp } from 'modelence/server';
 startApp({
   security: {
     frameAncestors: ['https://modelence.com', 'https://app.example.com'],
+    trustedProxies: ['loopback', 'linklocal', 'uniquelocal'],
+    clientIpHeader: 'cf-connecting-ip',
   },
 });
 ```
@@ -32,4 +34,6 @@ startApp({
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="frameancestors"></a> `frameAncestors?` | `string`[] | Additional origins allowed to embed this app in an iframe. The app's own origin (`'self'`) is always included automatically. When not set, only same-origin framing is allowed. When set, `X-Frame-Options` is omitted since it cannot express multiple origins. | [packages/modelence/src/app/securityConfig.ts:28](https://github.com/modelence/modelence/blob/60e8613fb64cecdf518d1bc0c8824c2abed99ac9/packages/modelence/src/app/securityConfig.ts#L28) |
+| <a id="clientipheader"></a> `clientIpHeader?` | `string` | Name of a single-value header the trusted proxy sets to the originating client IP, used instead of walking the `X-Forwarded-For` chain. Cloudflare recommends reading `CF-Connecting-IP` (or `True-Client-IP` on Enterprise plans) rather than `X-Forwarded-For`, because Cloudflare *appends* to an inbound `X-Forwarded-For` instead of overwriting it, while these headers always carry exactly one address. This header is only read when the immediate peer is a trusted proxy, so `trustedProxies` (or `MODELENCE_TRUSTED_PROXIES`) must also be configured with the proxy's addresses. Without that, a direct caller could set the header themselves and choose their own rate-limit identity. When the peer is untrusted or the header is absent, the IP falls back to the normal `trust proxy` resolution. **Example** `// Behind Cloudflare, with Cloudflare's published ranges trusted: clientIpHeader: 'cf-connecting-ip'` | [packages/modelence/src/app/securityConfig.ts:76](https://github.com/modelence/modelence/blob/b5106e18e14b5f640b7178d8c98e5db7519d020e/packages/modelence/src/app/securityConfig.ts#L76) |
+| <a id="frameancestors"></a> `frameAncestors?` | `string`[] | Additional origins allowed to embed this app in an iframe. The app's own origin (`'self'`) is always included automatically. When not set, only same-origin framing is allowed. When set, `X-Frame-Options` is omitted since it cannot express multiple origins. | [packages/modelence/src/app/securityConfig.ts:30](https://github.com/modelence/modelence/blob/b5106e18e14b5f640b7178d8c98e5db7519d020e/packages/modelence/src/app/securityConfig.ts#L30) |
+| <a id="trustedproxies"></a> `trustedProxies?` | `string` \| `string`[] | IP addresses or CIDR ranges of reverse proxies that are allowed to supply the client IP through `X-Forwarded-For`. This uses Express's `trust proxy` address syntax, which also supports the named ranges `loopback`, `linklocal`, and `uniquelocal`. For backward compatibility, all proxy addresses are trusted when neither this option nor `MODELENCE_TRUSTED_PROXIES` is set. Configure one of them in production so only addresses that cannot be reached directly by untrusted clients are trusted. Once configured, `connectionInfo.ip` is resolved by walking the proxy chain from the app toward the client and stopping at the first untrusted address. This keeps a caller from choosing its rate-limit identity by prepending a forged `X-Forwarded-For` value. **Example** `trustedProxies: ['loopback', '10.0.0.0/8']` | [packages/modelence/src/app/securityConfig.ts:52](https://github.com/modelence/modelence/blob/b5106e18e14b5f640b7178d8c98e5db7519d020e/packages/modelence/src/app/securityConfig.ts#L52) |
