@@ -25,10 +25,12 @@ vi.doMock('react-dom/client', () => ({
 
 const mockHydrateSession = vi.fn();
 const mockStartSessionHeartbeat = vi.fn();
+const mockRevalidateSessionOnPageShow = vi.fn();
 
 vi.doMock('./session', () => ({
   hydrateSession: mockHydrateSession,
   startSessionHeartbeat: mockStartSessionHeartbeat,
+  revalidateSessionOnPageShow: mockRevalidateSessionOnPageShow,
 }));
 
 const mockQueryProvider = vi.fn(({ children }: { children: React.ReactNode }) => <>{children}</>);
@@ -109,7 +111,7 @@ describe('client/renderApp', () => {
     globalThis.window = originalWindow;
   });
 
-  test('initializes error handler, attaches unload listener, and renders AppProvider', () => {
+  test('initializes error handler and renders AppProvider', () => {
     renderApp({
       loadingElement: <div>Loading</div>,
       routesElement: <div>Routes</div>,
@@ -122,7 +124,26 @@ describe('client/renderApp', () => {
     const renderFn = rootResult ? (rootResult.value as { render: Mock }).render : undefined;
     expect(renderFn).toBeDefined();
     expect(renderFn).toHaveBeenCalledTimes(1);
-    expect(addEventListenerMock).toHaveBeenCalledWith('unload', expect.any(Function));
+  });
+
+  test('attaches pageshow listener and revalidates session when event.persisted is true', () => {
+    renderApp({
+      loadingElement: null,
+      routesElement: null,
+    });
+
+    expect(addEventListenerMock).toHaveBeenCalledWith('pageshow', expect.any(Function));
+    const pageshowCall = addEventListenerMock.mock.calls.find((call) => call[0] === 'pageshow');
+    const pageshowHandler = pageshowCall?.[1] as
+      | ((event: { persisted: boolean }) => void)
+      | undefined;
+    expect(pageshowHandler).toBeDefined();
+
+    pageshowHandler?.({ persisted: false });
+    expect(mockRevalidateSessionOnPageShow).not.toHaveBeenCalled();
+
+    pageshowHandler?.({ persisted: true });
+    expect(mockRevalidateSessionOnPageShow).toHaveBeenCalledTimes(1);
   });
 
   test('creates favicon link when none exists', () => {

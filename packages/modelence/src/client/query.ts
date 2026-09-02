@@ -76,6 +76,13 @@ export function disconnectModelenceQueryClient() {
   websocketsStarted = false;
 }
 
+/** Revalidate all cached queries when restored from BFCache (`event.persisted === true`). */
+export function revalidateModelenceQueries() {
+  if (queryClientRef) {
+    void queryClientRef.invalidateQueries();
+  }
+}
+
 /** @deprecated Use `connectModelenceQueryClient(queryClient)` instead. */
 export class ModelenceQueryClient {
   connect(queryClient: QueryClient) {
