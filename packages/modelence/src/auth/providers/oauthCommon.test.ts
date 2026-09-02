@@ -1030,6 +1030,12 @@ describe('auth/providers/oauthCommon', () => {
     });
 
     describe('oauthErrorRedirectUrl', () => {
+      beforeEach(() => {
+        mockGetConfig.mockImplementation((key: string) =>
+          key === '_system.site.url' ? 'https://app.example.com' : undefined
+        );
+      });
+
       const redirectRes = () =>
         ({
           set: vi.fn(),
@@ -1052,7 +1058,7 @@ describe('auth/providers/oauthCommon', () => {
         );
 
         expect(webRes.redirect).toHaveBeenCalledWith(
-          '/login?error=Auth+failed&errorCode=email_exists'
+          'https://app.example.com/login?error=Auth+failed&errorCode=email_exists'
         );
         expect(webRes.status).not.toHaveBeenCalled();
         expect(webRes.json).not.toHaveBeenCalled();
@@ -1066,7 +1072,7 @@ describe('auth/providers/oauthCommon', () => {
         moduleExports.sendOAuthError(webRes, 500, 'Auth failed');
 
         expect(webRes.redirect).toHaveBeenCalledWith(
-          '/login?error=Auth+failed&errorCode=oauth_failed'
+          'https://app.example.com/login?error=Auth+failed&errorCode=oauth_failed'
         );
       });
 

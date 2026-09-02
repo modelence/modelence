@@ -371,8 +371,9 @@ export type AuthConfig = {
   errorComponent?: (props: OAuthErrorInfo) => string | null | undefined;
 
   /**
-   * Where a failed web OAuth flow sends the browser. A path (`'/login'`) or an
-   * absolute URL. The failure is appended as `?error=<message>&errorCode=<code>`,
+   * Where a failed web OAuth flow sends the browser. A path (`'/login'`),
+   * resolved against `_system.site.url`, or an absolute URL. The failure is
+   * appended as `?error=<message>&errorCode=<code>`,
    * the same contract a mobile flow delivers on its deep link, so the app can
    * show the message on a real page instead of the raw callback response.
    *

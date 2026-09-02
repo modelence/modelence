@@ -247,7 +247,7 @@ OAuth errors surface at the provider callback URL (`/api/_internal/auth/...`), w
 
 ### `oauthErrorRedirectUrl`
 
-Use `oauthErrorRedirectUrl` to send the browser back into your app when a web OAuth flow fails. It accepts a path or an absolute URL. The failure is appended as `?error=<message>&errorCode=<code>`, the same contract a mobile flow delivers on its deep link, so your app can show it on a real page.
+Use `oauthErrorRedirectUrl` to send the browser back into your app when a web OAuth flow fails. It accepts a path, resolved against your site URL (`MODELENCE_SITE_URL`), or an absolute URL. The failure is appended as `?error=<message>&errorCode=<code>`, the same contract a mobile flow delivers on its deep link, so your app can show it on a real page.
 
 ```typescript
 startApp({

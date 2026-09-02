@@ -6,12 +6,6 @@
  */
 const ERROR_PARAMS = ['error', 'errorCode'] as const;
 
-/**
- * Placeholder origin used to parse a relative target. It never appears in the
- * output: a target that came in relative goes out relative.
- */
-const RELATIVE_BASE = 'http://relative.invalid';
-
 export type OAuthErrorRedirectParams = {
   /** Human-readable message for display. Not a stable contract. */
   error: string;
@@ -20,16 +14,20 @@ export type OAuthErrorRedirectParams = {
 };
 
 /**
- * Builds the URL a failed web OAuth flow redirects to.
+ * Builds the absolute URL a failed web OAuth flow redirects to.
  *
  * `target` is `authConfig.oauthErrorRedirectUrl`: a server-side, trusted value,
- * so it is not allowlisted the way a mobile `redirectUri` is. It may be a path
- * (`/login`) or an absolute URL. Existing unrelated query params and any hash
- * fragment are preserved.
+ * so it is not allowlisted the way a mobile `redirectUri` is. A path such as
+ * `/login` is resolved against `siteUrl` (`_system.site.url`), the same base
+ * the email landing routes use; an absolute URL is taken as is. Existing
+ * unrelated query params and any hash fragment are preserved.
  */
-export function buildOAuthErrorRedirect(target: string, params: OAuthErrorRedirectParams): string {
-  const isRelative = target.startsWith('/');
-  const url = new URL(target, RELATIVE_BASE);
+export function buildOAuthErrorRedirect(
+  siteUrl: string,
+  target: string,
+  params: OAuthErrorRedirectParams
+): string {
+  const url = new URL(target, siteUrl);
 
   for (const key of ERROR_PARAMS) {
     url.searchParams.delete(key);
@@ -39,5 +37,5 @@ export function buildOAuthErrorRedirect(target: string, params: OAuthErrorRedire
     url.searchParams.set(key, value);
   }
 
-  return isRelative ? `${url.pathname}${url.search}${url.hash}` : url.toString();
+  return url.toString();
 }

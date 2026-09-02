@@ -183,8 +183,14 @@ export function sendOAuthError(
     // The message is not a credential, but it is user-facing text about a
     // failed sign-in; keep it out of Referer like the mobile branch does.
     res.set('Referrer-Policy', 'no-referrer');
+    // Always set by the time a callback runs: `getRedirectUri` needs it to
+    // start the flow at all.
+    const siteUrl = getConfig('_system.site.url') as string;
     return res.redirect(
-      buildOAuthErrorRedirect(authConfig.oauthErrorRedirectUrl, { error: errorMessage, errorCode })
+      buildOAuthErrorRedirect(siteUrl, authConfig.oauthErrorRedirectUrl, {
+        error: errorMessage,
+        errorCode,
+      })
     );
   }
 
