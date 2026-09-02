@@ -24,6 +24,8 @@
  * the app and its own server.
  */
 
+import { randomHex } from './randomHex';
+
 /** Verifier length in characters. 32 bytes of entropy, hex-encoded. */
 const VERIFIER_BYTES = 32;
 
@@ -55,32 +57,6 @@ function getSessionStorage(): Storage | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Random hex string from the best source the runtime offers.
- *
- * Bare React Native has no `crypto.getRandomValues`, so `Math.random` is the
- * fallback. It is weaker than a CSPRNG, but the verifier only needs to resist an
- * attacker who cannot read process memory — and one who can has already won.
- */
-function randomHex(byteLength: number): string {
-  const bytes = new Uint8Array(byteLength);
-
-  const cryptoObj = (globalThis as { crypto?: Crypto }).crypto;
-  if (cryptoObj?.getRandomValues) {
-    cryptoObj.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  let out = '';
-  for (const byte of bytes) {
-    out += byte.toString(16).padStart(2, '0');
-  }
-  return out;
 }
 
 /**

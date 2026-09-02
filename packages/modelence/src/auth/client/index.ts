@@ -8,6 +8,11 @@ import {
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
+import {
+  isMessageTarget,
+  offerVerifierToPopup,
+  requestVerifierFromOpener,
+} from './oauthPopupHandoff';
 import { consumeOAuthVerifier, startOAuthVerifier } from './oauthVerifier';
 
 export type UserInfo = {
@@ -336,13 +341,21 @@ export async function signInWithOAuth(options: {
       `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile` +
       `&redirectUri=${encodeURIComponent(redirectUri)}` +
       `&codeChallenge=${encodeURIComponent(codeChallenge)}`;
-    config.openUrl(url);
+    const opened = config.openUrl(url);
+
+    // `openUrl` returned the popup it opened: let the callback page running in
+    // it fetch the verifier from here. Needed when this page is an iframe whose
+    // storage the popup cannot see; harmless otherwise. `consumeOAuthVerifier`
+    // is what answers, so the verifier is handed out once and then gone here.
+    if (isMessageTarget(opened)) {
+      offerVerifierToPopup(opened, consumeOAuthVerifier);
+    }
     return;
   }
 
   const webUrl = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
   if (config?.openUrl) {
-    config.openUrl(webUrl);
+    void config.openUrl(webUrl);
     return;
   }
 
@@ -359,8 +372,11 @@ export async function signInWithOAuth(options: {
  * Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
  * a code back to your app. It works on native and under Expo Web, where the
  * verifier is kept in `sessionStorage` so it survives the navigation to the
- * provider. A plain web app that calls `signInWithOAuth({ provider })` with no
- * `redirectUri` is signed in by a session cookie and never needs this.
+ * provider. When the flow ran in a popup whose `openUrl` returned the window
+ * it opened, the verifier is fetched from the opening page instead, so it also
+ * works when the app is embedded in a cross-origin iframe. A plain web app
+ * that calls `signInWithOAuth({ provider })` with no `redirectUri` is signed
+ * in by a session cookie and never needs this.
  *
  * The verifier minted by `signInWithOAuth` is replayed here, which is what
  * makes a code usable only by the client that started the flow. Calling this
@@ -376,7 +392,10 @@ export async function signInWithOAuth(options: {
 export async function loginWithOAuth(options: { code: string }) {
   const { code } = options;
 
-  const codeVerifier = consumeOAuthVerifier();
+  // A popup asks the page that opened it first; that page holds the verifier
+  // in memory even when this popup's storage is partitioned away from it. With
+  // no opener, or one that does not answer, this page's own storage applies.
+  const codeVerifier = (await requestVerifierFromOpener()) ?? consumeOAuthVerifier();
   if (!codeVerifier) {
     // Thrown mid-flow, so apps surface it in the UI: the thrown message is for
     // the end user, the console line for whoever is debugging.
@@ -386,6 +405,8 @@ export async function loginWithOAuth(options: { code: string }) {
         'from somewhere other than a flow this client started. On native, the app ' +
         'process must survive the round trip; in a browser the verifier is kept in ' +
         'sessionStorage, so a new tab or a cleared session also produces this. ' +
+        'If the app runs in an iframe and opens the provider in a popup, openUrl ' +
+        'must return the window from window.open so the popup can ask this page. ' +
         'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
         'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
     );
@@ -457,7 +478,7 @@ export async function linkOAuthProvider(options: {
       `${baseUrl}/api/_internal/auth/${provider}?mode=link` +
       `&linkNonce=${encodeURIComponent(nonce)}` +
       `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
-    config.openUrl(url);
+    void config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).
     const token = getAuthToken();

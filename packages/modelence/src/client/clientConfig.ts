@@ -1,5 +1,12 @@
 import type { ClientInfo } from '@/methods/types';
 
+/**
+ * What `openUrl` may return. A `Window` (from `window.open`) enables the popup
+ * handoff described on {@link ClientConfig.openUrl}; anything else — including
+ * the `Promise` from `Linking.openURL` — is accepted and ignored.
+ */
+export type OpenUrlResult = void | Window | null | Promise<unknown>;
+
 export interface ClientConfig {
   baseUrl: string;
   getAuthToken: () => string | undefined;
@@ -9,8 +16,15 @@ export interface ClientConfig {
    * Opens a URL for OAuth redirects. React Native must use
    * `(url) => Linking.openURL(url)` — WebView is not supported.
    * Defaults to `window.location.href` when not provided.
+   *
+   * A web client that opens the flow in a popup should return the window
+   * `window.open` gave it: `(url) => window.open(url)`. With that reference the
+   * callback page in the popup can obtain the sign-in verifier from this page
+   * directly, which is what makes `loginWithOAuth` work when the app itself
+   * runs inside a cross-origin iframe and the popup's storage is partitioned
+   * away from it. Any other return value is ignored.
    */
-  openUrl?: (url: string) => void;
+  openUrl?: (url: string) => OpenUrlResult;
   /**
    * Credentials mode for method-call requests. Defaults to `'include'`, which
    * browser apps need for the cookie-based flows (password reset, magic link).
