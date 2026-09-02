@@ -225,7 +225,7 @@ describe('auth/providers/google', () => {
 
   test('callback handler returns 400 when state invalid', async () => {
     mockValidateOAuthStateAndGetMode.mockImplementationOnce((req, res) => {
-      mockSendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
+      mockSendOAuthError(res, 400, 'Your sign-in session has expired. Please sign in again.');
       return null;
     });
     const route = findRoute('/api/_internal/auth/google/callback');
@@ -243,7 +243,7 @@ describe('auth/providers/google', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(
       res,
       400,
-      'Invalid OAuth state - possible CSRF attack'
+      'Your sign-in session has expired. Please sign in again.'
     );
   });
 

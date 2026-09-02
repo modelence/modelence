@@ -184,6 +184,7 @@ export function sendOAuthError(
       console.error('Unhandled error in authConfig.errorComponent:', err);
     }
   }
+
   return response.json({ error: errorMessage });
 }
 
@@ -677,10 +678,17 @@ export function validateOAuthStateAndGetMode(
     // Deep-link the failure back when the decoded target survives re-validation,
     // rather than stranding the user on JSON. Trusted because the allowlist just
     // approved it, not because the cookie said so.
+    //
+    // The message says "sign in again" rather than naming CSRF: the overwhelming
+    // majority of the users who see it are victims of an expired cookie, a stale
+    // bookmarked callback, or a back button — not of an attack. Someone actually
+    // forging a state learns nothing from being told so, while everyone else is
+    // handed an accusation instead of the one action that fixes it. `invalid_state`
+    // still identifies the case precisely for anything branching on it.
     sendOAuthError(
       res,
       400,
-      'Invalid OAuth state - possible CSRF attack',
+      'Your sign-in session has expired. Please sign in again.',
       mobileOutcome ?? { platform: 'web' },
       'invalid_state'
     );
