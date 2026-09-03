@@ -118,26 +118,24 @@ async function tickCronJobs() {
   }
 
   const jobs = Object.values(cronJobs);
-
-  for (const job of jobs) {
-    const { alias, params, state } = job;
-    if (state.isRunning && state.startTs && state.startTs + params.timeout < now) {
-      const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
-      captureError(timeoutError);
-      state.isRunning = false;
-    }
-  }
-
   let usedCapacity = getUsedCapacity(jobs);
 
   for (const job of jobs) {
-    const { params, state } = job;
+    const { alias, params, state } = job;
+
     if (state.isRunning) {
+      if (state.startTs && state.startTs + params.timeout < now) {
+        const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
+        captureError(timeoutError);
+        state.isRunning = false;
+      }
       continue;
     }
+
     if (usedCapacity + params.weight > CRON_CAPACITY) {
       continue;
     }
+
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
       usedCapacity += params.weight;
       void runCronJob(job);
@@ -195,7 +193,11 @@ export default new Module('_system.cron', {
 function getUsedCapacity(jobs: CronJob[]): number {
   let used = 0;
   for (const job of jobs) {
-    if (job.state.isRunning) {
+    const { params, state } = job;
+    if (state.isRunning) {
+      if (state.startTs && state.startTs + params.timeout < Date.now()) {
+        continue;
+      }
       used += job.params.weight;
     }
   }
