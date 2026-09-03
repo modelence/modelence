@@ -9,6 +9,10 @@ import { Store } from '../data/store';
 import { acquireLock } from '../lock/helpers';
 import { getMongodbUri } from '@/db/client';
 
+/** Total capacity slots available for concurrent cron jobs. Each job's weight is deducted from this pool when running. */
+const CRON_CAPACITY = 10;
+const DEFAULT_WEIGHT = 1;
+
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 
@@ -27,6 +31,7 @@ export function defineCronJob(
     description = '',
     interval,
     timeout = Math.min(Math.max(interval, time.minutes(1)), time.days(1)),
+    weight = DEFAULT_WEIGHT,
     handler,
   }: CronJobInputParams
 ) {
@@ -48,9 +53,15 @@ export function defineCronJob(
     throw new Error(`Cron job timeout should not be longer than 1 day [${alias}]`);
   }
 
+  if (weight < 1 || weight > CRON_CAPACITY) {
+    throw new Error(
+      `Cron job weight must be between 1 and ${CRON_CAPACITY} [${alias}], got ${weight}`
+    );
+  }
+
   cronJobs[alias] = {
     alias,
-    params: { description, interval, timeout },
+    params: { description, interval, timeout, weight },
     handler,
     state: {
       isRunning: false,
@@ -106,23 +117,30 @@ async function tickCronJobs() {
     return;
   }
 
-  Object.values(cronJobs).forEach(async (job) => {
+  const jobs = Object.values(cronJobs);
+  let usedCapacity = getUsedCapacity(jobs);
+
+  for (const job of jobs) {
     const { alias, params, state } = job;
+
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
         const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
         captureError(timeoutError);
         state.isRunning = false;
       }
-      return;
+      continue;
     }
 
-    // TODO: limit the number of jobs running concurrently
+    if (usedCapacity + params.weight > CRON_CAPACITY) {
+      continue;
+    }
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      await runCronJob(job);
+      usedCapacity += params.weight;
+      void runCronJob(job);
     }
-  });
+  }
 }
 
 async function runCronJob(job: CronJob) {
@@ -164,12 +182,27 @@ export function getCronJobsMetadata() {
     description: params.description,
     interval: params.interval,
     timeout: params.timeout,
+    weight: params.weight,
   }));
 }
 
 export default new Module('_system.cron', {
   stores: [cronJobsCollection],
 });
+
+function getUsedCapacity(jobs: CronJob[]): number {
+  let used = 0;
+  for (const job of jobs) {
+    const { params, state } = job;
+    if (state.isRunning) {
+      if (state.startTs && state.startTs + params.timeout < Date.now()) {
+        continue;
+      }
+      used += job.params.weight;
+    }
+  }
+  return used;
+}
 
 // const runCronJob = () => {
 //   const worker = new Worker(filePath, {
