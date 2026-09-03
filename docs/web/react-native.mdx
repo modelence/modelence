@@ -112,7 +112,7 @@ Modelence's client library works in React Native. Because React Native lacks bro
 | `getAuthToken` | `() => string \| undefined` | Returns the stored auth token synchronously. Called before every request — must not return a `Promise`. |
 | `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token synchronously. Called after login and logout. Async side-effects (e.g. writing to `AsyncStorage`) are fine as long as the function itself is not `async`. |
 | `getClientInfo` | `() => ClientInfo` | Returns device screen dimensions and pixel ratio. Used for telemetry. |
-| `openUrl` | `(url: string) => void` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. |
+| `openUrl` | `(url: string) => unknown` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. On the web, return the result of `window.open` to run the flow in a popup — see [Embedded previews and popups](#embedded-previews-and-popups). |
 
 ## Using authentication
 
@@ -340,6 +340,44 @@ export default function AuthCallback() {
   `Linking.createURL('auth')` returns a different value in each — see the table
   below. Add the Expo Web origin alongside your native scheme.
 </Note>
+
+### Embedded previews and popups
+
+When your web build runs inside a **cross-origin iframe** — an embedded preview,
+a sandbox, a hosted playground — it cannot navigate in place: Google and GitHub
+refuse to render their consent screen inside an iframe. The flow has to run in a
+real top-level popup instead. Have `openUrl` open one and **return it**:
+
+```typescript
+configureClient({
+  // ...
+  openUrl: (url) => window.open(url),
+});
+```
+
+That return value is what makes the popup case work. Once the popup is a
+top-level window, browsers partition its `sessionStorage` away from the iframe's
+(Chrome storage partitioning, Safari ITP), so the callback page in the popup
+cannot see the verifier the iframe stored. With the window reference in hand,
+Modelence instead answers the popup's request for the verifier directly over
+`postMessage` — only to that exact window, only on your own origin, and only
+once. The verifier never appears in a URL and is never written anywhere the
+iframe's storage would not already reach.
+
+The callback route is the same `app/auth.tsx` as above: `loginWithOAuth({ code })`
+reads its own storage first and asks its opener only when that is empty, so a
+same-tab flow is unaffected. The session is established **in the popup**; hand
+it to the embedding page from your callback route (for example by posting the
+token to `window.opener` on your own origin, then closing the popup) if that is
+where the user continues.
+
+<Warning>
+  The handoff relies on the popup keeping its `window.opener` across the
+  provider round trip. A provider page that sends
+  `Cross-Origin-Opener-Policy: same-origin` severs that link, in which case
+  `loginWithOAuth` has nothing to ask and fails in the partitioned iframe case
+  as before.
+</Warning>
 
 ### Plain web apps (no React Native)
 
