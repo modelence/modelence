@@ -150,7 +150,9 @@ async function ensureClaudePluginEnabled(): Promise<void> {
           2
         ) + '\n'
       );
-      console.log(`Enabled the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
+      console.log(
+        `Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE} — Claude Code will show the install command when you open this project`
+      );
     } catch (error) {
       console.warn(`Failed to create ${CLAUDE_SETTINGS_FILE}:`, error);
     }
@@ -258,12 +260,11 @@ export async function setup(options: { token?: string; host: string }) {
     await ensureClaudePluginEnabled();
 
     if (fileExisted) {
-      // Anything that read the old file holds stale credentials: the dev
-      // server loads it at boot, and MCP connections send its token per
-      // connection.
+      // The dev server reads the file at boot, and an open agent session may
+      // still hold the old environment id in its context.
       console.log(
         'The project now points to a different environment. Restart your dev server, and if you use ' +
-          'an AI coding agent, reconnect its Modelence MCP server (in Claude Code: /mcp) or start a new session.'
+          'an AI coding agent, start a new session.'
       );
     }
 
