@@ -133,55 +133,39 @@ const CLAUDE_PLUGIN_INSTALL_HINT =
   `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
 
 /*
-  Makes the Modelence Claude Code plugin available in connected projects that
-  didn't start from the template (which ships this file). Only ever creates
-  the file: an existing settings.json is the user's own — a missing or
-  explicitly disabled plugin entry there gets a hint, not an edit, so a
-  deliberate opt-out is never flipped back on. The file is inert for people
-  who don't use Claude Code, and like the project file, failing to write it
-  doesn't fail the setup.
+  Declares the Modelence Claude Code plugin in the project's settings.json,
+  merging into an existing file rather than replacing it. An explicit
+  `false` is a deliberate opt-out and is never flipped back on. The file is
+  inert for people who don't use Claude Code, and failing to write it doesn't
+  fail the setup.
 */
 async function ensureClaudePluginEnabled(): Promise<void> {
   const settingsPath = join(process.cwd(), CLAUDE_SETTINGS_FILE);
 
-  let content: string;
+  let settings: Record<string, any> = {};
   try {
-    content = await fs.readFile(settingsPath, 'utf8');
-  } catch {
-    // Missing — create it with just the plugin enabled.
-    try {
-      await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
-      await fs.writeFile(
-        settingsPath,
-        JSON.stringify(
-          {
-            extraKnownMarketplaces: CLAUDE_MARKETPLACES,
-            enabledPlugins: { [CLAUDE_PLUGIN_ID]: true },
-          },
-          null,
-          2
-        ) + '\n'
-      );
-      console.log(`Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
-    } catch (error) {
-      console.warn(`Failed to create ${CLAUDE_SETTINGS_FILE}:`, error);
+    settings = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE}; leaving it unchanged.`);
+      return;
     }
+  }
+
+  // An explicit `false` is the user's opt-out — leave it alone.
+  if (settings.enabledPlugins?.[CLAUDE_PLUGIN_ID] !== undefined) {
     return;
   }
 
+  settings.extraKnownMarketplaces = { ...settings.extraKnownMarketplaces, ...CLAUDE_MARKETPLACES };
+  settings.enabledPlugins = { ...settings.enabledPlugins, [CLAUDE_PLUGIN_ID]: true };
+
   try {
-    const settings = JSON.parse(content);
-    const enabled = settings?.enabledPlugins?.[CLAUDE_PLUGIN_ID];
-    if (enabled !== true) {
-      console.warn(
-        `Note: the Modelence plugin is ${enabled === false ? 'disabled' : 'not enabled'} in ` +
-          `${CLAUDE_SETTINGS_FILE}. To get Modelence tools and docs in Claude Code, add ` +
-          `"${CLAUDE_PLUGIN_ID}": true under "enabledPlugins", and declare the marketplace under ` +
-          `"extraKnownMarketplaces": ${JSON.stringify(CLAUDE_MARKETPLACES)}.`
-      );
-    }
-  } catch {
-    console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE} to check the Modelence plugin status.`);
+    await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    console.log(`Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
+  } catch (error) {
+    console.warn(`Failed to write ${CLAUDE_SETTINGS_FILE}:`, error);
   }
 }
 
