@@ -124,7 +124,7 @@ async function tickCronJobs() {
     if (state.isRunning && state.startTs && state.startTs + params.timeout < now) {
       const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
       captureError(timeoutError);
-      handleCronJobCompletion(state, params);
+      state.isRunning = false;
     }
   }
 
