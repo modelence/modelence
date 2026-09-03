@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
+import { spawnSync } from 'child_process';
 import { authenticateCli } from './auth';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
@@ -45,21 +46,25 @@ async function fetchServiceConfig(host: string, auth: SetupAuth): Promise<SetupR
   return response.json();
 }
 
-async function confirmOverwrite(): Promise<boolean> {
+async function ask(question: string): Promise<string> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
   return new Promise((resolve) => {
-    rl.question(
-      `Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `,
-      (answer) => {
-        rl.close();
-        resolve(answer.toLowerCase() === 'y');
-      }
-    );
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
   });
+}
+
+async function confirmOverwrite(): Promise<boolean> {
+  const answer = await ask(
+    `Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `
+  );
+  return answer.toLowerCase() === 'y';
 }
 
 function escapeEnvValue(value: string | number): string {
@@ -116,9 +121,16 @@ const CLAUDE_PLUGIN_ID = 'modelence@modelence';
 // Without the marketplace declared alongside enabledPlugins, Claude Code
 // can't resolve the plugin unless the user already ran
 // `claude plugin marketplace add` themselves.
+const CLAUDE_MARKETPLACE_REPO = 'modelence/modelence';
 const CLAUDE_MARKETPLACES = {
-  modelence: { source: { source: 'github', repo: 'modelence/modelence' } },
+  modelence: { source: { source: 'github', repo: CLAUDE_MARKETPLACE_REPO } },
 };
+const CLAUDE_PLUGIN_DOCS_URL = 'https://docs.modelence.com/ai-coding-agents';
+const CLAUDE_PLUGIN_INSTALL_HINT =
+  'Install the Modelence plugin for Claude Code by hand:\n' +
+  `  claude plugin marketplace add ${CLAUDE_MARKETPLACE_REPO}\n` +
+  `  claude plugin install ${CLAUDE_PLUGIN_ID}\n` +
+  `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
 
 /*
   Makes the Modelence Claude Code plugin available in connected projects that
@@ -150,9 +162,7 @@ async function ensureClaudePluginEnabled(): Promise<void> {
           2
         ) + '\n'
       );
-      console.log(
-        `Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE} — Claude Code will show the install command when you open this project`
-      );
+      console.log(`Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
     } catch (error) {
       console.warn(`Failed to create ${CLAUDE_SETTINGS_FILE}:`, error);
     }
@@ -172,6 +182,46 @@ async function ensureClaudePluginEnabled(): Promise<void> {
     }
   } catch {
     console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE} to check the Modelence plugin status.`);
+  }
+}
+
+function runClaude(args: string[]) {
+  return spawnSync('claude', args, { encoding: 'utf8', shell: process.platform === 'win32' });
+}
+
+/*
+  Installs the plugin through the Claude Code CLI — the one install path that
+  behaves the same for the terminal, the IDE extensions and the desktop app,
+  which all read the same plugin state. Touches the user's machine-wide Claude
+  config, so it asks first, and it never fails the setup: without the CLI on
+  PATH it prints the commands to run by hand.
+*/
+async function offerClaudePluginInstall(): Promise<void> {
+  const probe = runClaude(['--version']);
+  if (probe.error || probe.status !== 0) {
+    console.log(CLAUDE_PLUGIN_INSTALL_HINT);
+    return;
+  }
+
+  const answer = await ask('Install the Modelence plugin for Claude Code? (Y/n) ');
+  if (answer && answer.toLowerCase() !== 'y') {
+    return;
+  }
+
+  // Idempotent, and makes the install work before Claude Code has picked up
+  // the marketplace declared in .claude/settings.json.
+  runClaude(['plugin', 'marketplace', 'add', CLAUDE_MARKETPLACE_REPO]);
+  const install = runClaude(['plugin', 'install', CLAUDE_PLUGIN_ID, '--scope', 'project']);
+  if (install.status === 0) {
+    console.log(
+      'Installed the Modelence plugin for Claude Code. Sign in once from Claude Code: ' +
+        'run /mcp, choose modelence, then Authenticate.'
+    );
+  } else {
+    console.warn(
+      `Could not install the Modelence plugin: ${(install.stderr || install.stdout || '').trim()}`
+    );
+    console.warn(CLAUDE_PLUGIN_INSTALL_HINT);
   }
 }
 
@@ -258,6 +308,11 @@ export async function setup(options: { token?: string; host: string }) {
     }
 
     await ensureClaudePluginEnabled();
+    // Interactive runs only: with --token (CI) or without a terminal there is
+    // nobody to ask, and no Claude Code to set up.
+    if (!options.token && process.stdin.isTTY) {
+      await offerClaudePluginInstall();
+    }
 
     if (fileExisted) {
       // The dev server reads the file at boot, and an open agent session may

@@ -28,87 +28,45 @@ The `modelence` plugin gives Claude Code:
 It works everywhere Claude Code runs: the terminal CLI, the desktop app, and the VS Code and JetBrains
 extensions.
 
-### Install the plugin
+### Installing
 
-New Modelence projects declare the plugin in `.claude/settings.json`, which tells Claude Code where to
-find it. Claude Code doesn't install plugins from external marketplaces on its own, so each person
-installs it once per machine. How depends on where you run Claude Code:
+`npx modelence@latest setup` installs the plugin for you. After connecting the project it offers to
+install the plugin through the Claude Code CLI, which works the same whether you use Claude Code in the
+terminal, in VS Code or JetBrains, or in the Claude desktop app. Say yes and you're done.
 
-<Tabs>
-  <Tab title="Terminal">
-    Start Claude Code in the project folder and, if asked, trust the folder. Claude Code notices the
-    plugin isn't installed and shows the command to run:
+To install it yourself — or to reinstall it after it was removed — run these two commands in a
+terminal:
 
-    ```
-    /plugin install modelence@modelence
-    ```
+```bash
+claude plugin marketplace add modelence/modelence
+claude plugin install modelence@modelence
+```
 
-    If it reports that the `modelence` marketplace isn't found, add it first and retry the install:
+If a Claude Code session is already open, run `/reload-plugins` in it or start a new session. To
+confirm, run `/plugin`: `modelence` should appear under installed plugins.
 
-    ```
-    /plugin marketplace add modelence/modelence
-    ```
-
-    The install summary says whether the plugin is already active. If it says to run
-    `/reload-plugins`, run it — or start a new session.
-  </Tab>
-  <Tab title="VS Code / JetBrains">
-    Open the project folder, open the Claude Code panel from the sidebar and, if asked, trust the
-    folder. Type `/plugins` in the prompt box to open **Manage plugins**, find **Modelence** under the
-    available plugins and click **Install**.
-
-    If it isn't listed, switch to the **Marketplaces** tab, enter `modelence/modelence` to add the
-    Modelence marketplace, then go back to the **Plugins** tab.
-
-    After installing, a banner asks you to restart Claude Code — accept it. If nothing changes, reload
-    the window from the Command Palette with **Developer: Reload Window**.
-  </Tab>
-  <Tab title="Claude Desktop">
-    In the **Code** tab, start a session in the project folder. Click **+** next to the prompt box,
-    then **Plugins** → **Add plugin**, find **Modelence** and install it.
-
-    If it isn't listed, the Modelence marketplace hasn't been added on this machine yet. Open the
-    session's terminal (from the **Views** menu, or with Ctrl+`) and run:
-
-    ```
-    claude plugin marketplace add modelence/modelence
-    ```
-
-    then open **Add plugin** again. This needs the [Claude Code CLI](https://code.claude.com/docs/en/setup)
-    installed. Once installed, start a new session so the plugin loads; if it still doesn't appear under
-    **Plugins**, quit Claude completely and reopen it.
-  </Tab>
-</Tabs>
-
-You can confirm it's active by running `/plugin` and looking for `modelence` in the list of installed
-plugins.
+<Note>
+The plugin requires Claude Code v2.1.195 or later, and the `claude` command on your PATH. The desktop
+app and the IDE extensions bundle their own private copy, so if `claude` isn't found, install the CLI
+from [code.claude.com](https://code.claude.com/docs/en/setup) first.
+</Note>
 
 ### Sign in to Modelence
 
 The plugin's `modelence` MCP server — the one that reads your environments — needs a one-time sign-in
-with your Modelence account. Until then Claude Code lists the server as needing authentication and its
-tools are unavailable; the rest of the plugin works regardless.
+with your Modelence account. In Claude Code, run `/mcp`, choose `modelence`, then **Authenticate**. Your
+browser opens — sign in and choose the organization your app belongs to. Claude Code stores the sign-in
+per server, so it covers every Modelence project on your machine.
 
-<Tabs>
-  <Tab title="Terminal, VS Code, JetBrains">
-    Run `/mcp`, choose `modelence`, then **Authenticate**. Your browser opens — sign in and choose the
-    organization your app belongs to. Back in Claude Code the server shows as connected; no restart is
-    needed.
-  </Tab>
-  <Tab title="Claude Desktop">
-    Click **+** next to the prompt box, then **Plugins** → **Modelence**, and click **Connect** next
-    to the `modelence` server. Your browser opens — sign in and choose the organization your app
-    belongs to. If the panel still shows the server as not connected afterwards, start a new session.
-  </Tab>
-</Tabs>
-
-Claude Code stores the sign-in per server, so it covers every Modelence project on your machine. See
+Until you sign in, Claude Code lists the server as needing authentication and its tools are unavailable;
+the rest of the plugin works regardless. See
 [Inspecting your environment](#inspecting-your-environment) for what the sign-in grants.
 
-### Adding it to an existing project
+### Sharing it with your team
 
-Projects created before the plugin existed — or ones where the configuration was removed — need it
-added once. Commit a `.claude/settings.json` file at the repository root:
+Setup also writes a `.claude/settings.json` to the project, which tells Claude Code where the plugin
+comes from. Commit it: teammates who open the project are prompted to install the plugin, and running
+`npx modelence@latest setup` on their clone installs it for them. This is what the file contains:
 
 ```json .claude/settings.json
 {
@@ -126,23 +84,7 @@ added once. Commit a `.claude/settings.json` file at the repository root:
 }
 ```
 
-This is the same file new projects ship with. Committing it means everyone on the team is prompted to
-install the plugin when they open the project, and the setting stays project-scoped — it doesn't
-affect your other projects.
-
-If you'd rather install it only for yourself, without committing anything, run these in a Claude Code
-session instead:
-
-```
-/plugin marketplace add modelence/modelence
-/plugin install modelence@modelence
-```
-
-<Note>
-The plugin requires a recent Claude Code (v2.1.195 or later). If `/plugin` isn't recognized, or the
-plugin's `modelence` MCP server fails to connect, update by running `claude update` and start a new
-session.
-</Note>
+The setting is project-scoped — it doesn't affect your other projects.
 
 ## The local workflow
 

@@ -25,19 +25,9 @@ email, cron jobs, and cloud deployment.
 
 ## Installation
 
-Projects created from the Modelence app template, or connected with `npx modelence@latest setup`,
-declare the plugin in `.claude/settings.json`; Claude Code shows the install command the
-first time you open such a project. To install it anywhere else:
-
-```bash
-claude plugin marketplace add modelence/modelence
-claude plugin install modelence@modelence
-```
-
-The `modelence` MCP server then needs a one-time sign-in with your Modelence account
-(`/mcp` → `modelence` → **Authenticate**). Step-by-step instructions for the terminal,
-VS Code, JetBrains and the Claude desktop app — installing, reloading, and signing in —
-are in the docs: [docs.modelence.com/ai-coding-agents](https://docs.modelence.com/ai-coding-agents#claude-code-plugin).
+`npx modelence@latest setup` installs the plugin when it connects a project. Manual install,
+reinstall, and the one-time sign-in for the `modelence` MCP server are covered in the docs:
+[docs.modelence.com/ai-coding-agents](https://docs.modelence.com/ai-coding-agents#claude-code-plugin).
 
 ## Usage
 
