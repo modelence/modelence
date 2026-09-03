@@ -355,7 +355,7 @@ export async function signInWithOAuth(options: {
 
   const webUrl = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
   if (config?.openUrl) {
-    void config.openUrl(webUrl);
+    config.openUrl(webUrl);
     return;
   }
 
@@ -373,8 +373,9 @@ export async function signInWithOAuth(options: {
  * a code back to your app. It works on native and under Expo Web, where the
  * verifier is kept in `sessionStorage` so it survives the navigation to the
  * provider. When the flow ran in a popup whose `openUrl` returned the window
- * it opened, the verifier is fetched from the opening page instead, so it also
- * works when the app is embedded in a cross-origin iframe. A plain web app
+ * it opened, the verifier is fetched from the opening page when this page's
+ * storage has none, so it also works when the app is embedded in a
+ * cross-origin iframe. A plain web app
  * that calls `signInWithOAuth({ provider })` with no `redirectUri` is signed
  * in by a session cookie and never needs this.
  *
@@ -392,10 +393,11 @@ export async function signInWithOAuth(options: {
 export async function loginWithOAuth(options: { code: string }) {
   const { code } = options;
 
-  // A popup asks the page that opened it first; that page holds the verifier
-  // in memory even when this popup's storage is partitioned away from it. With
-  // no opener, or one that does not answer, this page's own storage applies.
-  const codeVerifier = (await requestVerifierFromOpener()) ?? consumeOAuthVerifier();
+  // Own storage first: it is authoritative on native and for a same-tab flow.
+  // Only a popup whose storage is partitioned away from the page that opened
+  // it comes up empty here; that page still holds the verifier in memory, so
+  // the popup asks it.
+  const codeVerifier = consumeOAuthVerifier() ?? (await requestVerifierFromOpener());
   if (!codeVerifier) {
     // Thrown mid-flow, so apps surface it in the UI: the thrown message is for
     // the end user, the console line for whoever is debugging.
@@ -478,7 +480,7 @@ export async function linkOAuthProvider(options: {
       `${baseUrl}/api/_internal/auth/${provider}?mode=link` +
       `&linkNonce=${encodeURIComponent(nonce)}` +
       `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
-    void config.openUrl(url);
+    config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).
     const token = getAuthToken();

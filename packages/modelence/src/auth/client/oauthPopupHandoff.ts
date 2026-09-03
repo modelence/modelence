@@ -13,34 +13,29 @@
  * The verifier still lives in memory on the page that minted it, and that page
  * holds the `Window` reference `window.open` returned. So the callback page
  * asks its opener for the verifier over `postMessage`, and the opener answers
- * only that popup, only on its own origin, only once. The channel is exactly as
- * trusted as the tab that called `signInWithOAuth`: no more than the in-memory
- * copy it serves, and nothing weaker (no `localStorage`, no URL) is used.
+ * only that popup, only on its own origin, only once. Identity on both sides is
+ * the window reference itself (`event.source`), which no other frame can forge,
+ * so the messages carry no nonce. The channel is exactly as trusted as the tab
+ * that called `signInWithOAuth`: no more than the in-memory copy it serves, and
+ * nothing weaker (no `localStorage`, no URL) is used.
  */
-
-import { randomHex } from './randomHex';
 
 const REQUEST_TYPE = 'modelence:oauth-verifier-request';
 const REPLY_TYPE = 'modelence:oauth-verifier-reply';
 
 /**
- * How long the callback page waits for its opener before falling back to
- * storage. A live opener answers in a single event-loop turn; the timeout only
- * matters when the opener is some unrelated page that will never answer.
+ * How long the callback page waits for its opener before giving up. A live
+ * opener answers in a single event-loop turn; the timeout only matters when
+ * the opener is some unrelated page that will never answer.
  */
 const REPLY_TIMEOUT_MS = 3000;
 
-/** Nonce length in bytes. Correlates one request with its reply, nothing more. */
-const NONCE_BYTES = 16;
-
 interface VerifierRequest {
   type: typeof REQUEST_TYPE;
-  nonce: string;
 }
 
 interface VerifierReply {
   type: typeof REPLY_TYPE;
-  nonce: string;
   verifier: string | null;
 }
 
@@ -86,19 +81,13 @@ export function isMessageTarget(value: unknown): value is MessageTarget {
 }
 
 function isVerifierRequest(data: unknown): data is VerifierRequest {
-  if (typeof data !== 'object' || data === null) return false;
-  const d = data as Partial<VerifierRequest>;
-  return d.type === REQUEST_TYPE && typeof d.nonce === 'string';
+  return (data as Partial<VerifierRequest> | null)?.type === REQUEST_TYPE;
 }
 
 function isVerifierReply(data: unknown): data is VerifierReply {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Partial<VerifierReply>;
-  return (
-    d.type === REPLY_TYPE &&
-    typeof d.nonce === 'string' &&
-    (typeof d.verifier === 'string' || d.verifier === null)
-  );
+  return d.type === REPLY_TYPE && (typeof d.verifier === 'string' || d.verifier === null);
 }
 
 /** Tears down the listener of the most recent `offerVerifierToPopup`. */
@@ -135,11 +124,7 @@ export function offerVerifierToPopup(
 
     cancelPopupHandoff();
 
-    const reply: VerifierReply = {
-      type: REPLY_TYPE,
-      nonce: event.data.nonce,
-      verifier: takeVerifier(),
-    };
+    const reply: VerifierReply = { type: REPLY_TYPE, verifier: takeVerifier() };
     // Explicit target origin: if the popup has since navigated elsewhere, the
     // browser drops the message rather than delivering it to a foreign page.
     popup.postMessage(reply, origin);
@@ -160,8 +145,7 @@ export function cancelPopupHandoff(): void {
  *
  * Resolves with `null` when there is no opener, the opener never answers
  * (it is not a Modelence page, or is on another origin), or it has nothing
- * left to give. Callers fall back to their own storage in every such case, so
- * a flow that did not go through a popup is unaffected.
+ * left to give.
  */
 export function requestVerifierFromOpener(): Promise<string | null> {
   const w = getWindow();
@@ -169,7 +153,6 @@ export function requestVerifierFromOpener(): Promise<string | null> {
   if (!w || !isMessageTarget(opener)) return Promise.resolve(null);
 
   const origin = w.location.origin;
-  const nonce = randomHex(NONCE_BYTES);
 
   return new Promise((resolve) => {
     let settled = false;
@@ -185,14 +168,14 @@ export function requestVerifierFromOpener(): Promise<string | null> {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== opener) return;
       if (event.origin !== origin) return;
-      if (!isVerifierReply(event.data) || event.data.nonce !== nonce) return;
+      if (!isVerifierReply(event.data)) return;
       finish(event.data.verifier);
     };
 
     const timer = setTimeout(() => finish(null), REPLY_TIMEOUT_MS);
     w.addEventListener('message', onMessage);
 
-    const request: VerifierRequest = { type: REQUEST_TYPE, nonce };
+    const request: VerifierRequest = { type: REQUEST_TYPE };
     try {
       // Explicit target origin: a cross-origin opener never receives this.
       opener.postMessage(request, origin);

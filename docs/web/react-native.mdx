@@ -112,7 +112,7 @@ Modelence's client library works in React Native. Because React Native lacks bro
 | `getAuthToken` | `() => string \| undefined` | Returns the stored auth token synchronously. Called before every request — must not return a `Promise`. |
 | `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token synchronously. Called after login and logout. Async side-effects (e.g. writing to `AsyncStorage`) are fine as long as the function itself is not `async`. |
 | `getClientInfo` | `() => ClientInfo` | Returns device screen dimensions and pixel ratio. Used for telemetry. |
-| `openUrl` | `(url: string) => void \| Window \| null \| Promise<unknown>` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. On the web, return the result of `window.open` to run the flow in a popup — see [Embedded previews and popups](#embedded-previews-and-popups). |
+| `openUrl` | `(url: string) => unknown` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. On the web, return the result of `window.open` to run the flow in a popup — see [Embedded previews and popups](#embedded-previews-and-popups). |
 
 ## Using authentication
 
@@ -365,7 +365,7 @@ once. The verifier never appears in a URL and is never written anywhere the
 iframe's storage would not already reach.
 
 The callback route is the same `app/auth.tsx` as above: `loginWithOAuth({ code })`
-asks its opener first and falls back to storage when there is none, so a
+reads its own storage first and asks its opener only when that is empty, so a
 same-tab flow is unaffected. The session is established **in the popup**; hand
 it to the embedding page from your callback route (for example by posting the
 token to `window.opener` on your own origin, then closing the popup) if that is
@@ -375,8 +375,8 @@ where the user continues.
   The handoff relies on the popup keeping its `window.opener` across the
   provider round trip. A provider page that sends
   `Cross-Origin-Opener-Policy: same-origin` severs that link, in which case
-  `loginWithOAuth` falls back to storage and fails in the partitioned iframe
-  case as before.
+  `loginWithOAuth` has nothing to ask and fails in the partitioned iframe case
+  as before.
 </Warning>
 
 ### Plain web apps (no React Native)

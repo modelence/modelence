@@ -43,12 +43,10 @@ type FakeWindow = ReturnType<typeof makeWindow>;
 const ORIGIN = 'https://app.example.com';
 
 /** Message the popup sends; the shape a probing frame would also know. */
-function request(nonce: string) {
-  return { type: 'modelence:oauth-verifier-request', nonce };
-}
+const REQUEST = { type: 'modelence:oauth-verifier-request' };
 
-function reply(nonce: string, verifier: string | null) {
-  return { type: 'modelence:oauth-verifier-reply', nonce, verifier };
+function reply(verifier: string | null) {
+  return { type: 'modelence:oauth-verifier-reply', verifier };
 }
 
 describe('auth/client/oauthPopupHandoff', () => {
@@ -88,31 +86,12 @@ describe('auth/client/oauthPopupHandoff', () => {
       takeVerifier = vi.fn<() => string | null>(() => 'the-verifier');
     });
 
-    test('answers a request from the popup it opened, on its own origin', () => {
+    test('answers a request from the popup it opened, on its own origin only', () => {
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n1') });
+      opener.deliver({ source: popup, origin: ORIGIN, data: REQUEST });
 
-      expect(popup.posted).toEqual([
-        { message: reply('n1', 'the-verifier'), targetOrigin: ORIGIN },
-      ]);
-    });
-
-    // Correlation: the popup only trusts a reply carrying the nonce it sent.
-    test('echoes the request nonce in the reply', () => {
-      offerVerifierToPopup(popup, takeVerifier);
-
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('specific-nonce') });
-
-      expect((popup.posted[0].message as { nonce: string }).nonce).toBe('specific-nonce');
-    });
-
-    test('posts with an explicit target origin, never "*"', () => {
-      offerVerifierToPopup(popup, takeVerifier);
-
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n1') });
-
-      expect(popup.posted[0].targetOrigin).toBe(ORIGIN);
+      expect(popup.posted).toEqual([{ message: reply('the-verifier'), targetOrigin: ORIGIN }]);
     });
 
     // Another frame or tab on the same origin that knows the message shape
@@ -122,7 +101,7 @@ describe('auth/client/oauthPopupHandoff', () => {
       const probe = makeWindow(ORIGIN);
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: probe, origin: ORIGIN, data: request('n1') });
+      opener.deliver({ source: probe, origin: ORIGIN, data: REQUEST });
 
       expect(takeVerifier).not.toHaveBeenCalled();
       expect(probe.posted).toEqual([]);
@@ -134,7 +113,7 @@ describe('auth/client/oauthPopupHandoff', () => {
     test('ignores a request from the popup while it is on another origin', () => {
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: popup, origin: 'https://evil.example', data: request('n1') });
+      opener.deliver({ source: popup, origin: 'https://evil.example', data: REQUEST });
 
       expect(takeVerifier).not.toHaveBeenCalled();
       expect(popup.posted).toEqual([]);
@@ -155,8 +134,8 @@ describe('auth/client/oauthPopupHandoff', () => {
     test('answers at most once', () => {
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n1') });
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n2') });
+      opener.deliver({ source: popup, origin: ORIGIN, data: REQUEST });
+      opener.deliver({ source: popup, origin: ORIGIN, data: REQUEST });
 
       expect(takeVerifier).toHaveBeenCalledTimes(1);
       expect(popup.posted).toHaveLength(1);
@@ -169,28 +148,28 @@ describe('auth/client/oauthPopupHandoff', () => {
       offerVerifierToPopup(firstPopup, takeVerifier);
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: firstPopup, origin: ORIGIN, data: request('n1') });
+      opener.deliver({ source: firstPopup, origin: ORIGIN, data: REQUEST });
 
       expect(firstPopup.posted).toEqual([]);
       expect(opener.listenerCount()).toBe(1);
     });
 
-    // Already consumed — say so, so the popup falls back at once instead of
+    // Already consumed — say so, so the popup fails at once instead of
     // waiting out its timeout.
     test('replies with null when there is no verifier left', () => {
       takeVerifier.mockReturnValue(null);
       offerVerifierToPopup(popup, takeVerifier);
 
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n1') });
+      opener.deliver({ source: popup, origin: ORIGIN, data: REQUEST });
 
-      expect(popup.posted).toEqual([{ message: reply('n1', null), targetOrigin: ORIGIN }]);
+      expect(popup.posted).toEqual([{ message: reply(null), targetOrigin: ORIGIN }]);
     });
 
     test('cancelPopupHandoff removes the listener', () => {
       offerVerifierToPopup(popup, takeVerifier);
 
       cancelPopupHandoff();
-      opener.deliver({ source: popup, origin: ORIGIN, data: request('n1') });
+      opener.deliver({ source: popup, origin: ORIGIN, data: REQUEST });
 
       expect(opener.listenerCount()).toBe(0);
       expect(popup.posted).toEqual([]);
@@ -213,36 +192,15 @@ describe('auth/client/oauthPopupHandoff', () => {
       vi.stubGlobal('window', popup);
     });
 
-    function sentNonce(): string {
-      return (opener.posted[0].message as { nonce: string }).nonce;
-    }
-
     test('asks the opener on its own origin and resolves with the reply', async () => {
       const pending = requestVerifierFromOpener();
 
-      expect(opener.posted).toHaveLength(1);
-      expect(opener.posted[0].targetOrigin).toBe(ORIGIN);
-      expect(opener.posted[0].message).toEqual(request(sentNonce()));
+      expect(opener.posted).toEqual([{ message: REQUEST, targetOrigin: ORIGIN }]);
 
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply(sentNonce(), 'the-verifier') });
+      popup.deliver({ source: opener, origin: ORIGIN, data: reply('the-verifier') });
 
       await expect(pending).resolves.toBe('the-verifier');
-    });
-
-    // The request carries a fresh nonce and nothing else — never a verifier.
-    test('sends a fresh random nonce each time', async () => {
-      const first = requestVerifierFromOpener();
-      const firstNonce = sentNonce();
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply(firstNonce, null) });
-      await first;
-
-      const second = requestVerifierFromOpener();
-      const secondNonce = (opener.posted[1].message as { nonce: string }).nonce;
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply(secondNonce, null) });
-      await second;
-
-      expect(firstNonce).toMatch(/^[0-9a-f]{32}$/);
-      expect(secondNonce).not.toBe(firstNonce);
+      expect(popup.listenerCount()).toBe(0);
     });
 
     test('resolves null right away when there is no opener', async () => {
@@ -257,20 +215,14 @@ describe('auth/client/oauthPopupHandoff', () => {
       await expect(requestVerifierFromOpener()).resolves.toBeNull();
     });
 
-    // A reply from anything but the opener is a spoof attempt; a nonce
-    // mismatch is a stale or foreign reply. Both are ignored, not trusted.
-    test('ignores replies from other windows, other origins, or other nonces', async () => {
+    // A reply from anything but the opener is a spoof attempt and is ignored,
+    // not trusted: identity is `event.source`, which no frame can forge.
+    test('ignores replies from other windows or other origins', async () => {
       const pending = requestVerifierFromOpener();
-      const nonce = sentNonce();
       const other = makeWindow(ORIGIN);
 
-      popup.deliver({ source: other, origin: ORIGIN, data: reply(nonce, 'spoofed') });
-      popup.deliver({
-        source: opener,
-        origin: 'https://evil.example',
-        data: reply(nonce, 'spoofed'),
-      });
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply('wrong-nonce', 'spoofed') });
+      popup.deliver({ source: other, origin: ORIGIN, data: reply('spoofed') });
+      popup.deliver({ source: opener, origin: 'https://evil.example', data: reply('spoofed') });
       popup.deliver({ source: opener, origin: ORIGIN, data: { type: 'unrelated' } });
 
       vi.advanceTimersByTime(3000);
@@ -279,7 +231,7 @@ describe('auth/client/oauthPopupHandoff', () => {
     });
 
     // A non-Modelence opener (the user arrived here from some other page)
-    // never answers; the caller must get its turn to try storage instead.
+    // never answers; the caller must not hang on it.
     test('times out to null when the opener never answers', async () => {
       const pending = requestVerifierFromOpener();
 
@@ -299,18 +251,9 @@ describe('auth/client/oauthPopupHandoff', () => {
     test('passes through a null reply from an opener with nothing to give', async () => {
       const pending = requestVerifierFromOpener();
 
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply(sentNonce(), null) });
+      popup.deliver({ source: opener, origin: ORIGIN, data: reply(null) });
 
       await expect(pending).resolves.toBeNull();
-    });
-
-    test('removes its listener once answered', async () => {
-      const pending = requestVerifierFromOpener();
-
-      popup.deliver({ source: opener, origin: ORIGIN, data: reply(sentNonce(), 'v') });
-      await pending;
-
-      expect(popup.listenerCount()).toBe(0);
     });
 
     test('resolves null when posting to the opener throws', async () => {
