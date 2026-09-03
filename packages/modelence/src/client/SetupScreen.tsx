@@ -119,7 +119,7 @@ export default function SetupScreen() {
 
         <ol style={styles.steps}>
           <Step number={1}>
-            Run <code style={styles.code}>npx modelence setup</code> in the project folder.
+            Run <code style={styles.code}>npx modelence@latest setup</code> in the project folder.
           </Step>
           <Step number={2}>Your browser opens &mdash; log in and choose your environment.</Step>
           <Step number={3}>

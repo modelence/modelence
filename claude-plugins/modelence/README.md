@@ -25,7 +25,7 @@ email, cron jobs, and cloud deployment.
 
 ## Installation
 
-Projects created from the Modelence app template, or connected with `npx modelence setup`,
+Projects created from the Modelence app template, or connected with `npx modelence@latest setup`,
 declare the plugin in `.claude/settings.json`; Claude Code shows the install command the
 first time you open such a project. To install it anywhere else:
 
