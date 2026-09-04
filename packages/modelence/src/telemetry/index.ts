@@ -107,3 +107,28 @@ export function captureError(error: Error) {
 
   getApm().captureError(error);
 }
+
+/**
+ * Single sink for server-side error reporting (method + route handlers).
+ *
+ * Elastic APM on → the error goes to APM once. Off (or APM unavailable) →
+ * the console is the only sink, so it goes to stderr where the container log
+ * driver picks it up. Never throws, so it is safe to call from Express catch
+ * blocks without breaking the response.
+ */
+export function reportError(error: unknown, message: string) {
+  try {
+    if (!isTelemetryEnabled()) {
+      console.error(`${message}:`, error);
+      return;
+    }
+    const apm = getApm();
+    if (error instanceof Error) {
+      apm.captureError(error, { custom: { context: message } });
+      return;
+    }
+    apm.captureError(Object.assign(new Error(`${message}: ${String(error)}`), { cause: error }));
+  } catch {
+    console.error(`${message}:`, error);
+  }
+}
