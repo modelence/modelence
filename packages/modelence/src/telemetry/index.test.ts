@@ -190,4 +190,55 @@ describe('telemetry/index', () => {
 
     expect(captureError).toHaveBeenCalledWith(error);
   });
+
+  test('reportError logs to console with context when telemetry disabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(false);
+    const error = new Error('boom');
+
+    telemetry.reportError(error, 'Error calling myMethod');
+
+    expect(consoleError).toHaveBeenCalledWith('Error calling myMethod:', error);
+    expect(mockGetApm).not.toHaveBeenCalled();
+  });
+
+  test('reportError sends Error to APM with context, silent console, when enabled', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn();
+    mockGetApm.mockReturnValue({ captureError });
+
+    const error = new Error('boom');
+    telemetry.reportError(error, 'Error calling myMethod');
+
+    expect(captureError).toHaveBeenCalledWith(error, {
+      custom: { context: 'Error calling myMethod' },
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  test('reportError wraps non-Error with searchable message and cause', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn();
+    mockGetApm.mockReturnValue({ captureError });
+
+    telemetry.reportError('boom', 'Error calling myMethod');
+
+    expect(captureError).toHaveBeenCalledTimes(1);
+    const sent = captureError.mock.calls[0][0] as Error;
+    expect(sent).toBeInstanceOf(Error);
+    expect(sent.message).toBe('Error calling myMethod: boom');
+    expect((sent as Error & { cause: unknown }).cause).toBe('boom');
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  test('reportError falls back to console when APM throws', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn(() => {
+      throw new Error('apm down');
+    });
+    mockGetApm.mockReturnValue({ captureError });
+
+    const error = new Error('boom');
+    expect(() => telemetry.reportError(error, 'Error calling myMethod')).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith('Error calling myMethod:', error);
+  });
 });
