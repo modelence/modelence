@@ -191,7 +191,10 @@ describe('cron/jobs', () => {
     await intervalCallback?.();
     await Promise.resolve();
 
-    expect(mockAcquireLock).toHaveBeenCalled();
+    expect(mockAcquireLock).toHaveBeenCalledWith(
+      'cron',
+      expect.objectContaining({ heartbeat: true })
+    );
     expect(handler).toHaveBeenCalledTimes(1);
     expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
       { alias: 'hourly' },

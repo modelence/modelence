@@ -98,6 +98,7 @@ async function tickCronJobs() {
   const now = Date.now();
 
   const ownsLock = await acquireLock('cron', {
+    heartbeat: true,
     successfulLockCacheDuration: time.seconds(10),
     failedLockCacheDuration: time.seconds(30),
   });
@@ -106,7 +107,7 @@ async function tickCronJobs() {
     return;
   }
 
-  Object.values(cronJobs).forEach(async (job) => {
+  for (const job of Object.values(cronJobs)) {
     const { alias, params, state } = job;
     if (state.isRunning) {
       if (state.startTs && state.startTs + params.timeout < now) {
@@ -114,15 +115,13 @@ async function tickCronJobs() {
         captureError(timeoutError);
         state.isRunning = false;
       }
-      return;
+      continue;
     }
-
-    // TODO: limit the number of jobs running concurrently
 
     if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      await runCronJob(job);
+      void runCronJob(job);
     }
-  });
+  }
 }
 
 async function runCronJob(job: CronJob) {
