@@ -142,23 +142,34 @@ const CLAUDE_PLUGIN_INSTALL_HINT =
 async function ensureClaudePluginEnabled(): Promise<void> {
   const settingsPath = join(process.cwd(), CLAUDE_SETTINGS_FILE);
 
-  let settings: Record<string, any> = {};
+  let content: string | undefined;
   try {
-    settings = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    content = await fs.readFile(settingsPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`Could not read ${CLAUDE_SETTINGS_FILE}; leaving it unchanged.`);
+      return;
+    }
+  }
+
+  let settings: Record<string, any> = {};
+  if (content !== undefined) {
+    try {
+      settings = JSON.parse(content);
+    } catch {
       console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE}; leaving it unchanged.`);
       return;
     }
   }
 
-  // An explicit `false` is the user's opt-out — leave it alone.
-  if (settings.enabledPlugins?.[CLAUDE_PLUGIN_ID] !== undefined) {
-    return;
-  }
-
+  // The marketplace is only a pointer, so it's always (re)declared — a file
+  // with just enabledPlugins, as `claude plugin install --scope project`
+  // leaves behind, can't be resolved by teammates without it. An explicit
+  // `false` in enabledPlugins is the user's opt-out and is left alone.
   settings.extraKnownMarketplaces = { ...settings.extraKnownMarketplaces, ...CLAUDE_MARKETPLACES };
-  settings.enabledPlugins = { ...settings.enabledPlugins, [CLAUDE_PLUGIN_ID]: true };
+  if (settings.enabledPlugins?.[CLAUDE_PLUGIN_ID] === undefined) {
+    settings.enabledPlugins = { ...settings.enabledPlugins, [CLAUDE_PLUGIN_ID]: true };
+  }
 
   try {
     await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
@@ -187,14 +198,16 @@ async function offerClaudePluginInstall(): Promise<void> {
     return;
   }
 
-  const answer = await ask('Install the Modelence plugin for Claude Code? (Y/n) ');
-  if (answer && answer.toLowerCase() !== 'y') {
+  const answer = (await ask('Install the Modelence plugin for Claude Code? (Y/n) ')).toLowerCase();
+  if (answer && answer !== 'y' && answer !== 'yes') {
     return;
   }
 
-  // Idempotent, and makes the install work before Claude Code has picked up
-  // the marketplace declared in .claude/settings.json.
-  runClaude(['plugin', 'marketplace', 'add', CLAUDE_MARKETPLACE_REPO]);
+  // Makes the install work before Claude Code has picked up the marketplace
+  // declared in .claude/settings.json. Its result only matters if the install
+  // then fails: a network or auth error here is the real cause, and the
+  // install's own message wouldn't point at it.
+  const marketplace = runClaude(['plugin', 'marketplace', 'add', CLAUDE_MARKETPLACE_REPO]);
   const install = runClaude(['plugin', 'install', CLAUDE_PLUGIN_ID, '--scope', 'project']);
   if (install.status === 0) {
     console.log(
@@ -202,8 +215,9 @@ async function offerClaudePluginInstall(): Promise<void> {
         'run /mcp, choose modelence, then Authenticate.'
     );
   } else {
+    const failed = marketplace.status !== 0 ? marketplace : install;
     console.warn(
-      `Could not install the Modelence plugin: ${(install.stderr || install.stdout || '').trim()}`
+      `Could not install the Modelence plugin: ${(failed.stderr || failed.stdout || '').trim()}`
     );
     console.warn(CLAUDE_PLUGIN_INSTALL_HINT);
   }
