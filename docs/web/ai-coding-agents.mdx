@@ -22,24 +22,52 @@ The `modelence` plugin gives Claude Code:
   mutations, and cron jobs, plus Expo Router rules for [React Native apps](/react-native).
 - **Live documentation access** through the Modelence docs MCP server, so the agent looks up APIs
   instead of writing them from memory.
-- **Database access** to the environment your project is connected to, authenticated automatically —
-  see [Inspecting your environment](#inspecting-your-environment).
+- **Database access** to your Modelence environments, after a one-time sign-in — see
+  [Inspecting your environment](#inspecting-your-environment).
 
 It works everywhere Claude Code runs: the terminal CLI, the desktop app, and the VS Code and JetBrains
 extensions.
 
-### Nothing to install
+### Installing
 
-New Modelence projects come with the plugin already wired up. Open the project in Claude Code, approve
-the one-time confirmation prompt, and the plugin loads in every session from then on.
+`npx modelence@latest setup` installs the plugin for you. After connecting the project it offers to
+install the plugin through the Claude Code CLI, which works the same whether you use Claude Code in the
+terminal, in VS Code or JetBrains, or in the Claude desktop app. Say yes and you're done.
 
-You can confirm it's active by running `/plugin` and looking for `modelence` in the list of installed
-plugins.
+To install it yourself — or to reinstall it after it was removed — run these two commands in a
+terminal:
 
-### Adding it to an existing project
+```bash
+claude plugin marketplace add modelence/modelence
+claude plugin install modelence@modelence
+```
 
-Projects created before the plugin existed — or ones where the configuration was removed — need it
-added once. Commit a `.claude/settings.json` file at the repository root:
+If a Claude Code session is already open, run `/reload-plugins` in it or start a new session. To
+confirm, run `/plugin`: `modelence` should appear under installed plugins.
+
+<Note>
+The plugin requires Claude Code v2.1.195 or later, and the `claude` command on your PATH. The desktop
+app and the IDE extensions ship a private copy that isn't on your PATH, so `npx modelence setup` can't
+use it — if `claude` isn't found, install the standalone CLI from
+[code.claude.com](https://code.claude.com/docs/en/setup) first.
+</Note>
+
+### Sign in to Modelence
+
+The plugin's `modelence` MCP server — the one that reads your environments — needs a one-time sign-in
+with your Modelence account. In Claude Code, run `/mcp`, choose `modelence`, then **Authenticate**. Your
+browser opens — sign in and choose the organization your app belongs to. Claude Code stores the sign-in
+per server, so it covers every Modelence project on your machine.
+
+Until you sign in, Claude Code lists the server as needing authentication and its tools are unavailable;
+the rest of the plugin works regardless. See
+[Inspecting your environment](#inspecting-your-environment) for what the sign-in grants.
+
+### Sharing it with your team
+
+Setup also writes a `.claude/settings.json` to the project, which tells Claude Code where the plugin
+comes from. Commit it: teammates who open the project are prompted to install the plugin, and running
+`npx modelence@latest setup` on their clone installs it for them. This is what the file contains:
 
 ```json .claude/settings.json
 {
@@ -57,23 +85,7 @@ added once. Commit a `.claude/settings.json` file at the repository root:
 }
 ```
 
-This is the same file new projects ship with. Committing it means everyone on the team gets the plugin
-after a single confirmation prompt, and the setting stays project-scoped — it doesn't affect your other
-projects.
-
-If you'd rather install it only for yourself, without committing anything, run these in a Claude Code
-session instead:
-
-```
-/plugin marketplace add modelence/modelence
-/plugin install modelence@modelence
-```
-
-<Note>
-The plugin requires a recent Claude Code (v2.1.195 or later). If `/plugin` isn't recognized, or the
-plugin's `modelence` MCP server fails to connect, update by running `claude update` and start a new
-session.
-</Note>
+The setting is project-scoped — it doesn't affect your other projects.
 
 ## The local workflow
 
@@ -144,27 +156,29 @@ Your project is connected to a Modelence environment, and the agent can query it
 the same MongoDB your local app reads and writes. That makes it useful for diagnosis: confirming what a
 mutation actually stored, checking a migration's result, or inspecting a document's real shape.
 
-The plugin sets this up for you. It authenticates with the service token already in `.modelence.env`,
-so there's no sign-in step and nothing to configure.
+This needs the one-time [sign-in](#sign-in-to-modelence) described above. The sign-in grants access to
+all apps in the organization you chose — the agent reads `MODELENCE_ENVIRONMENT_ID` from
+`.modelence.env` to work against the environment this project is connected to, and can look at your
+other environments and apps when you ask it to, which is handy for comparing against production or
+borrowing context from a related app.
 
 <Note>
-If you switch environments by re-running `modelence setup`, reconnect the `modelence` server from
-`/mcp` (or start a new session). The connection reads `.modelence.env` once, when it connects.
+If you switch environments by re-running `modelence setup`, start a new agent session so it picks up
+the new environment id. There's nothing to reconnect — the sign-in stays valid.
 </Note>
 
 ### From other clients
 
 The same server is available at `https://cloud.modelence.com/mcp` for tools that aren't running inside
 your project — claude.ai on web or mobile, Cursor, Codex, or a Claude Code session outside a project
-directory. Signing in through the browser grants access to every app in your organization, including
-status and logs for App Builder sandboxes:
+directory. The browser sign-in is the same, and grants access to every app in your organization,
+including status and logs for App Builder sandboxes:
 
 ```bash
 claude mcp add --transport http modelence https://cloud.modelence.com/mcp
 ```
 
-You don't need this inside a Modelence project — the plugin already connects you, scoped to that
-project's own environment.
+You don't need this inside a Modelence project — the plugin already registers the server.
 
 ## Next steps
 

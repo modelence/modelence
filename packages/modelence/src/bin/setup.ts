@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
+import { spawnSync } from 'child_process';
 import { authenticateCli } from './auth';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
@@ -45,21 +46,25 @@ async function fetchServiceConfig(host: string, auth: SetupAuth): Promise<SetupR
   return response.json();
 }
 
-async function confirmOverwrite(): Promise<boolean> {
+async function ask(question: string): Promise<string> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
   return new Promise((resolve) => {
-    rl.question(
-      `Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `,
-      (answer) => {
-        rl.close();
-        resolve(answer.toLowerCase() === 'y');
-      }
-    );
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
   });
+}
+
+async function confirmOverwrite(): Promise<boolean> {
+  const answer = await ask(
+    `Warning: ${MODELENCE_ENV_FILE} already exists. Do you want to overwrite it? (y/N) `
+  );
+  return answer.toLowerCase() === 'y';
 }
 
 function escapeEnvValue(value: string | number): string {
@@ -116,60 +121,105 @@ const CLAUDE_PLUGIN_ID = 'modelence@modelence';
 // Without the marketplace declared alongside enabledPlugins, Claude Code
 // can't resolve the plugin unless the user already ran
 // `claude plugin marketplace add` themselves.
+const CLAUDE_MARKETPLACE_REPO = 'modelence/modelence';
 const CLAUDE_MARKETPLACES = {
-  modelence: { source: { source: 'github', repo: 'modelence/modelence' } },
+  modelence: { source: { source: 'github', repo: CLAUDE_MARKETPLACE_REPO } },
 };
+const CLAUDE_PLUGIN_DOCS_URL = 'https://docs.modelence.com/ai-coding-agents';
+const CLAUDE_PLUGIN_INSTALL_HINT =
+  'Install the Modelence plugin for Claude Code by hand:\n' +
+  `  claude plugin marketplace add ${CLAUDE_MARKETPLACE_REPO}\n` +
+  `  claude plugin install ${CLAUDE_PLUGIN_ID}\n` +
+  `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
 
 /*
-  Makes the Modelence Claude Code plugin available in connected projects that
-  didn't start from the template (which ships this file). Only ever creates
-  the file: an existing settings.json is the user's own — a missing or
-  explicitly disabled plugin entry there gets a hint, not an edit, so a
-  deliberate opt-out is never flipped back on. The file is inert for people
-  who don't use Claude Code, and like the project file, failing to write it
-  doesn't fail the setup.
+  Declares the Modelence Claude Code plugin in the project's settings.json,
+  merging into an existing file rather than replacing it. An explicit
+  `false` is a deliberate opt-out and is never flipped back on. The file is
+  inert for people who don't use Claude Code, and failing to write it doesn't
+  fail the setup.
 */
 async function ensureClaudePluginEnabled(): Promise<void> {
   const settingsPath = join(process.cwd(), CLAUDE_SETTINGS_FILE);
 
-  let content: string;
+  let content: string | undefined;
   try {
     content = await fs.readFile(settingsPath, 'utf8');
-  } catch {
-    // Missing — create it with just the plugin enabled.
-    try {
-      await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
-      await fs.writeFile(
-        settingsPath,
-        JSON.stringify(
-          {
-            extraKnownMarketplaces: CLAUDE_MARKETPLACES,
-            enabledPlugins: { [CLAUDE_PLUGIN_ID]: true },
-          },
-          null,
-          2
-        ) + '\n'
-      );
-      console.log(`Enabled the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
-    } catch (error) {
-      console.warn(`Failed to create ${CLAUDE_SETTINGS_FILE}:`, error);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`Could not read ${CLAUDE_SETTINGS_FILE}; leaving it unchanged.`);
+      return;
     }
-    return;
+  }
+
+  let settings: Record<string, any> = {};
+  if (content !== undefined) {
+    try {
+      settings = JSON.parse(content);
+    } catch {
+      console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE}; leaving it unchanged.`);
+      return;
+    }
+  }
+
+  // The marketplace is only a pointer, so it's always (re)declared — a file
+  // with just enabledPlugins, as `claude plugin install --scope project`
+  // leaves behind, can't be resolved by teammates without it. An explicit
+  // `false` in enabledPlugins is the user's opt-out and is left alone.
+  settings.extraKnownMarketplaces = { ...settings.extraKnownMarketplaces, ...CLAUDE_MARKETPLACES };
+  if (settings.enabledPlugins?.[CLAUDE_PLUGIN_ID] === undefined) {
+    settings.enabledPlugins = { ...settings.enabledPlugins, [CLAUDE_PLUGIN_ID]: true };
   }
 
   try {
-    const settings = JSON.parse(content);
-    const enabled = settings?.enabledPlugins?.[CLAUDE_PLUGIN_ID];
-    if (enabled !== true) {
-      console.warn(
-        `Note: the Modelence plugin is ${enabled === false ? 'disabled' : 'not enabled'} in ` +
-          `${CLAUDE_SETTINGS_FILE}. To get Modelence tools and docs in Claude Code, add ` +
-          `"${CLAUDE_PLUGIN_ID}": true under "enabledPlugins", and declare the marketplace under ` +
-          `"extraKnownMarketplaces": ${JSON.stringify(CLAUDE_MARKETPLACES)}.`
-      );
-    }
-  } catch {
-    console.warn(`Could not parse ${CLAUDE_SETTINGS_FILE} to check the Modelence plugin status.`);
+    await fs.mkdir(join(process.cwd(), CLAUDE_DIR), { recursive: true });
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    console.log(`Declared the Modelence Claude Code plugin in ${CLAUDE_SETTINGS_FILE}`);
+  } catch (error) {
+    console.warn(`Failed to write ${CLAUDE_SETTINGS_FILE}:`, error);
+  }
+}
+
+function runClaude(args: string[]) {
+  return spawnSync('claude', args, { encoding: 'utf8', shell: process.platform === 'win32' });
+}
+
+/*
+  Installs the plugin through the Claude Code CLI — the one install path that
+  behaves the same for the terminal, the IDE extensions and the desktop app,
+  which all read the same plugin state. Touches the user's machine-wide Claude
+  config, so it asks first, and it never fails the setup: without the CLI on
+  PATH it prints the commands to run by hand.
+*/
+async function offerClaudePluginInstall(): Promise<void> {
+  const probe = runClaude(['--version']);
+  if (probe.error || probe.status !== 0) {
+    console.log(CLAUDE_PLUGIN_INSTALL_HINT);
+    return;
+  }
+
+  const answer = (await ask('Install the Modelence plugin for Claude Code? (Y/n) ')).toLowerCase();
+  if (answer && answer !== 'y' && answer !== 'yes') {
+    return;
+  }
+
+  // Makes the install work before Claude Code has picked up the marketplace
+  // declared in .claude/settings.json. Its result only matters if the install
+  // then fails: a network or auth error here is the real cause, and the
+  // install's own message wouldn't point at it.
+  const marketplace = runClaude(['plugin', 'marketplace', 'add', CLAUDE_MARKETPLACE_REPO]);
+  const install = runClaude(['plugin', 'install', CLAUDE_PLUGIN_ID, '--scope', 'project']);
+  if (install.status === 0) {
+    console.log(
+      'Installed the Modelence plugin for Claude Code. Sign in once from Claude Code: ' +
+        'run /mcp, choose modelence, then Authenticate.'
+    );
+  } else {
+    const failed = marketplace.status !== 0 ? marketplace : install;
+    console.warn(
+      `Could not install the Modelence plugin: ${(failed.stderr || failed.stdout || '').trim()}`
+    );
+    console.warn(CLAUDE_PLUGIN_INSTALL_HINT);
   }
 }
 
@@ -256,14 +306,18 @@ export async function setup(options: { token?: string; host: string }) {
     }
 
     await ensureClaudePluginEnabled();
+    // Interactive runs only: with --token (CI) or without a terminal there is
+    // nobody to ask, and no Claude Code to set up.
+    if (!options.token && process.stdin.isTTY) {
+      await offerClaudePluginInstall();
+    }
 
     if (fileExisted) {
-      // Anything that read the old file holds stale credentials: the dev
-      // server loads it at boot, and MCP connections send its token per
-      // connection.
+      // The dev server reads the file at boot, and an open agent session may
+      // still hold the old environment id in its context.
       console.log(
         'The project now points to a different environment. Restart your dev server, and if you use ' +
-          'an AI coding agent, reconnect its Modelence MCP server (in Claude Code: /mcp) or start a new session.'
+          'an AI coding agent, start a new session.'
       );
     }
 
