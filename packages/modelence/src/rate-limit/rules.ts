@@ -50,88 +50,116 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
       : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
   };
 
-  const record = await dbRateLimits.findOne({
+  const filter = {
     bucket: rule.bucket,
     type: rule.type,
     value,
     windowMs: rule.window,
-  });
+  };
 
-  const now = Date.now();
-  const currentWindowStart = Math.floor(now / rule.window) * rule.window;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const now = Date.now();
+    const currentWindowStart = Math.floor(now / rule.window) * rule.window;
+    const currentWindowDate = new Date(currentWindowStart);
+    const expiresAt = new Date(currentWindowStart + rule.window + rule.window);
 
-  const { count, modifier } = record
-    ? getCount(record, currentWindowStart, now)
-    : {
-        count: 0,
-        modifier: {
-          $setOnInsert: {
-            windowStart: new Date(currentWindowStart),
+    // 1. Try atomic increment if the document is already in the current window.
+    const updatedDoc = await dbRateLimits.findOneAndUpdate(
+      { ...filter, windowStart: currentWindowDate },
+      { $inc: { windowCount: 1 } },
+      { returnDocument: 'after' }
+    );
+
+    if (updatedDoc) {
+      const prevWeight = 1 - (now - currentWindowStart) / rule.window;
+      const count = Math.round(updatedDoc.windowCount + updatedDoc.prevWindowCount * prevWeight);
+      if (count > rule.limit) {
+        await dbRateLimits.updateOne(
+          { ...filter, windowStart: currentWindowDate },
+          { $inc: { windowCount: -1 } }
+        );
+        throw createRateLimitError();
+      }
+      return;
+    }
+
+    // 2. Read existing record to handle window transition.
+    const existingRecord = await dbRateLimits.findOne(filter);
+
+    if (existingRecord) {
+      if (existingRecord.windowStart.getTime() >= currentWindowStart) {
+        // A concurrent request already shifted windowStart to currentWindowStart or a newer window!
+        // Loop back to Step 1 to perform an atomic $inc on the current window.
+        continue;
+      }
+
+      const prevWindowStart = currentWindowStart - rule.window;
+      const prevWindowCount =
+        existingRecord.windowStart.getTime() === prevWindowStart ? existingRecord.windowCount : 0;
+
+      // Atomically shift window only if windowStart has not been modified by a concurrent call
+      const shiftedDoc = await dbRateLimits.findOneAndUpdate(
+        { ...filter, windowStart: existingRecord.windowStart },
+        {
+          $set: {
+            windowStart: currentWindowDate,
             windowCount: 1,
-            prevWindowCount: 0,
-            expiresAt: new Date(currentWindowStart + rule.window + rule.window),
+            prevWindowCount,
+            expiresAt,
           },
         },
-      };
+        { returnDocument: 'after' }
+      );
 
-  if (count >= rule.limit) {
-    throw createRateLimitError();
-  }
+      if (shiftedDoc) {
+        const prevWeight = 1 - (now - currentWindowStart) / rule.window;
+        const count = Math.round(shiftedDoc.windowCount + shiftedDoc.prevWindowCount * prevWeight);
+        if (count > rule.limit) {
+          await dbRateLimits.updateOne(
+            { ...filter, windowStart: currentWindowDate },
+            { $inc: { windowCount: -1 } }
+          );
+          throw createRateLimitError();
+        }
+        return;
+      }
 
-  /*
-    Always use upsert, because there is a small chance the document might be auto-removed
-    based on the expiration TTL index in between the check and the update
-  */
-  await dbRateLimits.upsertOne(
-    { bucket: rule.bucket, type: rule.type, value, windowMs: rule.window },
-    modifier
-  );
-}
+      // If another call shifted the window concurrently, retry loop to hit step 1
+      continue;
+    }
 
-function getCount(record: (typeof dbRateLimits)['Doc'], currentWindowStart: number, now: number) {
-  const prevWindowStart = currentWindowStart - record.windowMs;
-
-  if (record.windowStart.getTime() === currentWindowStart) {
-    const currentWindowCount = record.windowCount;
-    const prevWindowCount = record.prevWindowCount;
-    const prevWindowWeight = 1 - (now - currentWindowStart) / record.windowMs;
-    return {
-      count: Math.round(currentWindowCount + prevWindowCount * prevWindowWeight),
-      modifier: {
-        $inc: { windowCount: 1 },
-        $setOnInsert: {
-          windowStart: new Date(currentWindowStart),
-          prevWindowCount: 0,
-          expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        },
-      },
-    };
-  }
-
-  if (record.windowStart.getTime() === prevWindowStart) {
-    const weight = 1 - (now - currentWindowStart) / record.windowMs;
-    return {
-      count: Math.round(record.windowCount * weight),
-      modifier: {
-        $set: {
-          windowStart: new Date(currentWindowStart),
-          windowCount: 1,
-          prevWindowCount: record.windowCount,
-          expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        },
-      },
-    };
-  }
-
-  return {
-    count: 0,
-    modifier: {
-      $set: {
-        windowStart: new Date(currentWindowStart),
+    // 3. Fallback find-or-create for a brand-new rate-limit key.
+    const { doc: upsertedDoc, isNew } = await dbRateLimits.findOneAndUpsert(filter, {
+      $setOnInsert: {
+        bucket: rule.bucket,
+        type: rule.type,
+        value,
+        windowMs: rule.window,
+        windowStart: currentWindowDate,
         windowCount: 1,
         prevWindowCount: 0,
-        expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
+        expiresAt,
       },
-    },
-  };
+    });
+
+    if (upsertedDoc) {
+      if (!isNew) {
+        // If not newly inserted, a concurrent request created it; retry loop to increment via step 1
+        continue;
+      }
+      const prevWeight = 1 - (now - currentWindowStart) / rule.window;
+      const count = Math.round(upsertedDoc.windowCount + upsertedDoc.prevWindowCount * prevWeight);
+      if (count > rule.limit) {
+        await dbRateLimits.updateOne(
+          { ...filter, windowStart: currentWindowDate },
+          { $inc: { windowCount: -1 } }
+        );
+        throw createRateLimitError();
+      }
+      return;
+    }
+  }
+
+  // Fail-closed if retry attempts are exhausted under extreme concurrency.
+  throw createRateLimitError();
 }
