@@ -33,6 +33,11 @@ const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
 const mockInvalidateAllUserSessions = vi.fn();
 const mockMagicLinkTokensDeleteMany = vi.fn();
+const mockCaptureError = vi.fn();
+
+vi.doMock('@/telemetry', () => ({
+  captureError: mockCaptureError,
+}));
 
 vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
@@ -1236,6 +1241,11 @@ describe('auth/resetPassword', () => {
       const result = await handleResetPasswordLanding(makeParams('bad-token', cookie) as never);
 
       expect(cookie).not.toHaveBeenCalled();
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'This password reset link is invalid or has expired.',
+        })
+      );
       expect(result?.status).toBe(302);
       expect(result?.redirect).toContain('status=error');
       expect(result?.redirect).toContain(friendlyParam);
@@ -1253,6 +1263,11 @@ describe('auth/resetPassword', () => {
       const result = await handleResetPasswordLanding(makeParams('expired', cookie) as never);
 
       expect(cookie).not.toHaveBeenCalled();
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'This password reset link is invalid or has expired.',
+        })
+      );
       expect(result?.redirect).toContain('status=error');
       expect(result?.redirect).toContain(friendlyParam);
     });
@@ -1265,6 +1280,7 @@ describe('auth/resetPassword', () => {
       const result = await handleResetPasswordLanding(makeParams(undefined, cookie) as never);
 
       expect(cookie).not.toHaveBeenCalled();
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
       expect(result?.redirect).toContain('status=error');
       // The friendly message — NOT the raw ZodError issues array.
       expect(result?.redirect).toContain(friendlyParam);
