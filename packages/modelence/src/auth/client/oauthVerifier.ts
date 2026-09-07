@@ -104,6 +104,22 @@ export function startOAuthVerifier(): string {
 }
 
 /**
+ * Whether a sign-in started by this client is still awaiting its code.
+ *
+ * Read-only counterpart to `consumeOAuthVerifier`, for deciding whether a flow
+ * is worth resuming after the page reloaded mid-round-trip. Deliberately does
+ * not consume: the verifier is still needed by whoever redeems the code.
+ */
+export function hasPendingOAuthVerifier(): boolean {
+  if (pendingVerifier !== null) return true;
+  try {
+    return Boolean(getSessionStorage()?.getItem(STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns the pending verifier and clears it, so a given verifier is replayed
  * at most once even if the deep link fires twice.
  */

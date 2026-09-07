@@ -12,11 +12,11 @@ export interface ClientConfig {
    *
    * A web client that opens the flow in a popup should return the window
    * `window.open` gave it: `(url) => window.open(url)`. With that reference the
-   * callback page in the popup can obtain the sign-in verifier from this page
-   * directly, which is what makes `loginWithOAuth` work when the app itself
-   * runs inside a cross-origin iframe and the popup's storage is partitioned
-   * away from it. Any other return value (including the `Promise` from
-   * `Linking.openURL`) is ignored.
+   * callback page in the popup can hand the sign-in code back to this page,
+   * which then completes the login in its own context — what makes OAuth work
+   * when the app runs inside a cross-origin iframe and the popup's storage is
+   * partitioned away from it. Any other return value (including the `Promise`
+   * from `Linking.openURL`) is ignored.
    */
   openUrl?: (url: string) => unknown;
   /**

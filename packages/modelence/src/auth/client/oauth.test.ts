@@ -147,14 +147,19 @@ describe('auth/client — OAuth sign-in', () => {
     /**
      * The iframe case: the app cannot navigate in place (providers refuse to
      * render inside an iframe) so `openUrl` opens a popup and returns it. The
-     * popup's storage is partitioned away from the iframe's, so the verifier
-     * has to travel over postMessage — and only to that popup.
+     * popup's storage is partitioned away from the iframe's, so the *code*
+     * travels back over postMessage and the sign-in completes here — in the
+     * context that actually needs the session. The verifier never leaves.
      */
     describe('when openUrl returns the popup it opened', () => {
-      test('serves the verifier to that popup once, and then it is spent', async () => {
-        const popup = { postMessage: vi.fn() };
+      test('redeems the code the popup hands back, using the verifier held here', async () => {
+        const popup = { postMessage: vi.fn(), close: vi.fn() };
         useNativeClient();
         mockOpenUrl.mockReturnValue(popup);
+        mockCallMethod.mockResolvedValue({
+          user: { id: 'u1', handle: 'user', roles: [] },
+          session: { authToken: 'new-token' },
+        });
         const win = usePopupWindow();
 
         await authClient.signInWithOAuth({
@@ -168,15 +173,69 @@ describe('auth/client — OAuth sign-in', () => {
         win.deliver({
           source: popup,
           origin: 'https://app.example.com',
-          data: { type: 'modelence:oauth-verifier-request' },
+          data: { type: 'modelence:oauth-code', code: 'code-from-popup' },
         });
+        await vi.waitFor(() => expect(mockCallMethod).toHaveBeenCalled());
 
+        // Redeemed here, pairing the popup's code with this page's verifier.
+        expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithOAuth', {
+          code: 'code-from-popup',
+          codeVerifier: challenge,
+        });
+        // The session lands in THIS context, which is the whole point.
+        expect(mockSetAuthToken).toHaveBeenCalledWith('new-token');
+        // Acknowledged and dismissed; the verifier was never posted anywhere.
         expect(popup.postMessage).toHaveBeenCalledWith(
-          { type: 'modelence:oauth-verifier-reply', verifier: challenge },
+          { type: 'modelence:oauth-code-ack', accepted: true },
           'https://app.example.com'
         );
-        // Handed over: this page can no longer redeem it either.
-        await expect(authClient.loginWithOAuth({ code: 'c' })).rejects.toThrow(/sign in again/i);
+        expect(JSON.stringify(popup.postMessage.mock.calls)).not.toContain(challenge);
+        await vi.waitFor(() => expect(popup.close).toHaveBeenCalled());
+      });
+
+      // Spent on arrival: a code replayed after the first one has been
+      // redeemed finds no verifier here and cannot be exchanged again.
+      test('stops listening once a code has been redeemed', async () => {
+        const popup = { postMessage: vi.fn(), close: vi.fn() };
+        useNativeClient();
+        mockOpenUrl.mockReturnValue(popup);
+        const win = usePopupWindow();
+
+        await authClient.signInWithOAuth({
+          provider: 'google',
+          redirectUri: 'https://app.example.com/auth',
+        });
+
+        win.deliver({
+          source: popup,
+          origin: 'https://app.example.com',
+          data: { type: 'modelence:oauth-code', code: 'code-from-popup' },
+        });
+        await vi.waitFor(() => expect(mockCallMethod).toHaveBeenCalledTimes(1));
+
+        win.deliver({
+          source: popup,
+          origin: 'https://app.example.com',
+          data: { type: 'modelence:oauth-code', code: 'code-from-popup' },
+        });
+        await Promise.resolve();
+
+        expect(mockCallMethod).toHaveBeenCalledTimes(1);
+      });
+
+      // A blocked popup returns null from window.open, which previously left
+      // signInWithOAuth resolving normally with nothing happening at all.
+      test('throws when the browser blocked the popup', async () => {
+        useNativeClient();
+        mockOpenUrl.mockReturnValue(null);
+        usePopupWindow();
+
+        await expect(
+          authClient.signInWithOAuth({
+            provider: 'google',
+            redirectUri: 'https://app.example.com/auth',
+          })
+        ).rejects.toThrow(/blocked it/i);
       });
 
       // Linking.openURL returns a Promise, which is not a window: the native
@@ -272,9 +331,9 @@ describe('auth/client — OAuth sign-in', () => {
       expect(user).toEqual({ id: 'u1', handle: 'user' });
     });
 
-    // The popup side of the iframe case: this page was opened by the one that
-    // started the flow and its own storage is empty, so it asks that page.
-    test('obtains the verifier from the opener when opened as a popup', async () => {
+    // The popup side of the iframe case: this page has no verifier of its own,
+    // so it hands the code to the page that opened it and signs in nobody here.
+    test('hands the code to the opener when opened as a popup', async () => {
       useNativeClient();
       const opener = { postMessage: vi.fn() };
       const win = usePopupWindow(opener);
@@ -282,20 +341,42 @@ describe('auth/client — OAuth sign-in', () => {
         win.deliver({
           source: opener,
           origin: 'https://app.example.com',
-          data: { type: 'modelence:oauth-verifier-reply', verifier: 'verifier-from-opener' },
+          data: { type: 'modelence:oauth-code-ack', accepted: true },
         });
       });
 
-      await authClient.loginWithOAuth({ code: 'exchange-code' });
+      const user = await authClient.loginWithOAuth({ code: 'exchange-code' });
 
       expect(opener.postMessage).toHaveBeenCalledWith(
-        { type: 'modelence:oauth-verifier-request' },
+        { type: 'modelence:oauth-code', code: 'exchange-code' },
         'https://app.example.com'
       );
-      expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithOAuth', {
-        code: 'exchange-code',
-        codeVerifier: 'verifier-from-opener',
+      // Redeemed by the opener, not here: no exchange and no token in this
+      // context, and nothing to return to the caller.
+      expect(mockCallMethod).not.toHaveBeenCalled();
+      expect(mockSetAuthToken).not.toHaveBeenCalled();
+      expect(user).toBeNull();
+    });
+
+    // An opener that declines (or, in the real COOP case, never answers at
+    // all) must not strand the flow: this page tries to finish it itself.
+    test('falls back to redeeming here when the opener declines', async () => {
+      useNativeClient();
+      const opener = { postMessage: vi.fn() };
+      const win = usePopupWindow(opener);
+      opener.postMessage.mockImplementation(() => {
+        win.deliver({
+          source: opener,
+          origin: 'https://app.example.com',
+          data: { type: 'modelence:oauth-code-ack', accepted: false },
+        });
       });
+
+      // No verifier in this context either, so it fails — but with the
+      // diagnostic, rather than hanging or silently doing nothing.
+      await expect(authClient.loginWithOAuth({ code: 'exchange-code' })).rejects.toThrow(
+        /sign in again/i
+      );
     });
 
     // A page that has its own verifier never asks its opener, so a flow that
@@ -327,6 +408,66 @@ describe('auth/client — OAuth sign-in', () => {
         'Invalid or expired sign-in code'
       );
       expect(mockSetAuthToken).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * An embedded preview that reloads while the popup is still at the provider
+   * loses the in-memory listener. The verifier survives in sessionStorage, so
+   * the flow can be picked up again rather than failing with a misleading
+   * "no longer valid".
+   */
+  describe('resumeOAuthPopup', () => {
+    test('re-arms the handoff when a sign-in is still pending', async () => {
+      const popup = { postMessage: vi.fn(), close: vi.fn() };
+      useNativeClient();
+      mockOpenUrl.mockReturnValue(undefined);
+      mockCallMethod.mockResolvedValue({
+        user: { id: 'u1', handle: 'user', roles: [] },
+        session: { authToken: 'new-token' },
+      });
+      const win = usePopupWindow();
+
+      // A flow was started; the verifier is now pending.
+      await authClient.signInWithOAuth({
+        provider: 'google',
+        redirectUri: 'https://app.example.com/auth',
+      });
+      const challenge = new URL(mockOpenUrl.mock.calls[0][0] as string).searchParams.get(
+        'codeChallenge'
+      );
+
+      // The page reloaded: nothing is listening until this is called.
+      expect(authClient.resumeOAuthPopup({ popup })).toBe(true);
+
+      win.deliver({
+        source: popup,
+        origin: 'https://app.example.com',
+        data: { type: 'modelence:oauth-code', code: 'code-from-popup' },
+      });
+      await vi.waitFor(() => expect(mockCallMethod).toHaveBeenCalled());
+
+      expect(mockCallMethod).toHaveBeenCalledWith('_system.user.loginWithOAuth', {
+        code: 'code-from-popup',
+        codeVerifier: challenge,
+      });
+    });
+
+    // Nothing pending means there is no flow to resume, and in particular no
+    // listener should be left armed for a code that can never be redeemed.
+    test('reports false when no sign-in is pending', () => {
+      useNativeClient();
+      usePopupWindow();
+
+      expect(authClient.resumeOAuthPopup({ popup: { postMessage: vi.fn() } })).toBe(false);
+    });
+
+    test('reports false when given something that is not a window', () => {
+      useNativeClient();
+      usePopupWindow();
+
+      expect(authClient.resumeOAuthPopup({ popup: Promise.resolve() })).toBe(false);
+      expect(authClient.resumeOAuthPopup({ popup: null })).toBe(false);
     });
   });
 
