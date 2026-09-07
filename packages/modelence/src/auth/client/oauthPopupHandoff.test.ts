@@ -5,6 +5,7 @@ import {
   cancelPopupHandoff,
   hasSeveredOpener,
   isMessageTarget,
+  OAUTH_POPUP_NAME,
   offerCodeToOpener,
 } from './oauthPopupHandoff';
 
@@ -13,14 +14,18 @@ import {
  * lets a test deliver a `message` event to its listeners with any `source`
  * and `origin` — which is exactly what an attacker-controlled frame controls.
  */
-function makeWindow(origin: string, opener?: unknown) {
+function makeWindow(origin: string, opener: unknown = null, name = '') {
   const listeners = new Set<(event: MessageEvent) => void>();
   const posted: Array<{ message: unknown; targetOrigin: string }> = [];
   let closed = false;
 
   const win = {
     location: { origin },
+    // Browsers report `null` — not `undefined` — on a page that was never a
+    // popup, so the fake must too: an `undefined` default silently made the
+    // severed-opener check look correct when it was not.
     opener,
+    name,
     addEventListener: (_type: 'message', listener: (event: MessageEvent) => void) => {
       listeners.add(listener);
     },
@@ -330,25 +335,38 @@ describe('auth/client/oauthPopupHandoff', () => {
   });
 
   describe('hasSeveredOpener', () => {
-    // The COOP case: this page was opened as a popup, but the provider's
-    // sign-in page cut the link, so there is nobody to hand the code to.
-    test('is true when window.opener is explicitly null', () => {
-      vi.stubGlobal('window', makeWindow(ORIGIN, null));
+    // The COOP case: this page carries the name signInWithOAuth gave the popup,
+    // so it *was* opened by us — but the opener link is gone.
+    test('is true for our named popup with no opener', () => {
+      vi.stubGlobal('window', makeWindow(ORIGIN, null, OAUTH_POPUP_NAME));
 
       expect(hasSeveredOpener()).toBe(true);
     });
 
-    test('is false when an opener is present', () => {
+    test('is false when our named popup still has its opener', () => {
       const opener = makeWindow(ORIGIN);
-      vi.stubGlobal('window', makeWindow(ORIGIN, opener));
+      vi.stubGlobal('window', makeWindow(ORIGIN, opener, OAUTH_POPUP_NAME));
 
       expect(hasSeveredOpener()).toBe(false);
     });
 
-    // An ordinary top-level page has no `opener` property at all, which is not
-    // the same as having had one severed.
-    test('is false for a page that was never a popup', () => {
-      vi.stubGlobal('window', makeWindow(ORIGIN));
+    /**
+     * The regression this check exists to avoid. Browsers set `window.opener`
+     * to null on any ordinary top-level page — a same-tab web flow, an Expo Web
+     * tab, a plain reload — so a null opener alone would fire the COOP
+     * diagnostic on the single most common case instead of the generic "no
+     * sign-in in progress" message.
+     */
+    test('is false for an ordinary page with a null opener and no popup name', () => {
+      vi.stubGlobal('window', makeWindow(ORIGIN, null));
+
+      expect(hasSeveredOpener()).toBe(false);
+    });
+
+    // Some other popup (an unrelated window.open elsewhere in the app) is not
+    // ours and must not be diagnosed as a broken OAuth flow.
+    test('is false for a differently named popup', () => {
+      vi.stubGlobal('window', makeWindow(ORIGIN, null, 'some-other-popup'));
 
       expect(hasSeveredOpener()).toBe(false);
     });

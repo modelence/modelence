@@ -13,6 +13,7 @@ import {
   cancelPopupHandoff,
   hasSeveredOpener,
   isMessageTarget,
+  OAUTH_POPUP_NAME,
   offerCodeToOpener,
   type MessageTarget,
 } from './oauthPopupHandoff';
@@ -352,6 +353,19 @@ export async function signInWithOAuth(options: {
     // land in this context, not in the popup that is about to close. Harmless
     // otherwise: a same-tab flow never posts a code.
     if (isMessageTarget(opened)) {
+      // Name the popup so its callback page can tell it apart from an ordinary
+      // tab. `window.opener === null` is true on *every* top-level page that
+      // was never a popup, so without this marker the callback page could not
+      // recognise a COOP-severed opener and would misreport the common case.
+      // Set here rather than passed to `window.open`, since the application's
+      // `openUrl` is what makes that call. Assignment can throw if the popup is
+      // already gone; the flow does not depend on it.
+      try {
+        (opened as { name?: string }).name = OAUTH_POPUP_NAME;
+      } catch {
+        // Only the diagnostic is affected, not the sign-in itself.
+      }
+
       armPopupCodeHandoff(opened);
       return;
     }

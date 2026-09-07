@@ -63,6 +63,8 @@ interface CodeAck {
 export interface HandoffWindow {
   location: { origin: string };
   opener?: unknown;
+  /** Browsing-context name; set by the opener via `window.open`. */
+  name?: string;
   addEventListener: (type: 'message', listener: (event: MessageEvent) => void) => void;
   removeEventListener: (type: 'message', listener: (event: MessageEvent) => void) => void;
 }
@@ -242,22 +244,34 @@ export function offerCodeToOpener(code: string): Promise<boolean> {
 }
 
 /**
- * Whether this page looks like an OAuth popup that has lost its opener.
+ * The browsing-context name `signInWithOAuth` gives a popup it opens.
  *
- * Distinguishes the two ways `offerCodeToOpener` can come up empty: a page that
- * was never opened as a popup (ordinary same-tab flow — nothing is wrong) from
- * one that was, but whose `window.opener` is now null. The latter is almost
- * always `Cross-Origin-Opener-Policy: same-origin` on the provider's sign-in
- * page severing the link, which is otherwise invisible in the console.
+ * The opener sets it, the provider round trip preserves it, and the callback
+ * page can read it — so it is the one signal that positively identifies a page
+ * as *our* OAuth popup rather than an ordinary tab.
+ */
+export const OAUTH_POPUP_NAME = 'modelence-oauth';
+
+/**
+ * Whether this page is an OAuth popup that has lost its opener.
  *
- * `window.history.length === 1` would be a stronger signal but is not readable
- * after a cross-origin round trip, so the check is deliberately shallow: it is
- * used only to choose a diagnostic message, never to gate the flow.
+ * `window.opener === null` on its own proves nothing: browsers report exactly
+ * that on any ordinary top-level page which was never a popup (the property is
+ * present and null, not absent), so testing it alone would fire this diagnostic
+ * on the most common case of all — a same-tab or native flow with no sign-in in
+ * progress.
+ *
+ * What distinguishes the two is the name the opener assigned when it called
+ * `window.open`. A page carrying that name was opened by `signInWithOAuth`; if
+ * it nonetheless has no opener, the link was severed in transit, which in
+ * practice means `Cross-Origin-Opener-Policy: same-origin` on the provider's
+ * sign-in page. An ordinary tab does not carry the name and so is never
+ * misreported.
+ *
+ * Used only to choose a diagnostic message, never to gate the flow.
  */
 export function hasSeveredOpener(): boolean {
   const w = getWindow();
   if (!w) return false;
-  // `opener` is explicitly null (rather than absent) on a window that was
-  // opened by another and then had the link cut.
-  return w.opener === null;
+  return w.name === OAUTH_POPUP_NAME && !isMessageTarget(w.opener);
 }

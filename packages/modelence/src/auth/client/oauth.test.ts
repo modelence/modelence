@@ -31,11 +31,15 @@ const mockSetAuthToken = vi.fn();
  * at https://app.example.com — the iframe when `opener` is omitted, the popup
  * when it is given.
  */
-function usePopupWindow(opener?: unknown) {
+function usePopupWindow(opener: unknown = null, name = '') {
   const listeners = new Set<(event: MessageEvent) => void>();
   const win = {
     location: { href: '', origin: 'https://app.example.com' },
+    // Browsers report `null`, not `undefined`, on a page that was never a
+    // popup — so the fake does too, or the severed-opener check looks correct
+    // while misfiring on every ordinary page.
     opener,
+    name,
     addEventListener: vi.fn((_type: string, listener: (event: MessageEvent) => void) => {
       listeners.add(listener);
     }),
@@ -223,6 +227,55 @@ describe('auth/client — OAuth sign-in', () => {
         expect(mockCallMethod).toHaveBeenCalledTimes(1);
       });
 
+      // Without this marker the callback page cannot tell a COOP-severed
+      // opener from an ordinary tab, since both report opener === null.
+      test('names the popup so its callback page can identify it', async () => {
+        const popup = { postMessage: vi.fn(), close: vi.fn(), name: '' };
+        useNativeClient();
+        mockOpenUrl.mockReturnValue(popup);
+        usePopupWindow();
+
+        await authClient.signInWithOAuth({
+          provider: 'google',
+          redirectUri: 'https://app.example.com/auth',
+        });
+
+        expect(popup.name).toBe('modelence-oauth');
+      });
+
+      // A popup that vanished before the name could be assigned must not take
+      // the sign-in down with it — only the diagnostic depends on it.
+      test('still arms the handoff when naming the popup throws', async () => {
+        const popup = {
+          postMessage: vi.fn(),
+          close: vi.fn(),
+          set name(_v: string) {
+            throw new Error('detached');
+          },
+        };
+        useNativeClient();
+        mockOpenUrl.mockReturnValue(popup);
+        mockCallMethod.mockResolvedValue({
+          user: { id: 'u1', handle: 'user', roles: [] },
+          session: { authToken: 'new-token' },
+        });
+        const win = usePopupWindow();
+
+        await expect(
+          authClient.signInWithOAuth({
+            provider: 'google',
+            redirectUri: 'https://app.example.com/auth',
+          })
+        ).resolves.toBeUndefined();
+
+        win.deliver({
+          source: popup,
+          origin: 'https://app.example.com',
+          data: { type: 'modelence:oauth-code', code: 'code-from-popup' },
+        });
+        await vi.waitFor(() => expect(mockCallMethod).toHaveBeenCalled());
+      });
+
       // A blocked popup returns null from window.open, which previously left
       // signInWithOAuth resolving normally with nothing happening at all.
       test('throws when the browser blocked the popup', async () => {
@@ -408,6 +461,50 @@ describe('auth/client — OAuth sign-in', () => {
         'Invalid or expired sign-in code'
       );
       expect(mockSetAuthToken).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Which diagnostic is logged when there is no verifier. Getting this wrong is
+   * not cosmetic: the COOP message tells the reader their embedded flow is
+   * unfixable from application code, so firing it on an ordinary same-tab flow
+   * sends them chasing a header that was never the problem.
+   */
+  describe('loginWithOAuth diagnostics', () => {
+    let consoleError: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    function loggedText() {
+      return consoleError.mock.calls.map((call) => String(call[0])).join('\n');
+    }
+
+    // The regression the popup name exists to prevent: every ordinary page
+    // reports opener === null, so this must NOT mention COOP.
+    test('reports a generic failure on an ordinary page with a null opener', async () => {
+      useNativeClient();
+      usePopupWindow(null);
+
+      await expect(authClient.loginWithOAuth({ code: 'stray-code' })).rejects.toThrow(
+        /sign in again/i
+      );
+
+      expect(loggedText()).toContain('no sign-in in progress');
+      expect(loggedText()).not.toContain('Cross-Origin-Opener-Policy');
+    });
+
+    // The real COOP case: our named popup, opener gone.
+    test('names COOP when our popup has lost its opener', async () => {
+      useNativeClient();
+      usePopupWindow(null, 'modelence-oauth');
+
+      await expect(authClient.loginWithOAuth({ code: 'stray-code' })).rejects.toThrow(
+        /sign in again/i
+      );
+
+      expect(loggedText()).toContain('Cross-Origin-Opener-Policy');
     });
   });
 
