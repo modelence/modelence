@@ -226,7 +226,7 @@ export async function startServer(
     if (isSetupRequired()) {
       console.log(
         'This project is not connected to a backend yet, so the app serves setup instructions instead of its UI.\n' +
-          'To connect it to Modelence Cloud, run `npx modelence setup` and restart the dev server.\n'
+          'To connect it to Modelence Cloud, run `npx modelence@latest setup` and restart the dev server.\n'
       );
     }
   });
