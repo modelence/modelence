@@ -38,7 +38,9 @@ For a more detailed guide, check out the [Quick Start](https://docs.modelence.co
 
 ### Local Development (Modelence Framework)
 
-If you want to contribute to Modelence itself (not just use it in an application), follow the steps below.
+> We don't accept external code pull requests. See [CONTRIBUTING.md](https://github.com/modelence/modelence/blob/main/CONTRIBUTING.md) for how to suggest changes.
+
+If you want to run the framework from source, follow the steps below.
 
 #### 1. Clone the repository
 ```bash
