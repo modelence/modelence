@@ -11,7 +11,6 @@ import { OAuthProvider } from '../types';
 import {
   awaitCodeFromPopup,
   cancelPopupHandoff,
-  hasSeveredOpener,
   isMessageTarget,
   OAUTH_POPUP_NAME,
   offerCodeToOpener,
@@ -353,17 +352,15 @@ export async function signInWithOAuth(options: {
     // land in this context, not in the popup that is about to close. Harmless
     // otherwise: a same-tab flow never posts a code.
     if (isMessageTarget(opened)) {
-      // Name the popup so its callback page can tell it apart from an ordinary
-      // tab. `window.opener === null` is true on *every* top-level page that
-      // was never a popup, so without this marker the callback page could not
-      // recognise a COOP-severed opener and would misreport the common case.
-      // Set here rather than passed to `window.open`, since the application's
-      // `openUrl` is what makes that call. Assignment can throw if the popup is
-      // already gone; the flow does not depend on it.
+      // Name the popup so `resumeOAuthPopup` can reclaim this exact window by
+      // name after a reload. Set here rather than passed to `window.open`,
+      // since the application's `openUrl` is what makes that call. The name
+      // does not survive a COOP hop, so nothing but the resume path relies on
+      // it. Assignment can throw if the popup is already gone.
       try {
         (opened as { name?: string }).name = OAUTH_POPUP_NAME;
       } catch {
-        // Only the diagnostic is affected, not the sign-in itself.
+        // Only the resume convenience is affected, not the sign-in.
       }
 
       armPopupCodeHandoff(opened);
@@ -446,34 +443,21 @@ async function redeemOAuthCode(code: string) {
  * debugging, and names the causes that actually produce this.
  */
 function noSignInInProgressError() {
-  const severedOpener = hasSeveredOpener();
-
-  if (severedOpener) {
-    // The single most likely cause, and otherwise invisible: the provider's
-    // sign-in page sent Cross-Origin-Opener-Policy, so this popup can no
-    // longer reach the page that started the flow and holds the verifier.
-    console.error(
-      '[modelence] This OAuth popup has no window.opener, so it cannot reach the ' +
-        'page that started the sign-in and holds the verifier. That link is almost ' +
-        'always severed by a Cross-Origin-Opener-Policy: same-origin header on the ' +
-        "provider's sign-in page. The embedded-iframe popup flow cannot complete " +
-        'while that is the case; a top-level (non-iframe) sign-in is unaffected, ' +
-        "because there the verifier is read from this page's own sessionStorage."
-    );
-  } else {
-    console.error(
-      '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
-        'Either signInWithOAuth was never called on this client, or the code came ' +
-        'from somewhere other than a flow this client started. On native, the app ' +
-        'process must survive the round trip; in a browser the verifier is kept in ' +
-        'sessionStorage, so a new tab or a cleared session also produces this. ' +
-        'If the app runs in an iframe and opens the provider in a popup, openUrl ' +
-        'must return the window from window.open so the popup can hand the code ' +
-        'back to this page. ' +
-        'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
-        'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
-    );
-  }
+  console.error(
+    '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
+      'Either signInWithOAuth was never called on this client, or the code came ' +
+      'from somewhere other than a flow this client started. On native, the app ' +
+      'process must survive the round trip; in a browser the verifier is kept in ' +
+      'sessionStorage, so a new tab or a cleared session also produces this. ' +
+      'If the app runs in an iframe and opens the provider in a popup, openUrl ' +
+      'must return the window from window.open so the popup can hand the code ' +
+      'back to that page — and note that a provider sending ' +
+      'Cross-Origin-Opener-Policy: same-origin severs window.opener during the ' +
+      'round trip, which breaks that handoff with no way for this code to tell ' +
+      'it apart from the cases above. ' +
+      'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
+      'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
+  );
 
   return new Error('This sign-in link is no longer valid. Please sign in again.');
 }

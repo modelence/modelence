@@ -3,9 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   awaitCodeFromPopup,
   cancelPopupHandoff,
-  hasSeveredOpener,
   isMessageTarget,
-  OAUTH_POPUP_NAME,
   offerCodeToOpener,
 } from './oauthPopupHandoff';
 
@@ -331,50 +329,6 @@ describe('auth/client/oauthPopupHandoff', () => {
       vi.stubGlobal('window', makeWindow(ORIGIN, brokenOpener));
 
       await expect(offerCodeToOpener('the-code')).resolves.toBe(false);
-    });
-  });
-
-  describe('hasSeveredOpener', () => {
-    // The COOP case: this page carries the name signInWithOAuth gave the popup,
-    // so it *was* opened by us — but the opener link is gone.
-    test('is true for our named popup with no opener', () => {
-      vi.stubGlobal('window', makeWindow(ORIGIN, null, OAUTH_POPUP_NAME));
-
-      expect(hasSeveredOpener()).toBe(true);
-    });
-
-    test('is false when our named popup still has its opener', () => {
-      const opener = makeWindow(ORIGIN);
-      vi.stubGlobal('window', makeWindow(ORIGIN, opener, OAUTH_POPUP_NAME));
-
-      expect(hasSeveredOpener()).toBe(false);
-    });
-
-    /**
-     * The regression this check exists to avoid. Browsers set `window.opener`
-     * to null on any ordinary top-level page — a same-tab web flow, an Expo Web
-     * tab, a plain reload — so a null opener alone would fire the COOP
-     * diagnostic on the single most common case instead of the generic "no
-     * sign-in in progress" message.
-     */
-    test('is false for an ordinary page with a null opener and no popup name', () => {
-      vi.stubGlobal('window', makeWindow(ORIGIN, null));
-
-      expect(hasSeveredOpener()).toBe(false);
-    });
-
-    // Some other popup (an unrelated window.open elsewhere in the app) is not
-    // ours and must not be diagnosed as a broken OAuth flow.
-    test('is false for a differently named popup', () => {
-      vi.stubGlobal('window', makeWindow(ORIGIN, null, 'some-other-popup'));
-
-      expect(hasSeveredOpener()).toBe(false);
-    });
-
-    test('is false outside a browser', () => {
-      vi.stubGlobal('window', undefined);
-
-      expect(hasSeveredOpener()).toBe(false);
     });
   });
 

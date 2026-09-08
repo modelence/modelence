@@ -465,10 +465,13 @@ describe('auth/client — OAuth sign-in', () => {
   });
 
   /**
-   * Which diagnostic is logged when there is no verifier. Getting this wrong is
-   * not cosmetic: the COOP message tells the reader their embedded flow is
-   * unfixable from application code, so firing it on an ordinary same-tab flow
-   * sends them chasing a header that was never the problem.
+   * The diagnostic logged when there is no verifier. It has to name every
+   * cause, because none of them are distinguishable from inside the callback
+   * page: a COOP `same-origin` hop clears `window.name` and `window.opener`
+   * together, `history.length` grows identically for a same-tab redirect, and
+   * an ordinary page reports `opener === null` too. An earlier attempt to guess
+   * which cause applied misreported the common case, so the message covers all
+   * of them instead of picking one.
    */
   describe('loginWithOAuth diagnostics', () => {
     let consoleError: ReturnType<typeof vi.spyOn>;
@@ -481,9 +484,7 @@ describe('auth/client — OAuth sign-in', () => {
       return consoleError.mock.calls.map((call) => String(call[0])).join('\n');
     }
 
-    // The regression the popup name exists to prevent: every ordinary page
-    // reports opener === null, so this must NOT mention COOP.
-    test('reports a generic failure on an ordinary page with a null opener', async () => {
+    test('names both the missing-flow and the COOP cause', async () => {
       useNativeClient();
       usePopupWindow(null);
 
@@ -491,20 +492,22 @@ describe('auth/client — OAuth sign-in', () => {
         /sign in again/i
       );
 
-      expect(loggedText()).toContain('no sign-in in progress');
-      expect(loggedText()).not.toContain('Cross-Origin-Opener-Policy');
+      const logged = loggedText();
+      expect(logged).toContain('no sign-in in progress');
+      expect(logged).toContain('Cross-Origin-Opener-Policy');
     });
 
-    // The real COOP case: our named popup, opener gone.
-    test('names COOP when our popup has lost its opener', async () => {
+    // Same message regardless of ambient window state, since that state cannot
+    // tell the causes apart.
+    test('logs the same guidance for a page that was never a popup', async () => {
       useNativeClient();
-      usePopupWindow(null, 'modelence-oauth');
+      usePopupWindow(null, '');
 
       await expect(authClient.loginWithOAuth({ code: 'stray-code' })).rejects.toThrow(
         /sign in again/i
       );
 
-      expect(loggedText()).toContain('Cross-Origin-Opener-Policy');
+      expect(loggedText()).toContain('no sign-in in progress');
     });
   });
 

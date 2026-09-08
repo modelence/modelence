@@ -415,10 +415,17 @@ call unconditionally.
   provider round trip. A provider page that sends
   `Cross-Origin-Opener-Policy: same-origin` severs that link, in which case the
   popup has nobody to hand the code to and the embedded flow cannot complete.
-  Modelence logs a distinct console message naming COOP when it detects this,
-  rather than failing with a generic "sign in again". Top-level (non-iframe)
-  sign-in is unaffected, since there the verifier is read from the page's own
-  `sessionStorage`.
+
+  This is not detectable from application code: a COOP `same-origin` response
+  moves the popup into a new browsing context group, clearing `window.name`
+  along with `window.opener`, so by the time your callback route runs there is
+  no evidence left that the page was ever a popup. The failure therefore
+  surfaces as the generic "no sign-in in progress" console message, which lists
+  COOP among its causes. If an embedded sign-in stalls and that message appears,
+  check the provider's response headers.
+
+  Top-level (non-iframe) sign-in is unaffected, since there the verifier is read
+  from the page's own `sessionStorage` and no opener is involved.
 </Warning>
 
 ### Plain web apps (no React Native)

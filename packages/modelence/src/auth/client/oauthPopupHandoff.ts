@@ -246,32 +246,11 @@ export function offerCodeToOpener(code: string): Promise<boolean> {
 /**
  * The browsing-context name `signInWithOAuth` gives a popup it opens.
  *
- * The opener sets it, the provider round trip preserves it, and the callback
- * page can read it — so it is the one signal that positively identifies a page
- * as *our* OAuth popup rather than an ordinary tab.
+ * Cosmetic, and lets `resumeOAuthPopup` reclaim the window by name. It is NOT
+ * an identity signal across the provider round trip: a
+ * `Cross-Origin-Opener-Policy: same-origin` response puts the page in a fresh
+ * browsing context group, which clears `window.name` along with
+ * `window.opener`. Verified in Chrome against a server sending real COOP: after
+ * the hop the callback page sees `name === ''` and `opener === null`.
  */
 export const OAUTH_POPUP_NAME = 'modelence-oauth';
-
-/**
- * Whether this page is an OAuth popup that has lost its opener.
- *
- * `window.opener === null` on its own proves nothing: browsers report exactly
- * that on any ordinary top-level page which was never a popup (the property is
- * present and null, not absent), so testing it alone would fire this diagnostic
- * on the most common case of all — a same-tab or native flow with no sign-in in
- * progress.
- *
- * What distinguishes the two is the name the opener assigned when it called
- * `window.open`. A page carrying that name was opened by `signInWithOAuth`; if
- * it nonetheless has no opener, the link was severed in transit, which in
- * practice means `Cross-Origin-Opener-Policy: same-origin` on the provider's
- * sign-in page. An ordinary tab does not carry the name and so is never
- * misreported.
- *
- * Used only to choose a diagnostic message, never to gate the flow.
- */
-export function hasSeveredOpener(): boolean {
-  const w = getWindow();
-  if (!w) return false;
-  return w.name === OAUTH_POPUP_NAME && !isMessageTarget(w.opener);
-}
