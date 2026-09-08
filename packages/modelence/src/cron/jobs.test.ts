@@ -95,6 +95,7 @@ describe('cron/jobs', () => {
         description: 'cleanup',
         interval: 10_000,
         timeout: 120_000,
+        weight: 1,
       },
     ]);
 
@@ -284,5 +285,71 @@ describe('cron/jobs', () => {
 
     resolveHandler!();
     (Date.now as Mock).mockRestore();
+  });
+
+  test('cron loop respects weight-based capacity limit', async () => {
+    const handler1 = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    const handler2 = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    const handler3 = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('heavyJob', {
+      interval: mockSeconds(10),
+      weight: 8,
+      handler: handler1,
+    });
+    defineCronJob('lightJob1', {
+      interval: mockSeconds(10),
+      weight: 3,
+      handler: handler2,
+    });
+    defineCronJob('lightJob2', {
+      interval: mockSeconds(10),
+      weight: 1,
+      handler: handler3,
+    });
+
+    await startCronJobs();
+    await intervalCallback?.();
+
+    // heavyJob (8) starts → usedCapacity = 8
+    // lightJob1 (3): 8 + 3 = 11 > 10 → skipped
+    // lightJob2 (1): 8 + 1 = 9 <= 10 → starts
+    expect(handler1).toHaveBeenCalledTimes(1);
+    expect(handler2).not.toHaveBeenCalled();
+    expect(handler3).toHaveBeenCalledTimes(1);
+  });
+
+  test('cron loop uses default weight of 1 when not specified', async () => {
+    const handler = vi.fn(async () => {});
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('defaultWeight', {
+      interval: mockSeconds(10),
+      handler,
+    });
+
+    await startCronJobs();
+    const metadata = getCronJobsMetadata();
+    expect(metadata[0].weight).toBe(1);
+  });
+
+  test('cron loop respects custom weight per job', async () => {
+    const handler = vi.fn(async () => {});
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('customWeight', {
+      interval: mockSeconds(10),
+      weight: 5,
+      handler,
+    });
+
+    await startCronJobs();
+    const metadata = getCronJobsMetadata();
+    expect(metadata[0].weight).toBe(5);
   });
 });
