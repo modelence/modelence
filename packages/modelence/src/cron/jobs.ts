@@ -109,10 +109,9 @@ async function tickCronJobs() {
   Object.values(cronJobs).forEach(async (job) => {
     const { alias, params, state } = job;
     if (state.isRunning) {
-      if (state.startTs && state.startTs + params.timeout < now) {
-        const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
-        captureError(timeoutError);
-        state.isRunning = false;
+      if (state.startTs && state.startTs + params.timeout < now && !state.timedOutAt) {
+        state.timedOutAt = now;
+        captureError(new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`));
       }
       return;
     }
@@ -127,6 +126,7 @@ async function tickCronJobs() {
 
 async function runCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
+  state.timedOutAt = undefined;
   state.isRunning = true;
   state.startTs = Date.now();
 
@@ -155,6 +155,7 @@ async function runCronJob(job: CronJob) {
 function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
   state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
   state.startTs = undefined;
+  state.timedOutAt = undefined;
   state.isRunning = false;
 }
 
