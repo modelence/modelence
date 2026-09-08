@@ -1,0 +1,37 @@
+---
+sidebar_position: 1
+title: resumeOAuthPopup
+---
+
+[API Reference](/api-reference/modelence/client/functions/../../../index) / [modelence](/api-reference/modelence/client/functions/../../index) / [client](/api-reference/modelence/client/functions/../index) / resumeOAuthPopup
+
+> **resumeOAuthPopup**(`options`): `boolean`
+
+Defined in: [packages/modelence/src/auth/client/index.ts:538](https://github.com/modelence/modelence/blob/a77834c318f8dc6950dd8d978ad30601d192d090/packages/modelence/src/auth/client/index.ts#L538)
+
+Resume a popup sign-in after the opening page reloaded mid-flow.
+
+An embedded preview that refreshes while the popup is at the provider loses
+the in-memory listener that would receive the code. The verifier survives in
+`sessionStorage`, so pass the popup window back in on load to keep the flow
+alive.
+
+## Example
+
+```ts
+const popup = window.open('', 'modelence-oauth');
+if (popup) resumeOAuthPopup({ popup });
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `options` | \{ `popup`: `unknown`; \} | - |
+| `options.popup` | `unknown` | The popup window that is still completing the flow. |
+
+## Returns
+
+`boolean`
+
+Whether a sign-in was pending and the handoff was re-armed.

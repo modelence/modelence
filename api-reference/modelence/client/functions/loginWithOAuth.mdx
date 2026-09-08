@@ -7,7 +7,7 @@ title: loginWithOAuth
 
 > **loginWithOAuth**(`options`): `Promise`\<`null` \| `User`\>
 
-Defined in: [packages/modelence/src/auth/client/index.ts:376](https://github.com/modelence/modelence/blob/3ece382ff59fb0f623ba01aaed723a2487aecc51/packages/modelence/src/auth/client/index.ts#L376)
+Defined in: [packages/modelence/src/auth/client/index.ts:500](https://github.com/modelence/modelence/blob/a77834c318f8dc6950dd8d978ad30601d192d090/packages/modelence/src/auth/client/index.ts#L500)
 
 Complete a native OAuth sign-in with the code from the deep link.
 
@@ -18,18 +18,29 @@ signed-in user. Codes are valid for one minute and can only be redeemed once.
 Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
 a code back to your app. It works on native and under Expo Web, where the
 verifier is kept in `sessionStorage` so it survives the navigation to the
-provider. A plain web app that calls `signInWithOAuth({ provider })` with no
-`redirectUri` is signed in by a session cookie and never needs this.
+provider.
 
-The verifier minted by `signInWithOAuth` is replayed here, which is what
-makes a code usable only by the client that started the flow. Calling this
-without a preceding `signInWithOAuth` — as a crafted deep link would — fails
-before the code is ever sent.
+When this page is an OAuth popup opened by a page that is still listening —
+the embedded-iframe case, where `openUrl` returned the window from
+`window.open` — the code is handed to that opening page instead, and the
+sign-in completes *there*, in the context the app actually runs in. This call
+then resolves to `null`: there is no user to return here, and this page is
+closed for you. A plain web app that calls `signInWithOAuth({ provider })`
+with no `redirectUri` is signed in by a session cookie and never needs this.
+
+The verifier minted by `signInWithOAuth` is replayed by whichever context
+redeems the code, which is what makes a code usable only by the client that
+started the flow. Calling this without a preceding `signInWithOAuth` — as a
+crafted deep link would — fails before the code is ever sent.
 
 ## Example
 
 ```ts
 const user = await loginWithOAuth({ code });
+if (user) {
+  // Signed in here. In an embedded popup, user is null and the opening
+  // page has completed the sign-in instead.
+}
 ```
 
 ## Parameters
