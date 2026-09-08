@@ -1,6 +1,7 @@
 export {
   startTransaction,
   captureError,
+  reportError,
   logInfo,
   logError,
   logDebug,

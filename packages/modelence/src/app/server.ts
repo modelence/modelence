@@ -4,7 +4,7 @@ import { runMethod } from '@/methods';
 import { getResponseTypeMap, sanitizeResult } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
-import { logInfo } from '@/telemetry';
+import { logInfo, reportError } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
@@ -302,11 +302,9 @@ export async function getCallContext(req: Request, res: Response | null = null) 
 }
 
 function handleMethodError(res: Response, methodName: string, error: unknown) {
-  // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
-
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
-      console.error(`Error calling ${methodName}:`, error);
+      reportError(error, `Error calling ${methodName}`);
     }
     // Surface a machine-readable code (when present) via a header so clients can
     // branch on the error kind without parsing the human-readable message. The
@@ -323,14 +321,14 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     try {
       errorMessage = parseZodError(error as z.ZodError);
     } catch (parsingError) {
-      console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+      reportError(parsingError, `Error parsing Zod error in ${methodName}`);
       errorMessage = 'Validation failed';
     }
     res.status(400).send(errorMessage);
     return;
   }
 
-  console.error(`Error calling ${methodName}:`, error);
+  reportError(error, `Error calling ${methodName}`);
   res.status(500).send(error instanceof Error ? error.message : String(error));
 }
 

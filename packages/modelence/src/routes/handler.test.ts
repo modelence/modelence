@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 const mockAuthenticate = vi.fn();
 const mockGetMongodbUri = vi.fn();
 const mockStartTransaction = vi.fn();
+const mockReportError = vi.fn();
 
 vi.doMock('../auth', () => ({
   authenticate: mockAuthenticate,
@@ -33,6 +34,7 @@ function redactSensitive(value: unknown): unknown {
 vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
+  reportError: mockReportError,
 }));
 
 const { ValidationError } = await import('../error');

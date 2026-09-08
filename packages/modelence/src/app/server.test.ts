@@ -56,6 +56,7 @@ const mockCreateRouteHandler =
 const mockGoogleAuthRouter = vi.fn();
 const mockGithubAuthRouter = vi.fn();
 const mockLogInfo = vi.fn();
+const mockReportError = vi.fn();
 const mockGetSecurityConfig = vi.fn();
 const mockGetWebsocketConfig = vi.fn();
 const mockExpressJson = vi.fn();
@@ -106,6 +107,7 @@ vi.doMock('@/auth/providers/github', () => ({
 
 vi.doMock('@/telemetry', () => ({
   logInfo: mockLogInfo,
+  reportError: mockReportError,
 }));
 
 vi.doMock('./securityConfig', () => ({
