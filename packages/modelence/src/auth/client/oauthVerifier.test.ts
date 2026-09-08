@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   __resetInMemoryVerifierForTests as resetInMemoryOnly,
   consumeOAuthVerifier,
+  hasPendingOAuthVerifier,
   resetOAuthVerifier,
   startOAuthVerifier,
 } from './oauthVerifier';
@@ -145,6 +146,54 @@ describe('auth/client/oauthVerifier', () => {
       const challenge = startOAuthVerifier();
 
       expect(consumeOAuthVerifier()).toBe(challenge);
+    });
+  });
+
+  /**
+   * Used to decide whether a flow is worth resuming after the opening page
+   * reloaded mid-round-trip, so it must not consume what it reports on.
+   */
+  describe('hasPendingOAuthVerifier', () => {
+    test('is false before any flow starts', () => {
+      expect(hasPendingOAuthVerifier()).toBe(false);
+    });
+
+    test('is true while a flow is in flight, and does not consume it', () => {
+      const challenge = startOAuthVerifier();
+
+      expect(hasPendingOAuthVerifier()).toBe(true);
+      // Asking twice must not spend it.
+      expect(hasPendingOAuthVerifier()).toBe(true);
+      expect(consumeOAuthVerifier()).toBe(challenge);
+    });
+
+    test('is false once the verifier has been consumed', () => {
+      startOAuthVerifier();
+      consumeOAuthVerifier();
+
+      expect(hasPendingOAuthVerifier()).toBe(false);
+    });
+
+    // The case this exists for: the page was torn down and rebuilt, so the
+    // in-memory copy is gone but sessionStorage still holds the verifier.
+    test('sees a verifier that only survives in sessionStorage', () => {
+      const store = new Map<string, string>();
+      vi.stubGlobal('sessionStorage', {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+      } as unknown as Storage);
+
+      startOAuthVerifier();
+      resetInMemoryOnly();
+
+      expect(hasPendingOAuthVerifier()).toBe(true);
+    });
+
+    test('is false when sessionStorage is unavailable and memory is empty', () => {
+      vi.stubGlobal('sessionStorage', undefined);
+
+      expect(hasPendingOAuthVerifier()).toBe(false);
     });
   });
 });

@@ -8,7 +8,15 @@ import {
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
-import { consumeOAuthVerifier, startOAuthVerifier } from './oauthVerifier';
+import {
+  awaitCodeFromPopup,
+  cancelPopupHandoff,
+  isMessageTarget,
+  OAUTH_POPUP_NAME,
+  offerCodeToOpener,
+  type MessageTarget,
+} from './oauthPopupHandoff';
+import { consumeOAuthVerifier, hasPendingOAuthVerifier, startOAuthVerifier } from './oauthVerifier';
 
 export type UserInfo = {
   id: string;
@@ -336,7 +344,40 @@ export async function signInWithOAuth(options: {
       `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile` +
       `&redirectUri=${encodeURIComponent(redirectUri)}` +
       `&codeChallenge=${encodeURIComponent(codeChallenge)}`;
-    config.openUrl(url);
+    const opened = config.openUrl(url);
+
+    // `openUrl` returned the popup it opened: wait for the callback page in it
+    // to hand back the code, and finish the sign-in *here*. Needed when this
+    // page is an iframe whose storage the popup cannot see — the session has to
+    // land in this context, not in the popup that is about to close. Harmless
+    // otherwise: a same-tab flow never posts a code.
+    if (isMessageTarget(opened)) {
+      // Name the popup so `resumeOAuthPopup` can reclaim this exact window by
+      // name after a reload. Set here rather than passed to `window.open`,
+      // since the application's `openUrl` is what makes that call. The name
+      // does not survive a COOP hop, so nothing but the resume path relies on
+      // it. Assignment can throw if the popup is already gone.
+      try {
+        (opened as { name?: string }).name = OAUTH_POPUP_NAME;
+      } catch {
+        // Only the resume convenience is affected, not the sign-in.
+      }
+
+      armPopupCodeHandoff(opened);
+      return;
+    }
+
+    // A browser that blocked the popup returns null from `window.open`, which
+    // would otherwise leave this resolving normally with nothing happening at
+    // all. Only a browser is diagnosed: `openUrl` legitimately returns
+    // undefined on React Native and on clients that just navigate.
+    if (opened === null && typeof window !== 'undefined') {
+      throw new Error(
+        'signInWithOAuth could not open the sign-in popup — the browser blocked it. ' +
+          'Call signInWithOAuth directly from a click or other user gesture, or allow ' +
+          'popups for this site.'
+      );
+    }
     return;
   }
 
@@ -350,6 +391,78 @@ export async function signInWithOAuth(options: {
 }
 
 /**
+ * Listens for the exchange code from a popup and completes the sign-in here.
+ *
+ * Kept separate from `signInWithOAuth` so the same wiring can be re-armed after
+ * a reload: an embedded preview that refreshes (HMR, a preview reload) while
+ * the popup is still at the provider loses the in-memory listener, but not the
+ * verifier in `sessionStorage`.
+ */
+function armPopupCodeHandoff(popup: MessageTarget) {
+  awaitCodeFromPopup(popup, redeemOAuthCode, (error) => {
+    console.error('[modelence] Failed to complete the OAuth sign-in in the opening page.', error);
+  });
+}
+
+/**
+ * Re-arms the popup handoff after the opening page has reloaded mid-flow.
+ *
+ * Call this on load, passing the popup you reopened or still hold, when a
+ * sign-in was in progress. Returns false when there is no pending verifier, in
+ * which case there is no flow to resume.
+ */
+function resumePopupCodeHandoff(popup: MessageTarget): boolean {
+  if (!hasPendingOAuthVerifier()) return false;
+  armPopupCodeHandoff(popup);
+  return true;
+}
+
+/**
+ * Redeems an exchange code against the verifier held by this context.
+ *
+ * The single place that pairs a code with a verifier, so the popup path and the
+ * ordinary deep-link path cannot drift apart.
+ */
+async function redeemOAuthCode(code: string) {
+  const codeVerifier = consumeOAuthVerifier();
+  if (!codeVerifier) {
+    throw noSignInInProgressError();
+  }
+
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOAuth',
+    { code, codeVerifier }
+  );
+  return completeLogin(result);
+}
+
+/**
+ * The error for a code that arrived with no verifier to pair it with.
+ *
+ * The thrown message is for the end user; the console line is for whoever is
+ * debugging, and names the causes that actually produce this.
+ */
+function noSignInInProgressError() {
+  console.error(
+    '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
+      'Either signInWithOAuth was never called on this client, or the code came ' +
+      'from somewhere other than a flow this client started. On native, the app ' +
+      'process must survive the round trip; in a browser the verifier is kept in ' +
+      'sessionStorage, so a new tab or a cleared session also produces this. ' +
+      'If the app runs in an iframe and opens the provider in a popup, openUrl ' +
+      'must return the window from window.open so the popup can hand the code ' +
+      'back to that page — and note that a provider sending ' +
+      'Cross-Origin-Opener-Policy: same-origin severs window.opener during the ' +
+      'round trip, which breaks that handoff with no way for this code to tell ' +
+      'it apart from the cases above. ' +
+      'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
+      'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
+  );
+
+  return new Error('This sign-in link is no longer valid. Please sign in again.');
+}
+
+/**
  * Complete a native OAuth sign-in with the code from the deep link.
  *
  * Exchanges the single-use code that {@link signInWithOAuth} delivered to your
@@ -359,45 +472,78 @@ export async function signInWithOAuth(options: {
  * Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
  * a code back to your app. It works on native and under Expo Web, where the
  * verifier is kept in `sessionStorage` so it survives the navigation to the
- * provider. A plain web app that calls `signInWithOAuth({ provider })` with no
- * `redirectUri` is signed in by a session cookie and never needs this.
+ * provider.
  *
- * The verifier minted by `signInWithOAuth` is replayed here, which is what
- * makes a code usable only by the client that started the flow. Calling this
- * without a preceding `signInWithOAuth` — as a crafted deep link would — fails
- * before the code is ever sent.
+ * When this page is an OAuth popup opened by a page that is still listening —
+ * the embedded-iframe case, where `openUrl` returned the window from
+ * `window.open` — the code is handed to that opening page instead, and the
+ * sign-in completes *there*, in the context the app actually runs in. This call
+ * then resolves to `null`: there is no user to return here, and this page is
+ * closed for you. A plain web app that calls `signInWithOAuth({ provider })`
+ * with no `redirectUri` is signed in by a session cookie and never needs this.
+ *
+ * The verifier minted by `signInWithOAuth` is replayed by whichever context
+ * redeems the code, which is what makes a code usable only by the client that
+ * started the flow. Calling this without a preceding `signInWithOAuth` — as a
+ * crafted deep link would — fails before the code is ever sent.
  *
  * @example
  * ```ts
  * const user = await loginWithOAuth({ code });
+ * if (user) {
+ *   // Signed in here. In an embedded popup, user is null and the opening
+ *   // page has completed the sign-in instead.
+ * }
  * ```
  * @param options.code - The `code` query parameter from the deep link.
  */
 export async function loginWithOAuth(options: { code: string }) {
   const { code } = options;
 
-  const codeVerifier = consumeOAuthVerifier();
-  if (!codeVerifier) {
-    // Thrown mid-flow, so apps surface it in the UI: the thrown message is for
-    // the end user, the console line for whoever is debugging.
-    console.error(
-      '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
-        'Either signInWithOAuth was never called on this client, or the code came ' +
-        'from somewhere other than a flow this client started. On native, the app ' +
-        'process must survive the round trip; in a browser the verifier is kept in ' +
-        'sessionStorage, so a new tab or a cleared session also produces this. ' +
-        'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
-        'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
-    );
-
-    throw new Error('This sign-in link is no longer valid. Please sign in again.');
+  // Own verifier first: a page holding one started the flow itself, so it is
+  // the context that needs the session. This is the native and same-tab path,
+  // and it means a flow that merely happens to have an unrelated opener never
+  // waits on it.
+  if (hasPendingOAuthVerifier()) {
+    return redeemOAuthCode(code);
   }
 
-  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
-    '_system.user.loginWithOAuth',
-    { code, codeVerifier }
-  );
-  return completeLogin(result);
+  // Nothing here: this is the partitioned popup, whose opener holds the
+  // verifier and is where the session has to land. Hand the code over.
+  if (await offerCodeToOpener(code)) {
+    return null;
+  }
+
+  // Nobody took it — no opener, or an opener that is not listening. Try
+  // anyway, so the failure is diagnosed in one place.
+  return redeemOAuthCode(code);
+}
+
+/**
+ * Resume a popup sign-in after the opening page reloaded mid-flow.
+ *
+ * An embedded preview that refreshes while the popup is at the provider loses
+ * the in-memory listener that would receive the code. The verifier survives in
+ * `sessionStorage`, so pass the popup window back in on load to keep the flow
+ * alive.
+ *
+ * @example
+ * ```ts
+ * const popup = window.open('', 'modelence-oauth');
+ * if (popup) resumeOAuthPopup({ popup });
+ * ```
+ * @param options.popup - The popup window that is still completing the flow.
+ * @returns Whether a sign-in was pending and the handoff was re-armed.
+ */
+export function resumeOAuthPopup(options: { popup: unknown }): boolean {
+  const { popup } = options;
+  if (!isMessageTarget(popup)) return false;
+  return resumePopupCodeHandoff(popup);
+}
+
+/** Abandons a popup sign-in this page was waiting on. */
+export function cancelOAuthPopup(): void {
+  cancelPopupHandoff();
 }
 
 /**

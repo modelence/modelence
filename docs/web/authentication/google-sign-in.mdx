@@ -125,6 +125,24 @@ function LoginForm() {
 6. **User Creation/Login** - If user doesn't exist, a new account is created; otherwise, user is logged in
 7. **Session Creation** - A session is established and the user is authenticated
 
+## Running inside an iframe
+
+The redirect flow above assumes your app can navigate in place. If your app is
+embedded in a **cross-origin iframe** — an embedded preview, a sandbox, a hosted
+playground — it cannot: providers refuse to render their consent screen inside an
+iframe, so the flow has to run in a top-level popup and the code has to be handed
+back to your page.
+
+Two things are needed, and both are off by default:
+
+1. List the embedding origin in
+   [`security.frameAncestors`](/api-reference/modelence/server/type-aliases/SecurityConfig#frameancestors)
+   — Modelence denies cross-origin framing by default, so the frame is blocked
+   before OAuth matters.
+2. Follow
+   [Embedded previews and popups](/react-native#embedded-previews-and-popups)
+   for the popup flow itself.
+
 ## User Data Handling
 
 When a user signs in with Google, Modelence automatically:
