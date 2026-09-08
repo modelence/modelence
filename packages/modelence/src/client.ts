@@ -42,6 +42,8 @@ export {
   loginWithOneTimeCode,
   signInWithOAuth,
   loginWithOAuth,
+  resumeOAuthPopup,
+  cancelOAuthPopup,
   linkOAuthProvider,
   unlinkOAuthProvider,
   type UserInfo,

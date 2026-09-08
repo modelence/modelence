@@ -130,4 +130,28 @@ describe('rate-limit/rules', () => {
 
     expect(mocks.upsertOne).not.toHaveBeenCalled();
   });
+
+  test('consumeRateLimit throws when rate limit count meets or exceeds limit threshold', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'login', type: 'ip', window: 60_000, limit: 3 }]);
+
+    mocks.findOne.mockResolvedValue({
+      bucket: 'login',
+      type: 'ip',
+      value: '10.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      windowCount: 3,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:03:00.000Z'),
+    } as never);
+
+    await expect(
+      consumeRateLimit({ bucket: 'login', type: 'ip', value: '10.0.0.1' })
+    ).rejects.toThrow('Rate limit exceeded for login');
+
+    expect(mocks.upsertOne).not.toHaveBeenCalled();
+  });
 });

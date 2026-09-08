@@ -112,7 +112,7 @@ Modelence's client library works in React Native. Because React Native lacks bro
 | `getAuthToken` | `() => string \| undefined` | Returns the stored auth token synchronously. Called before every request — must not return a `Promise`. |
 | `setAuthToken` | `(token: string \| null) => void` | Persists or clears the auth token synchronously. Called after login and logout. Async side-effects (e.g. writing to `AsyncStorage`) are fine as long as the function itself is not `async`. |
 | `getClientInfo` | `() => ClientInfo` | Returns device screen dimensions and pixel ratio. Used for telemetry. |
-| `openUrl` | `(url: string) => void` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. |
+| `openUrl` | `(url: string) => unknown` | _(Optional)_ Opens a URL externally. Defaults to `window.location.href` assignment in browsers. Pass `Linking.openURL` for React Native OAuth redirects. On the web, return the result of `window.open` to run the flow in a popup — see [Embedded previews and popups](#embedded-previews-and-popups). |
 
 ## Using authentication
 
@@ -340,6 +340,93 @@ export default function AuthCallback() {
   `Linking.createURL('auth')` returns a different value in each — see the table
   below. Add the Expo Web origin alongside your native scheme.
 </Note>
+
+### Embedded previews and popups
+
+When your web build runs inside a **cross-origin iframe** — an embedded preview,
+a sandbox, a hosted playground — it cannot navigate in place: Google and GitHub
+refuse to render their consent screen inside an iframe. The flow has to run in a
+real top-level popup instead. Have `openUrl` open one and **return it**:
+
+```typescript
+configureClient({
+  // ...
+  openUrl: (url) => window.open(url),
+});
+```
+
+<Note>
+  Framing is a prerequisite, and it is denied by default. Modelence sends
+  `X-Frame-Options: SAMEORIGIN` and CSP `frame-ancestors 'self'`, so an
+  embedding page on another origin gets a blocked frame before OAuth is ever
+  reached. List the embedding origin in
+  [`security.frameAncestors`](/api-reference/modelence/server/type-aliases/SecurityConfig#frameancestors)
+  first.
+</Note>
+
+That return value is what makes the popup case work. Once the popup is a
+top-level window, browsers partition its `sessionStorage` away from the iframe's
+(Chrome storage partitioning, Safari ITP), so the two contexts share nothing.
+
+The direction of the handoff is what decides where the user ends up signed in.
+The popup **hands the single-use code back to your page**, and your page — which
+still holds the verifier in memory — redeems it and completes the sign-in in its
+own context. The session therefore lands in the iframe, where your app actually
+runs, rather than in a popup that is about to close. The verifier never leaves
+the page that minted it, and no session token crosses `postMessage`.
+
+The callback route is the same `app/auth.tsx` as above. In the popup,
+`loginWithOAuth({ code })` finds no verifier of its own, hands the code to its
+opener, and resolves to `null` — there is no user to return there, and the popup
+is closed for you:
+
+```typescript
+const user = await loginWithOAuth({ code });
+if (user) {
+  // Signed in here: the ordinary same-tab or native flow.
+} else {
+  // This was an embedded popup. The opening page completed the sign-in.
+}
+```
+
+A page that has its own verifier never consults an opener, so same-tab and
+native flows are unaffected.
+
+#### If the opening page reloads mid-flow
+
+An embedded preview that refreshes while the popup is still at the provider (a
+hot reload, a preview refresh) loses the in-memory listener that would receive
+the code. The verifier survives in `sessionStorage`, so hand the popup back on
+load to keep the flow alive:
+
+```typescript
+import { resumeOAuthPopup } from 'modelence/client';
+
+// On load, reconnect to a popup opened with a name you can reclaim.
+const popup = window.open('', 'modelence-oauth');
+if (popup) resumeOAuthPopup({ popup });
+```
+
+`resumeOAuthPopup` returns `false` when no sign-in was pending, so it is safe to
+call unconditionally.
+
+<Warning>
+  The handoff relies on the popup keeping its `window.opener` across the
+  provider round trip. A provider page that sends
+  `Cross-Origin-Opener-Policy: same-origin` severs that link, in which case the
+  popup has nobody to hand the code to and the embedded flow cannot complete.
+
+  This is not detectable from application code: a COOP `same-origin` response
+  moves the popup into a new browsing context group, clearing `window.name`
+  along with `window.opener`, so by the time your callback route runs there is
+  no evidence left that the page was ever a popup. The failure therefore
+  surfaces as the generic "no sign-in in progress" console message, which lists
+  COOP among its causes. If an embedded sign-in stalls and that message appears,
+  check the provider's response headers.
+
+  Top-level (non-iframe) sign-in is unaffected, since there the verifier is read
+  from the page's own `sessionStorage` and no opener is involved.
+</Warning>
 
 ### Plain web apps (no React Native)
 

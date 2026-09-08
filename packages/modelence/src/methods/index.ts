@@ -1,5 +1,5 @@
 import { requireServer } from '../utils';
-import { startTransaction, redactSensitive } from '@/telemetry';
+import { startTransaction, captureError, redactSensitive } from '@/telemetry';
 import { requireAccess } from '../auth/role';
 import { Method, MethodDefinition, MethodType, Args, Context } from './types';
 import { LiveData } from '../live-query';
@@ -83,7 +83,7 @@ export async function runMethod(name: string, args: Args, context: Context) {
     requireAccess(context.roles, method.permissions);
     response = await handler(args, context);
   } catch (error) {
-    // TODO: log error and associate it with the transaction
+    captureError(error instanceof Error ? error : new Error(String(error)));
     transaction.end('error');
     throw error;
   }
@@ -127,6 +127,7 @@ export async function runLiveMethod(name: string, args: Args, context: Context):
       );
     }
   } catch (error) {
+    captureError(error instanceof Error ? error : new Error(String(error)));
     transaction.end('error');
     throw error;
   }
