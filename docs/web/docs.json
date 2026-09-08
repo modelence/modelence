@@ -199,6 +199,7 @@
                     "group": "Functions",
                     "pages": [
                       "api-reference/modelence/client/functions/callMethod",
+                      "api-reference/modelence/client/functions/cancelOAuthPopup",
                       "api-reference/modelence/client/functions/configureClient",
                       "api-reference/modelence/client/functions/connectModelenceQueryClient",
                       "api-reference/modelence/client/functions/createClientModule",
@@ -221,6 +222,7 @@
                       "api-reference/modelence/client/functions/renderApp",
                       "api-reference/modelence/client/functions/resendEmailVerification",
                       "api-reference/modelence/client/functions/resetPassword",
+                      "api-reference/modelence/client/functions/resumeOAuthPopup",
                       "api-reference/modelence/client/functions/sendMagicLink",
                       "api-reference/modelence/client/functions/sendResetPasswordToken",
                       "api-reference/modelence/client/functions/setWebsocketClientProvider",
