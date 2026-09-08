@@ -72,7 +72,13 @@ async function createBundle(bundlePath: string) {
 
   archive.pipe(output);
 
-  const bundleFiles = ['package.json', 'next.config.js', 'next.config.ts', 'modelence.config.ts'];
+  const bundleFiles = [
+    'package.json',
+    'package-lock.json',
+    'next.config.js',
+    'next.config.ts',
+    'modelence.config.ts',
+  ];
 
   const bundleDirs = ['public', 'server', join('.modelence', 'build'), '.next'];
 
