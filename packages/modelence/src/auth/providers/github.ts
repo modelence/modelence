@@ -203,7 +203,9 @@ function getRouter(): ExpressRouter {
     const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
 
     if (!githubEnabled || !githubClientId || !githubClientSecret) {
-      sendOAuthError(res, 503, 'GitHub authentication is not configured');
+      sendOAuthError(res, 503, 'GitHub authentication is not configured', {
+        platform: 'api',
+      });
       return;
     }
 

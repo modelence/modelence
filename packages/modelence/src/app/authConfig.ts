@@ -385,6 +385,11 @@ export type AuthConfig = {
    *
    * `error` is for display and its wording may change; branch on `errorCode`.
    *
+   * Applies to the provider callback only. A request rejected at the sign-in
+   * *initiation* endpoint (auth not configured, a disallowed mobile
+   * `redirectUri`, a missing `codeChallenge`) still answers the calling client
+   * with JSON, since nothing has left for the provider yet.
+   *
    * @example
    * ```typescript
    * startApp({

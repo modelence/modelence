@@ -116,7 +116,8 @@ describe('auth/providers/google', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(
       res,
       503,
-      'Google authentication is not configured'
+      'Google authentication is not configured',
+      { platform: 'api' }
     );
     expect(next).not.toHaveBeenCalled();
   });

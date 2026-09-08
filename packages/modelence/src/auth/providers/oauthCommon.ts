@@ -11,6 +11,7 @@ import {
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
+import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
@@ -67,8 +68,16 @@ export type BoundMobileOutcome = {
  * Where an *error* should be delivered.
  *
  * A failure carries no credential, so it needs a destination but no binding.
+ *
+ * `api` is for failures raised at the initiation endpoint, which a client calls
+ * directly and can read a JSON body from. `web` is for the provider callback,
+ * where the browser has landed on a URL outside any client bundle and a JSON
+ * body would strand it.
  */
-export type OAuthErrorTarget = { platform: 'web' } | { platform: 'mobile'; redirectUri: string };
+export type OAuthErrorTarget =
+  | { platform: 'web' }
+  | { platform: 'api' }
+  | { platform: 'mobile'; redirectUri: string };
 
 /**
  * Resolves the outcome for a validated OAuth state.
@@ -157,6 +166,11 @@ export type OAuthErrorCode =
  * browser with no route back into the app, so the error is delivered as a
  * redirect to the app's deep link instead. Errors raised before the state is
  * decoded have no known platform and keep the default behaviour.
+ *
+ * `oauthErrorRedirectUrl` covers the `web` platform only: it exists for the
+ * provider callback, where the browser has landed outside any client bundle.
+ * An initiation-time failure (`api`) is answered by a client that called the
+ * endpoint directly and can read the JSON body, so it is never redirected.
  */
 export function sendOAuthError(
   res: Response,
@@ -178,20 +192,35 @@ export function sendOAuthError(
 
   const authConfig = getAuthConfig();
 
-  if (authConfig.oauthErrorRedirectUrl) {
-    // Same shape as the mobile deep link, so a client can handle both alike.
-    // The message is not a credential, but it is user-facing text about a
-    // failed sign-in; keep it out of Referer like the mobile branch does.
-    res.set('Referrer-Policy', 'no-referrer');
-    // Always set by the time a callback runs: `getRedirectUri` needs it to
-    // start the flow at all.
-    const siteUrl = getConfig('_system.site.url') as string;
-    return res.redirect(
-      buildOAuthErrorRedirect(siteUrl, authConfig.oauthErrorRedirectUrl, {
+  if (authConfig.oauthErrorRedirectUrl && outcome.platform === 'web') {
+    // `_system.site.url` is set by the time a *callback* runs, since
+    // `getRedirectUri` needs it to start the flow at all. It can still be
+    // missing in local dev, so fall back to the same value that seeds it there.
+    const siteUrl = (getConfig('_system.site.url') as string) || getLocalSiteUrl();
+    let redirectUrl: string | null = null;
+    try {
+      redirectUrl = buildOAuthErrorRedirect(siteUrl, authConfig.oauthErrorRedirectUrl, {
         error: errorMessage,
         errorCode,
-      })
-    );
+      });
+    } catch (err) {
+      // A relative `oauthErrorRedirectUrl` against an unusable base throws here.
+      // Report the original failure below rather than turning it into a 500.
+      console.error(
+        `[modelence] Could not build the OAuth error redirect from ` +
+          `${JSON.stringify(authConfig.oauthErrorRedirectUrl)} and site URL ` +
+          `${JSON.stringify(siteUrl)}. Falling back to the default error response.`,
+        err
+      );
+    }
+
+    if (redirectUrl) {
+      // Same shape as the mobile deep link, so a client can handle both alike.
+      // The message is not a credential, but it is user-facing text about a
+      // failed sign-in; keep it out of Referer like the mobile branch does.
+      res.set('Referrer-Policy', 'no-referrer');
+      return res.redirect(redirectUrl);
+    }
   }
 
   const response = res.status(statusCode);
@@ -834,7 +863,9 @@ export function resolveMobileRedirectRequest(
   const redirectUri = typeof req.query.redirectUri === 'string' ? req.query.redirectUri : '';
 
   if (!redirectUri) {
-    sendOAuthError(res, 400, 'A redirectUri is required for mobile authentication.');
+    sendOAuthError(res, 400, 'A redirectUri is required for mobile authentication.', {
+      platform: 'api',
+    });
     return { ok: false };
   }
 
@@ -851,7 +882,7 @@ export function resolveMobileRedirectRequest(
       res,
       400,
       describeRejectedRedirectUri(redirectUri),
-      undefined,
+      { platform: 'api' },
       'invalid_redirect'
     );
     return { ok: false };
@@ -871,7 +902,8 @@ export function resolveMobileRedirectRequest(
       res,
       400,
       'This sign-in request is missing a valid codeChallenge. Update the Modelence ' +
-        'client package — signInWithOAuth generates it automatically.'
+        'client package — signInWithOAuth generates it automatically.',
+      { platform: 'api' }
     );
     return { ok: false };
   }
@@ -913,7 +945,10 @@ export async function prepareOAuthInitiation(
         res,
         401,
         'Invalid or expired link nonce for OAuth linking.',
-        mobileRedirectUri ? { platform: 'mobile', redirectUri: mobileRedirectUri } : undefined,
+        mobileRedirectUri
+          ? { platform: 'mobile', redirectUri: mobileRedirectUri }
+          : // Also an initiation-time failure: the caller gets JSON, not a redirect.
+            { platform: 'api' },
         'invalid_link_nonce'
       );
       return null;

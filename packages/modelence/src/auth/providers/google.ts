@@ -150,7 +150,9 @@ function getRouter(): ExpressRouter {
     const googleClientSecret = String(getConfig('_system.user.auth.google.clientSecret'));
 
     if (!googleEnabled || !googleClientId || !googleClientSecret) {
-      sendOAuthError(res, 503, 'Google authentication is not configured');
+      sendOAuthError(res, 503, 'Google authentication is not configured', {
+        platform: 'api',
+      });
       return;
     }
 

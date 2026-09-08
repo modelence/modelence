@@ -50,6 +50,7 @@ vi.doMock('../utils', () => ({
   resolveUniqueHandle: mockResolveUniqueHandle,
 }));
 
+const localConfig = await import('@/config/local');
 const moduleExports = await import('./oauthCommon');
 
 describe('auth/providers/oauthCommon', () => {
@@ -1098,6 +1099,58 @@ describe('auth/providers/oauthCommon', () => {
         expect(webRes.redirect).toHaveBeenCalled();
         expect(mockErrorComponent).not.toHaveBeenCalled();
         expect(webRes.send).not.toHaveBeenCalled();
+      });
+
+      test('falls back to the local site URL when _system.site.url is unset', () => {
+        const webRes = redirectRes();
+        mockGetConfig.mockReturnValue(undefined);
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(webRes, 400, 'Auth failed');
+
+        expect(webRes.redirect).toHaveBeenCalledWith(
+          'http://localhost:3000/login?error=Auth+failed&errorCode=oauth_failed'
+        );
+      });
+
+      test('falls back to JSON when the redirect cannot be built', () => {
+        const webRes = redirectRes();
+        // No usable base, so a relative target has nothing to resolve against.
+        mockGetConfig.mockReturnValue(undefined);
+        vi.spyOn(localConfig, 'getLocalSiteUrl').mockReturnValue('');
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        moduleExports.sendOAuthError(webRes, 400, 'Auth failed');
+
+        expect(webRes.redirect).not.toHaveBeenCalled();
+        expect(webRes.status).toHaveBeenCalledWith(400);
+        expect(webRes.json).toHaveBeenCalledWith({ error: 'Auth failed' });
+        expect(consoleError).toHaveBeenCalled();
+
+        consoleError.mockRestore();
+        // clearAllMocks leaves a spy's implementation in place, so this one
+        // would otherwise blank the site URL for every later test.
+        vi.restoreAllMocks();
+      });
+
+      test('does not apply to initiation-time errors, which stay JSON', () => {
+        const apiRes = redirectRes();
+        mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
+
+        moduleExports.sendOAuthError(
+          apiRes,
+          400,
+          'A redirectUri is required for mobile authentication.',
+          { platform: 'api' },
+          'invalid_redirect'
+        );
+
+        expect(apiRes.redirect).not.toHaveBeenCalled();
+        expect(apiRes.status).toHaveBeenCalledWith(400);
+        expect(apiRes.json).toHaveBeenCalledWith({
+          error: 'A redirectUri is required for mobile authentication.',
+        });
       });
 
       test('does not apply to mobile flows, which use the deep link', () => {

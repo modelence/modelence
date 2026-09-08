@@ -114,7 +114,8 @@ describe('auth/providers/github', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(
       res,
       503,
-      'GitHub authentication is not configured'
+      'GitHub authentication is not configured',
+      { platform: 'api' }
     );
     expect(next).not.toHaveBeenCalled();
   });
