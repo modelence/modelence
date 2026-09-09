@@ -129,7 +129,7 @@ const CLAUDE_PLUGIN_DOCS_URL = 'https://docs.modelence.com/ai-coding-agents';
 const CLAUDE_PLUGIN_INSTALL_HINT =
   'Install the Modelence plugin for Claude Code by hand:\n' +
   `  claude plugin marketplace add ${CLAUDE_MARKETPLACE_REPO}\n` +
-  `  claude plugin install ${CLAUDE_PLUGIN_ID}\n` +
+  `  claude plugin install ${CLAUDE_PLUGIN_ID} --scope project\n` +
   `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
 
 /*
