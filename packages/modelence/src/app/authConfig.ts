@@ -85,6 +85,8 @@ export type AuthRateLimitsConfig = {
   magicLink?: AuthRateLimitOverride[];
   /** Rate limits for one-time code sign-in attempts. */
   oneTimeCode?: AuthRateLimitOverride[];
+  /** Rate limits for redeeming a mobile OAuth exchange code. */
+  oauthExchange?: AuthRateLimitOverride[];
   /** Per-user rate limits for profile updates. */
   updateProfile?: AuthRateLimitOverride[];
 };
@@ -306,8 +308,10 @@ export type AuthConfig = {
    * Custom handle generator. If provided, overrides the default behavior
    * (which derives the handle from the email local-part). Receives
    * `{ email, firstName?, lastName? }` and returns the desired handle
-   * synchronously or as a `Promise<string>`. If the returned handle collides
-   * with an existing one, Modelence appends a numeric suffix automatically.
+   * synchronously or as a `Promise<string>`. The returned handle must contain
+   * only letters, numbers, underscores, and hyphens (matching `HANDLE_REGEX`).
+   * If the returned handle collides with an existing one, Modelence appends
+   * a numeric suffix automatically.
    */
   generateHandle?: (props: GenerateHandleProps) => Promise<string> | string;
 
@@ -382,6 +386,36 @@ export type AuthConfig = {
    * means disposable emails will be allowed to sign up.
    */
   allowDisposableEmails?: boolean;
+
+  /**
+   * Settings for authenticating from a native (React Native / Expo) client.
+   *
+   * @example
+   * ```typescript
+   * startApp({
+   *   auth: {
+   *     mobile: { redirectUrls: ['myapp://auth'] },
+   *   },
+   * });
+   * ```
+   */
+  mobile?: {
+    /**
+     * Deep links the OAuth callback is allowed to redirect a native app back to,
+     * e.g. `['myapp://auth']`. A sign-in request naming any other target is
+     * rejected before the user ever reaches the provider's consent screen.
+     *
+     * This is an allowlist because the redirect target decides where an auth
+     * flow ends up: without it, a crafted link could point the callback at an
+     * attacker-controlled destination. There is no implicit default — mobile
+     * OAuth stays disabled until at least one entry is configured here or via
+     * the `auth.mobile.redirectUrls` config value (the two are merged).
+     *
+     * Entries are matched on scheme, host and path; a request may add query
+     * parameters but may not change any of those three.
+     */
+    redirectUrls?: string[];
+  };
 };
 
 let authConfig: AuthConfig = Object.freeze({});

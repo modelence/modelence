@@ -4,6 +4,7 @@ import type { Handler } from './types';
 const transactionEnd = vi.fn();
 const mockRequireServer = vi.fn();
 const mockStartTransaction = vi.fn();
+const mockCaptureError = vi.fn();
 const mockRequireAccess = vi.fn();
 
 vi.doMock('../utils', () => ({
@@ -12,6 +13,7 @@ vi.doMock('../utils', () => ({
 
 vi.doMock('@/telemetry', () => ({
   startTransaction: mockStartTransaction,
+  captureError: mockCaptureError,
   redactSensitive: (v: unknown) => v,
 }));
 
@@ -91,6 +93,21 @@ describe('methods/index', () => {
     createQuery('demo.fail', handlerSpy as never);
 
     await expect(runMethod('demo.fail', {}, { roles: [] } as never)).rejects.toThrow('fail');
+    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    expect(transactionEnd).toHaveBeenCalledWith('error');
+  });
+
+  test('runLiveMethod captures errors and marks transaction', async () => {
+    const { createQuery, runLiveMethod } = await import('./index');
+    const handler: Handler = async () => {
+      throw new Error('live fail');
+    };
+    createQuery('demo.liveFail', handler as never);
+
+    await expect(runLiveMethod('demo.liveFail', {}, { roles: [] } as never)).rejects.toThrow(
+      'live fail'
+    );
+    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     expect(transactionEnd).toHaveBeenCalledWith('error');
   });
 });

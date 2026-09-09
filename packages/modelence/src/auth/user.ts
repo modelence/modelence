@@ -28,6 +28,7 @@ import {
   handleMagicLinkLanding,
   handleSendMagicLink,
 } from './magicLink';
+import { handleLoginWithOAuth } from './loginWithOAuth';
 
 function ruleKey(rule: Pick<RateLimitRule, 'bucket' | 'type' | 'window'>): string {
   return `${rule.bucket}\n${rule.type}\n${rule.window}`;
@@ -55,6 +56,10 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'oneTimeCode', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'oneTimeCode', type: 'email', window: time.hours(1), limit: 10 },
     { bucket: 'oneTimeCode', type: 'email', window: time.days(1), limit: 20 },
+    // Redeeming a mobile OAuth exchange code. Codes are 256-bit and live for a
+    // minute, so this guards against bulk guessing rather than a targeted one.
+    { bucket: 'oauthExchange', type: 'ip', window: time.minutes(15), limit: 30 },
+    { bucket: 'oauthExchange', type: 'ip', window: time.days(1), limit: 300 },
     { bucket: 'updateProfile', type: 'user', window: time.minutes(15), limit: 30 },
     { bucket: 'updateProfile', type: 'user', window: time.days(1), limit: 200 },
   ];
@@ -71,6 +76,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'passwordReset',
     'magicLink',
     'oneTimeCode',
+    'oauthExchange',
     'updateProfile',
   ];
 
@@ -168,6 +174,7 @@ export default new Module('_system.user', {
     sendMagicLink: handleSendMagicLink,
     loginWithMagicLink: handleLoginWithMagicLink,
     loginWithOneTimeCode: handleLoginWithOneTimeCode,
+    loginWithOAuth: handleLoginWithOAuth,
     updateProfile: handleUpdateProfile,
     unlinkOAuthProvider: handleUnlinkOAuthProvider,
   },
@@ -218,6 +225,15 @@ export default new Module('_system.user', {
     },
     'auth.github.clientSecret': {
       type: 'secret',
+      isPublic: false,
+      default: '',
+    },
+    // Deep links the mobile OAuth callback may redirect to, e.g. "myapp://auth",
+    // separated by commas or newlines. Merged with `AuthConfig.mobile.redirectUrls`.
+    // Not public: the client names its own redirect target, and publishing the
+    // allowlist would only advertise what an attacker needs to guess.
+    'auth.mobile.redirectUrls': {
+      type: 'text',
       isPublic: false,
       default: '',
     },

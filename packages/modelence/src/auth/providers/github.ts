@@ -1,6 +1,4 @@
 import { getConfig } from '@/server';
-import { time } from '@/time';
-import { randomBytes } from 'crypto';
 import {
   Router,
   type Request,
@@ -16,8 +14,10 @@ import {
   type OAuthUserData,
   clearOAuthLinkCookie,
   validateOAuthStateAndGetMode,
-  resolveUserIdFromLinkNonce,
   sendOAuthError,
+  prepareOAuthInitiation,
+  resolveMobileOutcomeFromCookie,
+  toOAuthOutcome,
 } from './oauth-common';
 
 interface GitHubTokenResponse {
@@ -114,13 +114,23 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
   const code = validateOAuthCode(req.query.code);
 
   if (!code) {
-    sendOAuthError(res, 400, 'Missing authorization code');
+    // No usable state to validate yet (a declined consent screen sends none),
+    // but the state cookie still records where the app lives, so this can be
+    // reported into the app instead of as JSON in the device browser.
+    sendOAuthError(
+      res,
+      400,
+      'Missing authorization code',
+      resolveMobileOutcomeFromCookie(req, 'authStateGithub') ?? undefined,
+      'missing_code'
+    );
     return;
   }
 
   const stateResult = validateOAuthStateAndGetMode(req, res, 'authStateGithub');
   if (!stateResult) return;
   const { mode, linkedUserId } = stateResult;
+  const outcome = toOAuthOutcome(stateResult);
 
   const githubClientId = String(getConfig('_system.user.auth.github.clientId'));
   const githubClientSecret = String(getConfig('_system.user.auth.github.clientSecret'));
@@ -149,7 +159,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       sendOAuthError(
         res,
         400,
-        'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.'
+        'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
+        outcome
       );
       return;
     }
@@ -169,16 +180,16 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
     };
 
     if (mode === 'link') {
-      await handleOAuthProviderLink(req, res, userData, linkedUserId);
+      await handleOAuthProviderLink(req, res, userData, linkedUserId, outcome);
     } else {
-      await handleOAuthUserAuthentication(req, res, userData);
+      await handleOAuthUserAuthentication(req, res, userData, outcome);
     }
   } catch (error) {
     console.error('GitHub OAuth error:', error);
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
-    sendOAuthError(res, 500, 'Authentication failed');
+    sendOAuthError(res, 500, 'Authentication failed', outcome);
   }
 }
 
@@ -214,27 +225,9 @@ function getRouter(): ExpressRouter {
             .join(' ')
         : 'user:email';
 
-      const state = randomBytes(32).toString('hex');
-
-      const mode = req.query.mode === 'link' ? 'link' : 'login';
-
-      // React Native: consume single-use nonce and embed resolved userId in state cookie.
-      let linkedUserId: string | null = null;
-      if (mode === 'link' && req.query.linkNonce) {
-        linkedUserId = await resolveUserIdFromLinkNonce(req.query.linkNonce as string);
-        if (!linkedUserId) {
-          sendOAuthError(res, 401, 'Invalid or expired link nonce for OAuth linking.');
-          return;
-        }
-      }
-
-      const stateValue = linkedUserId ? `${state}:${mode}:${linkedUserId}` : `${state}:${mode}`;
-      res.cookie('authStateGithub', stateValue, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: time.minutes(10), // 10 minutes
-      });
+      const initiation = await prepareOAuthInitiation(req, res, 'authStateGithub');
+      if (!initiation) return;
+      const { state } = initiation;
 
       const authUrl = new URL('https://github.com/login/oauth/authorize');
       authUrl.searchParams.append('client_id', githubClientId);

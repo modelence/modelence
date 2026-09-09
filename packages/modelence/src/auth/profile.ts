@@ -4,10 +4,11 @@ import { serializeUserForClient } from './utils';
 import { validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { consumeRateLimit } from '../rate-limit/rules';
+import { AuthError, ValidationError } from '../error';
 
 export async function getOwnProfile(props: Args, { user }: Context) {
   if (!user) {
-    throw new Error('Not authenticated');
+    throw new AuthError('Not authenticated');
   }
 
   const profile = await usersCollection.requireById(user.id);
@@ -24,12 +25,19 @@ export async function getOwnProfile(props: Args, { user }: Context) {
 
 export async function handleUpdateProfile(props: Args, { user }: Context) {
   if (!user) {
-    throw new Error('Not authenticated');
+    throw new AuthError('Not authenticated');
   }
 
   let profile = await usersCollection.requireById(user.id);
 
-  const update = validateProfileFields(props as UpdateProfileProps);
+  const rawProps = props as UpdateProfileProps;
+  const isHandleUnchanged =
+    typeof rawProps.handle === 'string' && rawProps.handle.trim() === profile.handle;
+
+  const { handle: _ignoredHandle, ...propsWithoutHandle } = rawProps;
+  const update = validateProfileFields(
+    isHandleUnchanged ? (propsWithoutHandle as UpdateProfileProps) : rawProps
+  );
 
   await getAuthConfig().validateProfileUpdate?.(update);
 
@@ -44,7 +52,7 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
     );
 
     if (existing) {
-      throw new Error('Handle already taken.');
+      throw new ValidationError('Handle already taken.');
     }
   }
 
@@ -77,7 +85,7 @@ export async function handleUpdateProfile(props: Args, { user }: Context) {
       profile = { ...profile, ...setFields, ...clearedFields } as typeof profile;
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as { code: number }).code === 11000) {
-        throw new Error('Handle already taken.');
+        throw new ValidationError('Handle already taken.');
       }
       throw error;
     }

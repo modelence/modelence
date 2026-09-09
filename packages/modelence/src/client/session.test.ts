@@ -7,6 +7,7 @@ const mockSetConfig = vi.fn();
 const mockSetLocalStorageSession = vi.fn();
 const mockGetLocalStorageSession = vi.fn<() => object | null>(() => null);
 const mockGetClientConfig = vi.fn();
+const mockRevalidateModelenceQueries = vi.fn();
 const mockSeconds = vi.fn((value: number) => value * 1000);
 
 vi.doMock('./method', () => ({
@@ -24,6 +25,10 @@ vi.doMock('./localStorage', () => ({
 
 vi.doMock('./clientConfig', () => ({
   getClientConfig: mockGetClientConfig,
+}));
+
+vi.doMock('./query', () => ({
+  revalidateModelenceQueries: mockRevalidateModelenceQueries,
 }));
 
 vi.doMock('../time', () => ({
@@ -50,6 +55,7 @@ describe('client/session', () => {
     mockGetLocalStorageSession.mockReturnValue(null);
     mockGetClientConfig.mockReset();
     mockGetClientConfig.mockReturnValue(null);
+    mockRevalidateModelenceQueries.mockReset();
     global.setTimeout = ((fn: Parameters<typeof originalSetTimeout>[0], delay?: number) => {
       return originalSetTimeout(fn, delay);
     }) as typeof setTimeout;
@@ -278,5 +284,70 @@ describe('client/session', () => {
 
     await fresh.reconcileSession();
     expect(mockCallMethod).not.toHaveBeenCalled();
+  });
+
+  test('revalidateSessionOnPageShow re-initializes session and updates user state', async () => {
+    const fresh = await import('./session');
+    mockCallMethod.mockResolvedValueOnce({
+      configs: [{ key: 'k', value: 'v' }],
+      session: { authToken: 'fresh-token' },
+      user: { id: '99', handle: 'bfcache-user', roles: ['user'] },
+    } as never);
+
+    await fresh.revalidateSessionOnPageShow();
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.session.init');
+    expect(mockSetConfig).toHaveBeenCalledWith([{ key: 'k', value: 'v' }]);
+    expect(mockSetLocalStorageSession).toHaveBeenCalledWith({ authToken: 'fresh-token' });
+    expect(fresh.useSessionStore.getState().user?.id).toBe('99');
+    expect(mockRevalidateModelenceQueries).toHaveBeenCalledTimes(1);
+  });
+
+  test('revalidateSessionOnPageShow delegates token storage to client config when configured', async () => {
+    const mockSetAuthToken = vi.fn();
+    mockGetClientConfig.mockReturnValue({ setAuthToken: mockSetAuthToken });
+    const fresh = await import('./session');
+    mockCallMethod.mockResolvedValueOnce({
+      configs: {},
+      session: { authToken: 'custom-config-token' },
+      user: { id: '100', handle: 'custom-user', roles: [] },
+    } as never);
+
+    await fresh.revalidateSessionOnPageShow();
+
+    expect(mockSetAuthToken).toHaveBeenCalledWith('custom-config-token');
+    expect(mockSetLocalStorageSession).not.toHaveBeenCalled();
+  });
+
+  test('revalidateSessionOnPageShow logs error when revalidation fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fresh = await import('./session');
+    mockCallMethod.mockRejectedValueOnce(new Error('Network error'));
+
+    await fresh.revalidateSessionOnPageShow();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Modelence: session revalidation failed on pageshow',
+      expect.any(Error)
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('revalidateSessionOnPageShow clears populated user state when revalidated anonymously (user: null)', async () => {
+    const fresh = await import('./session');
+    fresh.setCurrentUser({ id: 'active-user', handle: 'logged-in', roles: ['user'] });
+    expect(fresh.useSessionStore.getState().user?.id).toBe('active-user');
+
+    mockCallMethod.mockResolvedValueOnce({
+      configs: {},
+      session: { authToken: 'anon-token' },
+      user: null,
+    } as never);
+
+    await fresh.revalidateSessionOnPageShow();
+
+    expect(mockCallMethod).toHaveBeenCalledWith('_system.session.init');
+    expect(fresh.useSessionStore.getState().user).toBeNull();
+    expect(mockRevalidateModelenceQueries).toHaveBeenCalledTimes(1);
   });
 });

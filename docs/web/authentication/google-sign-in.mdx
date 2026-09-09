@@ -46,6 +46,12 @@ Before implementing Google Sign-In, you need to:
      - `https://yourdomain.com/api/_internal/auth/google/callback` (for production)
    - Click "Create"
 
+   <Note>
+     This is the only redirect URI you need, including for native apps. React
+     Native sign-in reuses this same callback and returns to your app through a
+     deep link — see [React Native](/react-native#oauth-sign-in).
+   </Note>
+
 5. **Save Credentials**
    - Copy your **Client ID** and **Client Secret**
    - Store them securely (use environment variables or Modelence Cloud config)
@@ -118,6 +124,24 @@ function LoginForm() {
 5. **Token Exchange** - Your server exchanges the code for user information
 6. **User Creation/Login** - If user doesn't exist, a new account is created; otherwise, user is logged in
 7. **Session Creation** - A session is established and the user is authenticated
+
+## Running inside an iframe
+
+The redirect flow above assumes your app can navigate in place. If your app is
+embedded in a **cross-origin iframe** — an embedded preview, a sandbox, a hosted
+playground — it cannot: providers refuse to render their consent screen inside an
+iframe, so the flow has to run in a top-level popup and the code has to be handed
+back to your page.
+
+Two things are needed, and both are off by default:
+
+1. List the embedding origin in
+   [`security.frameAncestors`](/api-reference/modelence/server/type-aliases/SecurityConfig#frameancestors)
+   — Modelence denies cross-origin framing by default, so the frame is blocked
+   before OAuth matters.
+2. Follow
+   [Embedded previews and popups](/react-native#embedded-previews-and-popups)
+   for the popup flow itself.
 
 ## User Data Handling
 

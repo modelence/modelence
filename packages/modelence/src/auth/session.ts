@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 import { type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import { Module } from '../app/module';
@@ -8,7 +8,7 @@ import { Store } from '../data/store';
 import { schema } from '../data/types';
 import { time } from '../time';
 import { hashToken } from './tokenHash';
-import { Session } from './types';
+import { OAuthProvider, Session } from './types';
 
 export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
   schema: {
@@ -36,6 +36,99 @@ export async function consumeLinkNonce(nonce: string): Promise<string | null> {
   const entry = await linkNoncesCollection.findOneAndDelete({ nonce });
   if (!entry) return null;
   return entry.userId;
+}
+
+/**
+ * Short-lived, single-use codes that hand an OAuth sign-in back to a native app.
+ *
+ * The mobile OAuth callback cannot set a usable cookie (no shared cookie jar) and
+ * must not put the session token in the deep link: a custom scheme like `myapp://`
+ * can be claimed by any installed app, so a token in the URL is handed to whichever
+ * app wins the race. Instead the callback mints one of these codes, and the app
+ * exchanges it for a real session over TLS via the `loginWithOAuth` mutation.
+ *
+ * Stored hashed — like magic link tokens, and unlike link nonces — because the code
+ * travels in a URL and is a bearer credential until redeemed. The TTL is deliberately
+ * much shorter than a link nonce's: the app is foregrounded by the deep link and
+ * redeems immediately.
+ */
+export const oauthExchangeCodesCollection = new Store('_modelenceOAuthExchangeCodes', {
+  schema: {
+    code: schema.string(),
+    userId: schema.string(),
+    provider: schema.string(),
+    /**
+     * Hash of the PKCE-style verifier held by the device that started the flow.
+     *
+     * Always written: `resolveMobileRedirectRequest` rejects an initiation that
+     * does not carry a challenge, so every code minted by this version is bound.
+     * Kept optional in the schema only to describe rows that may still exist
+     * from before the field was introduced — `consumeOAuthExchangeCode` refuses
+     * those rather than treating a missing challenge as "no binding required".
+     */
+    codeChallenge: schema.string().optional(),
+    expiresAt: schema.date(),
+  },
+  indexes: [
+    { key: { code: 1 }, unique: true },
+    { key: { expiresAt: 1 }, expireAfterSeconds: 0 },
+  ],
+});
+
+const OAUTH_EXCHANGE_CODE_TTL_MINUTES = 1;
+
+export async function issueOAuthExchangeCode(
+  userId: string,
+  provider: OAuthProvider,
+  codeChallenge: string
+): Promise<string> {
+  const code = randomBytes(32).toString('hex');
+  await oauthExchangeCodesCollection.insertOne({
+    code: hashToken(code),
+    userId,
+    provider,
+    // Stored hashed for the same reason the code is: it is a bearer secret at
+    // rest until the flow completes.
+    codeChallenge: hashToken(codeChallenge),
+    expiresAt: new Date(Date.now() + time.minutes(OAUTH_EXCHANGE_CODE_TTL_MINUTES)),
+  });
+  return code;
+}
+
+/**
+ * Consumes a single-use OAuth exchange code; returns the bound user and provider,
+ * or null when the code is unknown, already redeemed, expired, or not matched by
+ * the verifier of the device that started the flow.
+ *
+ * The delete is the commit point: concurrent redemptions of the same code resolve
+ * to exactly one winner. Expiry is checked explicitly rather than relying on the
+ * TTL index, which only sweeps periodically.
+ *
+ * The verifier check happens after the delete, so a wrong verifier still burns
+ * the code rather than leaving it available for another guess.
+ */
+export async function consumeOAuthExchangeCode(
+  code: string,
+  codeVerifier?: string | null
+): Promise<{ userId: string; provider: OAuthProvider } | null> {
+  const entry = await oauthExchangeCodesCollection.findOneAndDelete({ code: hashToken(code) });
+  if (!entry) return null;
+  if (entry.expiresAt < new Date()) return null;
+
+  // Fail closed. A stored entry with no challenge cannot be verified, so it is
+  // rejected rather than accepted unbound: treating "no challenge" as "no check
+  // needed" would let anyone who can mint an unbound code bypass the binding
+  // entirely, which is the whole point of having one.
+  if (!entry.codeChallenge || !codeVerifier) return null;
+  if (!timingSafeEqualHex(hashToken(codeVerifier), entry.codeChallenge)) return null;
+
+  return { userId: entry.userId, provider: entry.provider as OAuthProvider };
+}
+
+/** Constant-time comparison of two hex digests of equal expected length. */
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
 }
 
 export const sessionsCollection = new Store('_modelenceSessions', {
@@ -161,7 +254,7 @@ export function clearAuthTokenCookie(res: Response) {
 }
 
 export default new Module('_system.session', {
-  stores: [sessionsCollection, linkNoncesCollection],
+  stores: [sessionsCollection, linkNoncesCollection, oauthExchangeCodesCollection],
   mutations: {
     init: async function (args, { session, user, res }) {
       // Only refresh the cookie for logged-in sessions. Writing one for a

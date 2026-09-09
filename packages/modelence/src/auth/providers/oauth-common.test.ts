@@ -10,6 +10,7 @@ const mockGetAuthConfig = vi.fn();
 const mockGetCallContext = vi.fn();
 const mockGetConfig = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
+const mockIssueOAuthExchangeCode = vi.fn();
 
 vi.doMock('../db', () => ({
   usersCollection: {
@@ -29,6 +30,8 @@ vi.doMock('../session', () => ({
       path: '/',
     });
   }),
+  consumeLinkNonce: vi.fn(),
+  issueOAuthExchangeCode: mockIssueOAuthExchangeCode,
 }));
 
 vi.doMock('@/app/authConfig', () => ({
@@ -103,7 +106,7 @@ describe('auth/providers/oauth-common', () => {
       mockCreateSession.mockResolvedValue({ authToken: 'tok' } as never);
       const userId = new ObjectId();
 
-      await moduleExports.authenticateUser(res, userId);
+      await moduleExports.authenticateUser(res, userId, 'google');
 
       expect(mockCreateSession).toHaveBeenCalledWith(userId);
       expect(res.cookie).toHaveBeenCalledWith(
@@ -115,7 +118,7 @@ describe('auth/providers/oauth-common', () => {
           path: '/',
         })
       );
-      expect(res.status).toHaveBeenCalledWith(302);
+      // res.redirect sets 302 itself; asserting the redirect is the contract.
       expect(res.redirect).toHaveBeenCalledWith('/');
     });
   });
@@ -898,7 +901,7 @@ describe('auth/providers/oauth-common', () => {
           user: updatedUser,
         })
       );
-      expect(res.status).toHaveBeenCalledWith(302);
+      // res.redirect sets 302 itself; asserting the redirect is the contract.
       expect(res.redirect).toHaveBeenCalledWith('/');
     });
 
@@ -924,7 +927,7 @@ describe('auth/providers/oauth-common', () => {
 
       // Should still proceed and update (idempotent)
       expect(mockUsersUpdateOne).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(302);
+      expect(res.redirect).toHaveBeenCalledWith('/');
     });
 
     test('does not crash if onOAuthLinkError throws', async () => {

@@ -8,6 +8,15 @@ import {
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
 import { OAuthProvider } from '../types';
+import {
+  awaitCodeFromPopup,
+  cancelPopupHandoff,
+  isMessageTarget,
+  OAUTH_POPUP_NAME,
+  offerCodeToOpener,
+  type MessageTarget,
+} from './oauthPopupHandoff';
+import { consumeOAuthVerifier, hasPendingOAuthVerifier, startOAuthVerifier } from './oauthVerifier';
 
 export type UserInfo = {
   id: string;
@@ -36,6 +45,18 @@ function persistSession(session: { authToken: string }) {
   } else {
     setLocalStorageSession(session);
   }
+}
+
+/**
+ * Stores the session from a completed sign-in and returns the enriched user.
+ *
+ * Every login method ends the same way — persist the auth token, then publish
+ * the user to the reactive session store. Kept in one place so a new sign-in
+ * method cannot half-implement it.
+ */
+function completeLogin(result: { user: RawUserData; session: { authToken: string } }) {
+  persistSession(result.session);
+  return setCurrentUser(result.user);
 }
 
 /**
@@ -84,16 +105,14 @@ export async function signupWithPassword(options: {
  */
 export async function loginWithPassword(options: { email: string; password: string }) {
   const { email, password } = options;
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithPassword',
     {
       email,
       password,
     }
   );
-  persistSession(session);
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -216,12 +235,10 @@ export async function sendMagicLink(options: { email: string }) {
  * ```
  */
 export async function loginWithMagicLink() {
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithMagicLink'
   );
-  persistSession(session);
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -242,13 +259,11 @@ export async function loginWithMagicLink() {
  */
 export async function loginWithOneTimeCode(options: { email: string; code: string }) {
   const { email, code } = options;
-  const { user, session } = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
     '_system.user.loginWithOneTimeCode',
     { email, code }
   );
-  persistSession(session);
-  const enrichedUser = setCurrentUser(user);
-  return enrichedUser;
+  return completeLogin(result);
 }
 
 /**
@@ -270,22 +285,304 @@ export async function resetPassword(options: { token?: string; password: string 
 }
 
 /**
+ * Start an OAuth sign-in.
+ *
+ * On the web this navigates to the provider and the flow finishes on its own —
+ * the session cookie is set and the browser lands back on your site.
+ *
+ * Pass `redirectUri` to run the native flow: the device browser opens the
+ * provider, and when the flow completes Modelence redirects back to that deep
+ * link with a single-use `code` query parameter. Hand that code to
+ * {@link loginWithOAuth} to finish signing in. The redirect target must be
+ * listed in the server's `auth.mobile.redirectUrls`, otherwise the request is
+ * rejected before the provider is ever reached.
+ *
+ * The native flow additionally binds the sign-in to this device: a verifier is
+ * held in memory here and replayed by `loginWithOAuth`, so a `code` delivered
+ * to the app from outside this flow cannot be redeemed.
+ *
+ * @example Web
+ * ```ts
+ * await signInWithOAuth({ provider: 'google' });
+ * ```
+ *
+ * @example React Native
+ * ```ts
+ * import { parseDeepLinkParams } from 'modelence/client';
+ *
+ * await signInWithOAuth({ provider: 'google', redirectUri: 'myapp://auth' });
+ *
+ * Linking.addEventListener('url', async ({ url }) => {
+ *   const { code } = parseDeepLinkParams(url);
+ *   if (code) await loginWithOAuth({ code });
+ * });
+ * ```
+ * @param options.provider - The OAuth provider to sign in with ('google' or 'github').
+ * @param options.redirectUri - Deep link to return to. Required on React Native.
+ */
+export async function signInWithOAuth(options: {
+  provider: OAuthProvider;
+  redirectUri?: string;
+}): Promise<void> {
+  const { provider, redirectUri } = options;
+  const config = getClientConfig();
+  const baseUrl = config?.baseUrl ?? '';
+
+  // `redirectUri` — not the presence of `openUrl` — decides the flow. An
+  // Electron or Capacitor client may set `openUrl` purely to control how links
+  // open while still completing the ordinary cookie-based web flow.
+  if (redirectUri) {
+    if (!config?.openUrl) {
+      throw new Error(
+        'signInWithOAuth was given a redirectUri but the client has no openUrl. ' +
+          'Configure openUrl (e.g. (url) => Linking.openURL(url)) to use the native flow.'
+      );
+    }
+
+    const codeChallenge = startOAuthVerifier();
+    const url =
+      `${baseUrl}/api/_internal/auth/${provider}?mode=login&platform=mobile` +
+      `&redirectUri=${encodeURIComponent(redirectUri)}` +
+      `&codeChallenge=${encodeURIComponent(codeChallenge)}`;
+    const opened = config.openUrl(url);
+
+    // `openUrl` returned the popup it opened: wait for the callback page in it
+    // to hand back the code, and finish the sign-in *here*. Needed when this
+    // page is an iframe whose storage the popup cannot see — the session has to
+    // land in this context, not in the popup that is about to close. Harmless
+    // otherwise: a same-tab flow never posts a code.
+    if (isMessageTarget(opened)) {
+      // Name the popup so `resumeOAuthPopup` can reclaim this exact window by
+      // name after a reload. Set here rather than passed to `window.open`,
+      // since the application's `openUrl` is what makes that call. The name
+      // does not survive a COOP hop, so nothing but the resume path relies on
+      // it. Assignment can throw if the popup is already gone.
+      try {
+        (opened as { name?: string }).name = OAUTH_POPUP_NAME;
+      } catch {
+        // Only the resume convenience is affected, not the sign-in.
+      }
+
+      armPopupCodeHandoff(opened);
+      return;
+    }
+
+    // A browser that blocked the popup returns null from `window.open`, which
+    // would otherwise leave this resolving normally with nothing happening at
+    // all. Only a browser is diagnosed: `openUrl` legitimately returns
+    // undefined on React Native and on clients that just navigate.
+    if (opened === null && typeof window !== 'undefined') {
+      throw new Error(
+        'signInWithOAuth could not open the sign-in popup — the browser blocked it. ' +
+          'Call signInWithOAuth directly from a click or other user gesture, or allow ' +
+          'popups for this site.'
+      );
+    }
+    return;
+  }
+
+  const webUrl = `${baseUrl}/api/_internal/auth/${provider}?mode=login`;
+  if (config?.openUrl) {
+    config.openUrl(webUrl);
+    return;
+  }
+
+  window.location.href = webUrl;
+}
+
+/**
+ * Listens for the exchange code from a popup and completes the sign-in here.
+ *
+ * Kept separate from `signInWithOAuth` so the same wiring can be re-armed after
+ * a reload: an embedded preview that refreshes (HMR, a preview reload) while
+ * the popup is still at the provider loses the in-memory listener, but not the
+ * verifier in `sessionStorage`.
+ */
+function armPopupCodeHandoff(popup: MessageTarget) {
+  awaitCodeFromPopup(popup, redeemOAuthCode, (error) => {
+    console.error('[modelence] Failed to complete the OAuth sign-in in the opening page.', error);
+  });
+}
+
+/**
+ * Re-arms the popup handoff after the opening page has reloaded mid-flow.
+ *
+ * Call this on load, passing the popup you reopened or still hold, when a
+ * sign-in was in progress. Returns false when there is no pending verifier, in
+ * which case there is no flow to resume.
+ */
+function resumePopupCodeHandoff(popup: MessageTarget): boolean {
+  if (!hasPendingOAuthVerifier()) return false;
+  armPopupCodeHandoff(popup);
+  return true;
+}
+
+/**
+ * Redeems an exchange code against the verifier held by this context.
+ *
+ * The single place that pairs a code with a verifier, so the popup path and the
+ * ordinary deep-link path cannot drift apart.
+ */
+async function redeemOAuthCode(code: string) {
+  const codeVerifier = consumeOAuthVerifier();
+  if (!codeVerifier) {
+    throw noSignInInProgressError();
+  }
+
+  const result = await callMethod<{ user: RawUserData; session: { authToken: string } }>(
+    '_system.user.loginWithOAuth',
+    { code, codeVerifier }
+  );
+  return completeLogin(result);
+}
+
+/**
+ * The error for a code that arrived with no verifier to pair it with.
+ *
+ * The thrown message is for the end user; the console line is for whoever is
+ * debugging, and names the causes that actually produce this.
+ */
+function noSignInInProgressError() {
+  console.error(
+    '[modelence] loginWithOAuth was called with no sign-in in progress. ' +
+      'Either signInWithOAuth was never called on this client, or the code came ' +
+      'from somewhere other than a flow this client started. On native, the app ' +
+      'process must survive the round trip; in a browser the verifier is kept in ' +
+      'sessionStorage, so a new tab or a cleared session also produces this. ' +
+      'If the app runs in an iframe and opens the provider in a popup, openUrl ' +
+      'must return the window from window.open so the popup can hand the code ' +
+      'back to that page — and note that a provider sending ' +
+      'Cross-Origin-Opener-Policy: same-origin severs window.opener during the ' +
+      'round trip, which breaks that handoff with no way for this code to tell ' +
+      'it apart from the cases above. ' +
+      'A plain web app that never calls signInWithOAuth({ redirectUri }) does not ' +
+      'need loginWithOAuth at all — the cookie flow signs the user in on its own.'
+  );
+
+  return new Error('This sign-in link is no longer valid. Please sign in again.');
+}
+
+/**
+ * Complete a native OAuth sign-in with the code from the deep link.
+ *
+ * Exchanges the single-use code that {@link signInWithOAuth} delivered to your
+ * app's deep link for a session, stores the auth token, and returns the
+ * signed-in user. Codes are valid for one minute and can only be redeemed once.
+ *
+ * Pairs with `signInWithOAuth({ provider, redirectUri })` — the flow that hands
+ * a code back to your app. It works on native and under Expo Web, where the
+ * verifier is kept in `sessionStorage` so it survives the navigation to the
+ * provider.
+ *
+ * When this page is an OAuth popup opened by a page that is still listening —
+ * the embedded-iframe case, where `openUrl` returned the window from
+ * `window.open` — the code is handed to that opening page instead, and the
+ * sign-in completes *there*, in the context the app actually runs in. This call
+ * then resolves to `null`: there is no user to return here, and this page is
+ * closed for you. A plain web app that calls `signInWithOAuth({ provider })`
+ * with no `redirectUri` is signed in by a session cookie and never needs this.
+ *
+ * The verifier minted by `signInWithOAuth` is replayed by whichever context
+ * redeems the code, which is what makes a code usable only by the client that
+ * started the flow. Calling this without a preceding `signInWithOAuth` — as a
+ * crafted deep link would — fails before the code is ever sent.
+ *
+ * @example
+ * ```ts
+ * const user = await loginWithOAuth({ code });
+ * if (user) {
+ *   // Signed in here. In an embedded popup, user is null and the opening
+ *   // page has completed the sign-in instead.
+ * }
+ * ```
+ * @param options.code - The `code` query parameter from the deep link.
+ */
+export async function loginWithOAuth(options: { code: string }) {
+  const { code } = options;
+
+  // Own verifier first: a page holding one started the flow itself, so it is
+  // the context that needs the session. This is the native and same-tab path,
+  // and it means a flow that merely happens to have an unrelated opener never
+  // waits on it.
+  if (hasPendingOAuthVerifier()) {
+    return redeemOAuthCode(code);
+  }
+
+  // Nothing here: this is the partitioned popup, whose opener holds the
+  // verifier and is where the session has to land. Hand the code over.
+  if (await offerCodeToOpener(code)) {
+    return null;
+  }
+
+  // Nobody took it — no opener, or an opener that is not listening. Try
+  // anyway, so the failure is diagnosed in one place.
+  return redeemOAuthCode(code);
+}
+
+/**
+ * Resume a popup sign-in after the opening page reloaded mid-flow.
+ *
+ * An embedded preview that refreshes while the popup is at the provider loses
+ * the in-memory listener that would receive the code. The verifier survives in
+ * `sessionStorage`, so pass the popup window back in on load to keep the flow
+ * alive.
+ *
+ * @example
+ * ```ts
+ * const popup = window.open('', 'modelence-oauth');
+ * if (popup) resumeOAuthPopup({ popup });
+ * ```
+ * @param options.popup - The popup window that is still completing the flow.
+ * @returns Whether a sign-in was pending and the handoff was re-armed.
+ */
+export function resumeOAuthPopup(options: { popup: unknown }): boolean {
+  const { popup } = options;
+  if (!isMessageTarget(popup)) return false;
+  return resumePopupCodeHandoff(popup);
+}
+
+/** Abandons a popup sign-in this page was waiting on. */
+export function cancelOAuthPopup(): void {
+  cancelPopupHandoff();
+}
+
+/**
  * Link an OAuth provider to the currently signed-in user's account.
  * Redirects the browser to the OAuth provider's authorization page.
  * The provider will redirect back and the account will be linked.
+ *
+ * Without `redirectUri` this navigates the current context and authenticates
+ * with an httpOnly cookie, so it only works where the navigation stays in the
+ * same cookie jar — a browser, or a webview that navigates in place. Clients
+ * whose `openUrl` opens an external browser (Electron, Capacitor) must pass a
+ * `redirectUri`: that flow carries a single-use nonce in the URL and does not
+ * depend on cookies.
  *
  * @example
  * ```ts
  * linkOAuthProvider({ provider: 'google' });
  * ```
  * @param options.provider - The OAuth provider to link ('google' or 'github').
+ * @param options.redirectUri - Deep link to return to once linking completes.
+ *   Required for React Native and any client that opens URLs externally; must be
+ *   listed in the server's `auth.mobile.redirectUrls`. Without it the flow ends
+ *   wherever the navigation lands rather than back in the app.
  */
-export async function linkOAuthProvider(options: { provider: OAuthProvider }): Promise<void> {
-  const { provider } = options;
+export async function linkOAuthProvider(options: {
+  provider: OAuthProvider;
+  redirectUri?: string;
+}): Promise<void> {
+  const { provider, redirectUri } = options;
   const config = getClientConfig();
   const baseUrl = config?.baseUrl ?? '';
 
-  if (config?.openUrl) {
+  if (redirectUri) {
+    if (!config?.openUrl) {
+      throw new Error(
+        'linkOAuthProvider was given a redirectUri but the client has no openUrl. ' +
+          'Configure openUrl (e.g. (url) => Linking.openURL(url)) to use the native flow.'
+      );
+    }
     // React Native: exchange authToken for a single-use nonce via an authenticated
     // request, then put the nonce in the URL. A crafted external link can't work
     // because the nonce is bound to this session and consumed on first use.
@@ -302,7 +599,10 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
       throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
     }
     const { nonce } = await nonceResponse.json();
-    const url = `${baseUrl}/api/_internal/auth/${provider}?mode=link&linkNonce=${encodeURIComponent(nonce)}`;
+    const url =
+      `${baseUrl}/api/_internal/auth/${provider}?mode=link` +
+      `&linkNonce=${encodeURIComponent(nonce)}` +
+      `&platform=mobile&redirectUri=${encodeURIComponent(redirectUri)}`;
     config.openUrl(url);
   } else {
     // Browser: set httpOnly cookie via same-origin fetch (keeps token out of redirect params).
@@ -318,6 +618,11 @@ export async function linkOAuthProvider(options: { provider: OAuthProvider }): P
         throw new Error('Failed to initialize OAuth linking. Please ensure you are logged in.');
       }
     }
+    // Same-context navigation, not `config.openUrl`: this authenticates with the
+    // httpOnly cookie just set on this origin, and `openUrl` may open a system
+    // browser that never received it. (`signInWithOAuth` can use `openUrl` on
+    // its web path because that path is stateless.) Clients that open externally
+    // should pass a `redirectUri` and take the nonce flow above.
     window.location.href = `${baseUrl}/api/_internal/auth/${provider}?mode=link`;
   }
 }

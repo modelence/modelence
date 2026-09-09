@@ -50,12 +50,14 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
       : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
   };
 
-  const record = await dbRateLimits.findOne({
+  const filter = {
     bucket: rule.bucket,
     type: rule.type,
     value,
     windowMs: rule.window,
-  });
+  };
+
+  const record = await dbRateLimits.findOne(filter);
 
   const now = Date.now();
   const currentWindowStart = Math.floor(now / rule.window) * rule.window;
@@ -82,10 +84,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
     Always use upsert, because there is a small chance the document might be auto-removed
     based on the expiration TTL index in between the check and the update
   */
-  await dbRateLimits.upsertOne(
-    { bucket: rule.bucket, type: rule.type, value, windowMs: rule.window },
-    modifier
-  );
+  await dbRateLimits.upsertOne(filter, modifier);
 }
 
 function getCount(record: (typeof dbRateLimits)['Doc'], currentWindowStart: number, now: number) {

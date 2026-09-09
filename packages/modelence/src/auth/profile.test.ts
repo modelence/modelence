@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthError, ValidationError } from '../error';
 
 const mockRequireById = vi.fn();
 const mockFindOne = vi.fn();
@@ -58,43 +59,47 @@ describe('auth/profile', () => {
       expect(typeof getOwnProfile).toBe('function');
     });
 
-    it('should throw error when user is not authenticated', async () => {
-      await expect(
-        getOwnProfile(
-          {},
-          {
-            user: null,
-            session: null,
-            roles: [],
-            clientInfo: {
-              screenWidth: 1920,
-              screenHeight: 1080,
-              windowWidth: 1920,
-              windowHeight: 1080,
-              pixelRatio: 1,
-              orientation: 'landscape',
-            },
-            connectionInfo: {
-              userAgent: 'test',
-              ip: '127.0.0.1',
-            },
-            req: null,
-            res: null,
-          }
-        )
-      ).rejects.toThrow('Not authenticated');
+    it('should throw AuthError when user is not authenticated', async () => {
+      await expect(getOwnProfile({}, { user: null } as never)).rejects.toThrowError(AuthError);
+    });
+
+    it('should retrieve own profile when authenticated', async () => {
+      const mockProfile = {
+        _id: 'user-id',
+        handle: 'john_doe',
+        emails: [],
+        authMethods: {},
+      };
+      mockRequireById.mockResolvedValueOnce(mockProfile);
+
+      const result = await getOwnProfile({}, authenticatedContext);
+      expect(result.handle).toBe('john_doe');
     });
   });
 
   describe('handleUpdateProfile', () => {
+    it('should throw AuthError when user is not authenticated', async () => {
+      await expect(handleUpdateProfile({}, { user: null } as never)).rejects.toThrowError(
+        AuthError
+      );
+    });
+
+    it('should throw ValidationError when handle is already taken', async () => {
+      mockFindOne.mockResolvedValueOnce({ _id: 'user-id-2', handle: 'taken_handle' });
+
+      await expect(
+        handleUpdateProfile({ handle: 'taken_handle' }, authenticatedContext)
+      ).rejects.toThrowError(ValidationError);
+    });
+
     it('does not consume the profile update limit when field validation fails', async () => {
       mockValidateProfileFields.mockImplementation(() => {
-        throw new Error('Invalid profile field');
+        throw new ValidationError('Invalid profile field');
       });
 
       await expect(
         handleUpdateProfile({ firstName: 'Invalid' }, authenticatedContext)
-      ).rejects.toThrow('Invalid profile field');
+      ).rejects.toThrowError(ValidationError);
 
       expect(mockConsumeRateLimit).not.toHaveBeenCalled();
     });
@@ -118,6 +123,20 @@ describe('auth/profile', () => {
         value: 'user-1',
       });
       expect(mockUpdateOne).toHaveBeenCalled();
+    });
+
+    it('allows legacy users with invalid handle characters to update other fields when handle is unchanged', async () => {
+      mockRequireById.mockResolvedValueOnce({
+        _id: 'legacy-1',
+        handle: 'legacy.user',
+      });
+
+      await handleUpdateProfile(
+        { handle: 'legacy.user', firstName: 'Updated' },
+        authenticatedContext
+      );
+
+      expect(mockValidateProfileFields).toHaveBeenCalledWith({ firstName: 'Updated' });
     });
   });
 });
