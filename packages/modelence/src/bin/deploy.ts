@@ -80,7 +80,7 @@ async function createBundle(bundlePath: string) {
     'modelence.config.ts',
   ];
 
-  const bundleDirs = ['public', 'server', join('.modelence', 'build'), '.next'];
+  const bundleDirs = ['public', 'server', 'scripts', join('.modelence', 'build'), '.next'];
 
   for (const file of bundleFiles) {
     if (
