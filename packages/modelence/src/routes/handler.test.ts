@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 const mockAuthenticate = vi.fn();
 const mockGetMongodbUri = vi.fn();
 const mockStartTransaction = vi.fn();
+const mockCaptureError = vi.fn();
 
 vi.doMock('../auth', () => ({
   authenticate: mockAuthenticate,
@@ -33,6 +34,7 @@ function redactSensitive(value: unknown): unknown {
 vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
+  captureError: mockCaptureError,
 }));
 
 const { ValidationError } = await import('../error');
@@ -189,26 +191,45 @@ describe('routes/handler', () => {
     expect(res.setHeader).toHaveBeenNthCalledWith(2, 'Content-Type', 'application/vnd.ms-excel');
   });
 
-  test('handles ModelenceError gracefully', async () => {
+  test('handles ModelenceError gracefully and reports to captureError', async () => {
+    const error = new ValidationError('fail');
     const handler = createRouteHandler('GET', '/test', async () => {
-      throw new ValidationError('fail');
+      throw error;
     });
 
     await handler(baseReq, res, next);
 
+    expect(mockCaptureError).toHaveBeenCalledWith(error);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith('fail');
+    expect(transactionEnd).toHaveBeenCalledWith('error');
   });
 
-  test('logs generic errors and sends 500', async () => {
+  test('logs generic errors, captures in telemetry, and sends 500', async () => {
+    const error = new Error('boom');
     const handler = createRouteHandler('GET', '/test', async () => {
-      throw new Error('boom');
+      throw error;
     });
 
     await handler(baseReq, res, next);
 
+    expect(mockCaptureError).toHaveBeenCalledWith(error);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Error: boom');
+    expect(transactionEnd).toHaveBeenCalledWith('error');
+  });
+
+  test('wraps non-Error thrown values before passing to captureError', async () => {
+    const handler = createRouteHandler('GET', '/test', async () => {
+      throw 'string failure';
+    });
+
+    await handler(baseReq, res, next);
+
+    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockCaptureError.mock.calls[0][0].message).toBe('string failure');
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('string failure');
     expect(transactionEnd).toHaveBeenCalledWith('error');
   });
 });

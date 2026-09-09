@@ -4,7 +4,7 @@ import { ModelenceError } from '../error';
 import { authenticate } from '../auth';
 import { getMongodbUri } from '../db/client';
 import type { Context } from '../methods/types';
-import { startTransaction, redactSensitive } from '../telemetry';
+import { startTransaction, redactSensitive, captureError } from '../telemetry';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
 export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
@@ -73,6 +73,7 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
         }
       }
     } catch (error) {
+      captureError(error instanceof Error ? error : new Error(String(error)));
       transaction.end('error');
 
       if (error instanceof ModelenceError) {
