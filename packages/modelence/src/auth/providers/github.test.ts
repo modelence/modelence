@@ -38,7 +38,7 @@ const mockPrepareOAuthInitiation = vi.fn(
   }
 );
 
-vi.doMock('./oauth-common', () => ({
+vi.doMock('./oauthCommon', () => ({
   getRedirectUri: mockGetRedirectUri,
   handleOAuthUserAuthentication: mockHandleOAuthUserAuthentication,
   handleOAuthProviderLink: mockHandleOAuthProviderLink,
@@ -114,7 +114,8 @@ describe('auth/providers/github', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(
       res,
       503,
-      'GitHub authentication is not configured'
+      'GitHub authentication is not configured',
+      { platform: 'api' }
     );
     expect(next).not.toHaveBeenCalled();
   });
@@ -253,7 +254,7 @@ describe('auth/providers/github', () => {
 
   test('callback handler returns 400 when state invalid', async () => {
     mockValidateOAuthStateAndGetMode.mockImplementationOnce((req: Request, res: Response) => {
-      mockSendOAuthError(res, 400, 'Invalid OAuth state - possible CSRF attack');
+      mockSendOAuthError(res, 400, 'Your sign-in session has expired. Please sign in again.');
       return null;
     });
     const route = findRoute('/api/_internal/auth/github/callback');
@@ -271,7 +272,7 @@ describe('auth/providers/github', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(
       res,
       400,
-      'Invalid OAuth state - possible CSRF attack'
+      'Your sign-in session has expired. Please sign in again.'
     );
   });
 

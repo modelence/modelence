@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 /**
- * Mobile OAuth paths. Kept separate from oauth-common.test.ts so the config mock
+ * Mobile OAuth paths. Kept separate from oauthCommon.test.ts so the config mock
  * can distinguish the site URL from the deep-link allowlist, and so the web-flow
  * regression suite stays untouched.
  */
@@ -41,7 +41,7 @@ vi.doMock('@/app/server', () => ({ getCallContext: mockGetCallContext }));
 vi.doMock('@/config/server', () => ({ getConfig: mockGetConfig }));
 vi.doMock('../utils', () => ({ resolveUniqueHandle: mockResolveUniqueHandle }));
 
-const oauth = await import('./oauth-common');
+const oauth = await import('./oauthCommon');
 
 function makeRes() {
   return {
@@ -61,7 +61,7 @@ const MOBILE_OUTCOME = {
   codeChallenge: 'device-challenge',
 } as const;
 
-describe('auth/providers/oauth-common — mobile', () => {
+describe('auth/providers/oauthCommon — mobile', () => {
   let res: Response;
 
   beforeEach(() => {

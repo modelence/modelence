@@ -25,7 +25,7 @@ const ctx = (o = {}) =>
 
 /**
  * Redemption-side invariants, paired with the initiation invariants in
- * providers/oauth-common.e2e.test.ts. Together they cover the two halves that
+ * providers/oauthCommon.e2e.test.ts. Together they cover the two halves that
  * must agree: a code is minted only with a binding, and redeemed only with the
  * matching verifier.
  */
