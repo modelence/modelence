@@ -107,7 +107,7 @@ export function getResponseTypeMap(result: unknown) {
 }
 
 export function reviveResponseTypes<T = unknown>(data: T, typeMap?: Record<string, unknown>): T {
-  if (!typeMap) {
+  if (!typeMap || data == null) {
     return data;
   }
 
@@ -116,18 +116,29 @@ export function reviveResponseTypes<T = unknown>(data: T, typeMap?: Record<strin
   }
 
   if (typeMap.type === 'array') {
+    if (!Array.isArray(data)) {
+      return data;
+    }
     return (data as unknown[]).map((item: unknown, index: number) =>
-      reviveResponseTypes(item, (typeMap.elements as Record<string, unknown>[])[index])
+      reviveResponseTypes(
+        item,
+        (typeMap.elements as Record<string, unknown>)?.[index] as
+          | Record<string, unknown>
+          | undefined
+      )
     ) as T;
   }
 
   if (typeMap.type === 'object') {
+    if (typeof data !== 'object' || data === null) {
+      return data;
+    }
     return Object.fromEntries(
       Object.entries(data as Record<string, unknown>).map(([key, value]) => [
         key,
         reviveResponseTypes(
           value,
-          (typeMap.props as Record<string, unknown>)[key] as Record<string, unknown>
+          (typeMap.props as Record<string, unknown>)?.[key] as Record<string, unknown>
         ),
       ])
     ) as T;
