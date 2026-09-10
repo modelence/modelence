@@ -40,6 +40,10 @@ For a more detailed guide, check out the [Quick Start](https://docs.modelence.co
 
 If you want to contribute to Modelence itself (not just use it in an application), follow the steps below.
 
+> Before you start, please read [CONTRIBUTING.md](https://github.com/modelence/modelence/blob/main/CONTRIBUTING.md).
+> Bug fixes and small improvements are welcome as pull requests; changes to the core runtime or public API surface
+> should start with an issue.
+
 #### 1. Clone the repository
 ```bash
 git clone https://github.com/modelence/modelence.git
