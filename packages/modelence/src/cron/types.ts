@@ -6,6 +6,7 @@ export type CronJob = {
     description: string;
     interval: number;
     timeout: number;
+    weight: number;
   };
   handler: CronJobHandler;
   state: {
@@ -19,6 +20,7 @@ export type CronJobInputParams = {
   description?: string;
   interval: number;
   timeout?: number;
+  weight?: number;
   handler: CronJobHandler;
 };
 
@@ -27,4 +29,5 @@ export type CronJobMetadata = {
   description: string;
   interval: number;
   timeout: number;
+  weight: number;
 };

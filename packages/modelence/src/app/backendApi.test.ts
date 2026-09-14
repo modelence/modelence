@@ -70,7 +70,7 @@ describe('app/backendApi', () => {
       };
 
       const cronJobsMetadata: CronJobMetadata[] = [
-        { alias: 'daily-job', description: 'runs daily', interval: 3600, timeout: 60 },
+        { alias: 'daily-job', description: 'runs daily', interval: 3600, timeout: 60, weight: 1 },
       ];
 
       const roles: Record<string, RoleDefinition> = {
