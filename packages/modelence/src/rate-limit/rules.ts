@@ -66,6 +66,8 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
     const acceptOrReject = async (doc: { windowCount: number; prevWindowCount: number }) => {
       const prevWeight = 1 - (now - currentWindowStart) / rule.window;
       const count = Math.round(doc.windowCount + doc.prevWindowCount * prevWeight);
+      // Intentionally post-increment: doc.windowCount has already been bumped by one,
+      // so `count > rule.limit` here is equivalent to pre-increment `count >= rule.limit`.
       if (count > rule.limit) {
         // Compensate the optimistic increment. If a window shift raced us, this
         // matches nothing and the count leaks into prevWindowCount — stricter, not looser.
@@ -151,5 +153,8 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
   }
 
   // Fail-closed if retry attempts are exhausted under extreme concurrency.
+  console.error(
+    `Rate limit check exhausted retry attempts for bucket '${rule.bucket}' (type: '${rule.type}')`
+  );
   throw createRateLimitError();
 }
