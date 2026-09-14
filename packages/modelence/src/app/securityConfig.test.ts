@@ -83,6 +83,14 @@ describe('securityConfig', () => {
     expect(() => setSecurityConfig({ allowedOrigins: ['*'] })).toThrow(
       /wildcards are not supported/
     );
+    // `*` is a legal hostname character, so these parse as valid URLs and would
+    // otherwise be stored as-is — never matching an Origin any browser sends.
+    expect(() => setSecurityConfig({ allowedOrigins: ['https://*.example.com'] })).toThrow(
+      /wildcards are not supported/
+    );
+    expect(() => setSecurityConfig({ allowedOrigins: ['https://*'] })).toThrow(
+      /wildcards are not supported/
+    );
   });
 
   test('rejects an origin that includes a path', async () => {

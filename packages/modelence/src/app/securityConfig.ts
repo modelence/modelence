@@ -199,6 +199,17 @@ function normalizeOrigin(entry: string): string {
         `Scheme ${JSON.stringify(url.protocol.replace(':', ''))} does not form a comparable origin.`
     );
   }
+  // `*` is a legal URL hostname character, so `https://*.example.com` parses and
+  // would be stored as-is. Browsers never send a literal `*` in `Origin`, so the
+  // entry could only ever fail to match — the same silent CORS failure the bare
+  // '*' check above exists to prevent.
+  if (url.hostname.includes('*')) {
+    throw new Error(
+      `Invalid security.allowedOrigins entry ${JSON.stringify(entry)}: wildcards are not supported, ` +
+        'since the response echoes one concrete origin to keep credentialed requests working. ' +
+        'List each allowed origin explicitly.'
+    );
+  }
   // A bare origin parses with pathname '/' — anything longer is a real path.
   if (url.pathname !== '/') {
     throw new Error(
