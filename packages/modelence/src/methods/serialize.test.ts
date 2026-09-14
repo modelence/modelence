@@ -215,5 +215,66 @@ describe('serialize', () => {
       const result = reviveResponseTypes(data);
       expect(result).toBe(data);
     });
+
+    test('should safely handle null and undefined with object typeMap', () => {
+      const typeMap = {
+        type: 'object',
+        props: {
+          createdAt: { type: 'date' },
+        },
+      };
+      expect(reviveResponseTypes(null, typeMap)).toBeNull();
+      expect(reviveResponseTypes(undefined, typeMap)).toBeUndefined();
+    });
+
+    test('should safely handle null and undefined with array typeMap', () => {
+      const typeMap = {
+        type: 'array',
+        elements: {
+          0: { type: 'date' },
+        },
+      };
+      expect(reviveResponseTypes(null, typeMap)).toBeNull();
+      expect(reviveResponseTypes(undefined, typeMap)).toBeUndefined();
+    });
+
+    test('should safely handle nested null objects in object typeMap', () => {
+      const data = {
+        user: null,
+        meta: {
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      };
+      const typeMap = {
+        type: 'object',
+        props: {
+          user: {
+            type: 'object',
+            props: {
+              joinedAt: { type: 'date' },
+            },
+          },
+          meta: {
+            type: 'object',
+            props: {
+              createdAt: { type: 'date' },
+            },
+          },
+        },
+      };
+      const result = reviveResponseTypes(data, typeMap) as typeof data;
+      expect(result.user).toBeNull();
+      expect(result.meta.createdAt).toBeInstanceOf(Date);
+    });
+
+    test('should safely return non-array data when typeMap is array', () => {
+      const typeMap = {
+        type: 'array',
+        elements: {
+          0: { type: 'date' },
+        },
+      };
+      expect(reviveResponseTypes('not-an-array' as unknown, typeMap)).toBe('not-an-array');
+    });
   });
 });
