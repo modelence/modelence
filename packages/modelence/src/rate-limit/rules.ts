@@ -1,3 +1,5 @@
+import { Document, UpdateFilter } from 'mongodb';
+
 import { RateLimitRule, RateLimitType } from './types';
 import { dbRateLimits } from './db';
 import { RateLimitError } from '../error';
@@ -57,80 +59,74 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
     windowMs: rule.window,
   };
 
-  const record = await dbRateLimits.findOne(filter);
-
   const now = Date.now();
   const currentWindowStart = Math.floor(now / rule.window) * rule.window;
-
-  const { count, modifier } = record
-    ? getCount(record, currentWindowStart, now)
-    : {
-        count: 0,
-        modifier: {
-          $setOnInsert: {
-            windowStart: new Date(currentWindowStart),
-            windowCount: 1,
-            prevWindowCount: 0,
-            expiresAt: new Date(currentWindowStart + rule.window + rule.window),
-          },
-        },
-      };
-
-  if (count >= rule.limit) {
-    throw createRateLimitError();
-  }
+  const currentWindowStartDate = new Date(currentWindowStart);
+  const prevWindowStartDate = new Date(currentWindowStart - rule.window);
+  const expiresAtDate = new Date(currentWindowStart + rule.window + rule.window);
 
   /*
-    Always use upsert, because there is a small chance the document might be auto-removed
-    based on the expiration TTL index in between the check and the update
+    Rotate the window (if needed) and increment the count in a single atomic
+    findOneAndUpdate, using an aggregation-pipeline update so the "which window
+    is this document currently in" branching MongoDB runs server-side against
+    whatever the document's state is at the moment the update is applied - not
+    a value a previous `findOne` read a moment earlier.
+
+    This closes a TOCTOU window: the old code read the count, decided in JS
+    whether the limit was exceeded, and only *then* wrote the increment. Two
+    concurrent requests could both read a stale sub-limit count before either
+    had written its increment, so both would pass. Incrementing first and
+    checking the authoritative post-write count instead means a burst can
+    over-shoot the limit by at most the number of requests already in flight
+    when it was reached, and every one of those still gets a consistent count
+    to check against, rather than every one of them replaying the same stale
+    read.
   */
-  await dbRateLimits.upsertOne(filter, modifier);
-}
-
-function getCount(record: (typeof dbRateLimits)['Doc'], currentWindowStart: number, now: number) {
-  const prevWindowStart = currentWindowStart - record.windowMs;
-
-  if (record.windowStart.getTime() === currentWindowStart) {
-    const currentWindowCount = record.windowCount;
-    const prevWindowCount = record.prevWindowCount;
-    const prevWindowWeight = 1 - (now - currentWindowStart) / record.windowMs;
-    return {
-      count: Math.round(currentWindowCount + prevWindowCount * prevWindowWeight),
-      modifier: {
-        $inc: { windowCount: 1 },
-        $setOnInsert: {
-          windowStart: new Date(currentWindowStart),
-          prevWindowCount: 0,
-          expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        },
-      },
-    };
-  }
-
-  if (record.windowStart.getTime() === prevWindowStart) {
-    const weight = 1 - (now - currentWindowStart) / record.windowMs;
-    return {
-      count: Math.round(record.windowCount * weight),
-      modifier: {
-        $set: {
-          windowStart: new Date(currentWindowStart),
-          windowCount: 1,
-          prevWindowCount: record.windowCount,
-          expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
-        },
-      },
-    };
-  }
-
-  return {
-    count: 0,
-    modifier: {
+  const pipeline: Document[] = [
+    {
       $set: {
-        windowStart: new Date(currentWindowStart),
-        windowCount: 1,
-        prevWindowCount: 0,
-        expiresAt: new Date(currentWindowStart + record.windowMs + record.windowMs),
+        prevWindowCount: {
+          $switch: {
+            branches: [
+              {
+                case: { $eq: ['$windowStart', currentWindowStartDate] },
+                then: '$prevWindowCount',
+              },
+              {
+                case: { $eq: ['$windowStart', prevWindowStartDate] },
+                then: '$windowCount',
+              },
+            ],
+            default: 0,
+          },
+        },
+        windowCount: {
+          $cond: [
+            { $eq: ['$windowStart', currentWindowStartDate] },
+            { $add: ['$windowCount', 1] },
+            1,
+          ],
+        },
+        windowStart: currentWindowStartDate,
+        expiresAt: expiresAtDate,
       },
     },
-  };
+  ];
+
+  const record = await dbRateLimits.findOneAndUpdate(
+    filter,
+    pipeline as UpdateFilter<(typeof dbRateLimits)['_type']>,
+    {
+      upsert: true,
+      returnDocument: 'after',
+    }
+  );
+
+  // upsert: true + returnDocument: 'after' always returns a document.
+  const prevWindowWeight = 1 - (now - currentWindowStart) / rule.window;
+  const count = Math.round(record!.windowCount + record!.prevWindowCount * prevWindowWeight);
+
+  if (count > rule.limit) {
+    throw createRateLimitError();
+  }
 }
