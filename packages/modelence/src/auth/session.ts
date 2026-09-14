@@ -137,6 +137,7 @@ export const sessionsCollection = new Store('_modelenceSessions', {
     createdAt: schema.date(),
     expiresAt: schema.date(),
     userId: schema.userId().nullable(),
+    lastActiveDate: schema.date().optional(),
   },
   indexes: [
     { key: { authToken: 1 }, unique: true },

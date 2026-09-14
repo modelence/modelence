@@ -270,6 +270,51 @@ describe('auth/session', () => {
     });
   });
 
+  describe('_system.session.heartbeat', () => {
+    test('updates lastActiveDate and expiresAt on active session', async () => {
+      updateOneMock.mockResolvedValue({ acknowledged: true } as never);
+      const session = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+
+      await sessionSystemModule.mutations.heartbeat.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: { id: 'u', email: 'a@b' },
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+        }
+      );
+
+      expect(updateOneMock).toHaveBeenCalledWith(
+        { authToken: 'hashed-auth-token' },
+        {
+          $set: {
+            lastActiveDate: expect.any(Date),
+            expiresAt: expect.any(Date),
+          },
+        }
+      );
+    });
+
+    test('does nothing when session is null', async () => {
+      await sessionSystemModule.mutations.heartbeat.call(
+        sessionSystemModule,
+        {},
+        {
+          session: null,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+        }
+      );
+
+      expect(updateOneMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('OAuth exchange codes', () => {
     const insertMock: Mock = vi.fn();
     const findOneAndDeleteMock: Mock = vi.fn();
