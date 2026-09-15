@@ -9,6 +9,7 @@ import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
 import { start } from './start';
+import { logout } from './logout';
 import { loadEnv } from './config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,13 +40,37 @@ program
 
 program
   .command('deploy')
-  .description('Deploy to Modelence Cloud')
-  .requiredOption('-a, --app <app>', 'Application alias')
-  .requiredOption('-e, --env <env>', 'Environment alias')
+  .description(
+    'Deploy the current directory to Modelence Cloud (any Node.js app; picks the target in the browser on first run)'
+  )
+  .option('-a, --app <app>', 'Application alias')
+  .option('-e, --env <env>', 'Environment alias')
   .option('-h, --host <host>', 'Modelence host')
+  .option(
+    '--prebuilt',
+    'Build locally and upload the .modelence/build bundle (Modelence apps only)'
+  )
+  .option('--preset <preset>', 'Build preset: node or modelence (default: detected)')
+  .option('--node-version <version>', 'Node.js version for the container, e.g. 22')
+  .option('--root-dir <path>', 'Subdirectory containing the app (monorepos)')
+  .option('--install-command <command>', 'Override the detected install command')
+  .option('--build-command <command>', 'Override the detected build command ("" to skip)')
+  .option('--start-command <command>', 'Override the detected start command')
   .action(async (options) => {
-    await loadEnv();
-    await deploy(options);
+    try {
+      await deploy(options);
+    } catch (error) {
+      console.error(`Deploy failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('logout')
+  .description('Forget the saved Modelence Cloud login')
+  .option('-h, --host <host>', 'Only forget the login for this host')
+  .action(async (options) => {
+    await logout(options);
   });
 
 program
