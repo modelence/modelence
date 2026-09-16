@@ -41,6 +41,7 @@ export interface DeployOptions {
   installCommand?: string;
   buildCommand?: string;
   startCommand?: string;
+  outputDir?: string;
 }
 
 type CliTarget =
@@ -57,6 +58,7 @@ interface BuildPlanInput {
   installCommand?: string;
   buildCommand?: string;
   startCommand?: string;
+  outputDirectory?: string;
 }
 
 interface DeployStatus {
@@ -90,6 +92,7 @@ export async function deploy(options: DeployOptions) {
       installCommand: plan.installCommand,
       buildCommand: plan.buildCommand,
       startCommand: plan.startCommand,
+      outputDirectory: plan.outputDirectory,
     };
     printDetectedPlan({ ...detected, ...definedOnly(overrides) }, plan.notes);
     const { fileCount, sizeBytes, usedGit } = await packSource(cwd, archivePath);
@@ -407,6 +410,7 @@ function planOverrides(options: DeployOptions): BuildPlanInput {
     installCommand: options.installCommand,
     buildCommand: options.buildCommand,
     startCommand: options.startCommand,
+    outputDirectory: options.outputDir,
   };
 }
 
@@ -425,7 +429,11 @@ function printDetectedPlan(plan: BuildPlanInput, notes: string[]) {
   }
   console.log(`  install: ${plan.installCommand ?? 'default'}`);
   console.log(`  build:   ${plan.buildCommand || '(none)'}`);
-  console.log(`  start:   ${plan.startCommand ?? 'npm start'}`);
+  if (plan.preset === 'static') {
+    console.log(`  serve:   ${plan.outputDirectory ?? 'dist'}/ (static site)`);
+  } else {
+    console.log(`  start:   ${plan.startCommand ?? 'npm start'}`);
+  }
   for (const note of notes) {
     console.log(`  note: ${note}`);
   }

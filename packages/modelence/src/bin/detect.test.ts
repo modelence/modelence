@@ -91,6 +91,36 @@ describe('detectBuildPlan', () => {
     });
   });
 
+  it('treats a Vite project without a start script as a static site', async () => {
+    await writeProject({
+      'package.json': {
+        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+        devDependencies: { vite: '^5.0.0' },
+      },
+      'package-lock.json': '{}',
+      'index.html': '<div id="root"></div>',
+    });
+    const plan = await detectBuildPlan(dir);
+    expect(plan).toMatchObject({
+      preset: 'static',
+      installCommand: 'npm ci',
+      buildCommand: 'npm run build',
+      outputDirectory: 'dist',
+    });
+    expect(plan.startCommand).toBeUndefined();
+    expect(plan.notes.join('\n')).toMatch(/served from dist/);
+  });
+
+  it('keeps the node preset when a start script exists alongside vite', async () => {
+    await writeProject({
+      'package.json': {
+        scripts: { build: 'vite build', start: 'node server.js' },
+        devDependencies: { vite: '^5.0.0' },
+      },
+    });
+    expect((await detectBuildPlan(dir)).preset).toBe('node');
+  });
+
   it('recognizes a Modelence app by its config file', async () => {
     await writeProject({
       'package.json': { scripts: { build: 'modelence build', start: 'modelence start' } },

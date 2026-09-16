@@ -50,12 +50,13 @@ program
     '--prebuilt',
     'Build locally and upload the .modelence/build bundle (Modelence apps only)'
   )
-  .option('--preset <preset>', 'Build preset: node or modelence (default: detected)')
+  .option('--preset <preset>', 'Build preset: node, static or modelence (default: detected)')
   .option('--node-version <version>', 'Node.js version for the container, e.g. 22')
   .option('--root-dir <path>', 'Subdirectory containing the app (monorepos)')
   .option('--install-command <command>', 'Override the detected install command')
   .option('--build-command <command>', 'Override the detected build command ("" to skip)')
   .option('--start-command <command>', 'Override the detected start command')
+  .option('--output-dir <path>', 'Static sites: directory the build writes, e.g. dist')
   .action(async (options) => {
     try {
       await deploy(options);

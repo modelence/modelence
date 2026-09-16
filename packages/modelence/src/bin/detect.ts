@@ -12,13 +12,15 @@ import { join } from 'path';
 export type PackageManager = 'npm' | 'pnpm' | 'yarn';
 
 export interface DetectedBuildPlan {
-  preset: 'modelence' | 'node';
+  preset: 'modelence' | 'node' | 'static';
   packageManager: PackageManager;
   nodeVersion?: string;
   installCommand: string;
   // Undefined when nothing was found, so the server's defaults apply.
   buildCommand?: string;
   startCommand?: string;
+  // 'static' preset: where the build writes the site.
+  outputDirectory?: string;
   // Human-readable notes about what was (not) found.
   notes: string[];
 }
@@ -133,13 +135,34 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
   if (!startCommand && scripts.start) {
     startCommand = commands.start;
   }
+  const nodeVersion = parseNodeMajor(engines.node);
+
+  // A client-only site (Vite, Lovable, CRA…): something to build, nothing to
+  // start. The runtime serves the build output itself.
+  const staticOutput =
+    !isModelence && !startCommand && buildCommand
+      ? await detectStaticOutput(cwd, packageJson)
+      : undefined;
+  if (staticOutput) {
+    notes.push(
+      `No start script found; the site is served from ${staticOutput}/ with single-page app fallback.`
+    );
+    return {
+      preset: 'static',
+      packageManager,
+      nodeVersion,
+      installCommand: commands.install,
+      buildCommand,
+      outputDirectory: staticOutput,
+      notes,
+    };
+  }
+
   if (!startCommand) {
     notes.push(
       'No `start` script or Procfile found; the container runs `npm start`. Pass --start-command to override.'
     );
   }
-
-  const nodeVersion = parseNodeMajor(engines.node);
 
   return {
     preset: isModelence ? 'modelence' : 'node',
@@ -150,4 +173,37 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
     startCommand,
     notes,
   };
+}
+
+// Output directory of the common static-site toolchains, or undefined when
+// the project doesn't look like one.
+async function detectStaticOutput(
+  cwd: string,
+  packageJson: Record<string, unknown>
+): Promise<string | undefined> {
+  const deps = {
+    ...((packageJson.dependencies ?? {}) as Record<string, string>),
+    ...((packageJson.devDependencies ?? {}) as Record<string, string>),
+  };
+  const hasViteConfig =
+    (await exists(join(cwd, 'vite.config.ts'))) ||
+    (await exists(join(cwd, 'vite.config.js'))) ||
+    (await exists(join(cwd, 'vite.config.mts')));
+  if (deps.vite || hasViteConfig) {
+    return 'dist';
+  }
+  if (deps['react-scripts']) {
+    return 'build';
+  }
+  if (deps['@angular/cli']) {
+    return 'dist';
+  }
+  if (deps.astro) {
+    return 'dist';
+  }
+  // A root index.html with a build script is the Vite/Parcel convention.
+  if (await exists(join(cwd, 'index.html'))) {
+    return 'dist';
+  }
+  return undefined;
 }
