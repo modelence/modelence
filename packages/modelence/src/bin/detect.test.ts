@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { detectBuildPlan, parseNodeMajor, parseProcfileWebCommand } from './detect';
+import {
+  detectBuildPlan,
+  isLockfileInSync,
+  parseNodeMajor,
+  parseProcfileWebCommand,
+} from './detect';
 
 /*
   Detection feeds the defaults Studio builds with, so each convention it
@@ -48,6 +53,22 @@ describe('detectBuildPlan', () => {
       startCommand: 'npm start',
     });
     expect(plan.notes).toEqual([]);
+  });
+
+  it('falls back to npm install when the lockfile disagrees with package.json', async () => {
+    await writeProject({
+      'package.json': {
+        scripts: { build: 'vite build' },
+        dependencies: { react: '^18.0.0', '@supabase/supabase-js': '^2.0.0' },
+      },
+      'package-lock.json': {
+        lockfileVersion: 3,
+        packages: { '': { dependencies: { react: '^18.0.0' } } },
+      },
+    });
+    const plan = await detectBuildPlan(dir);
+    expect(plan.installCommand).toBe('npm install');
+    expect(plan.notes.join('\n')).toMatch(/out of date/);
   });
 
   it('falls back to npm install without a lockfile and leaves missing commands undefined', async () => {
@@ -131,6 +152,39 @@ describe('detectBuildPlan', () => {
 
   it('fails clearly without a package.json', async () => {
     await expect(detectBuildPlan(dir)).rejects.toThrow(/package.json/);
+  });
+});
+
+describe('isLockfileInSync', () => {
+  const pkg = { dependencies: { a: '^1.0.0' }, devDependencies: { b: '~2.0.0' } };
+
+  it('matches when the lock root mirrors package.json', () => {
+    const lock = {
+      packages: { '': { dependencies: { a: '^1.0.0' }, devDependencies: { b: '~2.0.0' } } },
+    };
+    expect(isLockfileInSync(pkg, lock)).toBe(true);
+  });
+
+  it('detects added, removed and re-ranged dependencies', () => {
+    expect(isLockfileInSync(pkg, { packages: { '': { dependencies: { a: '^1.0.0' } } } })).toBe(
+      false
+    );
+    expect(
+      isLockfileInSync(pkg, {
+        packages: { '': { dependencies: { a: '^1.1.0' }, devDependencies: { b: '~2.0.0' } } },
+      })
+    ).toBe(false);
+    expect(
+      isLockfileInSync(pkg, {
+        packages: {
+          '': { dependencies: { a: '^1.0.0', c: '1.0.0' }, devDependencies: { b: '~2.0.0' } },
+        },
+      })
+    ).toBe(false);
+  });
+
+  it('trusts a v1 lockfile that has no root entry', () => {
+    expect(isLockfileInSync(pkg, { lockfileVersion: 1, dependencies: {} })).toBe(true);
   });
 });
 

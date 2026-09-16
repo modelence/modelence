@@ -69,6 +69,35 @@ export function parseProcfileWebCommand(content: string): string | undefined {
   return undefined;
 }
 
+/*
+  `npm ci` refuses a package-lock.json that disagrees with package.json — a
+  common state for generated projects (Lovable adds a dependency without
+  refreshing the lock). Compares the root package's declared dependencies
+  with the lock's root entry (lockfileVersion 2+). An old v1 lock has no root
+  entry, so it is trusted as-is.
+*/
+export function isLockfileInSync(
+  packageJson: Record<string, unknown>,
+  lockfile: Record<string, unknown>
+): boolean {
+  const packages = lockfile.packages as Record<string, Record<string, unknown>> | undefined;
+  const root = packages?.[''];
+  if (!root) {
+    return true;
+  }
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies'] as const) {
+    const declared = (packageJson[field] ?? {}) as Record<string, string>;
+    const locked = (root[field] ?? {}) as Record<string, string>;
+    const names = new Set([...Object.keys(declared), ...Object.keys(locked)]);
+    for (const name of names) {
+      if (declared[name] !== locked[name]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function commandsFor(packageManager: PackageManager, hasLockfile: boolean) {
   switch (packageManager) {
     case 'pnpm':
@@ -112,12 +141,22 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
   } else if (await exists(join(cwd, 'yarn.lock'))) {
     packageManager = 'yarn';
   }
-  const hasNpmLockfile = await exists(join(cwd, 'package-lock.json'));
-  if (packageManager === 'npm' && !hasNpmLockfile) {
+  let useNpmLockfile = await exists(join(cwd, 'package-lock.json'));
+  if (packageManager === 'npm' && !useNpmLockfile) {
     notes.push('No package-lock.json found; dependencies are installed with `npm install`.');
   }
+  if (packageManager === 'npm' && useNpmLockfile) {
+    const lockfile = await readJson(join(cwd, 'package-lock.json'));
+    if (lockfile && !isLockfileInSync(packageJson, lockfile)) {
+      useNpmLockfile = false;
+      notes.push(
+        'package-lock.json is out of date with package.json, so dependencies are installed with `npm install`. ' +
+          'Run `npm install` locally and commit the lockfile to get reproducible `npm ci` installs.'
+      );
+    }
+  }
 
-  const commands = commandsFor(packageManager, hasNpmLockfile);
+  const commands = commandsFor(packageManager, useNpmLockfile);
 
   let buildCommand: string | undefined;
   if (scripts.build) {
