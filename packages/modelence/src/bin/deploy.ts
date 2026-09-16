@@ -197,6 +197,7 @@ async function runDeploy({
     envAlias: string;
     environmentId: string;
     buildId: string | null;
+    plan?: BuildPlanInput | null;
   }>(host, '/api/deploy', {
     method: 'POST',
     token,
@@ -216,6 +217,10 @@ async function runDeploy({
       appAlias: result.appAlias,
       envAlias: result.envAlias,
     });
+  }
+
+  if (result.plan) {
+    reportResolvedPlan(result.plan, detected);
   }
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
@@ -436,6 +441,30 @@ function printDetectedPlan(plan: BuildPlanInput, notes: string[]) {
   }
   for (const note of notes) {
     console.log(`  note: ${note}`);
+  }
+}
+
+// Stored environment settings can override what was detected here; say so,
+// since the difference is otherwise only visible in the dashboard.
+function reportResolvedPlan(used: BuildPlanInput, detected?: BuildPlanInput) {
+  if (!detected) {
+    return;
+  }
+  const differences: string[] = [];
+  if (used.preset && detected.preset && used.preset !== detected.preset) {
+    differences.push(`preset ${used.preset} (detected ${detected.preset})`);
+  }
+  for (const field of ['installCommand', 'buildCommand', 'startCommand'] as const) {
+    const detectedValue = detected[field];
+    if (detectedValue !== undefined && used[field] !== undefined && used[field] !== detectedValue) {
+      differences.push(
+        `${field.replace('Command', '')} "${used[field]}" (detected "${detectedValue}")`
+      );
+    }
+  }
+  if (differences.length > 0) {
+    console.log("Using the environment's Build & Deploy settings: " + differences.join(', '));
+    console.log('Edit them in the dashboard, or pass --preset/--*-command to change them.');
   }
 }
 
