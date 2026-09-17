@@ -129,6 +129,7 @@ describe('detectBuildPlan', () => {
     const plan = await detectBuildPlan(dir);
     expect(plan.preset).toBe('node');
     expect(plan.startCommand).toBe('pnpm --filter web start');
+    expect(plan.buildCommand).toBe('pnpm --filter web... --if-present run build');
     expect(plan.notes.join(' ')).toContain('apps/web/');
   });
 

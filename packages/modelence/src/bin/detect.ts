@@ -212,6 +212,11 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
   if (!startCommand && !isModelence) {
     const workspace = await detectWorkspaceStart(cwd, packageManager, packageJson);
     startCommand = workspace.startCommand;
+    if (workspace.startCommand) {
+      // Deploying one member: a root build that builds every package can
+      // drag in siblings with their own requirements.
+      buildCommand = workspace.buildCommand;
+    }
     if (workspace.note) {
       notes.push(workspace.note);
     }

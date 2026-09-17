@@ -281,7 +281,9 @@ async function followDeploy(host: string, token: string, environmentId: string, 
     for (const line of status.logs) {
       process.stdout.write(`  │ ${line.replace(/\n$/, '')}\n`);
     }
-    logOffset = status.logCount;
+    // A poll that could not read CloudWatch reports zero lines; keeping the
+    // offset avoids replaying the whole log on the next poll.
+    logOffset = Math.max(logOffset, status.logCount);
 
     if (status.status !== lastStatus) {
       lastStatus = status.status;

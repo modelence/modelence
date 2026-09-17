@@ -75,6 +75,7 @@ describe('detectWorkspaceStart', () => {
     await writePackage('packages/ui', { name: '@acme/ui', scripts: { build: 'tsc' } });
     const result = await detectWorkspaceStart(dir, 'pnpm', {});
     expect(result.startCommand).toBe('pnpm --filter web start');
+    expect(result.buildCommand).toBe('pnpm --filter web... --if-present run build');
     expect(result.note).toContain('apps/web/');
   });
 
@@ -86,10 +87,16 @@ describe('detectWorkspaceStart', () => {
     expect(result.note).toContain('api, web');
   });
 
-  it('uses the npm workspace syntax', async () => {
+  it('uses the npm workspace syntax and only builds a member that has a build script', async () => {
     await writePackage('apps/web', { name: 'web', scripts: { start: 'node .' } });
     const result = await detectWorkspaceStart(dir, 'npm', { workspaces: ['apps/*'] });
     expect(result.startCommand).toBe('npm start --workspace web');
+    expect(result.buildCommand).toBeUndefined();
+
+    await writePackage('apps/web', { name: 'web', scripts: { start: 'node .', build: 'tsc' } });
+    const built = await detectWorkspaceStart(dir, 'yarn', { workspaces: ['apps/*'] });
+    expect(built.startCommand).toBe('yarn workspace web start');
+    expect(built.buildCommand).toBe('yarn workspace web run build');
   });
 
   it('finds nothing outside a workspace', async () => {

@@ -160,8 +160,28 @@ export function workspaceStartCommand(packageManager: PackageManager, name: stri
   }
 }
 
+// Builds one member plus its workspace dependencies. pnpm's `name...` filter
+// is the dependency closure; npm and yarn classic have no equivalent, so
+// only the member itself is built there.
+export function workspaceBuildCommand(
+  packageManager: PackageManager,
+  member: WorkspacePackage
+): string | undefined {
+  switch (packageManager) {
+    case 'pnpm':
+      return `pnpm --filter ${member.name}... --if-present run build`;
+    case 'yarn':
+      return member.scripts.build ? `yarn workspace ${member.name} run build` : undefined;
+    default:
+      return member.scripts.build
+        ? `npm run build --if-present --workspace ${member.name}`
+        : undefined;
+  }
+}
+
 export interface WorkspaceStartDetection {
   startCommand?: string;
+  buildCommand?: string;
   note?: string;
 }
 
@@ -186,7 +206,10 @@ export async function detectWorkspaceStart(
     const [member] = startable;
     return {
       startCommand: workspaceStartCommand(packageManager, member.name),
-      note: `No root start script; the container starts the ${member.name} workspace package (${member.dir}/).`,
+      buildCommand: workspaceBuildCommand(packageManager, member),
+      note:
+        `No root start script; the container starts the ${member.name} workspace package (${member.dir}/), ` +
+        'and the build is scoped to it and its workspace dependencies. Pass --build-command to build differently.',
     };
   }
   if (startable.length > 1) {
