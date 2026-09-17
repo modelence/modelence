@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   detectBuildPlan,
   isLockfileInSync,
+  parsePackageManagerVersion,
   parseNodeMajor,
   parseProcfileWebCommand,
 } from './detect';
@@ -88,6 +89,47 @@ describe('detectBuildPlan', () => {
     });
     const plan = await detectBuildPlan(dir);
     expect(plan.startCommand).toBe('node server.js --port $PORT');
+  });
+
+  it('pins pnpm to the version in the packageManager field', async () => {
+    await writeProject({
+      'package.json': {
+        packageManager: 'pnpm@10.4.1+sha512.abc',
+        scripts: { build: 'tsc', start: 'node dist/index.js' },
+      },
+      'pnpm-lock.yaml': '',
+    });
+    const plan = await detectBuildPlan(dir);
+    expect(plan.installCommand).toBe(
+      'npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile'
+    );
+  });
+
+  it('falls back to the pnpm major implied by the lockfile', async () => {
+    await writeProject({
+      'package.json': { scripts: { start: 'node .' } },
+      'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+    });
+    const plan = await detectBuildPlan(dir);
+    expect(plan.installCommand).toBe('npm install -g pnpm@10 && pnpm install --frozen-lockfile');
+    expect(plan.notes.join(' ')).not.toContain('packageManager');
+  });
+
+  it('starts the only workspace package with a start script when the root has none', async () => {
+    await writeProject({
+      'package.json': { scripts: { build: 'pnpm -r build' } },
+      'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+      'pnpm-workspace.yaml': "packages:\n  - 'apps/*'\n",
+    });
+    await mkdir(join(dir, 'apps/web'), { recursive: true });
+    await writeFile(
+      join(dir, 'apps/web/package.json'),
+      JSON.stringify({ name: 'web', scripts: { start: 'node dist/server.js' } })
+    );
+    const plan = await detectBuildPlan(dir);
+    expect(plan.preset).toBe('node');
+    expect(plan.startCommand).toBe('pnpm --filter web start');
+    expect(plan.notes.join(' ')).toContain('apps/web/');
   });
 
   it('switches commands to pnpm and yarn by lockfile', async () => {
@@ -203,5 +245,19 @@ describe('parseProcfileWebCommand', () => {
   it('finds the web process and ignores others', () => {
     expect(parseProcfileWebCommand('worker: node w.js\nweb:  node s.js  \n')).toBe('node s.js');
     expect(parseProcfileWebCommand('worker: node w.js')).toBeUndefined();
+  });
+});
+
+describe('parsePackageManagerVersion', () => {
+  it('returns the version for the matching manager, without the integrity hash', () => {
+    expect(parsePackageManagerVersion('pnpm@10.4.1+sha512.abc', 'pnpm')).toBe('10.4.1');
+    expect(parsePackageManagerVersion('pnpm@9.15.0', 'pnpm')).toBe('9.15.0');
+  });
+
+  it('ignores other managers, missing and malformed values', () => {
+    expect(parsePackageManagerVersion('yarn@4.1.0', 'pnpm')).toBeUndefined();
+    expect(parsePackageManagerVersion(undefined, 'pnpm')).toBeUndefined();
+    expect(parsePackageManagerVersion('pnpm', 'pnpm')).toBeUndefined();
+    expect(parsePackageManagerVersion('pnpm@latest', 'pnpm')).toBeUndefined();
   });
 });

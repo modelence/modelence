@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { detectWorkspaceStart, pnpmMajorFromLockfile } from './workspaces';
 
 /*
   Infers the build contract from the project the way Heroku's Node buildpack
@@ -98,14 +99,35 @@ export function isLockfileInSync(
   return true;
 }
 
-function commandsFor(packageManager: PackageManager, hasLockfile: boolean) {
+// package.json `packageManager` ("pnpm@10.4.1+sha512...") → "10.4.1" when it
+// names the given manager. Anything that is not a plain semver version is
+// ignored rather than passed to npm.
+export function parsePackageManagerVersion(
+  field: unknown,
+  manager: PackageManager
+): string | undefined {
+  if (typeof field !== 'string') {
+    return undefined;
+  }
+  const match = /^([a-z]+)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\+.*)?$/.exec(field.trim());
+  if (!match || match[1] !== manager) {
+    return undefined;
+  }
+  return match[2];
+}
+
+function commandsFor(packageManager: PackageManager, hasLockfile: boolean, pinnedVersion?: string) {
   switch (packageManager) {
-    case 'pnpm':
+    case 'pnpm': {
+      // Without a pin `npm install -g pnpm` picks whatever is latest, which
+      // can be a major ahead of the lockfile and refuse the install.
+      const pnpmPackage = pinnedVersion ? `pnpm@${pinnedVersion}` : 'pnpm';
       return {
-        install: 'npm install -g pnpm && pnpm install --frozen-lockfile',
+        install: `npm install -g ${pnpmPackage} && pnpm install --frozen-lockfile`,
         run: (script: string) => `pnpm run ${script}`,
         start: 'pnpm start',
       };
+    }
     case 'yarn':
       return {
         install: 'yarn install --frozen-lockfile',
@@ -156,7 +178,20 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
     }
   }
 
-  const commands = commandsFor(packageManager, useNpmLockfile);
+  let pinnedVersion = parsePackageManagerVersion(packageJson.packageManager, packageManager);
+  if (packageManager === 'pnpm' && !pinnedVersion) {
+    // No explicit pin: the lockfile format still tells which major wrote it.
+    const major = pnpmMajorFromLockfile(await fs.readFile(join(cwd, 'pnpm-lock.yaml'), 'utf8'));
+    if (major) {
+      pinnedVersion = String(major);
+    } else {
+      notes.push(
+        'Could not tell which pnpm version wrote pnpm-lock.yaml; the build installs the latest. ' +
+          'Add e.g. "packageManager": "pnpm@10.4.1" to package.json to pin it.'
+      );
+    }
+  }
+  const commands = commandsFor(packageManager, useNpmLockfile, pinnedVersion);
 
   let buildCommand: string | undefined;
   if (scripts.build) {
@@ -173,6 +208,13 @@ export async function detectBuildPlan(cwd = process.cwd()): Promise<DetectedBuil
   }
   if (!startCommand && scripts.start) {
     startCommand = commands.start;
+  }
+  if (!startCommand && !isModelence) {
+    const workspace = await detectWorkspaceStart(cwd, packageManager, packageJson);
+    startCommand = workspace.startCommand;
+    if (workspace.note) {
+      notes.push(workspace.note);
+    }
   }
   const nodeVersion = parseNodeMajor(engines.node);
 
