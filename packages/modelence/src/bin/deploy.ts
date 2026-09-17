@@ -68,6 +68,15 @@ interface DeployStatus {
   logs: string[];
   logCount: number;
   siteUrl: string | null;
+  // Last output of the containers a failed rollout tried to start.
+  containerLogs?: string[];
+}
+
+// The token in use, shared so a re-authorization mid-deploy reaches every
+// later request without threading a new value through each call.
+interface Session {
+  host: string;
+  token: string;
 }
 
 export async function deploy(options: DeployOptions) {
@@ -121,13 +130,11 @@ export async function deploy(options: DeployOptions) {
     );
   }
 
-  try {
-    await runDeploy({ host, token, target, kind, archivePath, overrides, detected, project });
-  } catch (error) {
-    if (!(error instanceof StudioApiError) || error.status !== 401) {
-      throw error;
-    }
-    // Cached token expired or was revoked: authorize once more and retry.
+  const session: Session = { host, token };
+  // Cached token expired or was revoked: authorize once more. The deploy
+  // itself is never repeated — an upload that failed authentication did not
+  // start anything, and a build already running is simply followed again.
+  const signInAgain = async () => {
     await clearCachedToken(host);
     console.log('Your saved login has expired; please sign in again.');
     const auth = await authenticateCli(host, { pick: 'deploy', appId: project.appId });
@@ -136,24 +143,56 @@ export async function deploy(options: DeployOptions) {
       target = { environmentId: auth.target.environmentId };
       await rememberTarget(auth.target);
     }
-    await runDeploy({
-      host,
-      token: auth.token,
-      target,
-      kind,
-      archivePath,
-      overrides,
-      detected,
-      project,
-    });
+    session.token = auth.token;
+  };
+
+  try {
+    let started: StartedDeploy;
+    try {
+      started = await runDeploy({
+        session,
+        target,
+        kind,
+        archivePath,
+        overrides,
+        detected,
+        project,
+      });
+    } catch (error) {
+      if (!isUnauthorized(error)) {
+        throw error;
+      }
+      await signInAgain();
+      started = await runDeploy({
+        session,
+        target,
+        kind,
+        archivePath,
+        overrides,
+        detected,
+        project,
+      });
+    }
+    if (started.buildId) {
+      await followDeploy(session, signInAgain, started.environmentId, started.buildId);
+    }
   } finally {
     await fs.rm(archivePath, { force: true });
   }
 }
 
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof StudioApiError && error.status === 401;
+}
+
+interface StartedDeploy {
+  environmentId: string;
+  // Null from a Studio too old to have the status route.
+  buildId: string | null;
+}
+
 async function runDeploy({
-  host,
-  token,
+  session,
   target,
   kind,
   archivePath,
@@ -161,15 +200,15 @@ async function runDeploy({
   detected,
   project,
 }: {
-  host: string;
-  token: string;
+  session: Session;
   target: CliTarget;
   kind: UploadKind;
   archivePath: string;
   overrides: BuildPlanInput;
   detected?: BuildPlanInput;
   project: Awaited<ReturnType<typeof readProject>>;
-}) {
+}): Promise<StartedDeploy> {
+  const { host, token } = session;
   const upload = await studioRequest<{
     uploadUrl: string;
     bundleName: string;
@@ -224,11 +263,7 @@ async function runDeploy({
   }
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
-  if (!result.buildId) {
-    // Older Studio: no status route to follow.
-    return;
-  }
-  await followDeploy(host, token, result.environmentId, result.buildId);
+  return { environmentId: result.environmentId, buildId: result.buildId };
 }
 
 // An environment created moments ago in the browser is still provisioning
@@ -267,16 +302,34 @@ async function waitForEnvironmentReady(host: string, token: string, environmentI
 
 // Prints phase transitions and streams build log lines until the deploy
 // settles. Exit code reflects the outcome so CI and agents can act on it.
-async function followDeploy(host: string, token: string, environmentId: string, buildId: string) {
+async function followDeploy(
+  session: Session,
+  signInAgain: () => Promise<void>,
+  environmentId: string,
+  buildId: string
+) {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let lastStatus = '';
   let logOffset = 0;
+  let signedInAgain = false;
 
   while (Date.now() < deadline) {
-    const status = await studioRequest<DeployStatus>(host, '/api/deploy/status', {
-      token,
-      query: { environmentId, buildId, logOffset },
-    });
+    let status: DeployStatus;
+    try {
+      status = await studioRequest<DeployStatus>(session.host, '/api/deploy/status', {
+        token: session.token,
+        query: { environmentId, buildId, logOffset },
+      });
+    } catch (error) {
+      // A token can expire while a long rollout is being watched; the
+      // build keeps going on the server, so only the watching resumes.
+      if (!isUnauthorized(error) || signedInAgain) {
+        throw error;
+      }
+      signedInAgain = true;
+      await signInAgain();
+      continue;
+    }
 
     for (const line of status.logs) {
       process.stdout.write(`  │ ${line.replace(/\n$/, '')}\n`);
@@ -302,6 +355,12 @@ async function followDeploy(host: string, token: string, environmentId: string, 
     if (status.status === 'build-failed' || status.status === 'deploy-failed') {
       for (const error of status.errors) {
         console.error(`  ${error}`);
+      }
+      if (status.containerLogs && status.containerLogs.length > 0) {
+        console.error('Container output:');
+        for (const line of status.containerLogs) {
+          console.error(`  │ ${line.replace(/\n$/, '')}`);
+        }
       }
       process.exitCode = 1;
       return;
