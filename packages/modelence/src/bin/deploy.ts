@@ -310,6 +310,7 @@ async function followDeploy(
 ) {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let lastStatus = '';
+  let lastMessage = '';
   let logOffset = 0;
   let signedInAgain = false;
 
@@ -341,7 +342,9 @@ async function followDeploy(
     if (status.status !== lastStatus) {
       lastStatus = status.status;
       const message = describeStatus(status);
-      if (message) {
+      // Two statuses can share a message (deploy-pending and deploying).
+      if (message && message !== lastMessage) {
+        lastMessage = message;
         console.log(message);
       }
     }
