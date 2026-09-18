@@ -88,7 +88,10 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
   await dbRateLimits.upsertOne(filter, modifier);
 
   if (count + 1 > rule.limit) {
-    await dbRateLimits.upsertOne(filter, { $inc: { windowCount: -1 } });
+    await dbRateLimits.updateOne(
+      { ...filter, windowCount: { $gt: 0 } },
+      { $inc: { windowCount: -1 } }
+    );
     throw createRateLimitError();
   }
 }
