@@ -116,6 +116,14 @@ const CLAUDE_PLUGIN_INSTALL_HINT =
   `  claude plugin install ${CLAUDE_PLUGIN_ID} --scope project\n` +
   `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
 
+// Only the two keys this function touches are typed; the rest of the user's
+// settings are passed through untouched.
+type ClaudeSettings = {
+  extraKnownMarketplaces?: Record<string, unknown>;
+  enabledPlugins?: Record<string, boolean>;
+  [key: string]: unknown;
+};
+
 /*
   Declares the Modelence Claude Code plugin in the project's settings.json,
   merging into an existing file rather than replacing it. An explicit
@@ -136,7 +144,7 @@ async function ensureClaudePluginEnabled(): Promise<void> {
     }
   }
 
-  let settings: Record<string, any> = {};
+  let settings: ClaudeSettings = {};
   if (content !== undefined) {
     try {
       settings = JSON.parse(content);
