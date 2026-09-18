@@ -136,6 +136,50 @@ describe('deploy orchestration', () => {
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
   });
 
+  it('signs the upload URL again after waiting for the environment to provision', async () => {
+    const original = request.getMockImplementation()!;
+    let statusCalls = 0;
+    let urls = 0;
+    request.mockImplementation(async (host, path, args) => {
+      if (path === '/api/environment/status') {
+        return { status: statusCalls++ === 0 ? 'provisioning' : 'ready' };
+      }
+      if (path === '/api/upload-bundle') {
+        return {
+          uploadUrl: `https://upload.example/source?sig=${urls++}`,
+          bundleName: 'source.zip',
+          appAlias: 'app',
+          envAlias: 'prod',
+          environmentId: 'env-id',
+        };
+      }
+      return original(host, path, args);
+    });
+    await deploy(options);
+    // Signed once before the wait to resolve the target, once after it.
+    expect(request.mock.calls.filter(([, path]) => path === '/api/upload-bundle')).toHaveLength(2);
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload.mock.calls[0][0]).toBe('https://upload.example/source?sig=1');
+  });
+
+  it('signs the upload URL once when the environment is already ready', async () => {
+    await deploy(options);
+    expect(request.mock.calls.filter(([, path]) => path === '/api/upload-bundle')).toHaveLength(1);
+  });
+
+  it('reports the storage error code when an upload is rejected', async () => {
+    upload.mockResolvedValue(
+      new Response(
+        '<?xml version="1.0"?><Error><Code>AccessDenied</Code>' +
+          '<Message>Request has expired</Message></Error>',
+        { status: 403, statusText: 'Forbidden' }
+      )
+    );
+    await expect(deploy(options)).rejects.toThrow(
+      'Failed to upload: Forbidden (AccessDenied: Request has expired)'
+    );
+  });
+
   it('cleans up the archive when browser authentication fails', async () => {
     vi.stubEnv('MODELENCE_TOKEN', '');
     vi.mocked(authenticateCli).mockRejectedValue(new Error('Authentication timed out'));

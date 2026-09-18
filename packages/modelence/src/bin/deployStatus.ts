@@ -18,7 +18,13 @@ interface DeployStatus {
 
 // An environment created moments ago in the browser is still provisioning
 // its database and telemetry; deploys are refused until it is ready.
-export async function waitForEnvironmentReady(host: string, token: string, environmentId: string) {
+// Returns whether it actually had to wait, so the caller can refresh an
+// upload URL that may have been signed before a long provision.
+export async function waitForEnvironmentReady(
+  host: string,
+  token: string,
+  environmentId: string
+): Promise<boolean> {
   const deadline = Date.now() + PROVISION_TIMEOUT_MS;
   let announced = false;
   while (Date.now() < deadline) {
@@ -31,12 +37,12 @@ export async function waitForEnvironmentReady(host: string, token: string, envir
     } catch (error) {
       if (error instanceof StudioApiError && error.status === 404) {
         // Older Studio without the route: let /api/deploy decide.
-        return;
+        return false;
       }
       throw error;
     }
     if (status === 'ready') {
-      return;
+      return announced;
     }
     if (status === 'failed') {
       throw new Error('The environment failed to provision; check it in the dashboard.');

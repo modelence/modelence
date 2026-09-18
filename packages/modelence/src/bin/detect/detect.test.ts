@@ -53,6 +53,51 @@ function facts(overrides: Partial<ProjectFacts>): ProjectFacts {
   };
 }
 
+describe('development server start scripts', () => {
+  const site = (scripts: Record<string, string>, dependencies: Record<string, string>) =>
+    detectFromFacts(facts({ scripts: { build: 'x', ...scripts }, dependencies }));
+
+  it('serves the build output instead of a Create React App dev server', () => {
+    const detected = site({ start: 'react-scripts start' }, { 'react-scripts': '5.0.1' });
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toEqual([{ path: '/', dir: 'build' }]);
+  });
+
+  it('serves the build output instead of a Vite dev server', () => {
+    const detected = site({ start: 'vite' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toEqual([{ path: '/', dir: 'dist' }]);
+  });
+
+  it('drops an Angular dev server but does not guess its output directory', () => {
+    const detected = site({ start: 'ng serve' }, { '@angular/cli': '^18.2.0' });
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toBeUndefined();
+    expect(detected.notes.join(' ')).toContain('angular.json');
+  });
+
+  it('keeps a real server process', () => {
+    const detected = site({ start: 'node server.js' }, { express: '^4.0.0' });
+    expect(detected.spec.web?.start).toBe('npm start');
+    expect(detected.spec.web?.static).toBeUndefined();
+  });
+
+  it('keeps a start script that only wraps a dev server in more work', () => {
+    const detected = site({ start: 'npm run migrate && vite' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBe('npm start');
+  });
+
+  it('keeps a production preview server', () => {
+    const detected = site({ start: 'vite preview' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBe('npm start');
+  });
+
+  it('keeps a Parcel production build script', () => {
+    const detected = site({ start: 'parcel build src/index.html' }, { parcel: '^2.0.0' });
+    expect(detected.spec.web?.start).toBe('npm start');
+  });
+});
+
 describe('detectFromFacts', () => {
   it('preserves root generation/build steps when selecting a workspace process', () => {
     const detected = detectFromFacts(

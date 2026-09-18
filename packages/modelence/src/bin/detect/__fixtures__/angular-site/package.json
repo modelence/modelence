@@ -1,0 +1,14 @@
+{
+  "name": "angular-site",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build"
+  },
+  "dependencies": {
+    "@angular/core": "^18.2.0"
+  },
+  "devDependencies": {
+    "@angular/cli": "^18.2.0"
+  }
+}
