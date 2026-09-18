@@ -14,6 +14,10 @@ import open from 'open';
                     in .modelence/project.json.
   Without `pick` the page only authorizes the device.
 
+  `purpose: 'deploy'` asks for a deploy-lifetime token (30 days) without a
+  picker — for a deploy whose target is already known from flags or
+  .modelence/project.json. `pick: 'deploy'` implies it.
+
   `appId` is the hint from .modelence/project.json used to preselect the app.
 */
 
@@ -37,9 +41,15 @@ export async function authenticateCli(
   host: string,
   {
     pick,
+    purpose,
     pickEnvironment = false,
     appId,
-  }: { pick?: CliAuthPick; pickEnvironment?: boolean; appId?: string } = {}
+  }: {
+    pick?: CliAuthPick;
+    purpose?: 'deploy';
+    pickEnvironment?: boolean;
+    appId?: string;
+  } = {}
 ): Promise<CliAuthResult> {
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
@@ -54,6 +64,9 @@ export async function authenticateCli(
   const resolvedPick = pick ?? (pickEnvironment ? 'environment' : undefined);
   if (resolvedPick) {
     url.searchParams.set('pick', resolvedPick);
+  }
+  if (purpose) {
+    url.searchParams.set('purpose', purpose);
   }
   if (appId) {
     url.searchParams.set('appId', appId);

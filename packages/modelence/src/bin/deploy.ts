@@ -114,9 +114,15 @@ export async function deploy(options: DeployOptions) {
   let target = resolveTargetFromOptions(options, project);
   let token = await resolveToken(host);
   if (!token || !target) {
-    // The browser flow hands back both a token and, when picked there, the
-    // target — one visit covers a fresh machine and a fresh project.
-    const auth = await authenticateCli(host, { pick: 'deploy', appId: project.appId });
+    // The browser flow hands back a token and, when the target is not known
+    // yet, the environment picked there — one visit covers a fresh machine
+    // and a fresh project. A target from flags or the project file is final,
+    // so the page then only authorizes.
+    const auth = await authenticateCli(host, {
+      pick: target ? undefined : 'deploy',
+      purpose: 'deploy',
+      appId: project.appId,
+    });
     token = auth.token;
     await rememberToken(host, auth.token, auth.expiresAt);
     if (auth.target) {
@@ -137,7 +143,11 @@ export async function deploy(options: DeployOptions) {
   const signInAgain = async () => {
     await clearCachedToken(host);
     console.log('Your saved login has expired; please sign in again.');
-    const auth = await authenticateCli(host, { pick: 'deploy', appId: project.appId });
+    const auth = await authenticateCli(host, {
+      pick: target ? undefined : 'deploy',
+      purpose: 'deploy',
+      appId: project.appId,
+    });
     await rememberToken(host, auth.token, auth.expiresAt);
     if (auth.target) {
       target = { environmentId: auth.target.environmentId };
