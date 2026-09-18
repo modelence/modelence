@@ -1,0 +1,6 @@
+{
+  "name": "@acme/shared",
+  "scripts": {
+    "build": "tsc"
+  }
+}

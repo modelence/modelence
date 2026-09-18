@@ -1,0 +1,14 @@
+{
+  "profile": null,
+  "spec": {
+    "build": {
+      "node": "20",
+      "install": "npm ci",
+      "command": "npm run build"
+    },
+    "web": {
+      "start": "npm start"
+    }
+  },
+  "notes": []
+}

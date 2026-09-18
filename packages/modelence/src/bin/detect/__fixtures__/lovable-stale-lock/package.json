@@ -1,0 +1,14 @@
+{
+  "name": "lovable-site",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "lovable-tagger": "^1.0.0"
+  }
+}

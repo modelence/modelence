@@ -1,0 +1,10 @@
+{
+  "name": "modelence-app",
+  "scripts": {
+    "build": "modelence build",
+    "start": "modelence start"
+  },
+  "dependencies": {
+    "modelence": "^0.26.0"
+  }
+}

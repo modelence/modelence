@@ -1,0 +1,6 @@
+packages:
+  - artifacts/*
+  - lib/*
+
+onlyBuiltDependencies:
+  - esbuild

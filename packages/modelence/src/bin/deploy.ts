@@ -2,9 +2,18 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseDotenv } from 'dotenv';
 import archiver from 'archiver';
+import {
+  APP_SPEC_FILE_NAME,
+  definedOnly,
+  formatAppSpec,
+  mergeAppSpecs,
+  readAppSpecFile,
+  type AppSpec,
+  type StaticMount,
+} from './appSpec';
 import { authenticateCli, type CliAuthTarget } from './auth';
 import { clearCachedToken, readCachedToken, writeCachedToken } from './authCache';
-import { detectBuildPlan } from './detect';
+import { detectAppSpec } from './detect';
 import { loadEnv, getProjectPath } from './config';
 import { readProject, updateProject, type DeployTarget } from './project';
 import { packSource } from './source';
@@ -16,9 +25,10 @@ import { build } from './build';
   environment.
 
   Default path — any Node.js app: the source tree is uploaded and built
-  remotely (install → build → start commands detected here, overridable with
-  flags, stored on the environment). `--prebuilt` keeps the historical
-  Modelence path: build locally, upload .modelence/build.
+  remotely from its app spec, which Studio merges from (highest first) the
+  flags of this run, the environment's Build & Deploy settings, the
+  project's modelence.json and what is detected here. `--prebuilt` keeps the
+  historical Modelence path: build locally, upload .modelence/build.
 
   Target: -a/-e flags → --env with the app recorded in project.json → the
   deploy target recorded in project.json → the browser picker. Auth: the
@@ -35,13 +45,14 @@ export interface DeployOptions {
   env?: string;
   host?: string;
   prebuilt?: boolean;
-  preset?: string;
+  runtime?: string;
   nodeVersion?: string;
   rootDir?: string;
   installCommand?: string;
   buildCommand?: string;
   startCommand?: string;
-  outputDir?: string;
+  // "path=dir", repeatable.
+  static?: string[];
 }
 
 type CliTarget =
@@ -50,16 +61,6 @@ type CliTarget =
   | { appId: string; envAlias: string };
 
 type UploadKind = 'bundle' | 'source';
-
-interface BuildPlanInput {
-  preset?: string;
-  nodeVersion?: string;
-  rootDirectory?: string;
-  installCommand?: string;
-  buildCommand?: string;
-  startCommand?: string;
-  outputDirectory?: string;
-}
 
 interface DeployStatus {
   status: string;
@@ -79,31 +80,28 @@ interface Session {
   token: string;
 }
 
+// The spec layers this run sends along with the source.
+interface SpecLayers {
+  file: AppSpec | null;
+  overrides: AppSpec;
+  detected: AppSpec;
+}
+
 export async function deploy(options: DeployOptions) {
   const cwd = process.cwd();
   const host = await resolveHost(options.host, cwd);
   const kind: UploadKind = options.prebuilt ? 'bundle' : 'source';
-  const overrides = planOverrides(options);
   const project = await readProject(cwd);
 
   // Local work first, so nothing is uploaded when it fails.
-  let detected: BuildPlanInput | undefined;
+  let layers: SpecLayers | undefined;
   const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
   if (kind === 'bundle') {
     await loadEnv();
     await build();
     await createBundle(archivePath);
   } else {
-    const plan = await detectBuildPlan(cwd);
-    detected = {
-      preset: plan.preset,
-      nodeVersion: plan.nodeVersion,
-      installCommand: plan.installCommand,
-      buildCommand: plan.buildCommand,
-      startCommand: plan.startCommand,
-      outputDirectory: plan.outputDirectory,
-    };
-    printDetectedPlan({ ...detected, ...definedOnly(overrides) }, plan.notes);
+    layers = await prepareSpecLayers(cwd, options);
     const { fileCount, sizeBytes, usedGit } = await packSource(cwd, archivePath);
     console.log(
       `Packed ${fileCount} files (${formatMb(sizeBytes)})` +
@@ -159,29 +157,13 @@ export async function deploy(options: DeployOptions) {
   try {
     let started: StartedDeploy;
     try {
-      started = await runDeploy({
-        session,
-        target,
-        kind,
-        archivePath,
-        overrides,
-        detected,
-        project,
-      });
+      started = await runDeploy({ session, target, kind, archivePath, layers, project });
     } catch (error) {
       if (!isUnauthorized(error)) {
         throw error;
       }
       await signInAgain();
-      started = await runDeploy({
-        session,
-        target,
-        kind,
-        archivePath,
-        overrides,
-        detected,
-        project,
-      });
+      started = await runDeploy({ session, target, kind, archivePath, layers, project });
     }
     if (started.buildId) {
       await followDeploy(session, signInAgain, started.environmentId, started.buildId);
@@ -189,6 +171,34 @@ export async function deploy(options: DeployOptions) {
   } finally {
     await fs.rm(archivePath, { force: true });
   }
+}
+
+// Reads modelence.json, runs detection and prints the plan this run will
+// deploy with (before the environment's own settings, which only the server
+// knows).
+async function prepareSpecLayers(cwd: string, options: DeployOptions): Promise<SpecLayers> {
+  const file = await readAppSpecFile(cwd);
+  const detected = await detectAppSpec(cwd);
+  const overrides = specFromFlags(options);
+  const preview = mergeAppSpecs(detected.spec, file, overrides);
+
+  const sources = [
+    detected.profile ? `${detected.profile} project` : null,
+    file ? APP_SPEC_FILE_NAME : null,
+    Object.keys(overrides).length > 0 ? 'flags' : null,
+  ].filter(Boolean);
+  console.log(`Build plan${sources.length > 0 ? ` (${sources.join(', ')})` : ''}:`);
+  for (const line of formatAppSpec(preview)) {
+    console.log(line);
+  }
+  for (const note of detected.notes) {
+    console.log(`  note: ${note}`);
+  }
+  if (!file) {
+    console.log(`  tip: run \`modelence init\` to write this plan to ${APP_SPEC_FILE_NAME}.`);
+  }
+
+  return { file, overrides, detected: detected.spec };
 }
 
 function isUnauthorized(error: unknown): boolean {
@@ -206,16 +216,14 @@ async function runDeploy({
   target,
   kind,
   archivePath,
-  overrides,
-  detected,
+  layers,
   project,
 }: {
   session: Session;
   target: CliTarget;
   kind: UploadKind;
   archivePath: string;
-  overrides: BuildPlanInput;
-  detected?: BuildPlanInput;
+  layers?: SpecLayers;
   project: Awaited<ReturnType<typeof readProject>>;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
@@ -246,7 +254,7 @@ async function runDeploy({
     envAlias: string;
     environmentId: string;
     buildId: string | null;
-    plan?: BuildPlanInput | null;
+    spec?: ResolvedSpec | null;
   }>(host, '/api/deploy', {
     method: 'POST',
     token,
@@ -254,8 +262,9 @@ async function runDeploy({
       environmentId: upload.environmentId,
       bundleName: upload.bundleName,
       kind,
-      plan: definedOnly(overrides),
-      detected: detected ? definedOnly(detected) : undefined,
+      spec: layers?.file ?? undefined,
+      overrides: layers?.overrides,
+      detected: layers?.detected,
     },
   });
 
@@ -268,8 +277,11 @@ async function runDeploy({
     });
   }
 
-  if (result.plan) {
-    reportResolvedPlan(result.plan, detected);
+  if (result.spec && layers) {
+    reportEnvironmentSettings(
+      result.spec,
+      mergeAppSpecs(layers.detected, layers.file, layers.overrides)
+    );
   }
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
@@ -481,64 +493,68 @@ async function resolveHost(flag: string | undefined, cwd: string): Promise<strin
   return DEFAULT_HOST;
 }
 
-function planOverrides(options: DeployOptions): BuildPlanInput {
+// Flags → one spec layer, only the keys that were passed.
+export function specFromFlags(options: DeployOptions): AppSpec {
+  const build = definedOnly({
+    node: options.nodeVersion,
+    root: options.rootDir,
+    install: options.installCommand,
+    command: options.buildCommand,
+  });
+  const web = definedOnly({
+    start: options.startCommand,
+    static: options.static === undefined ? undefined : options.static.map(parseStaticFlag),
+  });
   return {
-    preset: options.preset,
-    nodeVersion: options.nodeVersion,
-    rootDirectory: options.rootDir,
-    installCommand: options.installCommand,
-    buildCommand: options.buildCommand,
-    startCommand: options.startCommand,
-    outputDirectory: options.outputDir,
+    ...(options.runtime ? { runtime: options.runtime as AppSpec['runtime'] } : {}),
+    ...(Object.keys(build).length > 0 ? { build } : {}),
+    ...(Object.keys(web).length > 0 ? { web } : {}),
   };
 }
 
-function definedOnly<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
-  ) as Partial<T>;
+// --static "/=client/dist" or "/docs=docs/build"; a bare directory mounts at /.
+export function parseStaticFlag(value: string): StaticMount {
+  const separator = value.indexOf('=');
+  if (separator === -1) {
+    return { path: '/', dir: value };
+  }
+  return { path: value.slice(0, separator) || '/', dir: value.slice(separator + 1) };
 }
 
-function printDetectedPlan(plan: BuildPlanInput, notes: string[]) {
-  console.log('Build plan:');
-  console.log(`  preset:  ${plan.preset ?? 'node'}`);
-  console.log(`  node:    ${plan.nodeVersion ?? 'default (22)'}`);
-  if (plan.rootDirectory) {
-    console.log(`  root:    ${plan.rootDirectory}`);
-  }
-  console.log(`  install: ${plan.installCommand ?? 'default'}`);
-  console.log(`  build:   ${plan.buildCommand || '(none)'}`);
-  if (plan.preset === 'static') {
-    console.log(`  serve:   ${plan.outputDirectory ?? 'dist'}/ (static site)`);
-  } else {
-    console.log(`  start:   ${plan.startCommand ?? 'npm start'}`);
-  }
-  for (const note of notes) {
-    console.log(`  note: ${note}`);
-  }
+// A resolved spec as the server reports it: every key present.
+interface ResolvedSpec {
+  runtime: string;
+  build: { node: string; root: string; install: string; command: string };
+  web: { start?: string | null; static: StaticMount[] };
 }
 
-// Stored environment settings can override what was detected here; say so,
-// since the difference is otherwise only visible in the dashboard.
-function reportResolvedPlan(used: BuildPlanInput, detected?: BuildPlanInput) {
-  if (!detected) {
-    return;
-  }
+// The environment's Build & Deploy settings sit between the flags and the
+// file; when they changed the outcome, say so, since that is otherwise only
+// visible in the dashboard.
+function reportEnvironmentSettings(used: ResolvedSpec, local: AppSpec) {
   const differences: string[] = [];
-  if (used.preset && detected.preset && used.preset !== detected.preset) {
-    differences.push(`preset ${used.preset} (detected ${detected.preset})`);
-  }
-  for (const field of ['installCommand', 'buildCommand', 'startCommand'] as const) {
-    const detectedValue = detected[field];
-    if (detectedValue !== undefined && used[field] !== undefined && used[field] !== detectedValue) {
-      differences.push(
-        `${field.replace('Command', '')} "${used[field]}" (detected "${detectedValue}")`
-      );
+  const compare = (
+    label: string,
+    usedValue: string | null | undefined,
+    localValue: string | undefined
+  ) => {
+    if (localValue !== undefined && (usedValue ?? '') !== localValue) {
+      differences.push(`${label} "${usedValue ?? ''}" (here "${localValue}")`);
     }
+  };
+  compare('install', used.build.install, local.build?.install);
+  compare('build', used.build.command, local.build?.command);
+  compare('start', used.web.start, local.web?.start);
+  if (local.runtime && used.runtime !== local.runtime) {
+    differences.push(`runtime ${used.runtime} (here ${local.runtime})`);
+  }
+  const usedMounts = JSON.stringify(used.web.static);
+  if (local.web?.static && usedMounts !== JSON.stringify(local.web.static)) {
+    differences.push('static directories');
   }
   if (differences.length > 0) {
     console.log("Using the environment's Build & Deploy settings: " + differences.join(', '));
-    console.log('Edit them in the dashboard, or pass --preset/--*-command to change them.');
+    console.log('Edit them in the dashboard to change this.');
   }
 }
 

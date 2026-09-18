@@ -1,0 +1,13 @@
+{
+  "name": "express-npm",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "engines": {
+    "node": ">=20.10"
+  },
+  "dependencies": {
+    "express": "^5.0.0"
+  }
+}

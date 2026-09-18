@@ -1,0 +1,6 @@
+{
+  "name": "yarn-app",
+  "scripts": {
+    "build": "tsc"
+  }
+}
