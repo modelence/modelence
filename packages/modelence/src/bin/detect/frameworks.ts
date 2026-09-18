@@ -11,24 +11,32 @@ export const staticSiteFromBuildOutput: Detector = (facts, draft) => {
   // Scaffolds like Create React App and Angular ship a `start` script that
   // runs a development server, which an earlier detector took for the app's
   // process. A dev server is not something to deploy, so the build output
-  // wins over it; a start script that runs anything else is left alone.
-  const devServer = draft.spec.web?.start ? developmentServer(facts) : undefined;
+  // wins over it; a start script that runs anything else is left alone. What
+  // is inspected is the command behind web.start, which may come from a
+  // Procfile or a workspace member rather than the root `start` script.
+  const devServer = draft.spec.web?.start ? developmentServer(draft.startScript) : undefined;
   if (draft.spec.web?.start && !devServer) {
     return draft;
   }
   // A dev server is dropped even when the output directory turns out to be
   // undiscoverable, so an unusable process is never what gets deployed.
   const base = devServer ? withoutStart(draft) : draft;
-  const unknownOutput = undiscoverableOutput(facts);
+  // A dev server started in a workspace member builds into that member's
+  // directory, so the whole question is scoped to it.
+  const owner = devServer ? draft.startMember : undefined;
+  const unknownOutput = undiscoverableOutput(owner ?? facts);
   if (unknownOutput) {
     return withNote(
       base,
       devServer ? `${devServerPrefix(devServer)} ${unknownOutput}` : capitalize(unknownOutput)
     );
   }
-  const dir = staticOutputDirectory(facts);
+  const ownDir = staticOutputDirectory(owner ?? facts);
+  const dir = ownDir && owner ? `${owner.dir}/${ownDir}` : ownDir;
   if (!dir) {
-    return draft;
+    // Still without the dev server: deploying one is worse than deploying
+    // nothing, and the fallback note then asks for a web.start.
+    return base;
   }
   const mounted = withWeb(base, { static: [{ path: '/', dir }] });
   return withNote(
@@ -57,7 +65,7 @@ function withoutStart(draft: Draft): Draft {
 
 // Frameworks whose build output directory cannot be read from the files
 // detection looks at, so it is asked for rather than guessed.
-function undiscoverableOutput(facts: ProjectFacts): string | undefined {
+function undiscoverableOutput(facts: OutputFacts): string | undefined {
   if (facts.viteOutputAmbiguous) {
     return (
       'could not determine Vite build.outDir safely; set web.static in modelence.json to the ' +
@@ -75,11 +83,11 @@ function undiscoverableOutput(facts: ProjectFacts): string | undefined {
   return undefined;
 }
 
-// The dev-server command a `start` script runs, when that is all it does.
-// Matched conservatively: a script that chains or wraps other work may be
-// starting a real process, so it is left to the conventions.
-function developmentServer(facts: ProjectFacts): string | undefined {
-  const start = facts.scripts.start?.trim();
+// The dev-server command the chosen start command runs, when that is all it
+// does. Matched conservatively: a command that chains or wraps other work may
+// be starting a real process, so it is left to the conventions.
+function developmentServer(startScript: string | undefined): string | undefined {
+  const start = startScript?.trim();
   if (!start || /[&|;><]/.test(start)) {
     return undefined;
   }
@@ -87,14 +95,16 @@ function developmentServer(facts: ProjectFacts): string | undefined {
   const patterns: [RegExp, string][] = [
     [/^react-scripts\s+start\b/, '`react-scripts start`'],
     [/^ng\s+serve\b/, '`ng serve`'],
-    [/^vite(?:\s+(?:dev|serve))?$/, '`vite`'],
+    // Bare `vite`, or `vite dev`/`vite serve`, each with any flags after it.
+    // `vite preview` serves a production build, so it is not matched.
+    [/^vite(?:\s+(?:dev|serve))?(?:\s+-|$)/, '`vite`'],
     [/^astro\s+dev\b/, '`astro dev`'],
     [/^parcel\s+(?!build\b)/, '`parcel`'],
   ];
   return patterns.find(([pattern]) => pattern.test(command))?.[1];
 }
 
-function staticOutputDirectory(facts: ProjectFacts): string | undefined {
+function staticOutputDirectory(facts: OutputFacts): string | undefined {
   if (facts.dependencies.vite || facts.hasViteConfig) {
     return facts.viteOutDir ?? 'dist';
   }
@@ -110,6 +120,15 @@ function staticOutputDirectory(facts: ProjectFacts): string | undefined {
   }
   return undefined;
 }
+
+// The fields that decide a build output directory. A workspace member carries
+// the same ones, so the questions below are asked of whichever package owns
+// the build — except for index.html, which is only read at the root.
+type OutputFacts = Pick<
+  ProjectFacts,
+  'dependencies' | 'hasViteConfig' | 'viteOutDir' | 'viteOutputAmbiguous'
+> &
+  Partial<Pick<ProjectFacts, 'hasIndexHtml'>>;
 
 export const FRAMEWORKS: NamedDetector[] = [
   { name: 'framework build output', apply: staticSiteFromBuildOutput },

@@ -1,6 +1,6 @@
 import { commandsFor } from './commands';
 import type { ProjectFacts, WorkspaceMember } from './facts';
-import { withBuild, withNote, withWeb, type Detector, type NamedDetector } from './types';
+import { withBuild, withNote, withStart, type Detector, type NamedDetector } from './types';
 
 /*
   Origin-blind conventions, in the order they run. Each fills in what it can
@@ -71,10 +71,10 @@ export const buildFromScripts: Detector = (facts, draft) => {
 
 export const startFromProcfileOrScripts: Detector = (facts, draft) => {
   if (facts.procfileWeb) {
-    return withWeb(draft, { start: facts.procfileWeb });
+    return withStart(draft, facts.procfileWeb, facts.procfileWeb);
   }
   if (facts.scripts.start) {
-    return withWeb(draft, { start: commandsFor(commandContext(facts)).start });
+    return withStart(draft, commandsFor(commandContext(facts)).start, facts.scripts.start);
   }
   return draft;
 };
@@ -103,7 +103,7 @@ export const startFromWorkspaceMember: Detector = (facts, draft) => {
   const built = inferredBuild
     ? withBuild(draft, { command: commands.buildWithDependencies(member.name) })
     : draft;
-  const started = withWeb(built, { start: commands.startIn(member.name) });
+  const started = withStart(built, commands.startIn(member.name), member.scripts.start, member);
   return withNote(
     started,
     `No root start script; the container starts the ${member.name} workspace package (${member.dir}/), ` +

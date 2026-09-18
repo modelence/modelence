@@ -45,7 +45,9 @@ export function detectFromFacts(facts: ProjectFacts): DetectedAppSpec {
     }
   }
   draft = startFallbackNote(facts, draft);
-  return { ...draft, profile: profile?.name ?? null, sources };
+  // startScript and startMember are bookkeeping the detectors pass to each
+  // other; only the spec and the notes are the result.
+  return { spec: draft.spec, notes: draft.notes, profile: profile?.name ?? null, sources };
 }
 
 function fields(spec: AppSpec): Record<string, unknown> {

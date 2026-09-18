@@ -96,6 +96,87 @@ describe('development server start scripts', () => {
     const detected = site({ start: 'parcel build src/index.html' }, { parcel: '^2.0.0' });
     expect(detected.spec.web?.start).toBe('npm start');
   });
+
+  it('recognizes a Vite dev server invoked with flags', () => {
+    const detected = site({ start: 'vite --host --port 3000' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toEqual([{ path: '/', dir: 'dist' }]);
+  });
+
+  it('recognizes `vite dev` with flags after it', () => {
+    const detected = site({ start: 'vite dev --port 3000' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBeUndefined();
+  });
+
+  it('does not mistake `vite preview` with flags for a dev server', () => {
+    const detected = site({ start: 'vite preview --port 3000' }, { vite: '^7.0.0' });
+    expect(detected.spec.web?.start).toBe('npm start');
+  });
+
+  it('drops a dev server even when no output directory can be guessed', () => {
+    const detected = site({ start: 'parcel src/index.html' }, { parcel: '^2.0.0' });
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toBeUndefined();
+    expect(detected.notes.join(' ')).toContain('set web.start');
+  });
+
+  it('deploys a Procfile process even when the start script is a dev server', () => {
+    const detected = detectFromFacts(
+      facts({
+        scripts: { build: 'vite build', start: 'vite' },
+        dependencies: { vite: '^7.0.0' },
+        procfileWeb: 'node server.js',
+      })
+    );
+    expect(detected.spec.web?.start).toBe('node server.js');
+    expect(detected.spec.web?.static).toBeUndefined();
+  });
+
+  it('serves the build output of a workspace member whose start is a dev server', () => {
+    const detected = detectFromFacts(
+      facts({
+        scripts: { build: 'npm run build --workspaces' },
+        workspace: {
+          globs: ['apps/*'],
+          members: [
+            {
+              name: 'web',
+              dir: 'apps/web',
+              dependencies: { vite: '^7.0.0' },
+              hasViteConfig: true,
+              scripts: { build: 'vite build', start: 'vite' },
+            },
+          ],
+        },
+      })
+    );
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toEqual([{ path: '/', dir: 'apps/web/dist' }]);
+  });
+
+  it('does not guess an output directory for a workspace member with an ambiguous Vite config', () => {
+    const detected = detectFromFacts(
+      facts({
+        scripts: { build: 'npm run build --workspaces' },
+        workspace: {
+          globs: ['apps/*'],
+          members: [
+            {
+              name: 'web',
+              dir: 'apps/web',
+              dependencies: { vite: '^7.0.0' },
+              hasViteConfig: true,
+              viteOutputAmbiguous: true,
+              scripts: { build: 'vite build', start: 'vite' },
+            },
+          ],
+        },
+      })
+    );
+    expect(detected.spec.web?.start).toBeUndefined();
+    expect(detected.spec.web?.static).toBeUndefined();
+    expect(detected.notes.join(' ')).toContain('set web.static');
+  });
 });
 
 describe('detectFromFacts', () => {

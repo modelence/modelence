@@ -1,5 +1,5 @@
 import type { AppSpec } from '../appSpec';
-import type { ProjectFacts } from './facts';
+import type { ProjectFacts, WorkspaceMember } from './facts';
 
 /*
   A detector is a pure step of the pipeline: it looks at the project facts
@@ -12,6 +12,15 @@ import type { ProjectFacts } from './facts';
 export interface Draft {
   spec: AppSpec;
   notes: string[];
+  // The shell command web.start ultimately runs — a Procfile line, or the
+  // `start` script of the root package or the chosen workspace member.
+  // `web.start` itself is a package-manager invocation (`npm start`), which
+  // says nothing about what it launches; detectors that need to recognize a
+  // development server read this instead. Never serialized.
+  startScript?: string;
+  // The workspace member web.start runs in, when it is not the root package.
+  // Its build output lives under that member's directory. Never serialized.
+  startMember?: WorkspaceMember;
 }
 
 export type Detector = (facts: ProjectFacts, draft: Draft) => Draft;
@@ -33,6 +42,17 @@ export function withBuild(draft: Draft, patch: NonNullable<AppSpec['build']>): D
 
 export function withWeb(draft: Draft, patch: NonNullable<AppSpec['web']>): Draft {
   return { ...draft, spec: { ...draft.spec, web: { ...draft.spec.web, ...patch } } };
+}
+
+// Sets web.start together with the shell command it runs, so the two can
+// never drift apart.
+export function withStart(
+  draft: Draft,
+  start: string,
+  startScript: string,
+  startMember?: WorkspaceMember
+): Draft {
+  return { ...withWeb(draft, { start }), startScript, ...(startMember ? { startMember } : {}) };
 }
 
 export function withNote(draft: Draft, note: string): Draft {
