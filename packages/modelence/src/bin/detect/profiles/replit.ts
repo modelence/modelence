@@ -39,6 +39,12 @@ function mountFrontends(facts: ProjectFacts, draft: Draft): Draft {
   if (frontends.length === 0) {
     return draft;
   }
+  if (frontends.some((member) => member.viteOutputAmbiguous)) {
+    return withNote(
+      draft,
+      'Could not determine a Replit frontend output directory safely; configure build.command and web.static in modelence.json.'
+    );
+  }
   const commands = commandsFor(commandContext(facts));
   const mounts = frontends.map((member) => ({
     path: mountPathFor(member, frontends.length === 1),
@@ -49,7 +55,12 @@ function mountFrontends(facts: ProjectFacts, draft: Draft): Draft {
   );
   const command = [draft.spec.build?.command, ...frontendBuilds].filter(Boolean).join(' && ');
 
-  let next = withWeb(withBuild(draft, { command }), { static: mounts });
+  // A root build may build every frontend itself. Supply the required base
+  // there too; the per-frontend builds below then apply each final mount path.
+  const env = facts.scripts.build
+    ? { BASE_PATH: '/', ...draft.spec.build?.env }
+    : draft.spec.build?.env;
+  let next = withWeb(withBuild(draft, { command, ...(env ? { env } : {}) }), { static: mounts });
   next = withNote(
     next,
     `Replit artifacts: ${frontends.map((member) => member.name).join(', ')} ` +

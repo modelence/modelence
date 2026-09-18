@@ -1,3 +1,6 @@
+import ts from 'typescript';
+import { posix } from 'path';
+
 /*
   Pure parsers for the files detection reads. No I/O, no decisions: each
   turns one file's text or JSON into a fact the detectors can use.
@@ -132,14 +135,74 @@ export function parsePackageJsonWorkspaces(packageJson: Record<string, unknown>)
   return [];
 }
 
-// The `outDir` of a Vite config, when it is a string literal or a
-// path.resolve(..., "literal") — enough for the generated configs
-// detection cares about. Anything else means "unknown".
+export interface ViteOutput {
+  outDir?: string;
+  ambiguous: boolean;
+}
+
+// Read syntax only: importing a Vite config would execute arbitrary project code.
+// Unknown expressions are reported, never treated as the default output path.
+export function parseViteOutput(configText: string): ViteOutput {
+  const values: (string | undefined)[] = [];
+  function literal(node: ts.Node): string | undefined {
+    return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
+      ? node.text
+      : undefined;
+  }
+  function output(node: ts.Expression): string | undefined {
+    const direct = literal(node);
+    if (direct !== undefined) return direct;
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression))
+      return undefined;
+    const call = node.expression;
+    if (call.expression.getText() !== 'path' || !['resolve', 'join'].includes(call.name.text))
+      return undefined;
+    const [base, ...rest] = node.arguments;
+    if (
+      !base ||
+      !['__dirname', 'import.meta.dirname'].includes(base.getText()) ||
+      rest.length === 0
+    )
+      return undefined;
+    const parts = rest.map(literal);
+    if (parts.some((part) => part === undefined)) return undefined;
+    const segments = parts as string[];
+    // Absolute segments would refer to the build machine, not the archive.
+    if (segments.some((part) => posix.isAbsolute(part))) return undefined;
+    return posix.join(...segments);
+  }
+  function visit(node: ts.Node) {
+    if (
+      ts.isPropertyAssignment(node) &&
+      (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) &&
+      node.name.text === 'outDir'
+    ) {
+      values.push(output(node.initializer));
+    } else if (ts.isShorthandPropertyAssignment(node) && node.name.text === 'outDir') {
+      values.push(undefined);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ts.createSourceFile('vite.config.ts', configText, ts.ScriptTarget.Latest, true));
+  // Also accept an object fragment for parser callers and diagnostics.
+  if (values.length === 0) {
+    visit(ts.createSourceFile('fragment.ts', `({${configText}})`, ts.ScriptTarget.Latest, true));
+  }
+  if (values.length === 0) return { ambiguous: false };
+  const normalized = values.map((value) =>
+    value ? posix.normalize(value).replace(/\/+$/, '') : undefined
+  );
+  if (
+    normalized.some((value) => value === undefined || posix.isAbsolute(value)) ||
+    new Set(normalized).size !== 1
+  ) {
+    return { ambiguous: true };
+  }
+  return { outDir: normalized[0], ambiguous: false };
+}
+
 export function parseViteOutDir(configText: string): string | undefined {
-  const match =
-    /outDir:\s*(?:path\.resolve\([^)]*?,\s*)?["'`]([^"'`]+)["'`]/.exec(configText) ??
-    /outDir:\s*["'`]([^"'`]+)["'`]/.exec(configText);
-  return match ? match[1].replace(/^\.\//, '').replace(/\/+$/, '') : undefined;
+  return parseViteOutput(configText).outDir;
 }
 
 // `modules = ["nodejs-24", "postgresql-16"]` from a .replit file.
@@ -152,15 +215,18 @@ export function parseReplitModules(replitText: string): string[] {
 }
 
 export function globToRegExp(glob: string): RegExp {
-  const normalized = glob.replace(/\\/g, '/').replace(/\/+$/, '');
-  const pattern = normalized
-    .split('/')
-    .map((segment) => {
-      if (segment === '**') {
-        return '.*';
-      }
-      return segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+  const normalized = glob.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const segments = normalized.split('/');
+  const pattern = segments
+    .map((segment, index) => {
+      const last = index === segments.length - 1;
+      if (segment === '**') return last ? '.*' : '(?:[^/]+/)*';
+      const value = segment
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '[^/]*')
+        .replace(/\?/g, '[^/]');
+      return value + (last ? '' : '/');
     })
-    .join('/');
+    .join('');
   return new RegExp(`^${pattern}$`);
 }

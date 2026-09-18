@@ -12,6 +12,7 @@ import {
   parseProcfileWebCommand,
   parseReplitModules,
   parseViteOutDir,
+  parseViteOutput,
   pnpmMajorFromLockfile,
 } from './parsers';
 
@@ -29,8 +30,9 @@ describe('detectAppSpec fixtures', () => {
     it(`detects ${name}`, async () => {
       const dir = join(fixturesDir, name);
       const expected = JSON.parse(readFileSync(join(dir, 'expected.json'), 'utf8'));
-      const detected = await detectAppSpec(dir);
+      const { sources, ...detected } = await detectAppSpec(dir);
       expect(detected).toEqual(expected);
+      expect(Object.keys(sources).length).toBeGreaterThan(0);
     });
   }
 });
@@ -52,6 +54,41 @@ function facts(overrides: Partial<ProjectFacts>): ProjectFacts {
 }
 
 describe('detectFromFacts', () => {
+  it('preserves root generation/build steps when selecting a workspace process', () => {
+    const detected = detectFromFacts(
+      facts({
+        scripts: { build: 'node generate.js && npm run build --workspaces' },
+        workspace: {
+          globs: ['apps/*'],
+          members: [
+            {
+              name: 'api',
+              dir: 'apps/api',
+              dependencies: {},
+              hasViteConfig: false,
+              scripts: { build: 'tsc', start: 'node dist/index.js' },
+            },
+          ],
+        },
+      })
+    );
+    expect(detected.spec.build?.command).toBe('npm run build');
+    expect(detected.spec.web?.start).toBe('npm start --workspace api');
+    expect(detected.sources['build.command']).toBe('root build script');
+    expect(detected.sources['web.start']).toBe('workspace package');
+  });
+
+  it('does not guess a static mount for an unresolved Vite output', () => {
+    const detected = detectFromFacts(
+      facts({
+        scripts: { build: 'vite build' },
+        hasViteConfig: true,
+        viteOutputAmbiguous: true,
+      })
+    );
+    expect(detected.spec.web?.static).toBeUndefined();
+    expect(detected.notes.join(' ')).toContain('set web.static');
+  });
   it('asks for a choice when several workspace members can start', () => {
     const detected = detectFromFacts(
       facts({
@@ -200,6 +237,22 @@ describe('parsers', () => {
     ).toBe('dist/public');
     expect(parseViteOutDir("outDir: './out/'")).toBe('out');
     expect(parseViteOutDir('outDir: someVariable')).toBeUndefined();
+    expect(parseViteOutDir('outDir: path.resolve(__dirname, "dist", "public")')).toBe(
+      'dist/public'
+    );
+    expect(
+      parseViteOutDir('outDir: path.resolve(import.meta.dirname, "..", "dist", "public")')
+    ).toBe('../dist/public');
+    expect(parseViteOutput('outDir: path.resolve(__dirname, output, "public")')).toEqual({
+      ambiguous: true,
+    });
+    expect(parseViteOutput('outDir: `dist/${target}`')).toEqual({ ambiguous: true });
+    expect(
+      parseViteOutput('export default { build: { /* outDir: "wrong" */ outDir: "right" } }')
+    ).toEqual({ outDir: 'right', ambiguous: false });
+    expect(
+      parseViteOutput('export default mode ? {build: {outDir: "a"}} : {build: {outDir: "b"}}')
+    ).toEqual({ ambiguous: true });
   });
 
   it('parseReplitModules reads the modules list', () => {

@@ -12,7 +12,9 @@ const execFileAsync = promisify(execFile);
   upload matches what a push would carry. Outside git a plain walk is used
   with a fixed exclusion list.
 
-  Credentials and build output are never uploaded regardless.
+  Local environment files and package-manager credentials are excluded even
+  outside Git. Example environment files and placeholder-based registry
+  configuration can be committed and uploaded.
 */
 
 export const MAX_SOURCE_BYTES = 200 * 1024 * 1024;
@@ -25,6 +27,35 @@ const ALWAYS_EXCLUDED_DIRS = [
   '.modelence/cache',
 ];
 const ALWAYS_EXCLUDED_FILES = [/^\.modelence(\.[^/]+)?\.env$/];
+
+function isLocalEnvFile(name: string): boolean {
+  return /^\.env(?:\.|$)/.test(name) && !/\.(example|sample|template)$/.test(name);
+}
+
+// Preserve registry URLs and ${TOKEN} references, but never upload literal
+// authentication values from a developer's npm or Yarn configuration.
+export function hasRegistryCredentials(content: string): boolean {
+  return content.split(/\r?\n/).some((line) => {
+    if (/^\s*[#;]/.test(line)) return false;
+    const credentialsInUrl = /https?:\/\/([^/\s]+)@/.exec(line)?.[1];
+    if (
+      credentialsInUrl &&
+      credentialsInUrl.replace(/\$\{[A-Za-z_][A-Za-z0-9_]*\}/g, '').replace(/:/g, '') !== ''
+    ) {
+      return true;
+    }
+    const match =
+      /^\s*[^=]*?(?:_authToken|_auth|_password|npmAuthToken|npmAuthIdent)["']?\s*[=:]\s*(.*?)\s*$/i.exec(
+        line
+      );
+    if (!match) return false;
+    const value = match[1]
+      .replace(/\s+#.*$/, '')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+    return value !== '' && !/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value);
+  });
+}
 
 function toPosix(path: string): string {
   return path.split(sep).join('/');
@@ -46,7 +77,9 @@ export function isExcludedPath(relativePath: string): boolean {
     }
   }
   const fileName = segments[segments.length - 1];
-  return ALWAYS_EXCLUDED_FILES.some((pattern) => pattern.test(fileName));
+  return (
+    isLocalEnvFile(fileName) || ALWAYS_EXCLUDED_FILES.some((pattern) => pattern.test(fileName))
+  );
 }
 
 async function isGitRepository(cwd: string): Promise<boolean> {
@@ -85,33 +118,42 @@ async function walk(cwd: string, dir = ''): Promise<string[]> {
 
 export async function listSourceFiles(
   cwd = process.cwd()
-): Promise<{ files: string[]; usedGit: boolean }> {
+): Promise<{ files: string[]; usedGit: boolean; excludedFiles: string[] }> {
   const usedGit = await isGitRepository(cwd);
   const candidates = usedGit ? await listGitFiles(cwd) : await walk(cwd);
 
   const files: string[] = [];
+  const excludedFiles: string[] = [];
   for (const file of candidates) {
     if (isExcludedPath(file)) {
+      excludedFiles.push(file);
       continue;
     }
     // git ls-files still lists tracked files deleted from the working tree.
     try {
-      const stat = await fs.stat(join(cwd, file));
+      const stat = await fs.lstat(join(cwd, file));
       if (stat.isFile()) {
+        if (
+          ['.npmrc', '.yarnrc.yml', '.yarnrc'].includes(file.split('/').at(-1) ?? '') &&
+          hasRegistryCredentials(await fs.readFile(join(cwd, file), 'utf8'))
+        ) {
+          excludedFiles.push(file);
+          continue;
+        }
         files.push(file);
       }
     } catch {
       // Gone from disk — nothing to upload.
     }
   }
-  return { files: files.sort(), usedGit };
+  return { files: files.sort(), usedGit, excludedFiles: excludedFiles.sort() };
 }
 
 export async function packSource(
   cwd: string,
   zipPath: string
-): Promise<{ fileCount: number; sizeBytes: number; usedGit: boolean }> {
-  const { files, usedGit } = await listSourceFiles(cwd);
+): Promise<{ fileCount: number; sizeBytes: number; usedGit: boolean; excludedFiles: string[] }> {
+  const { files, usedGit, excludedFiles } = await listSourceFiles(cwd);
   if (files.length === 0) {
     throw new Error('No files to upload');
   }
@@ -142,5 +184,5 @@ export async function packSource(
     );
   }
 
-  return { fileCount: files.length, sizeBytes: size, usedGit };
+  return { fileCount: files.length, sizeBytes: size, usedGit, excludedFiles };
 }

@@ -9,7 +9,7 @@ import {
   parsePnpmWorkspaceGlobs,
   parseProcfileWebCommand,
   parseReplitModules,
-  parseViteOutDir,
+  parseViteOutput,
   pnpmMajorFromLockfile,
   type PackageManager,
 } from './parsers';
@@ -29,6 +29,7 @@ export interface WorkspaceMember {
   hasViteConfig: boolean;
   // From the member's vite config when it could be read; undefined otherwise.
   viteOutDir?: string;
+  viteOutputAmbiguous?: boolean;
 }
 
 export interface ProjectFacts {
@@ -42,6 +43,7 @@ export interface ProjectFacts {
   // The version pinned for the package manager: package.json's
   // `packageManager` field, else what the lockfile format implies.
   packageManagerVersion?: string;
+  packageManagerNotes?: string[];
   lockfile: {
     present: boolean;
     // npm only: whether package-lock.json agrees with package.json.
@@ -52,6 +54,7 @@ export interface ProjectFacts {
   hasIndexHtml: boolean;
   hasViteConfig: boolean;
   viteOutDir?: string;
+  viteOutputAmbiguous?: boolean;
   // Present when the project came from Replit (.replit at the root).
   replit?: { modules: string[] };
   workspace: {
@@ -113,70 +116,101 @@ const VITE_CONFIG_NAMES = [
   'vite.config.mjs',
 ];
 
-async function readViteConfig(dir: string): Promise<{ present: boolean; outDir?: string }> {
+async function readViteConfig(
+  dir: string
+): Promise<{ present: boolean; outDir?: string; ambiguous?: boolean }> {
   for (const name of VITE_CONFIG_NAMES) {
     const text = await readText(join(dir, name));
     if (text !== null) {
-      return { present: true, outDir: parseViteOutDir(text) };
+      return { present: true, ...parseViteOutput(text) };
     }
   }
   return { present: false };
 }
 
 async function detectPackageManager(cwd: string, packageJson: Record<string, unknown>) {
-  const pnpmLock = await readText(join(cwd, 'pnpm-lock.yaml'));
-  if (pnpmLock !== null) {
-    const pinned = parsePackageManagerVersion(packageJson.packageManager, 'pnpm');
-    const major = pnpmMajorFromLockfile(pnpmLock);
-    return {
-      packageManager: 'pnpm' as const,
-      packageManagerVersion: pinned ?? (major ? String(major) : undefined),
-      lockfile: { present: true, inSync: true },
-    };
+  const [pnpmLock, yarnLock, npmLock] = await Promise.all([
+    readText(join(cwd, 'pnpm-lock.yaml')),
+    readText(join(cwd, 'yarn.lock')),
+    readJson(join(cwd, 'package-lock.json')),
+  ]);
+  const available: PackageManager[] = [];
+  if (pnpmLock !== null) available.push('pnpm');
+  if (yarnLock !== null) available.push('yarn');
+  if (npmLock !== null) available.push('npm');
+
+  const declaration = packageJson.packageManager;
+  const declared = typeof declaration === 'string' ? declaration.split('@')[0] : undefined;
+  if (declared && !['npm', 'pnpm', 'yarn'].includes(declared)) {
+    throw new Error(
+      `Unsupported package manager "${declared}"; configure a supported package manager before deploying.`
+    );
   }
-  if (await exists(join(cwd, 'yarn.lock'))) {
-    return {
-      packageManager: 'yarn' as const,
-      packageManagerVersion: parsePackageManagerVersion(packageJson.packageManager, 'yarn'),
-      lockfile: { present: true, inSync: true },
-    };
+  if (!declared && available.length > 1) {
+    throw new Error(
+      `Conflicting lockfiles (${available.join(', ')}); set packageManager in package.json or remove stale lockfiles.`
+    );
   }
-  const npmLock = await readJson(join(cwd, 'package-lock.json'));
+  const packageManager = (declared as PackageManager | undefined) ?? available[0] ?? 'npm';
+  const pinned = parsePackageManagerVersion(declaration, packageManager);
+  if (declared && !pinned) {
+    throw new Error('packageManager must pin a version, for example "pnpm@10.4.1".');
+  }
+  const ignored = available.filter((manager) => manager !== packageManager);
+  const packageManagerNotes = ignored.length
+    ? [`Using declared ${packageManager}; ignoring ${ignored.join(', ')} lockfiles.`]
+    : [];
+  const major = pnpmLock === null ? undefined : pnpmMajorFromLockfile(pnpmLock);
   return {
-    packageManager: 'npm' as const,
-    packageManagerVersion: undefined,
+    packageManager,
+    packageManagerVersion:
+      pinned ?? (packageManager === 'pnpm' && major ? String(major) : undefined),
+    packageManagerNotes,
     lockfile: {
-      present: npmLock !== null,
-      inSync: npmLock !== null && isLockfileInSync(packageJson, npmLock),
+      present: available.includes(packageManager),
+      inSync:
+        packageManager === 'npm'
+          ? npmLock !== null && isLockfileInSync(packageJson, npmLock)
+          : available.includes(packageManager),
     },
   };
 }
 
-const MAX_WORKSPACE_DEPTH = 4;
-
-async function listDirectories(root: string, maxDepth: number): Promise<string[]> {
-  const found: string[] = [];
-  async function walk(dir: string, depth: number) {
-    if (depth > maxDepth) {
-      return;
+// Follow only declared workspace patterns. Literal prefixes avoid walking assets
+// and build output; ** has no arbitrary depth cap. Symlink directories are skipped.
+async function workspaceDirectories(root: string, globs: string[]): Promise<string[]> {
+  const found = new Set<string>();
+  const exclude = globs
+    .filter((glob) => glob.startsWith('!'))
+    .map((glob) => globToRegExp(glob.slice(1)));
+  for (const glob of globs.filter((glob) => !glob.startsWith('!'))) {
+    const parts = glob.replace(/^\.\//, '').replace(/\/+$/, '').split('/');
+    if (parts.some((part) => part === '..') || glob.startsWith('/')) {
+      throw new Error(`Workspace pattern must stay within the project: ${glob}`);
     }
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name.startsWith('.')) {
-        continue;
+    const visited = new Set<string>();
+    async function walk(dir: string, index: number): Promise<void> {
+      const key = `${dir}:${index}`;
+      if (visited.has(key) || exclude.some((pattern) => pattern.test(dir))) return;
+      visited.add(key);
+      if (index === parts.length) {
+        if (dir) found.add(join(root, dir));
+        return;
       }
-      const full = join(dir, entry.name);
-      found.push(full);
-      await walk(full, depth + 1);
+      const part = parts[index];
+      if (part === '**') await walk(dir, index + 1);
+      const entries = await fs.readdir(join(root, dir), { withFileTypes: true });
+      const pattern = globToRegExp(part);
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name === 'node_modules' || entry.name.startsWith('.'))
+          continue;
+        if (part !== '**' && !pattern.test(entry.name)) continue;
+        await walk(dir ? `${dir}/${entry.name}` : entry.name, part === '**' ? index : index + 1);
+      }
     }
+    await walk('', 0);
   }
-  await walk(root, 1);
-  return found;
+  return [...found];
 }
 
 // Workspace members: directories under the root matching the globs that
@@ -192,7 +226,7 @@ export async function findWorkspaceMembers(
   const exclude = globs
     .filter((glob) => glob.startsWith('!'))
     .map((glob) => globToRegExp(glob.slice(1)));
-  const candidates = await listDirectories(root, MAX_WORKSPACE_DEPTH);
+  const candidates = await workspaceDirectories(root, globs);
   const members: WorkspaceMember[] = [];
   for (const dir of candidates) {
     const rel = relative(root, dir).split(sep).join('/');
@@ -210,6 +244,7 @@ export async function findWorkspaceMembers(
       scripts: (packageJson.scripts ?? {}) as Record<string, string>,
       dependencies: mergedDependencies(packageJson),
       hasViteConfig: vite.present,
+      ...(vite.ambiguous ? { viteOutputAmbiguous: true } : {}),
       ...(vite.outDir ? { viteOutDir: vite.outDir } : {}),
     });
   }
@@ -256,6 +291,7 @@ export async function gatherProjectFacts(cwd = process.cwd()): Promise<ProjectFa
     hasIndexHtml: await exists(join(cwd, 'index.html')),
     hasViteConfig: vite.present,
     viteOutDir: vite.outDir,
+    ...(vite.ambiguous ? { viteOutputAmbiguous: true } : {}),
     ...(replit === null ? {} : { replit: { modules: parseReplitModules(replit) } }),
     workspace: { globs, members: await findWorkspaceMembers(cwd, globs) },
   };

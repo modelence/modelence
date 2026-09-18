@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isExcludedPath, listSourceFiles, packSource } from './source';
+import { hasRegistryCredentials, isExcludedPath, listSourceFiles, packSource } from './source';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,11 +39,41 @@ describe('isExcludedPath', () => {
     expect(isExcludedPath('.modelence.prod.env')).toBe(true);
     expect(isExcludedPath('.modelence/project.json')).toBe(false);
     expect(isExcludedPath('src/server.js')).toBe(false);
-    expect(isExcludedPath('.env')).toBe(false);
+    expect(isExcludedPath('.env')).toBe(true);
+    expect(isExcludedPath('apps/api/.env.production')).toBe(true);
+    expect(isExcludedPath('.env.example')).toBe(false);
+    expect(isExcludedPath('.env.production.template')).toBe(false);
   });
 });
 
 describe('listSourceFiles', () => {
+  it.each([false, true])(
+    'excludes credentials with git=%s while retaining portable registry config',
+    async (git) => {
+      if (git) await execFileAsync('git', ['init', '-q'], { cwd: dir });
+      await write('.env.production', 'DATABASE_URL=secret');
+      await write('.npmrc', '//registry.npmjs.org/:_authToken=secret');
+      await write('apps/api/.yarnrc.yml', 'npmAuthToken: "secret"');
+      await write('.env.example', 'DATABASE_URL=');
+      await write(
+        'apps/web/.npmrc',
+        'registry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=${NPM_TOKEN}'
+      );
+      if (git) await execFileAsync('git', ['add', '.'], { cwd: dir });
+      const { files, excludedFiles } = await listSourceFiles(dir);
+      expect(files).toEqual(['.env.example', 'apps/web/.npmrc']);
+      expect(excludedFiles).toEqual(['.env.production', '.npmrc', 'apps/api/.yarnrc.yml']);
+    }
+  );
+
+  it('recognizes literal and placeholder registry authentication values', () => {
+    expect(hasRegistryCredentials('npmAuthToken: "${NPM_TOKEN}"')).toBe(false);
+    expect(hasRegistryCredentials('_password=base64secret')).toBe(true);
+    expect(hasRegistryCredentials('# _authToken=example')).toBe(false);
+    expect(hasRegistryCredentials('_authToken=${NPM_TOKEN:-literal-secret}')).toBe(true);
+    expect(hasRegistryCredentials('"npmAuthToken": "secret"')).toBe(true);
+    expect(hasRegistryCredentials('registry=https://user:secret@registry.example/')).toBe(true);
+  });
   it('walks the tree with default exclusions outside git', async () => {
     await write('package.json', '{}');
     await write('src/index.js');

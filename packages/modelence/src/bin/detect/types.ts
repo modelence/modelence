@@ -16,6 +16,11 @@ export interface Draft {
 
 export type Detector = (facts: ProjectFacts, draft: Draft) => Draft;
 
+export interface NamedDetector {
+  name: string;
+  apply: Detector;
+}
+
 export interface Profile {
   name: string;
   matches: (facts: ProjectFacts) => boolean;

@@ -1,6 +1,6 @@
 import { commandsFor } from './commands';
 import type { ProjectFacts, WorkspaceMember } from './facts';
-import { withBuild, withNote, withWeb, type Detector, type Draft } from './types';
+import { withBuild, withNote, withWeb, type Detector, type NamedDetector } from './types';
 
 /*
   Origin-blind conventions, in the order they run. Each fills in what it can
@@ -30,6 +30,15 @@ export const installFromPackageManager: Detector = (facts, draft) => {
     useLockfile: facts.lockfile.present && facts.lockfile.inSync,
   });
   let next = withBuild(draft, { install: commands.install });
+  for (const note of facts.packageManagerNotes ?? []) {
+    next = withNote(next, note);
+  }
+  if (facts.packageManager !== 'npm' && !facts.lockfile.present) {
+    next = withNote(
+      next,
+      `No ${facts.packageManager} lockfile found; installing without a frozen lockfile.`
+    );
+  }
   if (facts.packageManager === 'npm' && !facts.lockfile.present) {
     next = withNote(
       next,
@@ -90,29 +99,17 @@ export const startFromWorkspaceMember: Detector = (facts, draft) => {
   }
   const [member] = startable;
   const commands = commandsFor(commandContext(facts));
-  const built = withBuild(draft, { command: commands.buildWithDependencies(member.name) });
+  const inferredBuild = !draft.spec.build?.command;
+  const built = inferredBuild
+    ? withBuild(draft, { command: commands.buildWithDependencies(member.name) })
+    : draft;
   const started = withWeb(built, { start: commands.startIn(member.name) });
   return withNote(
     started,
     `No root start script; the container starts the ${member.name} workspace package (${member.dir}/), ` +
-      'and the build is scoped to it and its workspace dependencies.'
-  );
-};
-
-// A client-only site (Vite, Lovable, CRA…): something to build, nothing to
-// start. The runtime serves the build output itself.
-export const staticSiteFromBuildOutput: Detector = (facts, draft) => {
-  if (draft.spec.web?.start || draft.spec.runtime === 'modelence' || !draft.spec.build?.command) {
-    return draft;
-  }
-  const dir = staticOutputDirectory(facts);
-  if (!dir) {
-    return draft;
-  }
-  const mounted = withWeb(draft, { static: [{ path: '/', dir }] });
-  return withNote(
-    mounted,
-    `No start script found; the site is served from ${dir}/ with single-page app fallback.`
+      (inferredBuild
+        ? 'and the build is scoped to it and its workspace dependencies.'
+        : 'and the root build script is preserved.')
   );
 };
 
@@ -130,20 +127,14 @@ export const startFallbackNote: Detector = (facts, draft) => {
   );
 };
 
-export const CONVENTIONS: Detector[] = [
-  runtimeFromModelenceConfig,
-  nodeVersionFromEngines,
-  installFromPackageManager,
-  buildFromScripts,
-  startFromProcfileOrScripts,
-  startFromWorkspaceMember,
-  staticSiteFromBuildOutput,
-  startFallbackNote,
+export const CONVENTIONS: NamedDetector[] = [
+  { name: 'Modelence config', apply: runtimeFromModelenceConfig },
+  { name: 'Node engines', apply: nodeVersionFromEngines },
+  { name: 'package manager', apply: installFromPackageManager },
+  { name: 'root build script', apply: buildFromScripts },
+  { name: 'Procfile or start script', apply: startFromProcfileOrScripts },
+  { name: 'workspace package', apply: startFromWorkspaceMember },
 ];
-
-export function runDetectors(facts: ProjectFacts, detectors: Detector[], draft: Draft): Draft {
-  return detectors.reduce((current, detector) => detector(facts, current), draft);
-}
 
 export function commandContext(facts: ProjectFacts) {
   return {
@@ -151,23 +142,6 @@ export function commandContext(facts: ProjectFacts) {
     version: facts.packageManagerVersion,
     useLockfile: facts.lockfile.present && facts.lockfile.inSync,
   };
-}
-
-function staticOutputDirectory(facts: ProjectFacts): string | undefined {
-  if (facts.dependencies.vite || facts.hasViteConfig) {
-    return facts.viteOutDir ?? 'dist';
-  }
-  if (facts.dependencies['react-scripts']) {
-    return 'build';
-  }
-  if (facts.dependencies['@angular/cli'] || facts.dependencies.astro) {
-    return 'dist';
-  }
-  // A root index.html with a build script is the Vite/Parcel convention.
-  if (facts.hasIndexHtml) {
-    return 'dist';
-  }
-  return undefined;
 }
 
 // Workspace members that are Vite apps without a process of their own:

@@ -34,7 +34,7 @@ export function commandsFor({
       // can be a major ahead of the lockfile and refuse the install.
       const pnpmPackage = version ? `pnpm@${version}` : 'pnpm';
       return {
-        install: `npm install -g ${pnpmPackage} && pnpm install --frozen-lockfile`,
+        install: `npm install -g ${pnpmPackage} && pnpm install ${useLockfile ? '--frozen-lockfile' : '--no-frozen-lockfile'}`,
         run: (script) => `pnpm run ${script}`,
         start: 'pnpm start',
         runIn: (member, script) => `pnpm --filter ${member} run ${script}`,
@@ -42,15 +42,26 @@ export function commandsFor({
         startIn: (member) => `pnpm --filter ${member} start`,
       };
     }
-    case 'yarn':
+    case 'yarn': {
+      const modern = version !== undefined && Number(version.split('.')[0]) >= 2;
+      const setup = version
+        ? `corepack enable && corepack prepare yarn@${version} --activate && `
+        : '';
       return {
-        install: 'yarn install --frozen-lockfile',
+        install:
+          setup +
+          (modern
+            ? useLockfile
+              ? 'yarn install --immutable'
+              : 'YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install'
+            : `yarn install${useLockfile ? ' --frozen-lockfile' : ''}`),
         run: (script) => `yarn ${script}`,
         start: 'yarn start',
         runIn: (member, script) => `yarn workspace ${member} run ${script}`,
         buildWithDependencies: (member) => `yarn workspace ${member} run build`,
         startIn: (member) => `yarn workspace ${member} start`,
       };
+    }
     default:
       return {
         install: useLockfile ? 'npm ci' : 'npm install',

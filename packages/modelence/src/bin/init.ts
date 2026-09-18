@@ -7,6 +7,7 @@ import {
   type AppSpec,
 } from './appSpec';
 import { detectAppSpec } from './detect';
+import { resolveAppRoot } from './detect/root';
 
 /*
   `modelence init`: detect how the project builds and runs, and write it to
@@ -20,6 +21,7 @@ const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
 export interface InitOptions {
   force?: boolean;
   host?: string;
+  rootDir?: string;
 }
 
 export async function init(options: InitOptions) {
@@ -29,18 +31,19 @@ export async function init(options: InitOptions) {
     throw new Error(`${APP_SPEC_FILE_NAME} already exists; pass --force to overwrite it.`);
   }
 
-  const detected = await detectAppSpec(cwd);
+  const detected = await detectAppSpec(await resolveAppRoot(cwd, options.rootDir));
   const schemaHost = (options.host ?? DEFAULT_SCHEMA_HOST).replace(/\/$/, '');
   const spec: AppSpec = {
     $schema: `${schemaHost}/schema/modelence.json`,
     ...detected.spec,
+    ...(options.rootDir ? { build: { ...detected.spec.build, root: options.rootDir } } : {}),
   };
   await writeAppSpecFile(spec, cwd);
 
   console.log(
     `Wrote ${APP_SPEC_FILE_NAME}` + (detected.profile ? ` (${detected.profile} project)` : '')
   );
-  for (const line of formatAppSpec(spec)) {
+  for (const line of formatAppSpec(spec, detected.sources)) {
     console.log(line);
   }
   for (const note of detected.notes) {

@@ -74,6 +74,7 @@ program
 program
   .command('init')
   .description('Detect how this project builds and runs, and write it to modelence.json')
+  .option('--root-dir <path>', 'Subdirectory containing the app (monorepos)')
   .option('--force', 'Overwrite an existing modelence.json')
   .option('-h, --host <host>', 'Modelence host used for the schema URL')
   .action(async (options) => {

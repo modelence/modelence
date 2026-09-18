@@ -1,5 +1,6 @@
 import type { AppSpec } from '../appSpec';
-import { CONVENTIONS, runDetectors } from './conventions';
+import { CONVENTIONS, startFallbackNote } from './conventions';
+import { FRAMEWORKS } from './frameworks';
 import { gatherProjectFacts, type ProjectFacts } from './facts';
 import { lovableProfile } from './profiles/lovable';
 import { replitProfile } from './profiles/replit';
@@ -25,14 +26,38 @@ export interface DetectedAppSpec {
   notes: string[];
   // The recognized origin, if any.
   profile: string | null;
+  // Per-field provenance for diagnostics; never sent as executable app config.
+  sources: Record<string, string>;
 }
 
 export function detectFromFacts(facts: ProjectFacts): DetectedAppSpec {
-  const start: Draft = { spec: {}, notes: [] };
-  const conventional = runDetectors(facts, CONVENTIONS, start);
+  let draft: Draft = { spec: {}, notes: [] };
+  const sources: Record<string, string> = {};
   const profile = PROFILES.find((candidate) => candidate.matches(facts)) ?? null;
-  const final = profile ? profile.apply(facts, conventional) : conventional;
-  return { ...final, profile: profile?.name ?? null };
+  const steps = [...CONVENTIONS, ...FRAMEWORKS, ...(profile ? [profile] : [])];
+  for (const step of steps) {
+    const before = fields(draft.spec);
+    draft = step.apply(facts, draft);
+    const after = fields(draft.spec);
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (!(key in after)) delete sources[key];
+      else if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) sources[key] = step.name;
+    }
+  }
+  draft = startFallbackNote(facts, draft);
+  return { ...draft, profile: profile?.name ?? null, sources };
+}
+
+function fields(spec: AppSpec): Record<string, unknown> {
+  return {
+    ...(spec.runtime ? { runtime: spec.runtime } : {}),
+    ...Object.fromEntries(
+      Object.entries(spec.build ?? {}).map(([key, value]) => [`build.${key}`, value])
+    ),
+    ...Object.fromEntries(
+      Object.entries(spec.web ?? {}).map(([key, value]) => [`web.${key}`, value])
+    ),
+  };
 }
 
 export async function detectAppSpec(cwd = process.cwd()): Promise<DetectedAppSpec> {

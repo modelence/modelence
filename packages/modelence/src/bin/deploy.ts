@@ -1,24 +1,26 @@
 import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
-import { parse as parseDotenv } from 'dotenv';
 import archiver from 'archiver';
-import {
-  APP_SPEC_FILE_NAME,
-  definedOnly,
-  formatAppSpec,
-  mergeAppSpecs,
-  readAppSpecFile,
-  type AppSpec,
-  type StaticMount,
-} from './appSpec';
-import { authenticateCli, type CliAuthTarget } from './auth';
-import { clearCachedToken, readCachedToken, writeCachedToken } from './authCache';
-import { detectAppSpec } from './detect';
+import { authenticateCli } from './auth';
+import { clearCachedToken } from './authCache';
 import { loadEnv, getProjectPath } from './config';
-import { readProject, updateProject, type DeployTarget } from './project';
+import { readProject } from './project';
 import { packSource } from './source';
-import { StudioApiError, studioRequest } from './studioApi';
 import { build } from './build';
+import { prepareSpecLayers, type SpecLayers } from './deploySpec';
+import { resolveTargetFromOptions } from './deployTarget';
+import {
+  resolveHost,
+  resolveToken,
+  rememberToken,
+  rememberTarget,
+  isUnauthorized,
+  type Session,
+} from './deploySession';
+import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
+import { followDeploy } from './deployStatus';
+
+export { specFromFlags, parseStaticFlag } from './deploySpec';
 
 /*
   `modelence deploy`: ship the current directory to a Modelence Cloud
@@ -35,11 +37,6 @@ import { build } from './build';
   MODELENCE_TOKEN variable → the cached token → the browser.
 */
 
-const DEFAULT_HOST = 'https://cloud.modelence.com';
-const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 30 * 60 * 1000;
-const PROVISION_TIMEOUT_MS = 10 * 60 * 1000;
-
 export interface DeployOptions {
   app?: string;
   env?: string;
@@ -55,43 +52,12 @@ export interface DeployOptions {
   static?: string[];
 }
 
-type CliTarget =
-  | { environmentId: string }
-  | { appAlias: string; envAlias: string }
-  | { appId: string; envAlias: string };
-
-type UploadKind = 'bundle' | 'source';
-
-interface DeployStatus {
-  status: string;
-  errors: string[];
-  rolloutProgress: { updatedCount: number; totalCount: number } | null;
-  logs: string[];
-  logCount: number;
-  siteUrl: string | null;
-  // Last output of the containers a failed rollout tried to start.
-  containerLogs?: string[];
-}
-
-// The token in use, shared so a re-authorization mid-deploy reaches every
-// later request without threading a new value through each call.
-interface Session {
-  host: string;
-  token: string;
-}
-
-// The spec layers this run sends along with the source.
-interface SpecLayers {
-  file: AppSpec | null;
-  overrides: AppSpec;
-  detected: AppSpec;
-}
-
 export async function deploy(options: DeployOptions) {
   const cwd = process.cwd();
   const host = await resolveHost(options.host, cwd);
   const kind: UploadKind = options.prebuilt ? 'bundle' : 'source';
   const project = await readProject(cwd);
+  let target = resolveTargetFromOptions(options, project);
 
   // Local work first, so nothing is uploaded when it fails.
   let layers: SpecLayers | undefined;
@@ -102,59 +68,63 @@ export async function deploy(options: DeployOptions) {
     await createBundle(archivePath);
   } else {
     layers = await prepareSpecLayers(cwd, options);
-    const { fileCount, sizeBytes, usedGit } = await packSource(cwd, archivePath);
+    const { fileCount, sizeBytes, usedGit, excludedFiles } = await packSource(cwd, archivePath);
     console.log(
       `Packed ${fileCount} files (${formatMb(sizeBytes)})` +
         (usedGit ? ' from git' : '; not a git repository, so only default exclusions applied')
     );
-  }
-
-  let target = resolveTargetFromOptions(options, project);
-  let token = await resolveToken(host);
-  if (!token || !target) {
-    // The browser flow hands back a token and, when the target is not known
-    // yet, the environment picked there — one visit covers a fresh machine
-    // and a fresh project. A target from flags or the project file is final,
-    // so the page then only authorizes.
-    const auth = await authenticateCli(host, {
-      pick: target ? undefined : 'deploy',
-      purpose: 'deploy',
-      appId: project.appId,
-    });
-    token = auth.token;
-    await rememberToken(host, auth.token, auth.expiresAt);
-    if (auth.target) {
-      target = { environmentId: auth.target.environmentId };
-      await rememberTarget(auth.target);
+    if (excludedFiles.length > 0) {
+      console.log(
+        `Excluded ${excludedFiles.length} local or generated files from the upload. Store secrets in the target environment.`
+      );
     }
   }
-  if (!target) {
-    throw new Error(
-      'No deploy target selected. Run again and pick an environment in the browser, or pass --app and --env.'
-    );
-  }
-
-  const session: Session = { host, token };
-  // Cached token expired or was revoked: authorize once more. The deploy
-  // itself is never repeated — an upload that failed authentication did not
-  // start anything, and a build already running is simply followed again.
-  const signInAgain = async () => {
-    await clearCachedToken(host);
-    console.log('Your saved login has expired; please sign in again.');
-    const auth = await authenticateCli(host, {
-      pick: target ? undefined : 'deploy',
-      purpose: 'deploy',
-      appId: project.appId,
-    });
-    await rememberToken(host, auth.token, auth.expiresAt);
-    if (auth.target) {
-      target = { environmentId: auth.target.environmentId };
-      await rememberTarget(auth.target);
-    }
-    session.token = auth.token;
-  };
 
   try {
+    let token = await resolveToken(host);
+    if (!token || !target) {
+      // The browser flow hands back a token and, when the target is not known
+      // yet, the environment picked there — one visit covers a fresh machine
+      // and a fresh project. A target from flags or the project file is final,
+      // so the page then only authorizes.
+      const auth = await authenticateCli(host, {
+        pick: target ? undefined : 'deploy',
+        purpose: 'deploy',
+        appId: project.appId,
+      });
+      token = auth.token;
+      await rememberToken(host, auth.token, auth.expiresAt);
+      if (auth.target) {
+        target = { environmentId: auth.target.environmentId };
+        await rememberTarget(auth.target);
+      }
+    }
+    if (!target) {
+      throw new Error(
+        'No deploy target selected. Run again and pick an environment in the browser, or pass --app and --env.'
+      );
+    }
+
+    const session: Session = { host, token };
+    // Cached token expired or was revoked: authorize once more. The deploy
+    // itself is never repeated — an upload that failed authentication did not
+    // start anything, and a build already running is simply followed again.
+    const signInAgain = async () => {
+      await clearCachedToken(host);
+      console.log('Your saved login has expired; please sign in again.');
+      const auth = await authenticateCli(host, {
+        pick: target ? undefined : 'deploy',
+        purpose: 'deploy',
+        appId: project.appId,
+      });
+      await rememberToken(host, auth.token, auth.expiresAt);
+      if (auth.target) {
+        target = { environmentId: auth.target.environmentId };
+        await rememberTarget(auth.target);
+      }
+      session.token = auth.token;
+    };
+
     let started: StartedDeploy;
     try {
       started = await runDeploy({ session, target, kind, archivePath, layers, project });
@@ -170,391 +140,6 @@ export async function deploy(options: DeployOptions) {
     }
   } finally {
     await fs.rm(archivePath, { force: true });
-  }
-}
-
-// Reads modelence.json, runs detection and prints the plan this run will
-// deploy with (before the environment's own settings, which only the server
-// knows).
-async function prepareSpecLayers(cwd: string, options: DeployOptions): Promise<SpecLayers> {
-  const file = await readAppSpecFile(cwd);
-  const detected = await detectAppSpec(cwd);
-  const overrides = specFromFlags(options);
-  const preview = mergeAppSpecs(detected.spec, file, overrides);
-
-  const sources = [
-    detected.profile ? `${detected.profile} project` : null,
-    file ? APP_SPEC_FILE_NAME : null,
-    Object.keys(overrides).length > 0 ? 'flags' : null,
-  ].filter(Boolean);
-  console.log(`Build plan${sources.length > 0 ? ` (${sources.join(', ')})` : ''}:`);
-  for (const line of formatAppSpec(preview)) {
-    console.log(line);
-  }
-  for (const note of detected.notes) {
-    console.log(`  note: ${note}`);
-  }
-  if (!file) {
-    console.log(`  tip: run \`modelence init\` to write this plan to ${APP_SPEC_FILE_NAME}.`);
-  }
-
-  return { file, overrides, detected: detected.spec };
-}
-
-function isUnauthorized(error: unknown): boolean {
-  return error instanceof StudioApiError && error.status === 401;
-}
-
-interface StartedDeploy {
-  environmentId: string;
-  // Null from a Studio too old to have the status route.
-  buildId: string | null;
-}
-
-async function runDeploy({
-  session,
-  target,
-  kind,
-  archivePath,
-  layers,
-  project,
-}: {
-  session: Session;
-  target: CliTarget;
-  kind: UploadKind;
-  archivePath: string;
-  layers?: SpecLayers;
-  project: Awaited<ReturnType<typeof readProject>>;
-}): Promise<StartedDeploy> {
-  const { host, token } = session;
-  const upload = await studioRequest<{
-    uploadUrl: string;
-    bundleName: string;
-    appAlias: string;
-    envAlias: string;
-    environmentId: string;
-  }>(host, '/api/upload-bundle', { method: 'POST', token, body: { ...target, kind } });
-
-  await waitForEnvironmentReady(host, token, upload.environmentId);
-
-  console.log(`Uploading to ${upload.appAlias}/${upload.envAlias}...`);
-  const fileBuffer = await fs.readFile(archivePath);
-  const uploadResponse = await fetch(upload.uploadUrl, {
-    method: 'PUT',
-    body: new Uint8Array(fileBuffer),
-    headers: { 'Content-Type': 'application/zip' },
-  });
-  if (!uploadResponse.ok) {
-    throw new Error(`Failed to upload: ${uploadResponse.statusText}`);
-  }
-
-  const result = await studioRequest<{
-    deploymentUrl: string;
-    appAlias: string;
-    envAlias: string;
-    environmentId: string;
-    buildId: string | null;
-    spec?: ResolvedSpec | null;
-  }>(host, '/api/deploy', {
-    method: 'POST',
-    token,
-    body: {
-      environmentId: upload.environmentId,
-      bundleName: upload.bundleName,
-      kind,
-      spec: layers?.file ?? undefined,
-      overrides: layers?.overrides,
-      detected: layers?.detected,
-    },
-  });
-
-  // Whatever the target was resolved from, the next run can skip the picker.
-  if (!project.deploy || project.deploy.environmentId !== result.environmentId) {
-    await rememberTarget({
-      environmentId: result.environmentId,
-      appAlias: result.appAlias,
-      envAlias: result.envAlias,
-    });
-  }
-
-  if (result.spec && layers) {
-    reportEnvironmentSettings(
-      result.spec,
-      mergeAppSpecs(layers.detected, layers.file, layers.overrides)
-    );
-  }
-
-  console.log(`Deployment started: ${result.deploymentUrl}`);
-  return { environmentId: result.environmentId, buildId: result.buildId };
-}
-
-// An environment created moments ago in the browser is still provisioning
-// its database and telemetry; deploys are refused until it is ready.
-async function waitForEnvironmentReady(host: string, token: string, environmentId: string) {
-  const deadline = Date.now() + PROVISION_TIMEOUT_MS;
-  let announced = false;
-  while (Date.now() < deadline) {
-    let status: string;
-    try {
-      ({ status } = await studioRequest<{ status: string }>(host, '/api/environment/status', {
-        token,
-        query: { environmentId },
-      }));
-    } catch (error) {
-      if (error instanceof StudioApiError && error.status === 404) {
-        // Older Studio without the route: let /api/deploy decide.
-        return;
-      }
-      throw error;
-    }
-    if (status === 'ready') {
-      return;
-    }
-    if (status === 'failed') {
-      throw new Error('The environment failed to provision; check it in the dashboard.');
-    }
-    if (!announced) {
-      console.log('Waiting for the environment to finish provisioning...');
-      announced = true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-  throw new Error('Timed out waiting for the environment to be ready.');
-}
-
-// Prints phase transitions and streams build log lines until the deploy
-// settles. Exit code reflects the outcome so CI and agents can act on it.
-async function followDeploy(
-  session: Session,
-  signInAgain: () => Promise<void>,
-  environmentId: string,
-  buildId: string
-) {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  let lastStatus = '';
-  let lastMessage = '';
-  let logOffset = 0;
-  let signedInAgain = false;
-
-  while (Date.now() < deadline) {
-    let status: DeployStatus;
-    try {
-      status = await studioRequest<DeployStatus>(session.host, '/api/deploy/status', {
-        token: session.token,
-        query: { environmentId, buildId, logOffset },
-      });
-    } catch (error) {
-      // A token can expire while a long rollout is being watched; the
-      // build keeps going on the server, so only the watching resumes.
-      if (!isUnauthorized(error) || signedInAgain) {
-        throw error;
-      }
-      signedInAgain = true;
-      await signInAgain();
-      continue;
-    }
-
-    for (const line of status.logs) {
-      process.stdout.write(`  │ ${line.replace(/\n$/, '')}\n`);
-    }
-    // A poll that could not read CloudWatch reports zero lines; keeping the
-    // offset avoids replaying the whole log on the next poll.
-    logOffset = Math.max(logOffset, status.logCount);
-
-    if (status.status !== lastStatus) {
-      lastStatus = status.status;
-      const message = describeStatus(status);
-      // Two statuses can share a message (deploy-pending and deploying).
-      if (message && message !== lastMessage) {
-        lastMessage = message;
-        console.log(message);
-      }
-    }
-
-    if (status.status === 'deploy-completed') {
-      if (status.siteUrl) {
-        console.log(`Live at ${status.siteUrl}`);
-      }
-      return;
-    }
-    if (status.status === 'build-failed' || status.status === 'deploy-failed') {
-      for (const error of status.errors) {
-        console.error(`  ${error}`);
-      }
-      if (status.containerLogs && status.containerLogs.length > 0) {
-        console.error('Container output:');
-        for (const line of status.containerLogs) {
-          console.error(`  │ ${line.replace(/\n$/, '')}`);
-        }
-      }
-      process.exitCode = 1;
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-
-  console.error('Timed out waiting for the deployment; check the dashboard for its status.');
-  process.exitCode = 1;
-}
-
-function describeStatus(status: DeployStatus): string | null {
-  switch (status.status) {
-    case 'build-pending':
-      return 'Building image...';
-    case 'deploy-pending':
-    case 'deploying':
-      return 'Image built. Deploying containers...';
-    case 'rolling-out':
-      return 'Rolling out new containers...';
-    case 'deploy-completed':
-      return 'Deployed successfully.';
-    case 'build-failed':
-      return 'Build failed.';
-    case 'deploy-failed':
-      return 'Deployment failed.';
-    default:
-      return null;
-  }
-}
-
-function resolveTargetFromOptions(
-  options: DeployOptions,
-  project: Awaited<ReturnType<typeof readProject>>
-): CliTarget | null {
-  if (options.app && options.env) {
-    return { appAlias: options.app, envAlias: options.env };
-  }
-  if (options.env && project.deploy?.appAlias) {
-    return { appAlias: project.deploy.appAlias, envAlias: options.env };
-  }
-  if (options.env && project.appId) {
-    return { appId: project.appId, envAlias: options.env };
-  }
-  if (options.app || options.env) {
-    throw new Error('Pass both --app and --env, or neither to pick the target in the browser.');
-  }
-  if (project.deploy?.environmentId) {
-    return { environmentId: project.deploy.environmentId };
-  }
-  return null;
-}
-
-async function resolveToken(host: string): Promise<string | null> {
-  if (process.env.MODELENCE_TOKEN) {
-    return process.env.MODELENCE_TOKEN;
-  }
-  return await readCachedToken(host);
-}
-
-async function rememberToken(host: string, token: string, expiresAt?: string) {
-  if (!expiresAt) {
-    // Older Studio: the token lasts an hour, not worth caching.
-    return;
-  }
-  try {
-    await writeCachedToken(host, token, expiresAt);
-  } catch (error) {
-    console.warn('Could not save the login for next time:', error);
-  }
-}
-
-async function rememberTarget(target: CliAuthTarget | DeployTarget) {
-  const deploy: DeployTarget = {
-    environmentId: target.environmentId,
-    appAlias: target.appAlias,
-    envAlias: target.envAlias,
-  };
-  try {
-    await updateProject({ deploy, ...('appId' in target ? { appId: target.appId } : {}) });
-  } catch (error) {
-    console.warn('Could not record the deploy target in .modelence/project.json:', error);
-  }
-}
-
-// The Studio host: flag → environment → the project's .modelence.env → default.
-// Read directly rather than through loadEnv(), which requires a
-// modelence.config.ts that plain Node.js projects don't have.
-async function resolveHost(flag: string | undefined, cwd: string): Promise<string> {
-  if (flag) {
-    return flag.replace(/\/$/, '');
-  }
-  if (process.env.MODELENCE_SERVICE_ENDPOINT) {
-    return process.env.MODELENCE_SERVICE_ENDPOINT.replace(/\/$/, '');
-  }
-  try {
-    const env = parseDotenv(await fs.readFile(join(cwd, '.modelence.env'), 'utf8'));
-    if (env.MODELENCE_SERVICE_ENDPOINT) {
-      return env.MODELENCE_SERVICE_ENDPOINT.replace(/\/$/, '');
-    }
-  } catch {
-    // No .modelence.env — plain Node.js projects usually have none.
-  }
-  return DEFAULT_HOST;
-}
-
-// Flags → one spec layer, only the keys that were passed.
-export function specFromFlags(options: DeployOptions): AppSpec {
-  const build = definedOnly({
-    node: options.nodeVersion,
-    root: options.rootDir,
-    install: options.installCommand,
-    command: options.buildCommand,
-  });
-  const web = definedOnly({
-    start: options.startCommand,
-    static: options.static === undefined ? undefined : options.static.map(parseStaticFlag),
-  });
-  return {
-    ...(options.runtime ? { runtime: options.runtime as AppSpec['runtime'] } : {}),
-    ...(Object.keys(build).length > 0 ? { build } : {}),
-    ...(Object.keys(web).length > 0 ? { web } : {}),
-  };
-}
-
-// --static "/=client/dist" or "/docs=docs/build"; a bare directory mounts at /.
-export function parseStaticFlag(value: string): StaticMount {
-  const separator = value.indexOf('=');
-  if (separator === -1) {
-    return { path: '/', dir: value };
-  }
-  return { path: value.slice(0, separator) || '/', dir: value.slice(separator + 1) };
-}
-
-// A resolved spec as the server reports it: every key present.
-interface ResolvedSpec {
-  runtime: string;
-  build: { node: string; root: string; install: string; command: string };
-  web: { start?: string | null; static: StaticMount[] };
-}
-
-// The environment's Build & Deploy settings sit between the flags and the
-// file; when they changed the outcome, say so, since that is otherwise only
-// visible in the dashboard.
-function reportEnvironmentSettings(used: ResolvedSpec, local: AppSpec) {
-  const differences: string[] = [];
-  const compare = (
-    label: string,
-    usedValue: string | null | undefined,
-    localValue: string | undefined
-  ) => {
-    if (localValue !== undefined && (usedValue ?? '') !== localValue) {
-      differences.push(`${label} "${usedValue ?? ''}" (here "${localValue}")`);
-    }
-  };
-  compare('install', used.build.install, local.build?.install);
-  compare('build', used.build.command, local.build?.command);
-  compare('start', used.web.start, local.web?.start);
-  if (local.runtime && used.runtime !== local.runtime) {
-    differences.push(`runtime ${used.runtime} (here ${local.runtime})`);
-  }
-  const usedMounts = JSON.stringify(used.web.static);
-  if (local.web?.static && usedMounts !== JSON.stringify(local.web.static)) {
-    differences.push('static directories');
-  }
-  if (differences.length > 0) {
-    console.log("Using the environment's Build & Deploy settings: " + differences.join(', '));
-    console.log('Edit them in the dashboard to change this.');
   }
 }
 

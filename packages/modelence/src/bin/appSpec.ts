@@ -105,25 +105,28 @@ export function definedOnly<T extends object>(value: T): Partial<T> {
   ) as Partial<T>;
 }
 
-export function formatAppSpec(spec: AppSpec): string[] {
+export function formatAppSpec(spec: AppSpec, sources: Record<string, string> = {}): string[] {
   const lines: string[] = [];
-  lines.push(`  runtime: ${spec.runtime ?? 'node'}`);
-  lines.push(`  node:    ${spec.build?.node ?? 'default (22)'}`);
+  const add = (field: string, line: string) => {
+    lines.push(line + (sources[field] ? ` (${sources[field]})` : ''));
+  };
+  add('runtime', `  runtime: ${spec.runtime ?? 'node'}`);
+  add('build.node', `  node:    ${spec.build?.node ?? 'default (22)'}`);
   if (spec.build?.root && spec.build.root !== '.') {
-    lines.push(`  root:    ${spec.build.root}`);
+    add('build.root', `  root:    ${spec.build.root}`);
   }
-  lines.push(`  install: ${spec.build?.install ?? 'default'}`);
-  lines.push(`  build:   ${spec.build?.command || '(none)'}`);
+  add('build.install', `  install: ${spec.build?.install ?? 'default'}`);
+  add('build.command', `  build:   ${spec.build?.command || '(none)'}`);
   for (const [key, value] of Object.entries(spec.build?.env ?? {})) {
-    lines.push(`  env:     ${key}=${value}`);
+    add('build.env', `  env:     ${key}=${value}`);
   }
   if (spec.web?.start) {
-    lines.push(`  start:   ${spec.web.start}`);
+    add('web.start', `  start:   ${spec.web.start}`);
   } else if (!spec.web?.static?.length) {
     lines.push('  start:   (none)');
   }
   for (const mount of spec.web?.static ?? []) {
-    lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
+    add('web.static', `  static:  ${mount.path} -> ${mount.dir}/`);
   }
   return lines;
 }

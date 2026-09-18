@@ -3,13 +3,13 @@
   "spec": {
     "build": {
       "install": "npm install -g pnpm@10.4.1 && pnpm install --frozen-lockfile",
-      "command": "pnpm --filter api... --if-present run build"
+      "command": "pnpm run build"
     },
     "web": {
       "start": "pnpm --filter api start"
     }
   },
   "notes": [
-    "No root start script; the container starts the api workspace package (apps/api/), and the build is scoped to it and its workspace dependencies."
+    "No root start script; the container starts the api workspace package (apps/api/), and the root build script is preserved."
   ]
 }
