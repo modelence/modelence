@@ -6,6 +6,8 @@ import { deploy } from './deploy';
 import { authenticateCli } from './auth';
 import { StudioApiError, studioRequest } from './studioApi';
 import { followDeploy, waitForEnvironmentReady } from './deployStatus';
+import { build } from './build';
+import { getProjectPath } from './config';
 
 vi.mock('./auth', () => ({ authenticateCli: vi.fn() }));
 vi.mock('./build', () => ({ build: vi.fn() }));
@@ -122,6 +124,25 @@ describe('deploy orchestration', () => {
     expect(request).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
+  });
+
+  it('keeps the historical bundle path for a Modelence app without modelence.json', async () => {
+    await rm(join(project, 'modelence.json'));
+    await writeFile(
+      join(project, 'package.json'),
+      JSON.stringify({ name: 'app', dependencies: { modelence: '^0.25.0' } })
+    );
+    vi.mocked(getProjectPath).mockImplementation((...parts: string[]) => join(project, ...parts));
+    await deploy(options);
+    expect(build).toHaveBeenCalledTimes(1);
+    const [, , uploadArgs] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
+    expect(uploadArgs?.body).toMatchObject({ kind: 'bundle' });
+    const [, , deployArgs] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
+    expect(deployArgs?.body).toMatchObject({ kind: 'bundle' });
+    expect((deployArgs?.body as { spec?: unknown })?.spec).toBeUndefined();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('built locally and uploaded as before')
+    );
   });
 
   it('reauthorizes once when the upload authorization is rejected', async () => {

@@ -8,6 +8,7 @@ import { readProject } from './project';
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
+import { describeDeployKind, resolveDeployKind } from './deployKind';
 import type { AppSpec } from './appSpec';
 import { resolveTargetFromOptions } from './deployTarget';
 import {
@@ -29,7 +30,9 @@ import { followDeploy } from './deployStatus';
   remotely as the project's modelence.json describes. Studio resolves that
   file against the defaults of its runtime and nothing else; the CLI neither
   inspects nor amends anything. `--prebuilt` keeps the historical
-  Modelence path: build locally, upload .modelence/build.
+  Modelence path: build locally, upload .modelence/build — and so does a
+  Modelence framework app that has no modelence.json, so projects that
+  deployed before the file existed keep deploying unchanged (deployKind.ts).
 
   Target: -a/-e flags → --env with the app recorded in project.json → the
   deploy target recorded in project.json → the browser picker. Auth: the
@@ -46,7 +49,12 @@ export interface DeployOptions {
 export async function deploy(options: DeployOptions) {
   const cwd = process.cwd();
   const host = await resolveHost(options.host, cwd);
-  const kind: UploadKind = options.prebuilt ? 'bundle' : 'source';
+  const decision = await resolveDeployKind(cwd, options);
+  const kind: UploadKind = decision.kind;
+  const kindNote = describeDeployKind(decision);
+  if (kindNote) {
+    console.log(kindNote);
+  }
   const project = await readProject(cwd);
   let target = resolveTargetFromOptions(options, project);
 

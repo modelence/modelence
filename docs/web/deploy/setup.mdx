@@ -49,6 +49,12 @@ takes the default of the runtime.
 | `web.start` | string \| null | none | Command that starts the web process. `null` means there is no process: the site is static only and `web.static` must be set. |
 | `web.static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to the build root and must exist after the build. |
 
+<Note>
+Apps built on the Modelence framework need no file: `modelence deploy` recognizes the `modelence`
+dependency and keeps building them locally, as it always has. Add a `modelence.json` with
+`"runtime": "modelence"` to move the build to Modelence Cloud instead.
+</Note>
+
 **The null / missing / empty rule** for `build.command` and `web.start`: a **missing** key inherits the
 runtime default, **`null`** means "none" on purpose, and an **empty string `""` is invalid** and is
 rejected. Write `null` when there is nothing to run.
