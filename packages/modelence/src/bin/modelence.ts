@@ -42,7 +42,7 @@ program
 program
   .command('deploy')
   .description(
-    'Deploy the current directory to Modelence Cloud (any Node.js app; picks the target in the browser on first run)'
+    'Deploy the project described by modelence.json to Modelence Cloud (picks the target in the browser on first run)'
   )
   .option('-a, --app <app>', 'Application alias')
   .option('-e, --env <env>', 'Environment alias')
@@ -50,17 +50,6 @@ program
   .option(
     '--prebuilt',
     'Build locally and upload the .modelence/build bundle (Modelence apps only)'
-  )
-  .option('--runtime <runtime>', 'node or modelence (default: from modelence.json or detected)')
-  .option('--node-version <version>', 'Node.js version for the container, e.g. 22')
-  .option('--root-dir <path>', 'Subdirectory containing the app (monorepos)')
-  .option('--install-command <command>', 'Install command for this deploy')
-  .option('--build-command <command>', 'Build command for this deploy ("" to skip)')
-  .option('--start-command <command>', 'Start command for this deploy')
-  .option(
-    '--static <path=dir>',
-    'Serve a built directory at a URL path, e.g. /=client/dist (repeatable)',
-    (value: string, previous: string[] = []) => [...previous, value]
   )
   .action(async (options) => {
     try {
@@ -73,8 +62,7 @@ program
 
 program
   .command('init')
-  .description('Detect how this project builds and runs, and write it to modelence.json')
-  .option('--root-dir <path>', 'Subdirectory containing the app (monorepos)')
+  .description('Create a modelence.json template for this project')
   .option('--force', 'Overwrite an existing modelence.json')
   .option('-h, --host <host>', 'Modelence host used for the schema URL')
   .action(async (options) => {

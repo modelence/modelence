@@ -7,7 +7,8 @@ import { loadEnv, getProjectPath } from './config';
 import { readProject } from './project';
 import { packSource } from './source';
 import { build } from './build';
-import { prepareSpecLayers, type SpecLayers } from './deploySpec';
+import { prepareSpec } from './deploySpec';
+import type { AppSpec } from './appSpec';
 import { resolveTargetFromOptions } from './deployTarget';
 import {
   resolveHost,
@@ -20,17 +21,15 @@ import {
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
 import { followDeploy } from './deployStatus';
 
-export { specFromFlags, parseStaticFlag } from './deploySpec';
-
 /*
   `modelence deploy`: ship the current directory to a Modelence Cloud
   environment.
 
   Default path — any Node.js app: the source tree is uploaded and built
-  remotely from its app spec, which Studio merges from (highest first) the
-  flags of this run, the environment's Build & Deploy settings, the
-  project's modelence.json and what is detected here. `--prebuilt` keeps the
-  historical Modelence path: build locally, upload .modelence/build.
+  remotely as the project's modelence.json describes. Studio resolves that
+  file against the defaults of its runtime and nothing else; the CLI neither
+  inspects nor amends anything. `--prebuilt` keeps the historical
+  Modelence path: build locally, upload .modelence/build.
 
   Target: -a/-e flags → --env with the app recorded in project.json → the
   deploy target recorded in project.json → the browser picker. Auth: the
@@ -42,14 +41,6 @@ export interface DeployOptions {
   env?: string;
   host?: string;
   prebuilt?: boolean;
-  runtime?: string;
-  nodeVersion?: string;
-  rootDir?: string;
-  installCommand?: string;
-  buildCommand?: string;
-  startCommand?: string;
-  // "path=dir", repeatable.
-  static?: string[];
 }
 
 export async function deploy(options: DeployOptions) {
@@ -59,15 +50,16 @@ export async function deploy(options: DeployOptions) {
   const project = await readProject(cwd);
   let target = resolveTargetFromOptions(options, project);
 
-  // Local work first, so nothing is uploaded when it fails.
-  let layers: SpecLayers | undefined;
+  // Local work first, so nothing is uploaded — and nobody is asked to sign
+  // in — when it fails; a missing modelence.json stops right here.
+  let spec: AppSpec | undefined;
   const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
   if (kind === 'bundle') {
     await loadEnv();
     await build();
     await createBundle(archivePath);
   } else {
-    layers = await prepareSpecLayers(cwd, options);
+    spec = await prepareSpec(cwd);
     const { fileCount, sizeBytes, usedGit, excludedFiles } = await packSource(cwd, archivePath);
     console.log(
       `Packed ${fileCount} files (${formatMb(sizeBytes)})` +
@@ -127,13 +119,13 @@ export async function deploy(options: DeployOptions) {
 
     let started: StartedDeploy;
     try {
-      started = await runDeploy({ session, target, kind, archivePath, layers, project });
+      started = await runDeploy({ session, target, kind, archivePath, spec, project });
     } catch (error) {
       if (!isUnauthorized(error)) {
         throw error;
       }
       await signInAgain();
-      started = await runDeploy({ session, target, kind, archivePath, layers, project });
+      started = await runDeploy({ session, target, kind, archivePath, spec, project });
     }
     if (started.buildId) {
       await followDeploy(session, signInAgain, started.environmentId, started.buildId);

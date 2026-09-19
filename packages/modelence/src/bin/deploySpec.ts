@@ -1,124 +1,76 @@
 import {
+  AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
-  definedOnly,
+  SETUP_DOCS_URL,
   formatAppSpec,
-  mergeAppSpecs,
   readAppSpecFile,
   type AppSpec,
   type StaticMount,
 } from './appSpec';
-import { detectAppSpec } from './detect';
-import { resolveAppRoot } from './detect/root';
-import type { DeployOptions } from './deploy';
+import { resolveAppRoot } from './appRoot';
 
-export interface SpecLayers {
-  file: AppSpec | null;
-  overrides: AppSpec;
-  detected: AppSpec;
-}
+/*
+  modelence.json is the whole contract between a project and Modelence
+  Cloud: the CLI reads it, checks what only the local file system can tell
+  (the file exists, build.root is a real directory in the upload) and sends
+  it on. Studio validates it against the schema and fills in the runtime's
+  defaults; nothing is inferred here.
+*/
 
-// Reads modelence.json, runs detection and prints the plan this run will
-// deploy with (before the environment's own settings, which only the server
-// knows).
-export async function prepareSpecLayers(cwd: string, options: DeployOptions): Promise<SpecLayers> {
-  const file = await readAppSpecFile(cwd);
-  const overrides = specFromFlags(options);
-  const appRoot = await resolveAppRoot(cwd, overrides.build?.root ?? file?.build?.root);
-  const detected = await detectAppSpec(appRoot);
-  const preview = mergeAppSpecs(detected.spec, file, overrides);
-  const fieldSources = { ...detected.sources };
-  for (const [name, layer] of [
-    [APP_SPEC_FILE_NAME, file],
-    ['flags', overrides],
-  ] as const) {
-    if (layer?.runtime) fieldSources.runtime = name;
-    for (const section of ['build', 'web'] as const) {
-      for (const key of Object.keys(layer?.[section] ?? {})) {
-        fieldSources[`${section}.${key}`] = name;
-      }
-    }
+const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'runtime', 'build', 'web'];
+
+// Reads and checks modelence.json, prints the plan and returns the file's
+// content for the deploy request. Throws when there is no file.
+export async function prepareSpec(cwd: string): Promise<AppSpec> {
+  const spec = await readAppSpecFile(cwd);
+  if (!spec) {
+    throw new Error(missingSpecMessage(cwd));
+  }
+  assertKnownKeys(spec);
+  if (spec.build?.root !== undefined) {
+    await resolveAppRoot(cwd, spec.build.root);
   }
 
-  const sources = [
-    detected.profile ? `${detected.profile} project` : null,
-    file ? APP_SPEC_FILE_NAME : null,
-    Object.keys(overrides).length > 0 ? 'flags' : null,
-  ].filter(Boolean);
-  console.log(`Build plan${sources.length > 0 ? ` (${sources.join(', ')})` : ''}:`);
-  for (const line of formatAppSpec(preview, fieldSources)) {
+  console.log(`Build plan (${APP_SPEC_FILE_NAME}):`);
+  for (const line of formatAppSpec(spec)) {
     console.log(line);
   }
-  for (const note of detected.notes) {
-    console.log(`  note: ${note}`);
-  }
-  if (!file) {
-    console.log(`  tip: run \`modelence init\` to write this plan to ${APP_SPEC_FILE_NAME}.`);
-  }
-
-  return { file, overrides, detected: detected.spec };
+  return spec;
 }
 
-// Flags → one spec layer, only the keys that were passed.
-export function specFromFlags(options: DeployOptions): AppSpec {
-  const build = definedOnly({
-    node: options.nodeVersion,
-    root: options.rootDir,
-    install: options.installCommand,
-    command: options.buildCommand,
-  });
-  const web = definedOnly({
-    start: options.startCommand,
-    static: options.static === undefined ? undefined : options.static.map(parseStaticFlag),
-  });
-  return {
-    ...(options.runtime ? { runtime: options.runtime as AppSpec['runtime'] } : {}),
-    ...(Object.keys(build).length > 0 ? { build } : {}),
-    ...(Object.keys(web).length > 0 ? { web } : {}),
-  };
+export function missingSpecMessage(cwd: string): string {
+  return [
+    `${APP_SPEC_FILE_NAME} not found in ${cwd}.`,
+    'Modelence Cloud builds and runs your app exactly as this file describes (install, build and start commands, Node.js version, static directories).',
+    'Ask your coding agent to create it with this prompt:',
+    '',
+    `  ${AGENT_SETUP_PROMPT}`,
+    '',
+    `Reference: ${SETUP_DOCS_URL}`,
+  ].join('\n');
 }
 
-// --static "/=client/dist" or "/docs=docs/build"; a bare directory mounts at /.
-export function parseStaticFlag(value: string): StaticMount {
-  const separator = value.indexOf('=');
-  if (separator === -1) {
-    return { path: '/', dir: value };
+// A typo at the top level (say "builds") would otherwise be dropped by the
+// server's schema check with a less specific message, or worse, ignored.
+function assertKnownKeys(spec: AppSpec): void {
+  const unknown = Object.keys(spec).filter((key) => !KNOWN_TOP_LEVEL_KEYS.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME} has unknown key "${unknown[0]}" (allowed: ${KNOWN_TOP_LEVEL_KEYS.join(', ')}).`
+    );
   }
-  return { path: value.slice(0, separator) || '/', dir: value.slice(separator + 1) };
+  for (const section of ['build', 'web'] as const) {
+    const value = spec[section];
+    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
+      throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
+    }
+  }
 }
 
-// A resolved spec as the server reports it: every key present.
+// A resolved spec as the server reports it: every key present, with '' for
+// no build step and null for no web process.
 export interface ResolvedSpec {
   runtime: string;
   build: { node: string; root: string; install: string; command: string };
-  web: { start?: string | null; static: StaticMount[] };
-}
-
-// The environment's Build & Deploy settings sit between the flags and the
-// file; when they changed the outcome, say so, since that is otherwise only
-// visible in the dashboard.
-export function reportEnvironmentSettings(used: ResolvedSpec, local: AppSpec) {
-  const differences: string[] = [];
-  const compare = (
-    label: string,
-    usedValue: string | null | undefined,
-    localValue: string | undefined
-  ) => {
-    if (localValue !== undefined && (usedValue ?? '') !== localValue) {
-      differences.push(`${label} "${usedValue ?? ''}" (here "${localValue}")`);
-    }
-  };
-  compare('install', used.build.install, local.build?.install);
-  compare('build', used.build.command, local.build?.command);
-  compare('start', used.web.start, local.web?.start);
-  if (local.runtime && used.runtime !== local.runtime) {
-    differences.push(`runtime ${used.runtime} (here ${local.runtime})`);
-  }
-  const usedMounts = JSON.stringify(used.web.static);
-  if (local.web?.static && usedMounts !== JSON.stringify(local.web.static)) {
-    differences.push('static directories');
-  }
-  if (differences.length > 0) {
-    console.log("Using the environment's Build & Deploy settings: " + differences.join(', '));
-    console.log('Edit them in the dashboard to change this.');
-  }
+  web: { start: string | null; static: StaticMount[] };
 }

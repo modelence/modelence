@@ -17,6 +17,10 @@ vi.mock('./studioApi', async (importOriginal) => ({
 
 const request = vi.mocked(studioRequest);
 const options = { host: 'https://studio.example', app: 'app', env: 'prod' };
+const spec = {
+  build: { install: 'npm ci', command: null },
+  web: { start: 'node server.js' },
+};
 const completed = {
   status: 'deploy-completed',
   logs: [],
@@ -34,10 +38,8 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'modelence-deploy-'));
   project = join(dir, 'project');
   await mkdir(project);
-  await writeFile(
-    join(project, 'package.json'),
-    JSON.stringify({ scripts: { start: 'node server.js' } })
-  );
+  await writeFile(join(project, 'package.json'), JSON.stringify({ name: 'app' }));
+  await writeFile(join(project, 'modelence.json'), JSON.stringify(spec));
   vi.spyOn(process, 'cwd').mockReturnValue(project);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -96,6 +98,29 @@ describe('deploy orchestration', () => {
         query: { environmentId: 'env-id', buildId: 'build-id', logOffset: 0 },
       })
     );
+    await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
+  });
+
+  it('sends modelence.json as the spec and nothing else about the project', async () => {
+    await deploy(options);
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
+    expect(args?.body).toEqual({
+      environmentId: 'env-id',
+      bundleName: 'source.zip',
+      kind: 'source',
+      spec,
+    });
+    expect(args?.body).not.toHaveProperty('overrides');
+    expect(args?.body).not.toHaveProperty('detected');
+  });
+
+  it('stops before signing in or uploading when modelence.json is missing', async () => {
+    await rm(join(project, 'modelence.json'));
+    vi.stubEnv('MODELENCE_TOKEN', '');
+    await expect(deploy(options)).rejects.toThrow('modelence.json not found in');
+    expect(authenticateCli).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
   });
 

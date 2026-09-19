@@ -1,7 +1,0 @@
-{
-  "name": "workspace",
-  "packageManager": "pnpm@10.4.1+sha512.abc",
-  "scripts": {
-    "build": "pnpm -r build"
-  }
-}

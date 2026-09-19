@@ -1,7 +1,0 @@
-{
-  "name": "workspace",
-  "scripts": {
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck": "tsc --build"
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "name": "@workspace/rolodex",
-  "scripts": {
-    "build": "vite build"
-  }
-}

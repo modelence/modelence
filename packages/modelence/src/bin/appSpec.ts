@@ -1,15 +1,25 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 /*
   modelence.json — how the project is built and run on Modelence Cloud. The
   CLI reads it as-is and sends it to Studio, which validates it against the
-  schema published at /schema/modelence.json and merges it with the
-  environment's settings and the CLI's detection. The types here mirror that
-  schema; the server is the authority.
+  schema published at /schema/modelence.json and fills in the defaults of
+  the chosen runtime. The types here mirror that schema; the server is the
+  authority.
+
+  For build.command and web.start: a missing key inherits the runtime
+  default, null means "none" (no build step / no process), and an empty
+  string is invalid.
 */
 
 export const APP_SPEC_FILE_NAME = 'modelence.json';
+
+// The file is written by the user's coding agent from the hosted setup
+// guide; Mintlify serves the same page raw at the .md URL for agents.
+export const SETUP_DOCS_URL = 'https://docs.modelence.com/deploy/setup';
+export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence deployment for this project`;
 
 export type AppRuntime = 'node' | 'modelence';
 
@@ -25,11 +35,11 @@ export interface AppSpec {
     node?: string;
     root?: string;
     install?: string;
-    command?: string;
+    command?: string | null;
     env?: Record<string, string>;
   };
   web?: {
-    start?: string;
+    start?: string | null;
     static?: StaticMount[];
   };
 }
@@ -38,8 +48,10 @@ export function getAppSpecFilePath(cwd = process.cwd()): string {
   return join(cwd, APP_SPEC_FILE_NAME);
 }
 
-// The file's content, or null when there is none. A file that is not valid
-// JSON is an error: silently ignoring it would deploy something else.
+// The file's content, or null when there is none. Comments and trailing
+// commas are accepted (JSONC) since the file is hand-written and annotated;
+// anything else malformed is an error, because silently ignoring it would
+// deploy something else.
 export async function readAppSpecFile(cwd = process.cwd()): Promise<AppSpec | null> {
   let content: string;
   try {
@@ -47,12 +59,14 @@ export async function readAppSpecFile(cwd = process.cwd()): Promise<AppSpec | nu
   } catch {
     return null;
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch (error) {
+  const errors: ParseError[] = [];
+  const parsed: unknown = parseJsonc(content, errors, {
+    allowTrailingComma: true,
+    disallowComments: false,
+  });
+  if (errors.length > 0) {
     throw new Error(
-      `${APP_SPEC_FILE_NAME} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
+      `${APP_SPEC_FILE_NAME} is not valid JSON: ${describeParseError(content, errors[0])}`
     );
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -61,72 +75,44 @@ export async function readAppSpecFile(cwd = process.cwd()): Promise<AppSpec | nu
   return parsed as AppSpec;
 }
 
+function describeParseError(content: string, error: ParseError): string {
+  const before = content.slice(0, error.offset);
+  const line = before.split('\n').length;
+  const column = error.offset - before.lastIndexOf('\n');
+  return `${printParseErrorCode(error.error)} at line ${line}, column ${column}`;
+}
+
 export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Promise<void> {
   await fs.writeFile(getAppSpecFilePath(cwd), JSON.stringify(spec, null, 2) + '\n');
 }
 
-// Layers merged the way the server does, for the plan shown before the
-// upload: later arguments win; build.env merges by key, mount lists replace.
-export function mergeAppSpecs(...layers: (AppSpec | null | undefined)[]): AppSpec {
-  return layers.reduce<AppSpec>((merged, layer) => {
-    if (!layer) {
-      return merged;
-    }
-    const build = { ...merged.build, ...layer.build };
-    if (merged.build?.env || layer.build?.env) {
-      build.env = { ...merged.build?.env, ...layer.build?.env };
-    }
-    const web = { ...merged.web, ...layer.web };
-    return dropEmpty({
-      ...merged,
-      ...(layer.runtime ? { runtime: layer.runtime } : {}),
-      build,
-      web,
-    });
-  }, {});
-}
-
-function dropEmpty(spec: AppSpec): AppSpec {
-  const result: AppSpec = { ...spec };
-  if (result.build && Object.keys(result.build).length === 0) {
-    delete result.build;
-  }
-  if (result.web && Object.keys(result.web).length === 0) {
-    delete result.web;
-  }
-  return result;
-}
-
-// Only the keys a user actually set, so "unset" stays distinguishable from
-// "empty" on the server.
-export function definedOnly<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
-  ) as Partial<T>;
-}
-
-export function formatAppSpec(spec: AppSpec, sources: Record<string, string> = {}): string[] {
+export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
-  const add = (field: string, line: string) => {
-    lines.push(line + (sources[field] ? ` (${sources[field]})` : ''));
-  };
-  add('runtime', `  runtime: ${spec.runtime ?? 'node'}`);
-  add('build.node', `  node:    ${spec.build?.node ?? 'default (22)'}`);
+  lines.push(`  runtime: ${spec.runtime ?? 'node'}`);
+  lines.push(`  node:    ${spec.build?.node ?? 'default (22)'}`);
   if (spec.build?.root && spec.build.root !== '.') {
-    add('build.root', `  root:    ${spec.build.root}`);
+    lines.push(`  root:    ${spec.build.root}`);
   }
-  add('build.install', `  install: ${spec.build?.install ?? 'default'}`);
-  add('build.command', `  build:   ${spec.build?.command || '(none)'}`);
+  lines.push(`  install: ${spec.build?.install ?? 'default'}`);
+  lines.push(`  build:   ${formatCommand(spec.build?.command)}`);
   for (const [key, value] of Object.entries(spec.build?.env ?? {})) {
-    add('build.env', `  env:     ${key}=${value}`);
+    lines.push(`  env:     ${key}=${value}`);
   }
-  if (spec.web?.start) {
-    add('web.start', `  start:   ${spec.web.start}`);
-  } else if (!spec.web?.static?.length) {
-    lines.push('  start:   (none)');
-  }
+  lines.push(`  start:   ${formatCommand(spec.web?.start)}`);
   for (const mount of spec.web?.static ?? []) {
-    add('web.static', `  static:  ${mount.path} -> ${mount.dir}/`);
+    lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
   }
   return lines;
+}
+
+// A missing command is filled in by the runtime's default on the server;
+// null is the user saying there is none.
+function formatCommand(command: string | null | undefined): string {
+  if (command === undefined) {
+    return 'default';
+  }
+  if (command === null || command === '') {
+    return '(none)';
+  }
+  return command;
 }

@@ -150,6 +150,18 @@ CLI, add your own `AGENTS.md` describing the conventions your project relies on,
 
 Then register the docs MCP server through your tool's own MCP configuration, using the JSON above.
 
+## Deploying any Node.js app
+
+Modelence Cloud also hosts projects that don't use the framework — an Express API, a Vite site, a
+Next.js app. How such a project is built and run is described in a `modelence.json` file at its root,
+and your agent is the right one to write it, since it knows the codebase. Give it the
+[Deploy Setup](/deploy/setup) page — it is written for agents and covers the file's reference, worked
+examples, and how to verify the result locally — then run `npx modelence deploy`:
+
+```text
+Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment for this project
+```
+
 ## Inspecting your environment
 
 Your project is connected to a Modelence environment, and the agent can query its database directly —

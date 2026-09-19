@@ -1,19 +1,17 @@
 import { promises as fs } from 'fs';
 import {
+  AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
-  formatAppSpec,
+  SETUP_DOCS_URL,
   getAppSpecFilePath,
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
-import { detectAppSpec } from './detect';
-import { resolveAppRoot } from './detect/root';
 
 /*
-  `modelence init`: detect how the project builds and runs, and write it to
-  modelence.json so the next deploy is deterministic and the result can be
-  read and edited. Detection still runs on every deploy for whatever the
-  file leaves out.
+  `modelence init`: write a modelence.json template for the user's coding
+  agent to fill in from the hosted setup guide. Nothing about the project is
+  inspected — the file is the contract, and the agent reads the code.
 */
 
 const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
@@ -21,7 +19,6 @@ const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
 export interface InitOptions {
   force?: boolean;
   host?: string;
-  rootDir?: string;
 }
 
 export async function init(options: InitOptions) {
@@ -31,25 +28,21 @@ export async function init(options: InitOptions) {
     throw new Error(`${APP_SPEC_FILE_NAME} already exists; pass --force to overwrite it.`);
   }
 
-  const detected = await detectAppSpec(await resolveAppRoot(cwd, options.rootDir));
   const schemaHost = (options.host ?? DEFAULT_SCHEMA_HOST).replace(/\/$/, '');
-  const spec: AppSpec = {
+  const template: AppSpec = {
     $schema: `${schemaHost}/schema/modelence.json`,
-    ...detected.spec,
-    ...(options.rootDir ? { build: { ...detected.spec.build, root: options.rootDir } } : {}),
+    build: { node: '22', install: 'npm ci', command: null },
+    web: { start: null, static: [] },
   };
-  await writeAppSpecFile(spec, cwd);
+  await writeAppSpecFile(template, cwd);
 
-  console.log(
-    `Wrote ${APP_SPEC_FILE_NAME}` + (detected.profile ? ` (${detected.profile} project)` : '')
-  );
-  for (const line of formatAppSpec(spec, detected.sources)) {
-    console.log(line);
-  }
-  for (const note of detected.notes) {
-    console.log(`  note: ${note}`);
-  }
-  console.log('Edit the file to change any of this, then run `modelence deploy`.');
+  console.log(`Wrote a ${APP_SPEC_FILE_NAME} template.`);
+  console.log('Ask your coding agent to fill it in with this prompt:');
+  console.log('');
+  console.log(`  ${AGENT_SETUP_PROMPT}`);
+  console.log('');
+  console.log(`Reference: ${SETUP_DOCS_URL}`);
+  console.log(`Once ${APP_SPEC_FILE_NAME} describes your app, run \`modelence deploy\`.`);
 }
 
 async function exists(path: string): Promise<boolean> {

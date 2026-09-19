@@ -1,6 +1,0 @@
-{
-  "name": "@workspace/mockup-sandbox",
-  "scripts": {
-    "build": "vite build"
-  }
-}

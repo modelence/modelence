@@ -1,9 +1,9 @@
 import { openAsBlob } from 'fs';
-import { mergeAppSpecs } from './appSpec';
+import type { AppSpec } from './appSpec';
 import type { ProjectFile } from './project';
 import type { CliTarget } from './deployTarget';
 import { rememberTarget, type Session } from './deploySession';
-import { reportEnvironmentSettings, type ResolvedSpec, type SpecLayers } from './deploySpec';
+import type { ResolvedSpec } from './deploySpec';
 import { waitForEnvironmentReady } from './deployStatus';
 import { studioRequest } from './studioApi';
 
@@ -20,14 +20,15 @@ export async function runDeploy({
   target,
   kind,
   archivePath,
-  layers,
+  spec,
   project,
 }: {
   session: Session;
   target: CliTarget;
   kind: UploadKind;
   archivePath: string;
-  layers?: SpecLayers;
+  // The project's modelence.json; required by Studio for source uploads.
+  spec?: AppSpec;
   project: ProjectFile;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
@@ -67,6 +68,7 @@ export async function runDeploy({
     envAlias: string;
     environmentId: string;
     buildId: string | null;
+    // The spec Studio resolved the file against its runtime defaults to.
     spec?: ResolvedSpec | null;
   }>(host, '/api/deploy', {
     method: 'POST',
@@ -75,9 +77,7 @@ export async function runDeploy({
       environmentId: upload.environmentId,
       bundleName: upload.bundleName,
       kind,
-      spec: layers?.file ?? undefined,
-      overrides: layers?.overrides,
-      detected: layers?.detected,
+      spec,
     },
   });
 
@@ -88,13 +88,6 @@ export async function runDeploy({
       appAlias: result.appAlias,
       envAlias: result.envAlias,
     });
-  }
-
-  if (result.spec && layers) {
-    reportEnvironmentSettings(
-      result.spec,
-      mergeAppSpecs(layers.detected, layers.file, layers.overrides)
-    );
   }
 
   console.log(`Deployment started: ${result.deploymentUrl}`);

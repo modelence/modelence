@@ -1,0 +1,210 @@
+---
+title: 'Deploy Setup'
+description: 'Set up an existing Node.js project for Modelence Cloud by writing modelence.json'
+icon: 'rocket'
+---
+
+This page is written for a coding agent. It describes what Modelence Cloud runs, the `modelence.json`
+file that tells it how, and the steps to set up an existing Node.js project. If you are a person, hand
+it to your agent:
+
+```text
+Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment for this project
+```
+
+## What Modelence Cloud runs
+
+- **A Docker image built from the repository** with Node.js 18 or newer (default 22, set with
+  `build.node`). The install command, then the build command, run in the build root; only npm is
+  preinstalled.
+- **One web process**, started with `web.start`. It must listen on the port in the `PORT`
+  environment variable — a hardcoded port never receives traffic.
+- **Optional static directories** (`web.static`) served in front of that process by the platform.
+  Requests that match no file fall back to the directory's `index.html`, so single-page apps route on
+  the client.
+- **Environment variables injected at start:**
+  - `MONGODB_URI` and `MONGO_URL` — a MongoDB Atlas database provisioned for this environment
+    (both hold the same connection string).
+  - `SITE_URL` and `ROOT_URL` — the environment's public URL (both hold the same value).
+  - `PORT` — the port the web process must listen on.
+  - Any variables the user defines in the dashboard under **Environment variables**.
+
+  Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be defined by the user.
+
+## modelence.json reference
+
+`modelence.json` sits at the project root and is the whole contract between the project and Modelence
+Cloud. Comments (`//`, `/* */`) and trailing commas are allowed. Every key is optional; a missing key
+takes the default of the runtime.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.json` for editor validation and completion. |
+| `runtime` | `"node"` \| `"modelence"` | `"node"` | `"node"` runs any Node.js app exactly as described below. `"modelence"` is for apps built on the Modelence framework and fills in the framework's own build and start commands. |
+| `build.node` | string | `"22"` | Node.js major version of the image, `"18"` or newer. |
+| `build.root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `web.static` directories are relative to it. |
+| `build.install` | string | `"npm install"` | Command that installs dependencies. |
+| `build.command` | string \| null | none | Command that builds the app. `null` means there is no build step. |
+| `build.env` | object | `{}` | Non-secret variables set during the build, committed with the repository (a Vite base path, a public API URL). Secrets never go here — the dashboard has them. |
+| `web.start` | string \| null | none | Command that starts the web process. `null` means there is no process: the site is static only and `web.static` must be set. |
+| `web.static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to the build root and must exist after the build. |
+
+**The null / missing / empty rule** for `build.command` and `web.start`: a **missing** key inherits the
+runtime default, **`null`** means "none" on purpose, and an **empty string `""` is invalid** and is
+rejected. Write `null` when there is nothing to run.
+
+## Examples
+
+**Express API only** — no build step, the server serves everything:
+
+```json modelence.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.json",
+  "build": {
+    "node": "22",
+    "install": "npm ci",
+    "command": null
+  },
+  "web": {
+    "start": "node server.js"
+  }
+}
+```
+
+**Vite static site** — built once, served by the platform, no process:
+
+```json modelence.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.json",
+  "build": {
+    "node": "22",
+    "install": "npm ci",
+    "command": "npm run build"
+  },
+  "web": {
+    "start": null,
+    "static": [{ "path": "/", "dir": "dist" }]
+  }
+}
+```
+
+**Express API + Vite frontend** — the frontend in `client/` is built into `client/dist` and served at
+`/`; requests that match no file reach the API:
+
+```json modelence.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.json",
+  "build": {
+    "node": "22",
+    "install": "npm ci && npm ci --prefix client",
+    "command": "npm run build --prefix client",
+    "env": { "VITE_API_URL": "/api" }
+  },
+  "web": {
+    "start": "node server.js",
+    "static": [{ "path": "/", "dir": "client/dist" }]
+  }
+}
+```
+
+## Setting up a project
+
+Follow these steps in order. Do not skip the verification step.
+
+1. **Inspect `package.json`.** Read `scripts`, `engines.node`, `type` and the dependencies. Note which
+   framework builds the frontend (Vite, Next.js, Create React App, Angular, Astro…) and what runs the
+   server (Express, Fastify, Koa, Hono, NestJS, a framework's own server…).
+
+2. **Pick the install command from the lockfile.**
+   - `package-lock.json` in sync with `package.json` → `npm ci`. If it is stale or missing, use
+     `npm install`.
+   - `pnpm-lock.yaml` → `corepack enable && pnpm install --frozen-lockfile`.
+   - `yarn.lock` → `corepack enable && yarn install --frozen-lockfile` (Yarn 1) or
+     `corepack enable && yarn install --immutable` (Yarn 2+).
+
+   Only npm is preinstalled in the build image; `corepack enable` makes pnpm and Yarn available at the
+   version `packageManager` in `package.json` names.
+
+3. **Find the build output.** Vite writes `dist/`, Create React App and Angular write `build/` or
+   `dist/<project>/browser`, Astro writes `dist/`, Next.js needs `next build` and its own server
+   (`next start`), not a static mount, unless `output: 'export'` is set. Check the framework config for
+   a changed `outDir`.
+
+4. **Check the start script.** `vite`, `vite preview`, `react-scripts start`, `next dev`, `nodemon`,
+   `ts-node-dev` and `tsx watch` are development servers. Do not use them. Replace them with a
+   production start (`node dist/server.js` after a TypeScript build, `next start`, `node server.js`)
+   or, for a pure frontend, a static mount with `web.start: null`.
+
+5. **Make the server read `PORT`.** The listen call must use `process.env.PORT`, for example
+   `app.listen(Number(process.env.PORT) || 3000)`. Bind to all interfaces (the default), not to
+   `127.0.0.1` only. If the frontend and the API are served together, the server must be the one
+   process — the static mount handles the frontend files, the server handles everything else.
+
+6. **Use the injected database.** If the project needs MongoDB, read the connection string from
+   `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. Other databases are not
+   provided — see [Compatibility](#when-the-project-is-not-compatible).
+
+7. **Write `modelence.json`** at the repository root with the values found above. Set `build.root`
+   when the app lives in a subdirectory. Add `"$schema"`.
+
+8. **Verify locally.** Run the install command, then the build command, then the start command with
+   `PORT=3000` set — exactly as written in the file — and confirm the app answers on
+   `http://localhost:3000` (for a static site, confirm the `dir` exists after the build and holds
+   `index.html`). Fix the file or the code until this works; a deploy runs the same commands.
+
+9. **Commit `modelence.json`** together with any code changes (the `PORT` change, the production
+   start script).
+
+10. **Tell the user to run `npx modelence deploy`** in the project directory. On the first run it
+    opens the browser to sign in and pick the application and environment; afterwards it remembers
+    them.
+
+### Runtime values and secrets
+
+When the app needs a value at runtime that must not be committed — an API key, an OAuth secret, a
+third-party URL — tell the user to add it in the Modelence Cloud dashboard under **Environment
+variables** for the target environment, marked as secret. Values only a build needs (a `VITE_*` or
+`NEXT_PUBLIC_*` variable that is inlined into the frontend) must additionally be ticked **available at
+build time**; leave that unticked for anything the browser must not see. Read runtime values from
+`process.env` as usual.
+
+Non-secret build settings that belong with the code (a base path, a public API path) go in
+`build.env` instead, so they are versioned with the repository.
+
+## When the project is not compatible
+
+Report the project as not compatible with Modelence Cloud, and say why, when:
+
+- **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
+  Node.js frontend in front. The image runs Node.js only.
+- **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
+  process, or a database other than the provided MongoDB (PostgreSQL, MySQL, Redis…). One web
+  process is run, and MongoDB is the only database provisioned.
+- **It needs Docker Compose** or a custom Dockerfile to run.
+
+Then suggest what the user can do instead: move a worker or a cron loop into the web process (a
+`setInterval`, a queue library that runs in-process, a scheduler started from the server entry point),
+replace the database with the provided MongoDB (a Mongoose or MongoDB driver connection using
+`MONGODB_URI`), or keep the incompatible parts on another host and deploy only the Node.js web app.
+
+## Meteor
+
+<Note>Early support — the commands below work but Meteor is not yet a first-class runtime.</Note>
+
+Meteor bundles its own server; build it into a directory outside the source tree and start the bundle
+with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are already injected. Match
+`build.node` to the Meteor release: Meteor 3 runs on Node 22.
+
+```json modelence.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.json",
+  "build": {
+    "node": "22",
+    "install": "curl https://install.meteor.com/ | sh && meteor npm install",
+    "command": "meteor build --directory /tmp/meteor-build --server-only && cd /tmp/meteor-build/bundle/programs/server && npm install"
+  },
+  "web": {
+    "start": "node /tmp/meteor-build/bundle/main.js"
+  }
+}
+```

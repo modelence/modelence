@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 /*
   Cached deploy authorization, per Studio host, in the user's home directory
   (never in the project). Written only after a browser approval, dropped by
-  `modelence logout` or when Studio rejects it. MODELENCE_HOME overrides the
+  `modelence logout` or when Studio rejects it. MODELENCE_HOME changes the
   location (tests, sandboxes).
 */
 
@@ -53,6 +53,15 @@ export async function readCachedToken(host: string): Promise<string | null> {
     return null;
   }
   return cached.token;
+}
+
+// Every saved login, expired ones included, so logout can revoke them all
+// server-side; one host's entry when a host is given.
+export async function listCachedTokens(host?: string): Promise<{ host: string; token: string }[]> {
+  const { hosts = {} } = await readAuthFile();
+  return Object.entries(hosts)
+    .filter(([entryHost, cached]) => (!host || entryHost === host) && Boolean(cached?.token))
+    .map(([entryHost, cached]) => ({ host: entryHost, token: cached.token }));
 }
 
 export async function writeCachedToken(
