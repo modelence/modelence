@@ -85,6 +85,15 @@ describe('modelence.json parsing', () => {
     await writeFile(join(dir, 'modelence.json'), JSON.stringify({ web: ['node .'] }));
     await expect(prepareSpec(dir)).rejects.toThrow('"web" must be an object');
   });
+
+  it('rejects empty commands before anything is packed', async () => {
+    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ build: { command: '' } }));
+    await expect(prepareSpec(dir)).rejects.toThrow(
+      '"build.command" must not be empty; use null for none'
+    );
+    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ web: { start: '  ' } }));
+    await expect(prepareSpec(dir)).rejects.toThrow('"web.start" must not be empty');
+  });
 });
 
 describe('build.root', () => {

@@ -65,6 +65,16 @@ function assertKnownKeys(spec: AppSpec): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
     }
   }
+  // Studio rejects these too, but only after the archive is packed and
+  // uploaded; the rule is missing = default, null = none, never ''.
+  for (const [label, value] of [
+    ['build.command', spec.build?.command],
+    ['web.start', spec.web?.start],
+  ] as const) {
+    if (typeof value === 'string' && value.trim() === '') {
+      throw new Error(`${APP_SPEC_FILE_NAME}: "${label}" must not be empty; use null for none.`);
+    }
+  }
 }
 
 // A resolved spec as the server reports it: every key present, with '' for
