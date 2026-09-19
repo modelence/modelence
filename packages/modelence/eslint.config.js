@@ -42,6 +42,6 @@ export default [
     },
   },
   {
-    ignores: ['dist', 'node_modules', 'coverage', '.turbo'],
+    ignores: ['dist', 'node_modules', 'coverage', '.turbo', 'src/bin/detect/__fixtures__'],
   },
 ];

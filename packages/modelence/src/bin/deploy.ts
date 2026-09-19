@@ -2,74 +2,165 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { getProjectPath, getStudioUrl } from './config';
+import { clearCachedToken } from './authCache';
+import { loadEnv, getProjectPath } from './config';
+import { readProject } from './project';
+import { packSource } from './source';
 import { build } from './build';
+import { prepareSpec } from './deploySpec';
+import { describeDeployKind, resolveDeployKind } from './deployKind';
+import type { AppSpec } from './appSpec';
+import { resolveTargetFromOptions } from './deployTarget';
+import {
+  resolveHost,
+  resolveToken,
+  rememberToken,
+  rememberTarget,
+  isUnauthorized,
+  type Session,
+} from './deploySession';
+import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
+import { followDeploy } from './deployStatus';
 
-export async function deploy(options: { app: string; env: string; host?: string }) {
-  const cwd = process.cwd();
-  const modelenceDir = join(cwd, '.modelence');
+/*
+  `modelence deploy`: ship the current directory to a Modelence Cloud
+  environment.
 
-  const bundlePath = join(modelenceDir, 'tmp', 'bundle.zip');
-  const host = options.host || getStudioUrl('');
+  Default path — any Node.js app: the source tree is uploaded and built
+  remotely as the project's modelence.json describes. Studio resolves that
+  file against the defaults of its runtime and nothing else; the CLI neither
+  inspects nor amends anything. `--prebuilt` keeps the historical
+  Modelence path: build locally, upload .modelence/build — and so does a
+  Modelence framework app that has no modelence.json, so projects that
+  deployed before the file existed keep deploying unchanged (deployKind.ts).
 
-  await build();
+  Target: -a/-e flags → --env with the app recorded in project.json → the
+  deploy target recorded in project.json → the browser picker. Auth: the
+  MODELENCE_TOKEN variable → the cached token → the browser.
+*/
 
-  await createBundle(bundlePath);
-
-  const { token } = await authenticateCli(host);
-
-  const { bundleName } = await uploadBundle(options.app, options.env, bundlePath, token, host);
-
-  await fs.unlink(bundlePath);
-
-  await triggerDeployment(
-    options.app,
-    options.env,
-    bundleName,
-    join('.modelence', 'build', 'app.mjs'),
-    token,
-    host
-  );
+export interface DeployOptions {
+  app?: string;
+  env?: string;
+  host?: string;
+  prebuilt?: boolean;
 }
 
-async function createBundle(bundlePath: string) {
-  try {
-    await fs.unlink(bundlePath);
-    console.log('Removed existing bundle');
-  } catch (error) {
-    // Ignore error if file doesn't exist
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw error;
+export async function deploy(options: DeployOptions) {
+  const cwd = process.cwd();
+  const host = await resolveHost(options.host, cwd);
+  const decision = await resolveDeployKind(cwd, options);
+  const kind: UploadKind = decision.kind;
+  const kindNote = describeDeployKind(decision);
+  if (kindNote) {
+    console.log(kindNote);
+  }
+  const project = await readProject(cwd);
+  let target = resolveTargetFromOptions(options, project);
+
+  // Local work first, so nothing is uploaded — and nobody is asked to sign
+  // in — when it fails; a missing modelence.json stops right here.
+  let spec: AppSpec | undefined;
+  const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
+  if (kind === 'bundle') {
+    await loadEnv();
+    await build();
+    await createBundle(archivePath);
+  } else {
+    spec = await prepareSpec(cwd);
+    const { fileCount, sizeBytes, usedGit, excludedFiles } = await packSource(cwd, archivePath);
+    console.log(
+      `Packed ${fileCount} files (${formatMb(sizeBytes)})` +
+        (usedGit ? ' from git' : '; not a git repository, so only default exclusions applied')
+    );
+    if (excludedFiles.length > 0) {
+      console.log(
+        `Excluded ${excludedFiles.length} local or generated files from the upload. Store secrets in the target environment.`
+      );
     }
   }
 
-  console.log('Creating deployment bundle...');
+  try {
+    let token = await resolveToken(host);
+    if (!token || !target) {
+      // The browser flow hands back a token and, when the target is not known
+      // yet, the environment picked there — one visit covers a fresh machine
+      // and a fresh project. A target from flags or the project file is final,
+      // so the page then only authorizes.
+      const auth = await authenticateCli(host, {
+        pick: target ? undefined : 'deploy',
+        purpose: 'deploy',
+        appId: project.appId,
+      });
+      token = auth.token;
+      await rememberToken(host, auth.token, auth.expiresAt);
+      if (auth.target) {
+        target = { environmentId: auth.target.environmentId };
+        await rememberTarget(auth.target);
+      }
+    }
+    if (!target) {
+      throw new Error(
+        'No deploy target selected. Run again and pick an environment in the browser, or pass --app and --env.'
+      );
+    }
 
+    const session: Session = { host, token };
+    // Cached token expired or was revoked: authorize once more. The deploy
+    // itself is never repeated — an upload that failed authentication did not
+    // start anything, and a build already running is simply followed again.
+    const signInAgain = async () => {
+      await clearCachedToken(host);
+      console.log('Your saved login has expired; please sign in again.');
+      const auth = await authenticateCli(host, {
+        pick: target ? undefined : 'deploy',
+        purpose: 'deploy',
+        appId: project.appId,
+      });
+      await rememberToken(host, auth.token, auth.expiresAt);
+      if (auth.target) {
+        target = { environmentId: auth.target.environmentId };
+        await rememberTarget(auth.target);
+      }
+      session.token = auth.token;
+    };
+
+    let started: StartedDeploy;
+    try {
+      started = await runDeploy({ session, target, kind, archivePath, spec, project });
+    } catch (error) {
+      if (!isUnauthorized(error)) {
+        throw error;
+      }
+      await signInAgain();
+      started = await runDeploy({ session, target, kind, archivePath, spec, project });
+    }
+    if (started.buildId) {
+      await followDeploy(session, signInAgain, started.environmentId, started.buildId);
+    }
+  } finally {
+    await fs.rm(archivePath, { force: true });
+  }
+}
+
+function formatMb(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+// The historical --prebuilt bundle: build output plus the manifests the
+// container needs to install production dependencies.
+async function createBundle(bundlePath: string) {
+  await fs.rm(bundlePath, { force: true });
+  console.log('Creating deployment bundle...');
   await fs.mkdir(join(bundlePath, '..'), { recursive: true });
 
   const output = createWriteStream(bundlePath);
-  const archive = archiver('zip', {
-    zlib: { level: 9 }, // Maximum compression
-  });
-
-  archive.on('warning', (err) => {
-    if (err.code === 'ENOENT') {
-      console.warn('Warning:', err);
-    } else {
-      throw err;
-    }
-  });
-
-  archive.on('error', (err) => {
-    throw err;
-  });
-
+  const archive = archiver('zip', { zlib: { level: 9 } });
   const archiveComplete = new Promise<void>((resolve, reject) => {
     output.on('close', resolve);
     output.on('error', reject);
     archive.on('error', reject);
   });
-
   archive.pipe(output);
 
   const bundleFiles = [
@@ -79,27 +170,15 @@ async function createBundle(bundlePath: string) {
     'next.config.ts',
     'modelence.config.ts',
   ];
-
   const bundleDirs = ['public', 'server', 'scripts', join('.modelence', 'build'), '.next'];
 
   for (const file of bundleFiles) {
-    if (
-      await fs
-        .access(getProjectPath(file))
-        .then(() => true)
-        .catch(() => false)
-    ) {
+    if (await pathExists(getProjectPath(file))) {
       archive.file(getProjectPath(file), { name: file });
     }
   }
-
   for (const dir of bundleDirs) {
-    if (
-      await fs
-        .access(getProjectPath(dir))
-        .then(() => true)
-        .catch(() => false)
-    ) {
+    if (await pathExists(getProjectPath(dir))) {
       archive.directory(getProjectPath(dir), dir);
     }
   }
@@ -108,84 +187,14 @@ async function createBundle(bundlePath: string) {
   await archiveComplete;
 
   const stats = await fs.stat(bundlePath);
-  console.log(
-    `Deployment bundle created at: ${bundlePath} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`
-  );
+  console.log(`Deployment bundle created (${formatMb(stats.size)})`);
 }
 
-async function uploadBundle(
-  appAlias: string,
-  envAlias: string,
-  bundlePath: string,
-  token: string,
-  host: string
-) {
-  const response = await fetch(`${host}/api/upload-bundle`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      appAlias,
-      envAlias,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error(await response.text());
-    throw new Error(`Failed to create upload URL: ${response.statusText}`);
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
   }
-
-  const { uploadUrl, bundleName } = await response.json();
-
-  const fileBuffer = await fs.readFile(bundlePath);
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'PUT',
-    body: new Uint8Array(fileBuffer),
-    headers: {
-      'Content-Type': 'application/zip',
-    },
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error(`Failed to upload bundle: ${uploadResponse.statusText}`);
-  }
-
-  console.log('Successfully uploaded bundle to Modelence Cloud');
-  console.log(`Bundle name: ${bundleName}`);
-
-  return { bundleName };
-}
-
-async function triggerDeployment(
-  appAlias: string,
-  envAlias: string,
-  bundleName: string,
-  entryPoint: string,
-  token: string,
-  host: string
-) {
-  const response = await fetch(`${host}/api/deploy`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      appAlias,
-      envAlias,
-      bundleName,
-      entryPoint,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to trigger deployment: ${response.statusText}`);
-  }
-
-  const { deploymentUrl } = await response.json();
-
-  console.log('Successfully triggered deployment');
-  console.log(`Follow your deployment progress at: ${deploymentUrl}`);
 }

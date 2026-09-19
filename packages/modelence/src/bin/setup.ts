@@ -4,10 +4,9 @@ import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
 import { spawnSync } from 'child_process';
 import { authenticateCli } from './auth';
+import { MODELENCE_DIR, PROJECT_FILE, readProject, updateProject } from './project';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
-const MODELENCE_DIR = '.modelence';
-const PROJECT_FILE = 'project.json';
 
 interface SetupResponse {
   environmentId: string;
@@ -78,13 +77,8 @@ function escapeEnvValue(value: string | number): string {
   the app on the approval page; anything unreadable means "no hint".
 */
 async function readProjectAppId(): Promise<string | undefined> {
-  try {
-    const content = await fs.readFile(join(process.cwd(), MODELENCE_DIR, PROJECT_FILE), 'utf8');
-    const { appId } = JSON.parse(content);
-    return typeof appId === 'string' && appId ? appId : undefined;
-  } catch {
-    return undefined;
-  }
+  const { appId } = await readProject();
+  return typeof appId === 'string' && appId ? appId : undefined;
 }
 
 /*
@@ -98,21 +92,11 @@ async function readProjectAppId(): Promise<string | undefined> {
   Only the app goes here: which ENVIRONMENT a working copy connects to is
   per-developer state, already recorded by .modelence.env, and committing it
   would make teammates connected to different environments fight over the
-  value.
+  value. (The deploy target recorded by `modelence deploy` is different: it is
+  shared on purpose, like a git remote.)
 */
 async function recordProjectAppId(appId: string): Promise<void> {
-  const dirPath = join(process.cwd(), MODELENCE_DIR);
-  const projectPath = join(dirPath, PROJECT_FILE);
-
-  let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(await fs.readFile(projectPath, 'utf8'));
-  } catch {
-    // Missing or malformed — start fresh.
-  }
-
-  await fs.mkdir(dirPath, { recursive: true });
-  await fs.writeFile(projectPath, JSON.stringify({ ...existing, appId }, null, 2) + '\n');
+  await updateProject({ appId });
 }
 
 const CLAUDE_DIR = '.claude';
@@ -131,6 +115,14 @@ const CLAUDE_PLUGIN_INSTALL_HINT =
   `  claude plugin marketplace add ${CLAUDE_MARKETPLACE_REPO}\n` +
   `  claude plugin install ${CLAUDE_PLUGIN_ID} --scope project\n` +
   `Guide: ${CLAUDE_PLUGIN_DOCS_URL}`;
+
+// Only the two keys this function touches are typed; the rest of the user's
+// settings are passed through untouched.
+type ClaudeSettings = {
+  extraKnownMarketplaces?: Record<string, unknown>;
+  enabledPlugins?: Record<string, boolean>;
+  [key: string]: unknown;
+};
 
 /*
   Declares the Modelence Claude Code plugin in the project's settings.json,
@@ -152,7 +144,7 @@ async function ensureClaudePluginEnabled(): Promise<void> {
     }
   }
 
-  let settings: Record<string, any> = {};
+  let settings: ClaudeSettings = {};
   if (content !== undefined) {
     try {
       settings = JSON.parse(content);

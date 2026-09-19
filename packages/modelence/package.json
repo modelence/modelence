@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "modelence",
-  "version": "0.25.1",
+  "version": "0.26.0-nd.dev.12",
   "description": "The Node.js Framework for Real-Time MongoDB Apps",
   "main": "dist/index.js",
   "types": "dist/global.d.ts",
@@ -88,6 +88,7 @@
     "elastic-apm-node": "^4.15.0",
     "express": "^4.21.0",
     "jiti": "^2.4.2",
+    "jsonc-parser": "^3.3.1",
     "mongodb": "^6.8.1",
     "open": "^10.1.0",
     "socket.io": "^4.8.1",

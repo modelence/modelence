@@ -9,6 +9,8 @@ import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
 import { start } from './start';
+import { logout } from './logout';
+import { init } from './init';
 import { loadEnv } from './config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,13 +41,45 @@ program
 
 program
   .command('deploy')
-  .description('Deploy to Modelence Cloud')
-  .requiredOption('-a, --app <app>', 'Application alias')
-  .requiredOption('-e, --env <env>', 'Environment alias')
+  .description(
+    'Deploy the project described by modelence.json to Modelence Cloud (picks the target in the browser on first run)'
+  )
+  .option('-a, --app <app>', 'Application alias')
+  .option('-e, --env <env>', 'Environment alias')
   .option('-h, --host <host>', 'Modelence host')
+  .option(
+    '--prebuilt',
+    'Build locally and upload the .modelence/build bundle (Modelence apps only)'
+  )
   .action(async (options) => {
-    await loadEnv();
-    await deploy(options);
+    try {
+      await deploy(options);
+    } catch (error) {
+      console.error(`Deploy failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('init')
+  .description('Create a modelence.json template for this project')
+  .option('--force', 'Overwrite an existing modelence.json')
+  .option('-h, --host <host>', 'Modelence host used for the schema URL')
+  .action(async (options) => {
+    try {
+      await init(options);
+    } catch (error) {
+      console.error(`Init failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('logout')
+  .description('Forget the saved Modelence Cloud login')
+  .option('-h, --host <host>', 'Only forget the login for this host')
+  .action(async (options) => {
+    await logout(options);
   });
 
 program
