@@ -41,7 +41,7 @@ beforeEach(async () => {
   project = join(dir, 'project');
   await mkdir(project);
   await writeFile(join(project, 'package.json'), JSON.stringify({ name: 'app' }));
-  await writeFile(join(project, 'modelence.json'), JSON.stringify(spec));
+  await writeFile(join(project, 'modelence.config.json'), JSON.stringify(spec));
   vi.spyOn(process, 'cwd').mockReturnValue(project);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -103,7 +103,7 @@ describe('deploy orchestration', () => {
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
   });
 
-  it('sends modelence.json as the spec and nothing else about the project', async () => {
+  it('sends modelence.config.json as the spec and nothing else about the project', async () => {
     await deploy(options);
     const [, , args] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
     expect(args?.body).toEqual({
@@ -116,18 +116,18 @@ describe('deploy orchestration', () => {
     expect(args?.body).not.toHaveProperty('detected');
   });
 
-  it('stops before signing in or uploading when modelence.json is missing', async () => {
-    await rm(join(project, 'modelence.json'));
+  it('stops before signing in or uploading when modelence.config.json is missing', async () => {
+    await rm(join(project, 'modelence.config.json'));
     vi.stubEnv('MODELENCE_TOKEN', '');
-    await expect(deploy(options)).rejects.toThrow('modelence.json not found in');
+    await expect(deploy(options)).rejects.toThrow('modelence.config.json not found in');
     expect(authenticateCli).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
   });
 
-  it('keeps the historical bundle path for a Modelence app without modelence.json', async () => {
-    await rm(join(project, 'modelence.json'));
+  it('keeps the historical bundle path for a Modelence app without modelence.config.json', async () => {
+    await rm(join(project, 'modelence.config.json'));
     await writeFile(
       join(project, 'package.json'),
       JSON.stringify({ name: 'app', dependencies: { modelence: '^0.25.0' } })

@@ -25,8 +25,8 @@ afterEach(async () => {
 describe('init', () => {
   it('writes the template with the schema of the given host and prints the agent prompt', async () => {
     await init({ host: 'https://studio.example/' });
-    expect(JSON.parse(await readFile(join(dir, 'modelence.json'), 'utf8'))).toEqual({
-      $schema: 'https://studio.example/schema/modelence.json',
+    expect(JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'))).toEqual({
+      $schema: 'https://studio.example/schema/modelence.config.json',
       build: { node: '22', install: 'npm ci', command: null },
       web: { start: null, static: [] },
     });
@@ -35,11 +35,11 @@ describe('init', () => {
   });
 
   it('refuses to overwrite an existing file unless forced', async () => {
-    await writeFile(join(dir, 'modelence.json'), '{ "web": { "start": "node ." } }');
+    await writeFile(join(dir, 'modelence.config.json'), '{ "web": { "start": "node ." } }');
     await expect(init({})).rejects.toThrow('already exists');
     await init({ force: true });
-    const written = JSON.parse(await readFile(join(dir, 'modelence.json'), 'utf8'));
-    expect(written.$schema).toBe('https://cloud.modelence.com/schema/modelence.json');
+    const written = JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'));
+    expect(written.$schema).toBe('https://cloud.modelence.com/schema/modelence.config.json');
     expect(written.web.start).toBeNull();
   });
 });

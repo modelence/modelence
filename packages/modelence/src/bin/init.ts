@@ -9,7 +9,7 @@ import {
 } from './appSpec';
 
 /*
-  `modelence init`: write a modelence.json template for the user's coding
+  `modelence init`: write a modelence.config.json template for the user's coding
   agent to fill in from the hosted setup guide. Nothing about the project is
   inspected — the file is the contract, and the agent reads the code.
 */
@@ -30,7 +30,7 @@ export async function init(options: InitOptions) {
 
   const schemaHost = (options.host ?? DEFAULT_SCHEMA_HOST).replace(/\/$/, '');
   const template: AppSpec = {
-    $schema: `${schemaHost}/schema/modelence.json`,
+    $schema: `${schemaHost}/schema/${APP_SPEC_FILE_NAME}`,
     build: { node: '22', install: 'npm ci', command: null },
     web: { start: null, static: [] },
   };

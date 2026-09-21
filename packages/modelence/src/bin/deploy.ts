@@ -27,11 +27,11 @@ import { followDeploy } from './deployStatus';
   environment.
 
   Default path — any Node.js app: the source tree is uploaded and built
-  remotely as the project's modelence.json describes. Studio resolves that
+  remotely as the project's modelence.config.json describes. Studio resolves that
   file against the defaults of its runtime and nothing else; the CLI neither
   inspects nor amends anything. `--prebuilt` keeps the historical
   Modelence path: build locally, upload .modelence/build — and so does a
-  Modelence framework app that has no modelence.json, so projects that
+  Modelence framework app that has no modelence.config.json, so projects that
   deployed before the file existed keep deploying unchanged (deployKind.ts).
 
   Target: -a/-e flags → --env with the app recorded in project.json → the
@@ -59,7 +59,7 @@ export async function deploy(options: DeployOptions) {
   let target = resolveTargetFromOptions(options, project);
 
   // Local work first, so nothing is uploaded — and nobody is asked to sign
-  // in — when it fails; a missing modelence.json stops right here.
+  // in — when it fails; a missing modelence.config.json stops right here.
   let spec: AppSpec | undefined;
   const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
   if (kind === 'bundle') {

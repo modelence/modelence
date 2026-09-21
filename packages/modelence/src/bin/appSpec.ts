@@ -3,9 +3,9 @@ import { join } from 'path';
 import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc-parser';
 
 /*
-  modelence.json — how the project is built and run on Modelence Cloud. The
+  modelence.config.json — how the project is built and run on Modelence Cloud. The
   CLI reads it as-is and sends it to Studio, which validates it against the
-  schema published at /schema/modelence.json and fills in the defaults of
+  schema published at /schema/modelence.config.json and fills in the defaults of
   the chosen runtime. The types here mirror that schema; the server is the
   authority.
 
@@ -14,7 +14,7 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
   string is invalid.
 */
 
-export const APP_SPEC_FILE_NAME = 'modelence.json';
+export const APP_SPEC_FILE_NAME = 'modelence.config.json';
 
 // The file is written by the user's coding agent from the hosted setup
 // guide; Mintlify serves the same page raw at the .md URL for agents.

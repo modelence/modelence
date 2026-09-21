@@ -42,7 +42,7 @@ program
 program
   .command('deploy')
   .description(
-    'Deploy the project described by modelence.json to Modelence Cloud (picks the target in the browser on first run)'
+    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser on first run)'
   )
   .option('-a, --app <app>', 'Application alias')
   .option('-e, --env <env>', 'Environment alias')
@@ -62,8 +62,8 @@ program
 
 program
   .command('init')
-  .description('Create a modelence.json template for this project')
-  .option('--force', 'Overwrite an existing modelence.json')
+  .description('Create a modelence.config.json template for this project')
+  .option('--force', 'Overwrite an existing modelence.config.json')
   .option('-h, --host <host>', 'Modelence host used for the schema URL')
   .action(async (options) => {
     try {

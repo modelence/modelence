@@ -20,16 +20,16 @@ async function writePackageJson(manifest: object) {
 
 describe('resolveDeployKind', () => {
   it('--prebuilt always means the bundle path', async () => {
-    await writeFile(join(dir, 'modelence.json'), '{}');
+    await writeFile(join(dir, 'modelence.config.json'), '{}');
     expect(await resolveDeployKind(dir, { prebuilt: true })).toEqual({
       kind: 'bundle',
       reason: 'prebuilt-flag',
     });
   });
 
-  it('a modelence.json means a remote source build, framework app or not', async () => {
+  it('a modelence.config.json means a remote source build, framework app or not', async () => {
     await writePackageJson({ dependencies: { modelence: '^0.26.0' } });
-    await writeFile(join(dir, 'modelence.json'), '{ "runtime": "modelence" }');
+    await writeFile(join(dir, 'modelence.config.json'), '{ "runtime": "modelence" }');
     expect(await resolveDeployKind(dir, {})).toEqual({ kind: 'source', reason: 'spec-file' });
   });
 

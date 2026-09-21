@@ -10,7 +10,7 @@ import {
 import { resolveAppRoot } from './appRoot';
 
 /*
-  modelence.json is the whole contract between a project and Modelence
+  modelence.config.json is the whole contract between a project and Modelence
   Cloud: the CLI reads it, checks what only the local file system can tell
   (the file exists, build.root is a real directory in the upload) and sends
   it on. Studio validates it against the schema and fills in the runtime's
@@ -19,7 +19,7 @@ import { resolveAppRoot } from './appRoot';
 
 const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'runtime', 'build', 'web'];
 
-// Reads and checks modelence.json, prints the plan and returns the file's
+// Reads and checks modelence.config.json, prints the plan and returns the file's
 // content for the deploy request. Throws when there is no file.
 export async function prepareSpec(cwd: string): Promise<AppSpec> {
   const spec = await readAppSpecFile(cwd);

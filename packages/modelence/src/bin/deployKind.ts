@@ -6,12 +6,12 @@ import type { UploadKind } from './deployUpload';
 /*
   Which upload `modelence deploy` makes. Two paths exist:
 
-  - `source`: the tree is uploaded and built remotely as modelence.json
+  - `source`: the tree is uploaded and built remotely as modelence.config.json
     describes — the path for any Node.js app.
   - `bundle`: the historical Modelence path — build locally, upload
     .modelence/build.
 
-  `--prebuilt` forces `bundle`. Otherwise a modelence.json means `source`.
+  `--prebuilt` forces `bundle`. Otherwise a modelence.config.json means `source`.
   Without either, a project that depends on the `modelence` package is a
   framework app that deployed with this command long before the file
   existed, so it keeps the bundle path unchanged; anything else is `source`,

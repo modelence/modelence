@@ -22,11 +22,11 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe('modelence.json presence', () => {
+describe('modelence.config.json presence', () => {
   it('fails with the agent prompt when the file is missing', async () => {
     await expect(prepareSpec(dir)).rejects.toThrow(
       [
-        `modelence.json not found in ${dir}.`,
+        `modelence.config.json not found in ${dir}.`,
         'Modelence Cloud builds and runs your app exactly as this file describes (install, build and start commands, Node.js version, static directories).',
         'Ask your coding agent to create it with this prompt:',
         '',
@@ -42,18 +42,18 @@ describe('modelence.json presence', () => {
       build: { install: 'npm ci', command: 'npm run build' },
       web: { start: 'node .' },
     };
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify(spec));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
     expect(await prepareSpec(dir)).toEqual(spec);
-    expect(logged[0]).toBe('Build plan (modelence.json):');
+    expect(logged[0]).toBe('Build plan (modelence.config.json):');
     expect(logged).toContain('  build:   npm run build');
     expect(logged).toContain('  start:   node .');
   });
 });
 
-describe('modelence.json parsing', () => {
+describe('modelence.config.json parsing', () => {
   it('accepts comments and trailing commas', async () => {
     await writeFile(
-      join(dir, 'modelence.json'),
+      join(dir, 'modelence.config.json'),
       `{
         // Built by Vite, served by the platform.
         "build": { "command": "npm run build", /* no server */ },
@@ -67,44 +67,50 @@ describe('modelence.json parsing', () => {
   });
 
   it('reports the position of malformed JSON', async () => {
-    await writeFile(join(dir, 'modelence.json'), '{\n  "build": { "node": 22 "x" }\n}');
+    await writeFile(join(dir, 'modelence.config.json'), '{\n  "build": { "node": 22 "x" }\n}');
     await expect(readAppSpecFile(dir)).rejects.toThrow(/not valid JSON: .* at line 2/);
   });
 
   it('rejects anything that is not an object', async () => {
-    await writeFile(join(dir, 'modelence.json'), '["node"]');
+    await writeFile(join(dir, 'modelence.config.json'), '["node"]');
     await expect(readAppSpecFile(dir)).rejects.toThrow('must contain a JSON object');
   });
 
   it('rejects unknown top-level keys by name', async () => {
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ builds: {}, web: {} }));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ builds: {}, web: {} }));
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
   it('rejects sections that are not objects', async () => {
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ web: ['node .'] }));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ web: ['node .'] }));
     await expect(prepareSpec(dir)).rejects.toThrow('"web" must be an object');
   });
 
   it('rejects empty commands before anything is packed', async () => {
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ build: { command: '' } }));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ build: { command: '' } }));
     await expect(prepareSpec(dir)).rejects.toThrow(
       '"build.command" must not be empty; use null for none'
     );
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ web: { start: '  ' } }));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ web: { start: '  ' } }));
     await expect(prepareSpec(dir)).rejects.toThrow('"web.start" must not be empty');
   });
 });
 
 describe('build.root', () => {
   it('accepts a subdirectory inside the project', async () => {
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ build: { root: 'apps/api' } }));
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ build: { root: 'apps/api' } })
+    );
     expect((await prepareSpec(dir)).build?.root).toBe('apps/api');
     expect(logged).toContain('  root:    apps/api');
   });
 
   it('rejects a directory that does not exist', async () => {
-    await writeFile(join(dir, 'modelence.json'), JSON.stringify({ build: { root: 'missing' } }));
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ build: { root: 'missing' } })
+    );
     await expect(prepareSpec(dir)).rejects.toThrow('build.root "missing" does not exist');
   });
 

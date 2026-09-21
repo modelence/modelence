@@ -27,7 +27,7 @@ export async function runDeploy({
   target: CliTarget;
   kind: UploadKind;
   archivePath: string;
-  // The project's modelence.json; required by Studio for source uploads.
+  // The project's modelence.config.json; required by Studio for source uploads.
   spec?: AppSpec;
   project: ProjectFile;
 }): Promise<StartedDeploy> {
