@@ -39,8 +39,9 @@ describe('modelence.config.json presence', () => {
 
   it('returns the file as written and prints the plan', async () => {
     const spec = {
-      build: { install: 'npm ci', command: 'npm run build' },
-      web: { start: 'node .' },
+      resources: {
+        app: { build: { install: 'npm ci', command: 'npm run build' }, start: 'node .' },
+      },
     };
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
     expect(await prepareSpec(dir)).toEqual(spec);
@@ -81,18 +82,26 @@ describe('modelence.config.json parsing', () => {
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
-  it('rejects sections that are not objects', async () => {
-    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ web: ['node .'] }));
-    await expect(prepareSpec(dir)).rejects.toThrow('"web" must be an object');
+  it('rejects sections of the wrong kind', async () => {
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ env: ['A'] }));
+    await expect(prepareSpec(dir)).rejects.toThrow('"env" must be an object');
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: [] }));
+    await expect(prepareSpec(dir)).rejects.toThrow('"resources" must be an object');
   });
 
   it('rejects empty commands before anything is packed', async () => {
-    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ build: { command: '' } }));
-    await expect(prepareSpec(dir)).rejects.toThrow(
-      '"build.command" must not be empty; use null for none'
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ resources: { app: { build: { command: '' } } } })
     );
-    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ web: { start: '  ' } }));
-    await expect(prepareSpec(dir)).rejects.toThrow('"web.start" must not be empty');
+    await expect(prepareSpec(dir)).rejects.toThrow(
+      '"resources.app.build.command" must not be empty; use null for none'
+    );
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ resources: { app: { start: '  ' } } })
+    );
+    await expect(prepareSpec(dir)).rejects.toThrow('"resources.app.start" must not be empty');
   });
 });
 
@@ -100,16 +109,16 @@ describe('build.root', () => {
   it('accepts a subdirectory inside the project', async () => {
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ build: { root: 'apps/api' } })
+      JSON.stringify({ resources: { api: { build: { root: 'apps/api' } } } })
     );
-    expect((await prepareSpec(dir)).build?.root).toBe('apps/api');
+    expect((await prepareSpec(dir)).resources?.api.build?.root).toBe('apps/api');
     expect(logged).toContain('  root:    apps/api');
   });
 
   it('rejects a directory that does not exist', async () => {
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ build: { root: 'missing' } })
+      JSON.stringify({ resources: { app: { build: { root: 'missing' } } } })
     );
     await expect(prepareSpec(dir)).rejects.toThrow('build.root "missing" does not exist');
   });
@@ -129,27 +138,45 @@ describe('build.root', () => {
 
 describe('plan formatting', () => {
   it('prints null commands as none and missing ones as default', () => {
-    const lines = formatAppSpec({ build: { command: null }, web: { start: null } });
+    const lines = formatAppSpec({ resources: { app: { build: { command: null }, start: null } } });
     expect(lines).toContain('  build:   (none)');
     expect(lines).toContain('  start:   (none)');
-    expect(formatAppSpec({})).toEqual([
+    expect(formatAppSpec({ resources: { app: {} } })).toEqual([
       '  runtime: node',
       '  node:    default (22)',
       '  install: default',
       '  build:   default',
       '  start:   default',
     ]);
+    // Nothing declared is nothing to print; the server reports the default.
+    expect(formatAppSpec({})).toEqual([]);
   });
 
-  it('lists environment variables and static mounts', () => {
+  it('lists declared variables, resources and static mounts', () => {
     const lines = formatAppSpec({
-      runtime: 'node',
-      build: { node: '20', env: { VITE_BASE: '/' } },
-      web: { start: 'node server.js', static: [{ path: '/', dir: 'client/dist' }] },
+      resources: {
+        app: {
+          type: 'node',
+          build: { node: '20' },
+          start: 'node server.js',
+          static: [{ path: '/', dir: 'client/dist' }],
+        },
+        primary: { type: 'mongodb' },
+      },
+      env: { VITE_BASE: { type: 'text' }, API_KEY: { type: 'secret' } },
     });
     expect(lines).toContain('  node:    20');
-    expect(lines).toContain('  env:     VITE_BASE=/');
     expect(lines).toContain('  static:  / -> client/dist/');
+    expect(lines).toContain('  resource: primary (mongodb)');
+    expect(lines).toContain('  env:     VITE_BASE (text)');
+    expect(lines).toContain('  env:     API_KEY (secret)');
+  });
+
+  it('labels each runnable resource only when there is more than one', () => {
+    expect(formatAppSpec({ resources: { api: {} } })).not.toContain('  resource: api');
+    const lines = formatAppSpec({ resources: { api: {}, web: {} } });
+    expect(lines).toContain('  resource: api');
+    expect(lines).toContain('  resource: web');
   });
 });
 

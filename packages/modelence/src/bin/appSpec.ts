@@ -21,27 +21,53 @@ export const APP_SPEC_FILE_NAME = 'modelence.config.json';
 export const SETUP_DOCS_URL = 'https://docs.modelence.com/deploy/setup';
 export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence deployment for this project`;
 
-export type AppRuntime = 'node' | 'modelence';
+export type AppRuntime = 'node' | 'modelence' | 'static';
+export type BackingResourceType = 'mongodb' | 'redis';
+export type ResourceType = AppRuntime | BackingResourceType;
+
+const RUNNABLE_TYPES: readonly string[] = ['node', 'modelence', 'static'];
+
+export function isRunnableResource(type: ResourceType | undefined): boolean {
+  return RUNNABLE_TYPES.includes(type ?? 'node');
+}
+export type EnvDeclarationType = 'text' | 'secret';
+export type EnvVarScope = 'runtime' | 'build-and-runtime';
 
 export interface StaticMount {
   path: string;
   dir: string;
 }
 
-export interface AppSpec {
-  $schema?: string;
-  runtime?: AppRuntime;
+export interface AppResource {
+  // Defaults to 'node'.
+  type?: ResourceType;
   build?: {
     node?: string;
     root?: string;
     install?: string;
     command?: string | null;
-    env?: Record<string, string>;
   };
-  web?: {
-    start?: string | null;
-    static?: StaticMount[];
-  };
+  start?: string | null;
+  static?: StaticMount[];
+}
+
+export interface EnvDeclaration {
+  type?: EnvDeclarationType;
+  scope?: EnvVarScope;
+  value?: string;
+}
+
+export interface AppSpec {
+  $schema?: string;
+  /*
+    Everything the app is made of, by the name the project chose. A runnable
+    type (node, static, modelence) takes build/start/static; a backing type
+    (mongodb, redis) is declared now and provisioned later. No type means
+    'node'. One runnable resource is supported today.
+  */
+  resources?: Record<string, AppResource>;
+  // The variables the app expects; values live in the dashboard.
+  env?: Record<string, EnvDeclaration>;
 }
 
 export function getAppSpecFilePath(cwd = process.cwd()): string {
@@ -88,20 +114,41 @@ export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Prom
 
 export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
-  lines.push(`  runtime: ${spec.runtime ?? 'node'}`);
-  lines.push(`  node:    ${spec.build?.node ?? 'default (22)'}`);
-  if (spec.build?.root && spec.build.root !== '.') {
-    lines.push(`  root:    ${spec.build.root}`);
+  const entries = Object.entries(spec.resources ?? {});
+  const runnable = entries.filter(([, resource]) => isRunnableResource(resource.type));
+
+  for (const [name, resource] of runnable) {
+    // Only label the resource when there is more than one to tell apart.
+    if (runnable.length > 1) {
+      lines.push(`  resource: ${name}`);
+    }
+    lines.push(`  runtime: ${resource.type ?? 'node'}`);
+    lines.push(`  node:    ${resource.build?.node ?? 'default (22)'}`);
+    if (resource.build?.root && resource.build.root !== '.') {
+      lines.push(`  root:    ${resource.build.root}`);
+    }
+    lines.push(`  install: ${resource.build?.install ?? 'default'}`);
+    lines.push(`  build:   ${formatCommand(resource.build?.command)}`);
+    lines.push(`  start:   ${formatCommand(resource.start)}`);
+    for (const mount of resource.static ?? []) {
+      lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
+    }
   }
-  lines.push(`  install: ${spec.build?.install ?? 'default'}`);
-  lines.push(`  build:   ${formatCommand(spec.build?.command)}`);
-  for (const [key, value] of Object.entries(spec.build?.env ?? {})) {
-    lines.push(`  env:     ${key}=${value}`);
+
+  for (const [name, resource] of entries) {
+    if (!isRunnableResource(resource.type)) {
+      lines.push(`  resource: ${name} (${resource.type})`);
+    }
   }
-  lines.push(`  start:   ${formatCommand(spec.web?.start)}`);
-  for (const mount of spec.web?.static ?? []) {
-    lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
+
+  /*
+    Values are not printed: a declaration carries only a name and a type, and
+    the literal on a build-scoped entry is not worth the width here.
+  */
+  for (const [key, declaration] of Object.entries(spec.env ?? {})) {
+    lines.push(`  env:     ${key} (${declaration.type ?? 'text'})`);
   }
+
   return lines;
 }
 

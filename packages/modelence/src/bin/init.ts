@@ -31,8 +31,15 @@ export async function init(options: InitOptions) {
   const schemaHost = (options.host ?? DEFAULT_SCHEMA_HOST).replace(/\/$/, '');
   const template: AppSpec = {
     $schema: `${schemaHost}/schema/${APP_SPEC_FILE_NAME}`,
-    build: { node: '22', install: 'npm ci', command: null },
-    web: { start: null, static: [] },
+    resources: {
+      app: {
+        type: 'node',
+        build: { node: '22', install: 'npm ci', command: null },
+        start: null,
+        static: [],
+      },
+    },
+    env: {},
   };
   await writeAppSpecFile(template, cwd);
 

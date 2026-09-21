@@ -17,7 +17,7 @@ import { resolveAppRoot } from './appRoot';
   defaults; nothing is inferred here.
 */
 
-const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'runtime', 'build', 'web'];
+const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
 
 // Reads and checks modelence.config.json, prints the plan and returns the file's
 // content for the deploy request. Throws when there is no file.
@@ -27,8 +27,10 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
     throw new Error(missingSpecMessage(cwd));
   }
   assertKnownKeys(spec);
-  if (spec.build?.root !== undefined) {
-    await resolveAppRoot(cwd, spec.build.root);
+  for (const resource of Object.values(spec.resources ?? {})) {
+    if (resource.build?.root !== undefined) {
+      await resolveAppRoot(cwd, resource.build.root);
+    }
   }
 
   console.log(`Build plan (${APP_SPEC_FILE_NAME}):`);
@@ -59,20 +61,23 @@ function assertKnownKeys(spec: AppSpec): void {
       `${APP_SPEC_FILE_NAME} has unknown key "${unknown[0]}" (allowed: ${KNOWN_TOP_LEVEL_KEYS.join(', ')}).`
     );
   }
-  for (const section of ['build', 'web'] as const) {
+  for (const section of ['resources', 'env'] as const) {
     const value = spec[section];
     if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
     }
   }
+
   // Studio rejects these too, but only after the archive is packed and
   // uploaded; the rule is missing = default, null = none, never ''.
-  for (const [label, value] of [
-    ['build.command', spec.build?.command],
-    ['web.start', spec.web?.start],
-  ] as const) {
-    if (typeof value === 'string' && value.trim() === '') {
-      throw new Error(`${APP_SPEC_FILE_NAME}: "${label}" must not be empty; use null for none.`);
+  for (const [name, resource] of Object.entries(spec.resources ?? {})) {
+    for (const [label, value] of [
+      [`resources.${name}.build.command`, resource.build?.command],
+      [`resources.${name}.start`, resource.start],
+    ] as const) {
+      if (typeof value === 'string' && value.trim() === '') {
+        throw new Error(`${APP_SPEC_FILE_NAME}: "${label}" must not be empty; use null for none.`);
+      }
     }
   }
 }
