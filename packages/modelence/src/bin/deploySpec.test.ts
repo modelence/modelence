@@ -152,7 +152,7 @@ describe('plan formatting', () => {
     expect(formatAppSpec({})).toEqual([]);
   });
 
-  it('lists declared variables, resources and static mounts', () => {
+  it('lists declared variables and static mounts', () => {
     const lines = formatAppSpec({
       resources: {
         app: {
@@ -161,18 +161,16 @@ describe('plan formatting', () => {
           start: 'node server.js',
           static: [{ path: '/', dir: 'client/dist' }],
         },
-        primary: { type: 'mongodb' },
       },
       env: { VITE_BASE: { type: 'text' }, API_KEY: { type: 'secret' } },
     });
     expect(lines).toContain('  node:    20');
     expect(lines).toContain('  static:  / -> client/dist/');
-    expect(lines).toContain('  resource: primary (mongodb)');
     expect(lines).toContain('  env:     VITE_BASE (text)');
     expect(lines).toContain('  env:     API_KEY (secret)');
   });
 
-  it('labels each runnable resource only when there is more than one', () => {
+  it('labels each resource only when there is more than one', () => {
     expect(formatAppSpec({ resources: { api: {} } })).not.toContain('  resource: api');
     const lines = formatAppSpec({ resources: { api: {}, web: {} } });
     expect(lines).toContain('  resource: api');

@@ -21,15 +21,16 @@ export const APP_SPEC_FILE_NAME = 'modelence.config.json';
 export const SETUP_DOCS_URL = 'https://docs.modelence.com/deploy/setup';
 export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence deployment for this project`;
 
-export type AppRuntime = 'node' | 'modelence' | 'static';
-export type BackingResourceType = 'mongodb' | 'redis';
-export type ResourceType = AppRuntime | BackingResourceType;
+/*
+  'node' is any Node.js app, started through the runtime entrypoint;
+  'modelence' is a framework app that fetches its own configuration. A
+  client-only site is a node resource with `"start": null` and its `static`
+  mounts — there is no separate 'static' type, and backing types
+  (mongodb, redis) land with the thing that provisions them.
+*/
+export type AppRuntime = 'node' | 'modelence';
+export type ResourceType = AppRuntime;
 
-const RUNNABLE_TYPES: readonly string[] = ['node', 'modelence', 'static'];
-
-export function isRunnableResource(type: ResourceType | undefined): boolean {
-  return RUNNABLE_TYPES.includes(type ?? 'node');
-}
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvVarScope = 'runtime' | 'build-and-runtime';
 
@@ -60,10 +61,9 @@ export interface EnvDeclaration {
 export interface AppSpec {
   $schema?: string;
   /*
-    Everything the app is made of, by the name the project chose. A runnable
-    type (node, static, modelence) takes build/start/static; a backing type
-    (mongodb, redis) is declared now and provisioned later. No type means
-    'node'. One runnable resource is supported today.
+    Everything the app is made of, by the name the project chose. Each entry
+    takes build/start/static; no type means 'node'. One resource is
+    supported today.
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -115,11 +115,10 @@ export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Prom
 export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
   const entries = Object.entries(spec.resources ?? {});
-  const runnable = entries.filter(([, resource]) => isRunnableResource(resource.type));
 
-  for (const [name, resource] of runnable) {
+  for (const [name, resource] of entries) {
     // Only label the resource when there is more than one to tell apart.
-    if (runnable.length > 1) {
+    if (entries.length > 1) {
       lines.push(`  resource: ${name}`);
     }
     lines.push(`  runtime: ${resource.type ?? 'node'}`);
@@ -132,12 +131,6 @@ export function formatAppSpec(spec: AppSpec): string[] {
     lines.push(`  start:   ${formatCommand(resource.start)}`);
     for (const mount of resource.static ?? []) {
       lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
-    }
-  }
-
-  for (const [name, resource] of entries) {
-    if (!isRunnableResource(resource.type)) {
-      lines.push(`  resource: ${name} (${resource.type})`);
     }
   }
 
