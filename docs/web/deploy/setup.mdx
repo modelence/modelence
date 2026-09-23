@@ -219,10 +219,14 @@ Report the project as not compatible with Modelence Cloud, and say why, when:
   process is run, and MongoDB is the only database provisioned.
 - **It needs Docker Compose** or a custom Dockerfile to run.
 
-Then suggest what the user can do instead: move a worker or a cron loop into the web process (a
-`setInterval`, a queue library that runs in-process, a scheduler started from the server entry point),
-replace the database with the provided MongoDB (a Mongoose or MongoDB driver connection using
-`MONGODB_URI`), or keep the incompatible parts on another host and deploy only the Node.js web app.
+Then suggest what the user can do instead: replace the database with the provided MongoDB (a Mongoose
+or MongoDB driver connection using `MONGODB_URI`), or keep the incompatible parts on another host and
+deploy only the Node.js web app.
+
+Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
+several replicas, and each one would run every job — emails sent twice, charges made twice. If the
+user wants to do it anyway, tell them that each job needs a lock held in the database, so that only
+one replica runs it at a time.
 
 ## Meteor
 
