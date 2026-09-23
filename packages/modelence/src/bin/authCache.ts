@@ -10,9 +10,14 @@ import { dirname, join } from 'path';
 */
 
 const AUTH_FILE = 'auth.json';
-// A token about to expire is treated as expired so a deploy doesn't fail
-// halfway through its polling.
-const EXPIRY_MARGIN_MS = 60 * 1000;
+/*
+  A token that could expire during a deploy is treated as expired, so a
+  deploy doesn't fail halfway through its polling. That is the longest a
+  deploy waits: provisioning plus build polling (PROVISION_TIMEOUT_MS +
+  POLL_TIMEOUT_MS in deployStatus.ts). Deploy tokens last one hour, so a
+  login is reused for the first 20 minutes.
+*/
+const EXPIRY_MARGIN_MS = 40 * 60 * 1000;
 
 interface CachedToken {
   token: string;

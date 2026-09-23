@@ -29,7 +29,6 @@ describe('init', () => {
       $schema: 'https://studio.example/schema/modelence.config.json',
       resources: {
         app: {
-          type: 'node',
           build: { node: '22', install: 'npm ci', command: null },
           start: null,
           static: [],

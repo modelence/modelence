@@ -5,9 +5,8 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
 /*
   modelence.config.json — how the project is built and run on Modelence Cloud. The
   CLI reads it as-is and sends it to Studio, which validates it against the
-  schema published at /schema/modelence.config.json and fills in the defaults of
-  the chosen runtime. The types here mirror that schema; the server is the
-  authority.
+  schema published at /schema/modelence.config.json and fills in the defaults.
+  The types here mirror that schema; the server is the authority.
 
   For build.command and web.start: a missing key inherits the runtime
   default, null means "none" (no build step / no process), and an empty
@@ -21,16 +20,6 @@ export const APP_SPEC_FILE_NAME = 'modelence.config.json';
 export const SETUP_DOCS_URL = 'https://docs.modelence.com/deploy/setup';
 export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence deployment for this project`;
 
-/*
-  'node' is any Node.js app, started through the runtime entrypoint;
-  'modelence' is a framework app that fetches its own configuration. A
-  client-only site is a node resource with `"start": null` and its `static`
-  mounts — there is no separate 'static' type, and backing types
-  (mongodb, redis) land with the thing that provisions them.
-*/
-export type AppRuntime = 'node' | 'modelence';
-export type ResourceType = AppRuntime;
-
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvVarScope = 'runtime' | 'build-and-runtime';
 
@@ -39,9 +28,11 @@ export interface StaticMount {
   dir: string;
 }
 
+/*
+  A client-only site is a resource with `"start": null` and its `static`
+  mounts. There is no `type`: every resource runs through the same runtime.
+*/
 export interface AppResource {
-  // Defaults to 'node'.
-  type?: ResourceType;
   build?: {
     node?: string;
     root?: string;
@@ -62,8 +53,7 @@ export interface AppSpec {
   $schema?: string;
   /*
     Everything the app is made of, by the name the project chose. Each entry
-    takes build/start/static; no type means 'node'. One resource is
-    supported today.
+    takes build/start/static. One resource is supported today.
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -121,7 +111,6 @@ export function formatAppSpec(spec: AppSpec): string[] {
     if (entries.length > 1) {
       lines.push(`  resource: ${name}`);
     }
-    lines.push(`  runtime: ${resource.type ?? 'node'}`);
     lines.push(`  node:    ${resource.build?.node ?? 'default (22)'}`);
     if (resource.build?.root && resource.build.root !== '.') {
       lines.push(`  root:    ${resource.build.root}`);

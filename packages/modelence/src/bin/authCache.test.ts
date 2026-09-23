@@ -46,6 +46,10 @@ describe('auth cache', () => {
     expect(await readCachedToken(host)).toBeNull();
     await writeCachedToken(host, 'soon', new Date(Date.now() + 30 * 1000).toISOString());
     expect(await readCachedToken(host)).toBeNull();
+    // A one-hour token with less than a full deploy (40 minutes) left.
+    const halfGone = new Date(Date.now() + 35 * 60 * 1000).toISOString();
+    await writeCachedToken(host, 'too-short-for-a-deploy', halfGone);
+    expect(await readCachedToken(host)).toBeNull();
   });
 
   it('clears one host or all of them', async () => {

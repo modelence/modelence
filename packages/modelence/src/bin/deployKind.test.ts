@@ -29,7 +29,7 @@ describe('resolveDeployKind', () => {
 
   it('a modelence.config.json means a remote source build, framework app or not', async () => {
     await writePackageJson({ dependencies: { modelence: '^0.26.0' } });
-    await writeFile(join(dir, 'modelence.config.json'), '{ "runtime": "modelence" }');
+    await writeFile(join(dir, 'modelence.config.json'), '{ "resources": {} }');
     expect(await resolveDeployKind(dir, {})).toEqual({ kind: 'source', reason: 'spec-file' });
   });
 

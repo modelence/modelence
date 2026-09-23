@@ -1,0 +1,45 @@
+{
+  "type": "module",
+  "name": "@modelence/runtime",
+  "version": "0.1.0",
+  "description": "Container entrypoint for apps deployed to Modelence Cloud",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "modelence-runtime": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/modelence/modelence.git",
+    "directory": "packages/runtime"
+  },
+  "author": "Modelence",
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://modelence.com",
+  "devDependencies": {
+    "@types/node": "^22.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8",
+    "tsup": "^8.5.1"
+  }
+}

@@ -49,7 +49,7 @@ export function describeDeployKind(decision: DeployKindDecision): string | null 
   }
   return (
     `No ${APP_SPEC_FILE_NAME} found; this is a Modelence app, so it is built locally and uploaded as before. ` +
-    `Add a ${APP_SPEC_FILE_NAME} with "runtime": "modelence" to build it on Modelence Cloud instead.`
+    `Add a ${APP_SPEC_FILE_NAME} to build it on Modelence Cloud instead.`
   );
 }
 

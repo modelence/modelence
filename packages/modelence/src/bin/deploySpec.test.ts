@@ -142,7 +142,6 @@ describe('plan formatting', () => {
     expect(lines).toContain('  build:   (none)');
     expect(lines).toContain('  start:   (none)');
     expect(formatAppSpec({ resources: { app: {} } })).toEqual([
-      '  runtime: node',
       '  node:    default (22)',
       '  install: default',
       '  build:   default',
@@ -156,7 +155,6 @@ describe('plan formatting', () => {
     const lines = formatAppSpec({
       resources: {
         app: {
-          type: 'node',
           build: { node: '20' },
           start: 'node server.js',
           static: [{ path: '/', dir: 'client/dist' }],

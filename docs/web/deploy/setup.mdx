@@ -50,7 +50,6 @@ Each entry of `resources` takes:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `type` | `"node"` \| `"modelence"` | `"node"` | `"node"` runs any Node.js app exactly as described below. `"modelence"` is for apps built on the Modelence framework and fills in the framework's own build and start commands. |
 | `build.node` | string | `"22"` | Node.js major version of the image, `"18"` or newer. |
 | `build.root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `static` directories are relative to it. |
 | `build.install` | string | `"npm install"` | Command that installs dependencies. |
@@ -71,8 +70,9 @@ committed default rather than a fixed constant.
 
 <Note>
 Apps built on the Modelence framework need no file: `modelence deploy` recognizes the `modelence`
-dependency and keeps building them locally, as it always has. Add a `modelence.config.json` whose
-resource has `"type": "modelence"` to move the build to Modelence Cloud instead.
+dependency and keeps building them locally, as it always has. To build one on Modelence Cloud
+instead, describe it like any other Node.js app: `"build": { "command": "npm run build" }` and
+`"start": "npm start"`.
 </Note>
 
 **The null / missing / empty rule** for `build.command` and `start`: a **missing** key inherits the

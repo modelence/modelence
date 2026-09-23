@@ -33,7 +33,6 @@ export async function init(options: InitOptions) {
     $schema: `${schemaHost}/schema/${APP_SPEC_FILE_NAME}`,
     resources: {
       app: {
-        type: 'node',
         build: { node: '22', install: 'npm ci', command: null },
         start: null,
         static: [],

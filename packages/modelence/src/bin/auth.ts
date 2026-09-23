@@ -14,7 +14,7 @@ import open from 'open';
                     in .modelence/project.json.
   Without `pick` the page only authorizes the device.
 
-  `purpose: 'deploy'` asks for a deploy-lifetime token (30 days) without a
+  `purpose: 'deploy'` asks for a deploy-lifetime token (one hour) without a
   picker — for a deploy whose target is already known from flags or
   .modelence/project.json. `pick: 'deploy'` implies it.
 
