@@ -1,12 +1,21 @@
 import { loadRuntimeEnv, type ProcessEnv } from './env';
 import { log } from './log';
 import { prepareMounts } from './mounts';
-import { runStartCommand, waitForApp } from './process';
+import { killApp, runStartCommand, waitForApp } from './process';
 import { startRouter } from './router';
 import { readWebSpec, WEB_SPEC_ENV_NAME } from './spec';
 
 // Where the app listens when the router owns PORT.
 const DEFAULT_APP_PORT = 3001;
+// How long the app behind the router gets to open its port.
+const DEFAULT_APP_START_TIMEOUT_SECONDS = 300;
+
+/*
+  Frameworks that bind to $HOSTNAME (Next.js standalone) would otherwise
+  listen on the container's own hostname and never answer on localhost or
+  the task address. A value set in the dashboard still wins.
+*/
+const APP_HOSTNAME = '0.0.0.0';
 
 /*
   Starts an app on Modelence Cloud from the web part of its app spec
@@ -44,7 +53,7 @@ export async function run(env: ProcessEnv = process.env, cwd = process.cwd()): P
     return;
   }
 
-  const appEnv = await loadRuntimeEnv(env);
+  const appEnv = await loadRuntimeEnv({ ...env, HOSTNAME: APP_HOSTNAME });
   if (mounts.length === 0) {
     log('Starting: ' + web.start);
     runStartCommand(web.start, appEnv);
@@ -53,7 +62,16 @@ export async function run(env: ProcessEnv = process.env, cwd = process.cwd()): P
 
   const appPort = Number(env.MODELENCE_APP_PORT) || DEFAULT_APP_PORT;
   log(`Starting on port ${appPort}: ${web.start}`);
-  runStartCommand(web.start, { ...appEnv, PORT: String(appPort) });
-  await waitForApp(appPort);
+  const app = runStartCommand(web.start, { ...appEnv, PORT: String(appPort) });
+  const timeoutSeconds =
+    Number(env.MODELENCE_APP_START_TIMEOUT) || DEFAULT_APP_START_TIMEOUT_SECONDS;
+  if (!(await waitForApp(appPort, timeoutSeconds * 1000))) {
+    log(
+      `The app did not accept connections on 127.0.0.1:${appPort} within ${timeoutSeconds}s. ` +
+        `It must listen on the port in the PORT variable (${appPort} here), on 0.0.0.0 or 127.0.0.1.`
+    );
+    killApp(app);
+    process.exit(1);
+  }
   startRouter(mounts, port, appPort);
 }

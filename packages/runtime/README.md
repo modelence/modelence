@@ -11,7 +11,12 @@ On start it reads `MODELENCE_WEB` (the start command and static mounts from
   container's service token and runs the start command with them;
 - serves static mounts with single-page app fallback, when there is no start
   command;
-- with both, serves the mounts and proxies everything else to the app.
+- with both, serves the mounts and proxies everything else to the app. The
+  public port stays closed until the app opens its own; if it has not within
+  `MODELENCE_APP_START_TIMEOUT` seconds (default 300), the container exits.
+
+The app runs with `HOSTNAME=0.0.0.0`, so frameworks that bind to `$HOSTNAME`
+(Next.js standalone) listen on every interface; a dashboard value wins.
 
 Zero runtime dependencies; Node.js 18 or newer.
 

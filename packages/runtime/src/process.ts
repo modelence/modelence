@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { connect as netConnect } from 'node:net';
 import type { ProcessEnv } from './env';
 import { log, sleep } from './log';
@@ -18,8 +18,12 @@ function wrapCommand(command: string): string {
 }
 
 // Runs the app, forwards stop signals to it and exits with its exit code.
-export function runStartCommand(command: string, env: ProcessEnv): void {
-  const child = spawn('sh', ['-c', wrapCommand(command)], { stdio: 'inherit', env, detached: true });
+export function runStartCommand(command: string, env: ProcessEnv): ChildProcess {
+  const child = spawn('sh', ['-c', wrapCommand(command)], {
+    stdio: 'inherit',
+    env,
+    detached: true,
+  });
   let stopping = false;
   for (const signal of FORWARDED_SIGNALS) {
     process.on(signal, () => {
@@ -47,6 +51,16 @@ export function runStartCommand(command: string, env: ProcessEnv): void {
     log('Failed to start app: ' + error.message);
     process.exit(1);
   });
+  return child;
+}
+
+// Ends the app and everything its shell started, without draining.
+export function killApp(child: ChildProcess): void {
+  try {
+    process.kill(-(child.pid ?? 0), 'SIGKILL');
+  } catch {
+    // Already gone.
+  }
 }
 
 function canConnect(port: number): Promise<boolean> {
@@ -65,9 +79,16 @@ function canConnect(port: number): Promise<boolean> {
 /*
   ECS probes the public router port. Keep it closed until the backend can
   accept traffic, so a hung startup cannot replace healthy containers.
+  Resolves false when the app has not opened its port within the timeout —
+  usually an app that ignores PORT or listens on another address.
 */
-export async function waitForApp(port: number): Promise<void> {
+export async function waitForApp(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
   while (!(await canConnect(port))) {
+    if (Date.now() >= deadline) {
+      return false;
+    }
     await sleep(100);
   }
+  return true;
 }

@@ -119,6 +119,16 @@ describe('process mode', () => {
     expect(code).toBe(0);
   });
 
+  it('makes the app listen on all interfaces rather than the container hostname', async () => {
+    const { stdout } = await runEntrypoint({
+      HOSTNAME: 'ip-10-0-1-23.ec2.internal',
+      [WEB_SPEC_ENV_NAME]: webSpec({
+        start: `${process.execPath} -e "console.log('host=' + process.env.HOSTNAME)"`,
+      }),
+    });
+    expect(stdout).toContain('host=0.0.0.0');
+  });
+
   it('propagates the start command exit code', async () => {
     const { code } = await runEntrypoint({
       [WEB_SPEC_ENV_NAME]: webSpec({ start: `${process.execPath} -e "process.exit(3)"` }),
@@ -332,6 +342,72 @@ it('keeps the public port closed until the backend accepts connections', async (
     await new Promise<void>((resolve) => backend.listen(appPort, '127.0.0.1', resolve));
     await serving;
     expect(await (await fetch(`http://127.0.0.1:${port}/api`)).text()).toBe('backend ready');
+  } finally {
+    child.kill();
+    await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    backend.closeAllConnections();
+    await new Promise<void>((resolve) => backend.close(() => resolve()));
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+it('gives up and fails when the backend never opens its port', async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), 'modelence-start-timeout-'));
+  await mkdir(join(projectDir, 'dist'));
+  await writeFile(join(projectDir, 'dist', 'index.html'), 'ready');
+  const appPort = await freePort();
+  try {
+    const { code, stdout } = await runEntrypoint(
+      {
+        PORT: String(await freePort()),
+        MODELENCE_APP_PORT: String(appPort),
+        MODELENCE_APP_START_TIMEOUT: '1',
+        [WEB_SPEC_ENV_NAME]: webSpec({
+          start: `exec "${process.execPath}" -e "setInterval(() => {}, 1000)"`,
+          static: [{ path: '/', dir: 'dist' }],
+        }),
+      },
+      projectDir
+    );
+    expect(code).toBe(1);
+    expect(stdout).toContain(`did not accept connections on 127.0.0.1:${appPort} within 1s`);
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+it('closes the request to the app when the browser disconnects', async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), 'modelence-disconnect-'));
+  await mkdir(join(projectDir, 'dist'));
+  await writeFile(join(projectDir, 'dist', 'index.html'), 'ready');
+  const port = await freePort();
+  const appPort = await freePort();
+  let streamClosed!: () => void;
+  const closed = new Promise<void>((resolve) => (streamClosed = resolve));
+  // An event stream that never ends on its own.
+  const backend = createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(': open\n\n');
+    req.on('close', streamClosed);
+  });
+  await new Promise<void>((resolve) => backend.listen(appPort, '127.0.0.1', resolve));
+  const child = await startEntrypoint(
+    {
+      PORT: String(port),
+      MODELENCE_APP_PORT: String(appPort),
+      [WEB_SPEC_ENV_NAME]: webSpec({
+        start: `exec "${process.execPath}" -e "setInterval(() => {}, 1000)"`,
+        static: [{ path: '/', dir: 'dist' }],
+      }),
+    },
+    projectDir
+  );
+  try {
+    const abort = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${port}/events`, { signal: abort.signal });
+    await response.body!.getReader().read();
+    abort.abort();
+    await closed;
   } finally {
     child.kill();
     await new Promise<void>((resolve) => child.once('exit', () => resolve()));

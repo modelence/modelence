@@ -80,7 +80,18 @@ export function proxyRequest(
       upstreamResponse.pipe(response);
     }
   );
+  // A browser that goes away (a closed tab, an aborted fetch) ends the
+  // upstream request too, so streams and long polls don't outlive it.
+  response.on('close', () => {
+    if (!response.writableFinished) {
+      upstream.destroy();
+    }
+  });
   upstream.on('error', (error: NodeJS.ErrnoException) => {
+    if (response.destroyed) {
+      // The browser left first; the error is only the aborted request.
+      return;
+    }
     if (response.headersSent) {
       response.destroy();
       return;
