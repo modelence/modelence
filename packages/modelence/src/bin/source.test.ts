@@ -212,6 +212,23 @@ describe('packSource', () => {
     expect(stdout.trim()).toBe('shared/logo.svg');
   });
 
+  it('packs links to their own directory and to the project root', async () => {
+    await write('package.json', '{}');
+    await mkdir(join(dir, 'apps/web'), { recursive: true });
+    await symlink('.', join(dir, 'apps/web/self'));
+    await symlink('.', join(dir, 'root'));
+    const zipPath = join(dir, '.modelence', 'tmp', 'source.zip');
+
+    const result = await packSource(dir, zipPath);
+    expect(result.skipped).toEqual([]);
+    const out = join(dir, 'unpacked');
+    await execFileAsync('unzip', ['-q', zipPath, '-d', out]);
+    for (const link of ['apps/web/self', 'root']) {
+      const { stdout } = await execFileAsync('readlink', [join(out, link)]);
+      expect(stdout.trim()).toBe('.');
+    }
+  });
+
   it('refuses an empty tree', async () => {
     await expect(packSource(dir, join(dir, 'out.zip'))).rejects.toThrow(/No files/);
   });

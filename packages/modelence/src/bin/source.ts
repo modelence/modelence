@@ -142,17 +142,19 @@ export interface SourceListing {
   committedEnvFiles: string[];
 }
 
-// A link is kept when it resolves inside the project; one that leaves it
-// would upload nothing useful and point at the developer's machine.
+// A link is kept when it resolves inside the project, the root included;
+// one that leaves it would upload nothing useful and point at the
+// developer's machine.
 async function resolveSymlink(cwd: string, file: string): Promise<SourceSymlink | null> {
   const link = join(cwd, file);
   const target = await fs.readlink(link);
   const absolute = resolve(dirname(link), target);
   const fromRoot = relative(cwd, absolute);
-  if (fromRoot === '' || fromRoot.startsWith('..') || isAbsolute(fromRoot)) {
+  if (fromRoot.startsWith('..') || isAbsolute(fromRoot)) {
     return null;
   }
-  return { path: file, target: toPosix(relative(dirname(link), absolute)) };
+  // A link to its own directory is '.', never the empty path archiver rejects.
+  return { path: file, target: toPosix(relative(dirname(link), absolute)) || '.' };
 }
 
 /*
@@ -256,8 +258,8 @@ export async function packSource(
     // Without a mode the entry extracts as an unreadable link.
     archive.symlink(link.path, link.target, 0o777);
   }
-  await archive.finalize();
-  await done;
+  // Together, so an archive error rejects instead of leaving finalize() pending.
+  await Promise.all([archive.finalize(), done]);
 
   const { size } = await fs.stat(zipPath);
   if (size > MAX_SOURCE_BYTES) {
