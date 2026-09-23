@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "modelence-runtime": "./dist/bin.js"
+    "modelence-runtime": "dist/bin.js"
   },
   "files": [
     "dist"
