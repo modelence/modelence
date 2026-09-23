@@ -27,3 +27,35 @@ export function resolveTargetFromOptions(
   }
   return null;
 }
+
+// How the target reads in the CLI output, with where it came from.
+export function describeTarget(target: CliTarget, project: ProjectFile): string {
+  if ('environmentId' in target) {
+    const saved = project.deploy;
+    const name =
+      saved?.environmentId === target.environmentId
+        ? `${saved.appAlias}/${saved.envAlias}`
+        : target.environmentId;
+    return `${name} (saved in .modelence/project.json)`;
+  }
+  if ('appAlias' in target) {
+    return `${target.appAlias}/${target.envAlias}`;
+  }
+  return target.envAlias;
+}
+
+/*
+  Flags naming another environment than the one this project normally
+  deploys to. A plain `modelence deploy` goes to the saved target, so a
+  flag that points elsewhere (production, say) is worth a second look.
+*/
+export function differsFromSavedTarget(target: CliTarget, project: ProjectFile): boolean {
+  const saved = project.deploy;
+  if (!saved || 'environmentId' in target) {
+    return false;
+  }
+  if ('appAlias' in target && target.appAlias !== saved.appAlias) {
+    return true;
+  }
+  return target.envAlias !== saved.envAlias;
+}

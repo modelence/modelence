@@ -51,6 +51,10 @@ program
     '--prebuilt',
     'Build locally and upload the .modelence/build bundle (Modelence apps only)'
   )
+  .option(
+    '-y, --yes',
+    'Deploy to the given --app/--env without asking, even if it is not the saved target'
+  )
   .action(async (options) => {
     try {
       await deploy(options);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { deploy } from './deploy';
@@ -8,9 +8,11 @@ import { StudioApiError, studioRequest } from './studioApi';
 import { followDeploy, waitForEnvironmentReady } from './deployStatus';
 import { build } from './build';
 import { getProjectPath } from './config';
+import { confirm, isInteractive } from './terminal';
 
 vi.mock('./auth', () => ({ authenticateCli: vi.fn() }));
 vi.mock('./build', () => ({ build: vi.fn() }));
+vi.mock('./terminal', () => ({ isInteractive: vi.fn(), confirm: vi.fn() }));
 vi.mock('./config', () => ({ loadEnv: vi.fn(), getProjectPath: vi.fn() }));
 vi.mock('./studioApi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./studioApi')>()),
@@ -48,6 +50,7 @@ beforeEach(async () => {
   vi.stubEnv('MODELENCE_TOKEN', 'original-token');
   vi.stubEnv('MODELENCE_HOME', join(dir, 'auth'));
   vi.mocked(authenticateCli).mockResolvedValue({ token: 'refreshed-token' });
+  vi.mocked(isInteractive).mockReturnValue(true);
   upload = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
   vi.stubGlobal('fetch', upload);
   request.mockImplementation(async (_host, path) => {
@@ -241,6 +244,108 @@ describe('deploy orchestration', () => {
     );
     await deploy(options);
     expect(process.exitCode).toBe(1);
+  });
+});
+
+async function saveTarget(appAlias: string, envAlias: string) {
+  await mkdir(join(project, '.modelence'), { recursive: true });
+  await writeFile(
+    join(project, '.modelence/project.json'),
+    JSON.stringify({ deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias } })
+  );
+}
+
+async function readSavedProject() {
+  try {
+    return JSON.parse(await readFile(join(project, '.modelence/project.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+describe('without anyone at the terminal', () => {
+  beforeEach(() => {
+    vi.mocked(isInteractive).mockReturnValue(false);
+  });
+
+  it('fails at once without a target instead of opening the browser', async () => {
+    await expect(deploy({ host: options.host })).rejects.toThrow('pass --app and --env');
+    expect(authenticateCli).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
+  });
+
+  it('fails at once without a token', async () => {
+    vi.stubEnv('MODELENCE_TOKEN', '');
+    await expect(deploy(options)).rejects.toThrow(/set MODELENCE_TOKEN\.$/);
+    expect(authenticateCli).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('fails instead of signing in again when the token is rejected', async () => {
+    request.mockRejectedValueOnce(new StudioApiError('Expired', 401));
+    await expect(deploy(options)).rejects.toThrow('Set a fresh MODELENCE_TOKEN');
+    expect(authenticateCli).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('deploys to explicit flags without asking, even when another target is saved', async () => {
+    await saveTarget('app', 'staging');
+    await deploy(options);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(upload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('deploy target', () => {
+  it('does not make a target given by flags the default for later deploys', async () => {
+    await saveTarget('app', 'staging');
+    vi.mocked(confirm).mockResolvedValue(true);
+    await deploy(options);
+    expect((await readSavedProject()).deploy.envAlias).toBe('staging');
+  });
+
+  it('does not record a target given by flags when none is saved', async () => {
+    await deploy(options);
+    expect(await readSavedProject()).toBeNull();
+  });
+
+  it('records the target picked in the browser', async () => {
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await deploy({ host: options.host });
+    expect(await readSavedProject()).toEqual({
+      appId: 'app-id',
+      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
+    });
+  });
+
+  it('names the saved target before building', async () => {
+    await saveTarget('app', 'staging');
+    await deploy({ host: options.host });
+    expect(console.log).toHaveBeenCalledWith(
+      'Deploying to app/staging (saved in .modelence/project.json)'
+    );
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('asks before deploying to flags that differ from the saved target', async () => {
+    await saveTarget('app', 'staging');
+    vi.mocked(confirm).mockResolvedValue(false);
+    await expect(deploy(options)).rejects.toThrow('Cancelled.');
+    expect(confirm).toHaveBeenCalledWith(
+      'This project normally deploys to app/staging. Deploy to app/prod instead?'
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('skips the question with --yes', async () => {
+    await saveTarget('app', 'staging');
+    await deploy({ ...options, yes: true });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(upload).toHaveBeenCalledTimes(1);
   });
 });
 

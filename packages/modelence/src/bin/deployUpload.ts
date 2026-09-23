@@ -1,8 +1,7 @@
 import { openAsBlob } from 'fs';
 import type { AppSpec } from './appSpec';
-import type { ProjectFile } from './project';
 import type { CliTarget } from './deployTarget';
-import { rememberTarget, type Session } from './deploySession';
+import type { Session } from './deploySession';
 import type { ResolvedSpec } from './deploySpec';
 import { waitForEnvironmentReady } from './deployStatus';
 import { studioRequest } from './studioApi';
@@ -21,7 +20,6 @@ export async function runDeploy({
   kind,
   archivePath,
   spec,
-  project,
 }: {
   session: Session;
   target: CliTarget;
@@ -29,7 +27,6 @@ export async function runDeploy({
   archivePath: string;
   // The project's modelence.config.json; required by Studio for source uploads.
   spec?: AppSpec;
-  project: ProjectFile;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
   const requestUpload = () =>
@@ -80,15 +77,6 @@ export async function runDeploy({
       spec,
     },
   });
-
-  // Whatever the target was resolved from, the next run can skip the picker.
-  if (!project.deploy || project.deploy.environmentId !== result.environmentId) {
-    await rememberTarget({
-      environmentId: result.environmentId,
-      appAlias: result.appAlias,
-      envAlias: result.envAlias,
-    });
-  }
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
   return { environmentId: result.environmentId, buildId: result.buildId };

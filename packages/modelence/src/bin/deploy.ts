@@ -4,13 +4,19 @@ import archiver from 'archiver';
 import { authenticateCli } from './auth';
 import { clearCachedToken } from './authCache';
 import { loadEnv, getProjectPath } from './config';
-import { readProject } from './project';
+import { readProject, type ProjectFile } from './project';
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
 import type { AppSpec } from './appSpec';
-import { resolveTargetFromOptions } from './deployTarget';
+import {
+  describeTarget,
+  differsFromSavedTarget,
+  resolveTargetFromOptions,
+  type CliTarget,
+} from './deployTarget';
+import { confirm, isInteractive } from './terminal';
 import {
   resolveHost,
   resolveToken,
@@ -36,7 +42,12 @@ import { followDeploy } from './deployStatus';
 
   Target: -a/-e flags → --env with the app recorded in project.json → the
   deploy target recorded in project.json → the browser picker. Auth: the
-  MODELENCE_TOKEN variable → the cached token → the browser.
+  MODELENCE_TOKEN variable → the cached token → the browser. Only a target
+  picked in the browser is recorded; flags deploy once and change nothing.
+
+  Without someone at the terminal (CI, scripts, agent sandboxes) the browser
+  is never opened: a missing token or target fails at once instead of
+  waiting for an approval nobody will give.
 */
 
 export interface DeployOptions {
@@ -44,6 +55,7 @@ export interface DeployOptions {
   env?: string;
   host?: string;
   prebuilt?: boolean;
+  yes?: boolean;
 }
 
 export async function deploy(options: DeployOptions) {
@@ -57,6 +69,11 @@ export async function deploy(options: DeployOptions) {
   }
   const project = await readProject(cwd);
   let target = resolveTargetFromOptions(options, project);
+  let token = await resolveToken(host);
+  if ((!token || !target) && !isInteractive()) {
+    throw new Error(nonInteractiveMessage(Boolean(token), Boolean(target)));
+  }
+  await confirmTarget(target, project, options.yes);
 
   // Local work first, so nothing is uploaded — and nobody is asked to sign
   // in — when it fails; a missing modelence.config.json stops right here.
@@ -81,7 +98,6 @@ export async function deploy(options: DeployOptions) {
   }
 
   try {
-    let token = await resolveToken(host);
     if (!token || !target) {
       // The browser flow hands back a token and, when the target is not known
       // yet, the environment picked there — one visit covers a fresh machine
@@ -111,6 +127,12 @@ export async function deploy(options: DeployOptions) {
     // start anything, and a build already running is simply followed again.
     const signInAgain = async () => {
       await clearCachedToken(host);
+      if (!isInteractive()) {
+        throw new Error(
+          'Modelence Cloud rejected the token (expired or revoked), and nobody is at the terminal to sign in again. ' +
+            'Set a fresh MODELENCE_TOKEN. A deployment that already started keeps running; check the dashboard.'
+        );
+      }
       console.log('Your saved login has expired; please sign in again.');
       const auth = await authenticateCli(host, {
         pick: target ? undefined : 'deploy',
@@ -127,19 +149,51 @@ export async function deploy(options: DeployOptions) {
 
     let started: StartedDeploy;
     try {
-      started = await runDeploy({ session, target, kind, archivePath, spec, project });
+      started = await runDeploy({ session, target, kind, archivePath, spec });
     } catch (error) {
       if (!isUnauthorized(error)) {
         throw error;
       }
       await signInAgain();
-      started = await runDeploy({ session, target, kind, archivePath, spec, project });
+      started = await runDeploy({ session, target, kind, archivePath, spec });
     }
     if (started.buildId) {
       await followDeploy(session, signInAgain, started.environmentId, started.buildId);
     }
   } finally {
     await fs.rm(archivePath, { force: true });
+  }
+}
+
+function nonInteractiveMessage(hasToken: boolean, hasTarget: boolean): string {
+  const needed = [
+    hasTarget ? null : 'pass --app and --env',
+    hasToken ? null : 'set MODELENCE_TOKEN',
+  ].filter(Boolean);
+  return (
+    'Nobody is at the terminal to sign in or pick a target in the browser (CI or a non-interactive shell). ' +
+    `To deploy from here, ${needed.join(' and ')}.`
+  );
+}
+
+// Says where the deploy goes before anything is built, and asks first when
+// flags point away from the environment this project normally deploys to.
+async function confirmTarget(
+  target: CliTarget | null,
+  project: ProjectFile,
+  yes: boolean | undefined
+): Promise<void> {
+  if (!target) {
+    return;
+  }
+  const label = describeTarget(target, project);
+  console.log(`Deploying to ${label}`);
+  if (yes || !differsFromSavedTarget(target, project) || !isInteractive()) {
+    return;
+  }
+  const saved = `${project.deploy?.appAlias}/${project.deploy?.envAlias}`;
+  if (!(await confirm(`This project normally deploys to ${saved}. Deploy to ${label} instead?`))) {
+    throw new Error('Cancelled.');
   }
 }
 
