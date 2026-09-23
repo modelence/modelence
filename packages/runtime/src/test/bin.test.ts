@@ -340,3 +340,76 @@ it('keeps the public port closed until the backend accepts connections', async (
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+describe('shutdown', () => {
+  let projectDir = '';
+
+  // Drains for a moment on SIGTERM, like an app finishing in-flight requests.
+  beforeAll(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), 'modelence-shutdown-'));
+    await mkdir(join(projectDir, 'dist'));
+    await writeFile(join(projectDir, 'dist', 'index.html'), 'home');
+    await writeFile(
+      join(projectDir, 'drain.mjs'),
+      `import { createServer } from 'node:http';
+const server = createServer((_req, res) => res.end('ok'));
+server.listen(Number(process.env.PORT), '127.0.0.1', () => console.log('app ready'));
+process.on('SIGTERM', () => {
+  console.log('draining');
+  setTimeout(() => {
+    console.log('drained');
+    process.exit(0);
+  }, 300);
+});
+`
+    );
+  });
+
+  afterAll(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  // Starts the entrypoint, sends SIGTERM once `ready` is logged and collects the result.
+  function stopAfter(ready: string, env: Record<string, string>) {
+    return new Promise<{ code: number | null; output: string }>((resolve) => {
+      const child = spawn(process.execPath, [scriptPath], {
+        cwd: projectDir,
+        env: { PATH: process.env.PATH ?? '', ...env },
+      });
+      let output = '';
+      let signalled = false;
+      const onData = (chunk: Buffer) => {
+        output += String(chunk);
+        if (!signalled && output.includes(ready)) {
+          signalled = true;
+          child.kill('SIGTERM');
+        }
+      };
+      child.stdout.on('data', onData);
+      child.stderr.on('data', onData);
+      child.on('exit', (code) => resolve({ code, output }));
+    });
+  }
+
+  // `&& true` keeps the shell around instead of exec-ing the app.
+  const start = `"${process.execPath}" drain.mjs && true`;
+
+  it('stops the app behind a shell and waits for it to drain', async () => {
+    const { code, output } = await stopAfter('app ready', {
+      PORT: String(await freePort()),
+      [WEB_SPEC_ENV_NAME]: webSpec({ start }),
+    });
+    expect(output).toContain('drained');
+    expect(code).toBe(0);
+  });
+
+  it('keeps the router up until the app behind it has drained', async () => {
+    const { code, output } = await stopAfter('Serving', {
+      PORT: String(await freePort()),
+      MODELENCE_APP_PORT: String(await freePort()),
+      [WEB_SPEC_ENV_NAME]: webSpec({ start, static: [{ path: '/', dir: 'dist' }] }),
+    });
+    expect(output).toContain('drained');
+    expect(code).toBe(0);
+  });
+});

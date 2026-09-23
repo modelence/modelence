@@ -63,8 +63,11 @@ export function startRouter(mounts: PreparedMount[], port: number, appPort: numb
     const proxied = appPort ? `, proxying the rest to port ${appPort}` : '';
     log(`Serving ${served} on port ${port}${proxied}`);
   });
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.on(signal, () => server.close(() => process.exit(0)));
+  // In front of an app, the app's exit ends the process once it has drained.
+  if (!appPort) {
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+      process.on(signal, () => server.close(() => process.exit(0)));
+    }
   }
   return server;
 }
