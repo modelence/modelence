@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,12 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
+
+const GIT_IDENTITY = ['-c', 'user.email=test@example.com', '-c', 'user.name=test'];
+
+async function git(...args: string[]) {
+  await execFileAsync('git', [...GIT_IDENTITY, ...args], { cwd: dir });
+}
 
 async function write(path: string, content = '') {
   await mkdir(join(dir, path, '..'), { recursive: true });
@@ -59,12 +65,72 @@ describe('listSourceFiles', () => {
         'apps/web/.npmrc',
         'registry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=${NPM_TOKEN}'
       );
-      if (git) await execFileAsync('git', ['add', '.'], { cwd: dir });
       const { files, excludedFiles } = await listSourceFiles(dir);
       expect(files).toEqual(['.env.example', 'apps/web/.npmrc']);
       expect(excludedFiles).toEqual(['.env.production', '.npmrc', 'apps/api/.yarnrc.yml']);
     }
   );
+
+  it('uploads environment files committed to git and names them', async () => {
+    await git('init', '-q');
+    await write('package.json', '{}');
+    await write('.env.production', 'VITE_API_URL=https://api.example');
+    await write('.env.local', 'SECRET=1');
+    await git('add', 'package.json', '.env.production');
+
+    const { files, excludedFiles, committedEnvFiles } = await listSourceFiles(dir);
+    expect(files).toEqual(['.env.production', 'package.json']);
+    expect(committedEnvFiles).toEqual(['.env.production']);
+    expect(excludedFiles).toEqual(['.env.local']);
+  });
+
+  it('never uploads Modelence credentials, even when committed', async () => {
+    await git('init', '-q');
+    await write('package.json', '{}');
+    await write('.modelence.env', 'MODELENCE_SERVICE_TOKEN=secret');
+    await git('add', '.');
+
+    const { files, excludedFiles } = await listSourceFiles(dir);
+    expect(files).toEqual(['package.json']);
+    expect(excludedFiles).toEqual(['.modelence.env']);
+  });
+
+  it.each([false, true])(
+    'keeps symlinks inside the project and reports ones leaving it with git=%s',
+    async (useGit) => {
+      if (useGit) await git('init', '-q');
+      await write('package.json', '{}');
+      await write('shared/logo.svg', '<svg/>');
+      await mkdir(join(dir, 'apps/web/public'), { recursive: true });
+      await symlink('../../../shared', join(dir, 'apps/web/public/shared'));
+      await symlink(join(dir, 'shared/logo.svg'), join(dir, 'logo.svg'));
+      await symlink(tmpdir(), join(dir, 'outside'));
+
+      const { files, symlinks, skipped } = await listSourceFiles(dir);
+      expect(files).toEqual(['package.json', 'shared/logo.svg']);
+      expect(symlinks).toEqual([
+        { path: 'apps/web/public/shared', target: '../../../shared' },
+        { path: 'logo.svg', target: 'shared/logo.svg' },
+      ]);
+      expect(skipped).toEqual([{ path: 'outside', reason: 'symlink to outside the project' }]);
+    }
+  );
+
+  it('reports git submodules instead of dropping them silently', async () => {
+    await git('init', '-q');
+    await write('package.json', '{}');
+    await write('vendor/lib/index.js');
+    await execFileAsync('git', ['init', '-q'], { cwd: join(dir, 'vendor/lib') });
+    await execFileAsync('git', [...GIT_IDENTITY, 'add', '.'], { cwd: join(dir, 'vendor/lib') });
+    await execFileAsync('git', [...GIT_IDENTITY, 'commit', '-qm', 'lib'], {
+      cwd: join(dir, 'vendor/lib'),
+    });
+    await git('add', 'package.json', 'vendor/lib');
+
+    const { files, skipped } = await listSourceFiles(dir);
+    expect(files).toEqual(['package.json']);
+    expect(skipped).toEqual([{ path: 'vendor/lib', reason: 'git submodule' }]);
+  });
 
   it('recognizes literal and placeholder registry authentication values', () => {
     expect(hasRegistryCredentials('npmAuthToken: "${NPM_TOKEN}"')).toBe(false);
@@ -113,6 +179,20 @@ describe('packSource', () => {
 
     const { stdout } = await execFileAsync('unzip', ['-Z1', zipPath]);
     expect(stdout.trim().split('\n').sort()).toEqual(['package.json', 'src/index.js']);
+  });
+
+  it('stores symlinks as links', async () => {
+    await write('package.json', '{}');
+    await write('shared/logo.svg', '<svg/>');
+    await symlink('shared/logo.svg', join(dir, 'logo.svg'));
+    const zipPath = join(dir, '.modelence', 'tmp', 'source.zip');
+
+    const result = await packSource(dir, zipPath);
+    expect(result.fileCount).toBe(3);
+    const out = join(dir, 'unpacked');
+    await execFileAsync('unzip', ['-q', zipPath, '-d', out]);
+    const { stdout } = await execFileAsync('readlink', [join(out, 'logo.svg')]);
+    expect(stdout.trim()).toBe('shared/logo.svg');
   });
 
   it('refuses an empty tree', async () => {

@@ -118,6 +118,12 @@ describe('deploy orchestration', () => {
     expect(args?.body).not.toHaveProperty('detected');
   });
 
+  it('names the files left out of the upload', async () => {
+    await writeFile(join(project, '.env'), 'SECRET=1');
+    await deploy(options);
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/^Not uploaded .*: \.env$/));
+  });
+
   it('stops before signing in or uploading when modelence.config.json is missing', async () => {
     await rm(join(project, 'modelence.config.json'));
     vi.stubEnv('MODELENCE_TOKEN', '');

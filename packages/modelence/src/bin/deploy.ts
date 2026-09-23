@@ -85,16 +85,7 @@ export async function deploy(options: DeployOptions) {
     await createBundle(archivePath);
   } else {
     spec = await prepareSpec(cwd);
-    const { fileCount, sizeBytes, usedGit, excludedFiles } = await packSource(cwd, archivePath);
-    console.log(
-      `Packed ${fileCount} files (${formatMb(sizeBytes)})` +
-        (usedGit ? ' from git' : '; not a git repository, so only default exclusions applied')
-    );
-    if (excludedFiles.length > 0) {
-      console.log(
-        `Excluded ${excludedFiles.length} local or generated files from the upload. Store secrets in the target environment.`
-      );
-    }
+    reportPackedSource(await packSource(cwd, archivePath));
   }
 
   try {
@@ -194,6 +185,36 @@ async function confirmTarget(
   const saved = `${project.deploy?.appAlias}/${project.deploy?.envAlias}`;
   if (!(await confirm(`This project normally deploys to ${saved}. Deploy to ${label} instead?`))) {
     throw new Error('Cancelled.');
+  }
+}
+
+const LISTED_PATHS_LIMIT = 10;
+
+function formatPaths(paths: string[]): string {
+  const shown = paths.slice(0, LISTED_PATHS_LIMIT).join(', ');
+  const more = paths.length - LISTED_PATHS_LIMIT;
+  return more > 0 ? `${shown} and ${more} more` : shown;
+}
+
+// What went into the upload and, by name, everything that did not or that
+// might surprise: the cloud build sees only what is listed as packed.
+function reportPackedSource(packed: Awaited<ReturnType<typeof packSource>>): void {
+  console.log(
+    `Packed ${packed.fileCount} files (${formatMb(packed.sizeBytes)})` +
+      (packed.usedGit ? ' from git' : '; not a git repository, so only default exclusions applied')
+  );
+  if (packed.excludedFiles.length > 0) {
+    console.log(
+      `Not uploaded (local, generated or credentials; store secrets in the target environment): ${formatPaths(packed.excludedFiles)}`
+    );
+  }
+  if (packed.committedEnvFiles.length > 0) {
+    console.log(
+      `Uploaded environment files committed to git: ${formatPaths(packed.committedEnvFiles)}`
+    );
+  }
+  for (const { path, reason } of packed.skipped) {
+    console.warn(`Warning: ${path} is not uploaded (${reason}).`);
   }
 }
 

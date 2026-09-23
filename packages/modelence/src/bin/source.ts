@@ -1,5 +1,5 @@
 import { createWriteStream, promises as fs } from 'fs';
-import { join, relative, sep } from 'path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import archiver from 'archiver';
@@ -12,9 +12,12 @@ const execFileAsync = promisify(execFile);
   upload matches what a push would carry. Outside git a plain walk is used
   with a fixed exclusion list.
 
-  Local environment files and package-manager credentials are excluded even
-  outside Git. Example environment files and placeholder-based registry
-  configuration can be committed and uploaded.
+  Local environment files and package-manager credentials are excluded, in
+  git or not; environment files committed to git are uploaded (and named).
+  Example environment files and placeholder-based registry configuration
+  are uploaded too. Symlinks that stay inside the project are kept as links;
+  anything that cannot be uploaded as it is (a link leaving the project, a
+  git submodule) is reported rather than silently dropped.
 */
 
 export const MAX_SOURCE_BYTES = 200 * 1024 * 1024;
@@ -62,6 +65,14 @@ function toPosix(path: string): string {
 }
 
 export function isExcludedPath(relativePath: string): boolean {
+  return (
+    isAlwaysExcludedPath(relativePath) ||
+    isLocalEnvFile(toPosix(relativePath).split('/').at(-1) ?? '')
+  );
+}
+
+// Excluded even when committed: build output, dependencies, Modelence credentials.
+function isAlwaysExcludedPath(relativePath: string): boolean {
   const path = toPosix(relativePath);
   const segments = path.split('/');
   for (const dir of ALWAYS_EXCLUDED_DIRS) {
@@ -77,9 +88,7 @@ export function isExcludedPath(relativePath: string): boolean {
     }
   }
   const fileName = segments[segments.length - 1];
-  return (
-    isLocalEnvFile(fileName) || ALWAYS_EXCLUDED_FILES.some((pattern) => pattern.test(fileName))
-  );
+  return ALWAYS_EXCLUDED_FILES.some((pattern) => pattern.test(fileName));
 }
 
 async function isGitRepository(cwd: string): Promise<boolean> {
@@ -91,12 +100,11 @@ async function isGitRepository(cwd: string): Promise<boolean> {
   }
 }
 
-async function listGitFiles(cwd: string): Promise<string[]> {
-  const { stdout } = await execFileAsync(
-    'git',
-    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { cwd, maxBuffer: 64 * 1024 * 1024 }
-  );
+async function gitLsFiles(cwd: string, args: string[]): Promise<string[]> {
+  const { stdout } = await execFileAsync('git', ['ls-files', ...args, '-z'], {
+    cwd,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return stdout.split('\0').filter((entry) => entry.length > 0);
 }
 
@@ -109,51 +117,117 @@ async function walk(cwd: string, dir = ''): Promise<string[]> {
       if (!isExcludedPath(`${path}/x`)) {
         files.push(...(await walk(cwd, path)));
       }
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() || entry.isSymbolicLink()) {
       files.push(path);
     }
   }
   return files;
 }
 
-export async function listSourceFiles(
-  cwd = process.cwd()
-): Promise<{ files: string[]; usedGit: boolean; excludedFiles: string[] }> {
-  const usedGit = await isGitRepository(cwd);
-  const candidates = usedGit ? await listGitFiles(cwd) : await walk(cwd);
+export interface SourceSymlink {
+  path: string;
+  // Relative to the link's own directory, as the archive stores it.
+  target: string;
+}
 
-  const files: string[] = [];
-  const excludedFiles: string[] = [];
+export interface SourceListing {
+  files: string[];
+  symlinks: SourceSymlink[];
+  usedGit: boolean;
+  // Left out on purpose: build output, dependencies, credentials.
+  excludedFiles: string[];
+  // In the tree but impossible to upload faithfully, with the reason.
+  skipped: { path: string; reason: string }[];
+  // Environment files committed to git, uploaded as they are.
+  committedEnvFiles: string[];
+}
+
+// A link is kept when it resolves inside the project; one that leaves it
+// would upload nothing useful and point at the developer's machine.
+async function resolveSymlink(cwd: string, file: string): Promise<SourceSymlink | null> {
+  const link = join(cwd, file);
+  const target = await fs.readlink(link);
+  const absolute = resolve(dirname(link), target);
+  const fromRoot = relative(cwd, absolute);
+  if (fromRoot === '' || fromRoot.startsWith('..') || isAbsolute(fromRoot)) {
+    return null;
+  }
+  return { path: file, target: toPosix(relative(dirname(link), absolute)) };
+}
+
+/*
+  Inside git, committed .env files are part of the source (typically the
+  public VITE_* / NEXT_PUBLIC_* values a build inlines), so they are
+  uploaded like any other tracked file. Untracked ones and, outside git, all
+  of them are treated as local secrets.
+*/
+export async function listSourceFiles(cwd = process.cwd()): Promise<SourceListing> {
+  const usedGit = await isGitRepository(cwd);
+  const tracked = new Set(usedGit ? await gitLsFiles(cwd, ['--cached']) : []);
+  const candidates = usedGit
+    ? [...tracked, ...(await gitLsFiles(cwd, ['--others', '--exclude-standard']))]
+    : await walk(cwd);
+
+  const listing: SourceListing = {
+    files: [],
+    symlinks: [],
+    usedGit,
+    excludedFiles: [],
+    skipped: [],
+    committedEnvFiles: [],
+  };
   for (const file of candidates) {
-    if (isExcludedPath(file)) {
-      excludedFiles.push(file);
+    const name = file.split('/').at(-1) ?? '';
+    const localEnv = isLocalEnvFile(name);
+    if (isAlwaysExcludedPath(file) || (localEnv && !tracked.has(file))) {
+      listing.excludedFiles.push(file);
       continue;
     }
-    // git ls-files still lists tracked files deleted from the working tree.
+    let stat;
     try {
-      const stat = await fs.lstat(join(cwd, file));
-      if (stat.isFile()) {
-        if (
-          ['.npmrc', '.yarnrc.yml', '.yarnrc'].includes(file.split('/').at(-1) ?? '') &&
-          hasRegistryCredentials(await fs.readFile(join(cwd, file), 'utf8'))
-        ) {
-          excludedFiles.push(file);
-          continue;
-        }
-        files.push(file);
-      }
+      stat = await fs.lstat(join(cwd, file));
     } catch {
-      // Gone from disk — nothing to upload.
+      // git ls-files still lists tracked files deleted from the working tree.
+      continue;
+    }
+    if (stat.isSymbolicLink()) {
+      const symlink = await resolveSymlink(cwd, file);
+      if (symlink) {
+        listing.symlinks.push(symlink);
+      } else {
+        listing.skipped.push({ path: file, reason: 'symlink to outside the project' });
+      }
+    } else if (stat.isDirectory()) {
+      // git lists a submodule as a single entry; its files are in another repository.
+      listing.skipped.push({ path: file, reason: 'git submodule' });
+    } else if (stat.isFile()) {
+      if (
+        ['.npmrc', '.yarnrc.yml', '.yarnrc'].includes(name) &&
+        hasRegistryCredentials(await fs.readFile(join(cwd, file), 'utf8'))
+      ) {
+        listing.excludedFiles.push(file);
+        continue;
+      }
+      listing.files.push(file);
+      if (localEnv) {
+        listing.committedEnvFiles.push(file);
+      }
     }
   }
-  return { files: files.sort(), usedGit, excludedFiles: excludedFiles.sort() };
+  return {
+    ...listing,
+    files: listing.files.sort(),
+    symlinks: listing.symlinks.sort((a, b) => a.path.localeCompare(b.path)),
+    excludedFiles: listing.excludedFiles.sort(),
+    committedEnvFiles: listing.committedEnvFiles.sort(),
+  };
 }
 
 export async function packSource(
   cwd: string,
   zipPath: string
-): Promise<{ fileCount: number; sizeBytes: number; usedGit: boolean; excludedFiles: string[] }> {
-  const { files, usedGit, excludedFiles } = await listSourceFiles(cwd);
+): Promise<Omit<SourceListing, 'files' | 'symlinks'> & { fileCount: number; sizeBytes: number }> {
+  const { files, symlinks, ...listing } = await listSourceFiles(cwd);
   if (files.length === 0) {
     throw new Error('No files to upload');
   }
@@ -172,6 +246,10 @@ export async function packSource(
   for (const file of files) {
     archive.file(join(cwd, file), { name: toPosix(relative('', file)) });
   }
+  for (const link of symlinks) {
+    // Without a mode the entry extracts as an unreadable link.
+    archive.symlink(link.path, link.target, 0o777);
+  }
   await archive.finalize();
   await done;
 
@@ -184,5 +262,5 @@ export async function packSource(
     );
   }
 
-  return { fileCount: files.length, sizeBytes: size, usedGit, excludedFiles };
+  return { ...listing, fileCount: files.length + symlinks.length, sizeBytes: size };
 }
