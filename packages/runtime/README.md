@@ -8,7 +8,10 @@ On start it reads `MODELENCE_WEB` (the start command and static mounts from
 `modelence.config.json`) and:
 
 - fetches the environment variables set in the Modelence dashboard with the
-  container's service token and runs the start command with them;
+  container's service token and runs the start command with them. Each
+  request times out after 10s and is retried with backoff for up to
+  `MODELENCE_ENV_FETCH_TIMEOUT` seconds (default 300); a rejected token fails
+  at once;
 - serves static mounts with single-page app fallback, when there is no start
   command;
 - with both, serves the mounts and proxies everything else to the app. The
