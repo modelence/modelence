@@ -10,7 +10,8 @@ interface DeployStatus {
   errors: string[];
   rolloutProgress: { updatedCount: number; totalCount: number } | null;
   logs: string[];
-  logCount: number;
+  // Where the next poll resumes the build log; null until the log exists.
+  logCursor: string | null;
   siteUrl: string | null;
   // Last output of the containers a failed rollout tried to start.
   containerLogs?: string[];
@@ -67,7 +68,7 @@ export async function followDeploy(
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let lastStatus = '';
   let lastMessage = '';
-  let logOffset = 0;
+  let logCursor: string | null = null;
   let signedInAgain = false;
 
   while (Date.now() < deadline) {
@@ -75,7 +76,7 @@ export async function followDeploy(
     try {
       status = await studioRequest<DeployStatus>(session.host, '/api/deploy/status', {
         token: session.token,
-        query: { environmentId, buildId, logOffset },
+        query: { environmentId, buildId, ...(logCursor ? { logCursor } : {}) },
       });
     } catch (error) {
       // A token can expire while a long rollout is being watched; the
@@ -91,9 +92,9 @@ export async function followDeploy(
     for (const line of status.logs) {
       process.stdout.write(`  │ ${line.replace(/\n$/, '')}\n`);
     }
-    // A poll that could not read CloudWatch reports zero lines; keeping the
-    // offset avoids replaying the whole log on the next poll.
-    logOffset = Math.max(logOffset, status.logCount);
+    // A poll that could not read CloudWatch hands back the cursor it got, or
+    // none; keeping ours avoids replaying the whole log on the next poll.
+    logCursor = status.logCursor ?? logCursor;
 
     if (status.status !== lastStatus) {
       lastStatus = status.status;

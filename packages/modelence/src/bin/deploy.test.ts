@@ -27,7 +27,7 @@ const spec = {
 const completed = {
   status: 'deploy-completed',
   logs: [],
-  logCount: 0,
+  logCursor: null,
   errors: [],
   rolloutProgress: null,
   siteUrl: 'https://site.example',
@@ -99,7 +99,7 @@ describe('deploy orchestration', () => {
       options.host,
       '/api/deploy/status',
       expect.objectContaining({
-        query: { environmentId: 'env-id', buildId: 'build-id', logOffset: 0 },
+        query: { environmentId: 'env-id', buildId: 'build-id' },
       })
     );
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
@@ -382,8 +382,13 @@ describe('status polling', () => {
   it('preserves the log cursor when a poll temporarily returns no logs', async () => {
     vi.useFakeTimers();
     request
-      .mockResolvedValueOnce({ ...completed, status: 'building', logs: ['a', 'b'], logCount: 2 })
-      .mockResolvedValueOnce({ ...completed, status: 'building', logCount: 0 })
+      .mockResolvedValueOnce({
+        ...completed,
+        status: 'building',
+        logs: ['a', 'b'],
+        logCursor: 'f/2',
+      })
+      .mockResolvedValueOnce({ ...completed, status: 'building', logCursor: null })
       .mockResolvedValueOnce(completed);
     const following = followDeploy(
       { host: options.host, token: 'token' },
@@ -393,6 +398,10 @@ describe('status polling', () => {
     );
     await vi.advanceTimersByTimeAsync(6000);
     await following;
-    expect(request.mock.calls.map(([, , args]) => args?.query?.logOffset)).toEqual([0, 2, 2]);
+    expect(request.mock.calls.map(([, , args]) => args?.query?.logCursor)).toEqual([
+      undefined,
+      'f/2',
+      'f/2',
+    ]);
   });
 });
