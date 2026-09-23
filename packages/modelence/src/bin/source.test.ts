@@ -116,6 +116,23 @@ describe('listSourceFiles', () => {
     }
   );
 
+  it.each([false, true])(
+    'excludes symlinks named like excluded directories with git=%s',
+    async (useGit) => {
+      if (useGit) await git('init', '-q');
+      await write('package.json', '{}');
+      await write('packages/shared/index.js');
+      await mkdir(join(dir, 'apps/web'), { recursive: true });
+      await symlink('../../packages', join(dir, 'apps/web/node_modules'));
+      await symlink('packages', join(dir, 'node_modules'));
+      if (useGit) await git('add', '-f', 'apps/web/node_modules', 'node_modules');
+
+      const { symlinks, excludedFiles } = await listSourceFiles(dir);
+      expect(symlinks).toEqual([]);
+      expect(excludedFiles).toEqual(['apps/web/node_modules', 'node_modules']);
+    }
+  );
+
   it('reports git submodules instead of dropping them silently', async () => {
     await git('init', '-q');
     await write('package.json', '{}');

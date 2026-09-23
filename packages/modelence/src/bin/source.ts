@@ -191,6 +191,12 @@ export async function listSourceFiles(cwd = process.cwd()): Promise<SourceListin
       continue;
     }
     if (stat.isSymbolicLink()) {
+      // A link can stand in for a directory (a workspace's node_modules), so
+      // its own name is checked against the excluded directories too.
+      if (isAlwaysExcludedPath(`${file}/x`)) {
+        listing.excludedFiles.push(file);
+        continue;
+      }
       const symlink = await resolveSymlink(cwd, file);
       if (symlink) {
         listing.symlinks.push(symlink);
