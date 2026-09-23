@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@modelence/runtime",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Container entrypoint for apps deployed to Modelence Cloud",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
