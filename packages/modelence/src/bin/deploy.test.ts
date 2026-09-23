@@ -235,6 +235,18 @@ describe('deploy orchestration', () => {
     await expect(access(join(project, '.modelence/tmp/source.zip'))).rejects.toThrow();
   });
 
+  it('stops before uploading when Studio does not report the environment', async () => {
+    const original = request.getMockImplementation()!;
+    request.mockImplementation(async (host, path, args) =>
+      path === '/api/upload-bundle'
+        ? { uploadUrl: 'https://upload.example/source', bundleName: 'source.zip' }
+        : original(host, path, args)
+    );
+    await expect(deploy(options)).rejects.toThrow('Modelence Cloud is too old for this CLI');
+    expect(upload).not.toHaveBeenCalled();
+    expect(request.mock.calls.some(([, path]) => path === '/api/deploy')).toBe(false);
+  });
+
   it('reports a failed rollout through the exit code', async () => {
     const original = request.getMockImplementation()!;
     request.mockImplementation(async (host, path, args) =>

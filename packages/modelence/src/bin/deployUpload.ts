@@ -41,6 +41,17 @@ export async function runDeploy({
   // The first call also resolves an alias target to its environment, so it
   // has to happen before the wait.
   let upload = await requestUpload();
+  /*
+    Studio versions before source deploys answer without the environment
+    id, ignore `kind` and `spec`, and would build the upload as a prebuilt
+    Modelence bundle. Stopping here beats deploying something else.
+  */
+  if (!upload.environmentId) {
+    throw new Error(
+      'Modelence Cloud is too old for this CLI version (no environment id from /api/upload-bundle). ' +
+        'Try again later, or deploy with modelence@0.25.'
+    );
+  }
 
   // Provisioning can take minutes, which is long enough for the signed URL
   // to expire before the upload starts, so it is signed again afterwards.
