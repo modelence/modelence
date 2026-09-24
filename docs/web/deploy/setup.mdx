@@ -164,8 +164,11 @@ Follow these steps in order. Do not skip the verification step.
 4. **Check the start script.** `vite`, `vite preview`, `react-scripts start`, `next dev`, `nodemon`,
    `ts-node-dev` and `tsx watch` are development servers. Do not use them. Replace them with a
    production start (`node dist/server.js` after a TypeScript build, `next start`, `node server.js`)
-   or, for a pure frontend, a static mount and no `start`. A step that must run before the server
-   on every start (`prisma migrate deploy`) goes first in `start.commands`.
+   or, for a pure frontend, a static mount and no `start`. Do not add database migrations to
+   `start.commands`: every container runs them on every start, several at once during a rollout,
+   and a slow one is killed by the health check partway through. Leave migrations out of the file
+   and tell the user to run them against the environment's database before deploying. A step may go
+   first in `start.commands` only if it is fast and safe to run in parallel, such as `prisma generate`.
 
 5. **Make the server read `PORT`.** The listen call must use `process.env.PORT`, for example
    `app.listen(Number(process.env.PORT) || 3000)`. Bind to all interfaces (the default), not to
