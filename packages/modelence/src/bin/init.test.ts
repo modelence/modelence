@@ -26,11 +26,12 @@ describe('init', () => {
   it('writes the template with the schema of the given host and prints the agent prompt', async () => {
     await init({ host: 'https://studio.example/' });
     expect(JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'))).toEqual({
-      $schema: 'https://studio.example/schema/modelence.config.json',
+      $schema: 'https://studio.example/schema/modelence.config.json?version=1',
       resources: {
         app: {
-          build: { node: '22', install: 'npm ci', command: null },
-          start: null,
+          type: 'service',
+          image: 'node-22-slim',
+          build: { commands: ['npm ci'] },
           static: [],
         },
       },
@@ -45,7 +46,9 @@ describe('init', () => {
     await expect(init({})).rejects.toThrow('already exists');
     await init({ force: true });
     const written = JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'));
-    expect(written.$schema).toBe('https://cloud.modelence.com/schema/modelence.config.json');
-    expect(written.resources.app.start).toBeNull();
+    expect(written.$schema).toBe(
+      'https://cloud.modelence.com/schema/modelence.config.json?version=1'
+    );
+    expect(written.resources.app.type).toBe('service');
   });
 });

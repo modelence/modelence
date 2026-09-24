@@ -22,7 +22,13 @@ vi.mock('./studioApi', async (importOriginal) => ({
 const request = vi.mocked(studioRequest);
 const options = { host: 'https://studio.example', app: 'app', env: 'prod' };
 const spec = {
-  resources: { app: { build: { install: 'npm ci', command: null }, start: 'node server.js' } },
+  resources: {
+    app: {
+      type: 'service',
+      build: { commands: ['npm ci'] },
+      start: { commands: ['node server.js'] },
+    },
+  },
 };
 const completed = {
   status: 'deploy-completed',

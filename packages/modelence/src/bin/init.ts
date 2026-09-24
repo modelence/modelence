@@ -4,6 +4,7 @@ import {
   APP_SPEC_FILE_NAME,
   SETUP_DOCS_URL,
   getAppSpecFilePath,
+  getAppSpecSchemaUrl,
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
@@ -28,13 +29,13 @@ export async function init(options: InitOptions) {
     throw new Error(`${APP_SPEC_FILE_NAME} already exists; pass --force to overwrite it.`);
   }
 
-  const schemaHost = (options.host ?? DEFAULT_SCHEMA_HOST).replace(/\/$/, '');
   const template: AppSpec = {
-    $schema: `${schemaHost}/schema/${APP_SPEC_FILE_NAME}`,
+    $schema: getAppSpecSchemaUrl(options.host ?? DEFAULT_SCHEMA_HOST),
     resources: {
       app: {
-        build: { node: '22', install: 'npm ci', command: null },
-        start: null,
+        type: 'service',
+        image: 'node-22-slim',
+        build: { commands: ['npm ci'] },
         static: [],
       },
     },

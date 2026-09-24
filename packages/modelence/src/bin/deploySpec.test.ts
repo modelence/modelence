@@ -40,12 +40,17 @@ describe('modelence.config.json presence', () => {
   it('returns the file as written and prints the plan', async () => {
     const spec = {
       resources: {
-        app: { build: { install: 'npm ci', command: 'npm run build' }, start: 'node .' },
+        app: {
+          type: 'service',
+          build: { commands: ['npm ci', 'npm run build'] },
+          start: { commands: ['node .'] },
+        },
       },
     };
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
     expect(await prepareSpec(dir)).toEqual(spec);
     expect(logged[0]).toBe('Build plan (modelence.config.json):');
+    expect(logged).toContain('  build:   npm ci');
     expect(logged).toContain('  build:   npm run build');
     expect(logged).toContain('  start:   node .');
   });
@@ -57,18 +62,28 @@ describe('modelence.config.json parsing', () => {
       join(dir, 'modelence.config.json'),
       `{
         // Built by Vite, served by the platform.
-        "build": { "command": "npm run build", /* no server */ },
-        "web": { "start": null, "static": [{ "path": "/", "dir": "dist" },], },
+        "resources": {
+          "web": {
+            "type": "service",
+            "build": { "commands": ["npm ci", "npm run build",] /* no server */ },
+            "static": [{ "path": "/", "dir": "dist" },],
+          },
+        },
       }`
     );
     expect(await readAppSpecFile(dir)).toEqual({
-      build: { command: 'npm run build' },
-      web: { start: null, static: [{ path: '/', dir: 'dist' }] },
+      resources: {
+        web: {
+          type: 'service',
+          build: { commands: ['npm ci', 'npm run build'] },
+          static: [{ path: '/', dir: 'dist' }],
+        },
+      },
     });
   });
 
   it('reports the position of malformed JSON', async () => {
-    await writeFile(join(dir, 'modelence.config.json'), '{\n  "build": { "node": 22 "x" }\n}');
+    await writeFile(join(dir, 'modelence.config.json'), '{\n  "resources": { "app" "x" }\n}');
     await expect(readAppSpecFile(dir)).rejects.toThrow(/not valid JSON: .* at line 2/);
   });
 
@@ -92,35 +107,39 @@ describe('modelence.config.json parsing', () => {
   it('rejects empty commands before anything is packed', async () => {
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ resources: { app: { build: { command: '' } } } })
+      JSON.stringify({
+        resources: { app: { type: 'service', build: { commands: ['npm ci', ''] } } },
+      })
     );
     await expect(prepareSpec(dir)).rejects.toThrow(
-      '"resources.app.build.command" must not be empty; use null for none'
+      '"resources.app.build.commands.1" must not be empty'
     );
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ resources: { app: { start: '  ' } } })
+      JSON.stringify({ resources: { app: { type: 'service', start: { commands: ['  '] } } } })
     );
-    await expect(prepareSpec(dir)).rejects.toThrow('"resources.app.start" must not be empty');
+    await expect(prepareSpec(dir)).rejects.toThrow(
+      '"resources.app.start.commands.0" must not be empty'
+    );
   });
 });
 
-describe('build.root', () => {
+describe('root', () => {
   it('accepts a subdirectory inside the project', async () => {
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ resources: { api: { build: { root: 'apps/api' } } } })
+      JSON.stringify({ resources: { api: { type: 'service', root: 'apps/api' } } })
     );
-    expect((await prepareSpec(dir)).resources?.api.build?.root).toBe('apps/api');
+    expect((await prepareSpec(dir)).resources?.api.root).toBe('apps/api');
     expect(logged).toContain('  root:    apps/api');
   });
 
   it('rejects a directory that does not exist', async () => {
     await writeFile(
       join(dir, 'modelence.config.json'),
-      JSON.stringify({ resources: { app: { build: { root: 'missing' } } } })
+      JSON.stringify({ resources: { app: { type: 'service', root: 'missing' } } })
     );
-    await expect(prepareSpec(dir)).rejects.toThrow('build.root "missing" does not exist');
+    await expect(prepareSpec(dir)).rejects.toThrow('root "missing" does not exist');
   });
 
   it('rejects a file', async () => {
@@ -137,15 +156,16 @@ describe('build.root', () => {
 });
 
 describe('plan formatting', () => {
-  it('prints null commands as none and missing ones as default', () => {
-    const lines = formatAppSpec({ resources: { app: { build: { command: null }, start: null } } });
+  it('prints an empty build as none and missing keys as their default', () => {
+    const lines = formatAppSpec({
+      resources: { app: { type: 'service', build: { commands: [] } } },
+    });
     expect(lines).toContain('  build:   (none)');
     expect(lines).toContain('  start:   (none)');
-    expect(formatAppSpec({ resources: { app: {} } })).toEqual([
-      '  node:    default (22)',
-      '  install: default',
-      '  build:   default',
-      '  start:   default',
+    expect(formatAppSpec({ resources: { app: { type: 'service' } } })).toEqual([
+      '  image:   default (node-22-slim)',
+      '  build:   default (npm install)',
+      '  start:   (none)',
     ]);
     // Nothing declared is nothing to print; the server reports the default.
     expect(formatAppSpec({})).toEqual([]);
@@ -155,22 +175,27 @@ describe('plan formatting', () => {
     const lines = formatAppSpec({
       resources: {
         app: {
-          build: { node: '20' },
-          start: 'node server.js',
+          type: 'service',
+          image: 'node-20-alpine',
+          start: { commands: ['node server.js'] },
           static: [{ path: '/', dir: 'client/dist' }],
         },
       },
       env: { VITE_BASE: { type: 'text' }, API_KEY: { type: 'secret' } },
     });
-    expect(lines).toContain('  node:    20');
+    expect(lines).toContain('  image:   node-20-alpine');
     expect(lines).toContain('  static:  / -> client/dist/');
     expect(lines).toContain('  env:     VITE_BASE (text)');
     expect(lines).toContain('  env:     API_KEY (secret)');
   });
 
   it('labels each resource only when there is more than one', () => {
-    expect(formatAppSpec({ resources: { api: {} } })).not.toContain('  resource: api');
-    const lines = formatAppSpec({ resources: { api: {}, web: {} } });
+    expect(formatAppSpec({ resources: { api: { type: 'service' } } })).not.toContain(
+      '  resource: api'
+    );
+    const lines = formatAppSpec({
+      resources: { api: { type: 'service' }, web: { type: 'service' } },
+    });
     expect(lines).toContain('  resource: api');
     expect(lines).toContain('  resource: web');
   });

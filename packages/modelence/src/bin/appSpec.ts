@@ -8,12 +8,14 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
   schema published at /schema/modelence.config.json and fills in the defaults.
   The types here mirror that schema; the server is the authority.
 
-  For build.command and web.start: a missing key inherits the runtime
-  default, null means "none" (no build step / no process), and an empty
-  string is invalid.
+  A missing `build` inherits the runtime default (npm install), and
+  `"commands": []` means no build step. A missing `start` means no process.
+  An empty command string is invalid.
 */
 
 export const APP_SPEC_FILE_NAME = 'modelence.config.json';
+// The format version the CLI writes into $schema; Studio publishes the schema.
+export const APP_SPEC_VERSION = 1;
 
 // The file is written by the user's coding agent from the hosted setup
 // guide; Mintlify serves the same page raw at the .md URL for agents.
@@ -21,31 +23,34 @@ export const SETUP_DOCS_URL = 'https://docs.modelence.com/deploy/setup';
 export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence deployment for this project`;
 
 export type EnvDeclarationType = 'text' | 'secret';
-export type EnvVarScope = 'runtime' | 'build-and-runtime';
+export type EnvDeclarationScope = 'build' | 'runtime';
+export type ResourceType = 'service';
 
 export interface StaticMount {
   path: string;
   dir: string;
 }
 
-/*
-  A client-only site is a resource with `"start": null` and its `static`
-  mounts. There is no `type`: every resource runs through the same runtime.
-*/
+// Commands run one after another; one failing stops the rest.
+export interface CommandList {
+  commands: string[];
+}
+
+// A client-only site is a service without `start`, serving its `static` mounts.
 export interface AppResource {
-  build?: {
-    node?: string;
-    root?: string;
-    install?: string;
-    command?: string | null;
-  };
-  start?: string | null;
+  type: ResourceType;
+  // node-<version>-<variant>, e.g. "node-22-slim" or "node-22.23.1-alpine".
+  image?: string;
+  root?: string;
+  build?: CommandList;
+  start?: CommandList;
   static?: StaticMount[];
 }
 
 export interface EnvDeclaration {
   type?: EnvDeclarationType;
-  scope?: EnvVarScope;
+  // The phases the value reaches; default ["runtime"].
+  scopes?: EnvDeclarationScope[];
   value?: string;
 }
 
@@ -53,11 +58,15 @@ export interface AppSpec {
   $schema?: string;
   /*
     Everything the app is made of, by the name the project chose. Each entry
-    takes build/start/static. One resource is supported today.
+    takes type/image/root/build/start/static. One resource is supported today.
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
   env?: Record<string, EnvDeclaration>;
+}
+
+export function getAppSpecSchemaUrl(host: string): string {
+  return `${host.replace(/\/$/, '')}/schema/${APP_SPEC_FILE_NAME}?version=${APP_SPEC_VERSION}`;
 }
 
 export function getAppSpecFilePath(cwd = process.cwd()): string {
@@ -111,13 +120,12 @@ export function formatAppSpec(spec: AppSpec): string[] {
     if (entries.length > 1) {
       lines.push(`  resource: ${name}`);
     }
-    lines.push(`  node:    ${resource.build?.node ?? 'default (22)'}`);
-    if (resource.build?.root && resource.build.root !== '.') {
-      lines.push(`  root:    ${resource.build.root}`);
+    lines.push(`  image:   ${resource.image ?? 'default (node-22-slim)'}`);
+    if (resource.root && resource.root !== '.') {
+      lines.push(`  root:    ${resource.root}`);
     }
-    lines.push(`  install: ${resource.build?.install ?? 'default'}`);
-    lines.push(`  build:   ${formatCommand(resource.build?.command)}`);
-    lines.push(`  start:   ${formatCommand(resource.start)}`);
+    lines.push(...formatCommands('build', resource.build, 'default (npm install)'));
+    lines.push(...formatCommands('start', resource.start, '(none)'));
     for (const mount of resource.static ?? []) {
       lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
     }
@@ -134,14 +142,19 @@ export function formatAppSpec(spec: AppSpec): string[] {
   return lines;
 }
 
-// A missing command is filled in by the runtime's default on the server;
-// null is the user saying there is none.
-function formatCommand(command: string | null | undefined): string {
-  if (command === undefined) {
-    return 'default';
+// One line per command, in the order they run. A missing list is filled in
+// by the server's default; an empty one is the user saying there is none.
+function formatCommands(
+  label: string,
+  list: CommandList | undefined,
+  whenMissing: string
+): string[] {
+  const prefix = `  ${`${label}:`.padEnd(8)} `;
+  if (!list) {
+    return [`${prefix}${whenMissing}`];
   }
-  if (command === null || command === '') {
-    return '(none)';
+  if (list.commands.length === 0) {
+    return [`${prefix}(none)`];
   }
-  return command;
+  return list.commands.map((command) => `${prefix}${command}`);
 }

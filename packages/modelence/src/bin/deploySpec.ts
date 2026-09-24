@@ -12,7 +12,7 @@ import { resolveAppRoot } from './appRoot';
 /*
   modelence.config.json is the whole contract between a project and Modelence
   Cloud: the CLI reads it, checks what only the local file system can tell
-  (the file exists, build.root is a real directory in the upload) and sends
+  (the file exists, root is a real directory in the upload) and sends
   it on. Studio validates it against the schema and fills in the runtime's
   defaults; nothing is inferred here.
 */
@@ -28,8 +28,8 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
   }
   assertKnownKeys(spec);
   for (const resource of Object.values(spec.resources ?? {})) {
-    if (resource.build?.root !== undefined) {
-      await resolveAppRoot(cwd, resource.build.root);
+    if (resource?.root !== undefined) {
+      await resolveAppRoot(cwd, resource.root);
     }
   }
 
@@ -69,23 +69,28 @@ function assertKnownKeys(spec: AppSpec): void {
   }
 
   // Studio rejects these too, but only after the archive is packed and
-  // uploaded; the rule is missing = default, null = none, never ''.
+  // uploaded. An empty build list is "no build step"; an empty command never is.
   for (const [name, resource] of Object.entries(spec.resources ?? {})) {
-    for (const [label, value] of [
-      [`resources.${name}.build.command`, resource.build?.command],
-      [`resources.${name}.start`, resource.start],
-    ] as const) {
-      if (typeof value === 'string' && value.trim() === '') {
-        throw new Error(`${APP_SPEC_FILE_NAME}: "${label}" must not be empty; use null for none.`);
+    for (const section of ['build', 'start'] as const) {
+      const commands = resource?.[section]?.commands;
+      if (!Array.isArray(commands)) {
+        continue;
       }
+      commands.forEach((command, index) => {
+        if (typeof command === 'string' && command.trim() === '') {
+          throw new Error(
+            `${APP_SPEC_FILE_NAME}: "resources.${name}.${section}.commands.${index}" must not be empty.`
+          );
+        }
+      });
     }
   }
 }
 
-// A resolved spec as the server reports it: every key present, with '' for
+// A resolved spec as the server reports it: every key present, with [] for
 // no build step and null for no web process.
 export interface ResolvedSpec {
   runtime: string;
-  build: { node: string; root: string; install: string; command: string };
+  build: { image: string; root: string; commands: string[] };
   web: { start: string | null; static: StaticMount[] };
 }
