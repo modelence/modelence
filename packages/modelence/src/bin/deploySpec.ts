@@ -105,9 +105,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 // A resolved spec as the server reports it: every key present, with [] for
-// no build step and null for no web process.
+// no build step and null for no web process, by resource name.
 export interface ResolvedSpec {
   runtime: string;
-  build: { image: string; root: string; commands: string[] };
-  web: { start: string | null; static: StaticMount[] };
+  resources: Record<
+    string,
+    {
+      type: string;
+      build: { image: string; root: string; commands: string[] };
+      web: { start: string | null; static: StaticMount[] };
+    }
+  >;
 }
