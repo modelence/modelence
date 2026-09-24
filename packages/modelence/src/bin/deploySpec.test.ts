@@ -122,6 +122,27 @@ describe('modelence.config.json parsing', () => {
       '"resources.app.start.commands.0" must not be empty'
     );
   });
+
+  it.each([
+    [{ start: 'node .' }, '"resources.app.start" must be an object with a "commands" array'],
+    [{ build: {} }, '"resources.app.build" must be an object with a "commands" array'],
+    [{ build: { commands: 'npm ci' } }, '"resources.app.build" must be an object'],
+    [{ start: { commands: [42] } }, '"resources.app.start.commands.0" must be a string'],
+  ])('rejects malformed command lists before printing the plan (%j)', async (fields, message) => {
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ resources: { app: { type: 'service', ...fields } } })
+    );
+    await expect(prepareSpec(dir)).rejects.toThrow(message);
+  });
+
+  it('rejects a resource that is not an object', async () => {
+    await writeFile(
+      join(dir, 'modelence.config.json'),
+      JSON.stringify({ resources: { app: null } })
+    );
+    await expect(prepareSpec(dir)).rejects.toThrow('"resources.app" must be an object');
+  });
 });
 
 describe('root', () => {

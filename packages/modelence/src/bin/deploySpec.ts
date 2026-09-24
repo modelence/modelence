@@ -69,22 +69,39 @@ function assertKnownKeys(spec: AppSpec): void {
   }
 
   // Studio rejects these too, but only after the archive is packed and
-  // uploaded. An empty build list is "no build step"; an empty command never is.
+  // uploaded, and the plan printed before that reads these shapes as typed.
+  // An empty build list is "no build step"; an empty command never is.
   for (const [name, resource] of Object.entries(spec.resources ?? {})) {
+    if (!isPlainObject(resource)) {
+      throw new Error(`${APP_SPEC_FILE_NAME}: "resources.${name}" must be an object.`);
+    }
     for (const section of ['build', 'start'] as const) {
-      const commands = resource?.[section]?.commands;
-      if (!Array.isArray(commands)) {
-        continue;
-      }
-      commands.forEach((command, index) => {
-        if (typeof command === 'string' && command.trim() === '') {
-          throw new Error(
-            `${APP_SPEC_FILE_NAME}: "resources.${name}.${section}.commands.${index}" must not be empty.`
-          );
-        }
-      });
+      assertCommandList(resource[section], `resources.${name}.${section}`);
     }
   }
+}
+
+function assertCommandList(list: unknown, path: string): void {
+  if (list === undefined) {
+    return;
+  }
+  if (!isPlainObject(list) || !Array.isArray(list.commands)) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME}: "${path}" must be an object with a "commands" array, e.g. { "commands": ["npm ci"] }.`
+    );
+  }
+  list.commands.forEach((command: unknown, index: number) => {
+    if (typeof command !== 'string') {
+      throw new Error(`${APP_SPEC_FILE_NAME}: "${path}.commands.${index}" must be a string.`);
+    }
+    if (command.trim() === '') {
+      throw new Error(`${APP_SPEC_FILE_NAME}: "${path}.commands.${index}" must not be empty.`);
+    }
+  });
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 // A resolved spec as the server reports it: every key present, with [] for
