@@ -24,6 +24,12 @@
             ]
           },
           {
+            "group": "Deploy",
+            "pages": [
+              "deploy/setup"
+            ]
+          },
+          {
             "group": "Core Concepts",
             "pages": [
               "core-concepts/project-structure",
