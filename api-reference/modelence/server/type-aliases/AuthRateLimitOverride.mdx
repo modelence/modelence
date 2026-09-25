@@ -7,7 +7,7 @@ title: AuthRateLimitOverride
 
 > **AuthRateLimitOverride** = `object`
 
-Defined in: [packages/modelence/src/app/authConfig.ts:21](https://github.com/modelence/modelence/blob/b3abdbf506f9ad1e225780ceb0087367c98e6d24/packages/modelence/src/app/authConfig.ts#L21)
+Defined in: [packages/modelence/src/app/authConfig.ts:21](https://github.com/modelence/modelence/blob/4440162e3c5ddffed08300cbb3bc8eff4a9566f6/packages/modelence/src/app/authConfig.ts#L21)
 
 A single rate-limit rule for an authentication bucket. The `bucket` is
 implied by which auth action you're configuring (e.g. `signup`), so callers
@@ -29,6 +29,6 @@ const rule: AuthRateLimitOverride = {
 
 | Property | Type | Description | Defined in |
 | ------ | ------ | ------ | ------ |
-| <a id="limit"></a> `limit` | `number` | Maximum allowed hits within the window. | [packages/modelence/src/app/authConfig.ts:27](https://github.com/modelence/modelence/blob/b3abdbf506f9ad1e225780ceb0087367c98e6d24/packages/modelence/src/app/authConfig.ts#L27) |
-| <a id="type"></a> `type` | [`RateLimitType`](/api-reference/modelence/server/type-aliases/RateLimitType) | Identifier type of the actor this rule applies to. | [packages/modelence/src/app/authConfig.ts:23](https://github.com/modelence/modelence/blob/b3abdbf506f9ad1e225780ceb0087367c98e6d24/packages/modelence/src/app/authConfig.ts#L23) |
-| <a id="window"></a> `window` | `number` | Time window size in milliseconds. Use `time.minutes(15)` etc. | [packages/modelence/src/app/authConfig.ts:25](https://github.com/modelence/modelence/blob/b3abdbf506f9ad1e225780ceb0087367c98e6d24/packages/modelence/src/app/authConfig.ts#L25) |
+| <a id="limit"></a> `limit` | `number` | Maximum allowed hits within the window. | [packages/modelence/src/app/authConfig.ts:27](https://github.com/modelence/modelence/blob/4440162e3c5ddffed08300cbb3bc8eff4a9566f6/packages/modelence/src/app/authConfig.ts#L27) |
+| <a id="type"></a> `type` | [`RateLimitType`](/api-reference/modelence/server/type-aliases/RateLimitType) | Identifier type of the actor this rule applies to. | [packages/modelence/src/app/authConfig.ts:23](https://github.com/modelence/modelence/blob/4440162e3c5ddffed08300cbb3bc8eff4a9566f6/packages/modelence/src/app/authConfig.ts#L23) |
+| <a id="window"></a> `window` | `number` | Time window size in milliseconds. Use `time.minutes(15)` etc. | [packages/modelence/src/app/authConfig.ts:25](https://github.com/modelence/modelence/blob/4440162e3c5ddffed08300cbb3bc8eff4a9566f6/packages/modelence/src/app/authConfig.ts#L25) |

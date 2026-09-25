@@ -1,0 +1,259 @@
+---
+title: 'Deploy Setup'
+description: 'Set up an existing Node.js project for Modelence Cloud by writing modelence.config.json'
+icon: 'rocket'
+---
+
+This page is written for a coding agent. It describes what Modelence Cloud runs, the
+`modelence.config.json` file that tells it how, and the steps to set up an existing Node.js project.
+If you are a person, hand it to your agent:
+
+```text
+Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment for this project
+```
+
+## What Modelence Cloud runs
+
+- **A Docker image built from the repository** on an official Node.js image, 18 or newer (default
+  `node-22-slim`, set with `image`). The `build` commands run in order in the resource's root; only
+  npm is preinstalled.
+- **One web process**, started with the resource's `start` commands. The last one must keep running
+  and listen on the port in the `PORT` environment variable — a hardcoded port never receives traffic.
+- **Optional static directories** (the resource's `static`) served in front of that process by the platform.
+  Requests that match no file fall back to the directory's `index.html`, so single-page apps route on
+  the client.
+- **Environment variables injected at start:**
+  - `MONGODB_URI` and `MONGO_URL` — a MongoDB Atlas database provisioned for this environment
+    (both hold the same connection string).
+  - `SITE_URL` and `ROOT_URL` — the environment's public URL (both hold the same value).
+  - `PORT` — the port the web process must listen on.
+  - Any variables the user defines in the dashboard under **Environment variables**.
+
+  Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be defined by the user.
+
+## modelence.config.json reference
+
+`modelence.config.json` sits at the project root and is the whole contract between the project and
+Modelence Cloud. Comments (`//`, `/* */`) and trailing commas are allowed. Apart from a resource's
+`type`, every key is optional; a missing key takes the default.
+
+The file has two top-level sections: `resources` (what the app is made of) and `env` (the variables
+it expects).
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
+| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"web"`). Exactly one resource is supported today. |
+| `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
+
+Each entry of `resources` takes:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"service"` | required | What the resource is. `"service"` is a Node.js app built from this repository. |
+| `image` | string | `"node-22-slim"` | Base image, `node-<version>-<variant>`: a Node.js major (`"node-22-slim"`) or exact version (`"node-22.23.1-alpine"`), `18` or newer. `slim` is glibc and works with prebuilt native binaries; `alpine` is smaller. |
+| `root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `static` directories are relative to it. |
+| `build.commands` | string[] | `["npm install"]` | Commands that install dependencies and build the app, run in order. `[]` means there is no build step. |
+| `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
+| `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
+
+Each entry of `env` declares one variable:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"text"` \| `"secret"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. |
+| `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build commands — needed for anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. |
+| `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
+
+A value set in the dashboard overrides a `value` written here, so a literal in the file is the
+committed default rather than a fixed constant.
+
+<Note>
+Apps built on the Modelence framework need no file: `modelence deploy` recognizes the `modelence`
+dependency and keeps building them locally, as it always has. To build one on Modelence Cloud
+instead, describe it like any other Node.js app: `"build": { "commands": ["npm ci", "npm run build"] }`
+and `"start": { "commands": ["npm start"] }`.
+</Note>
+
+**Missing, empty and none**: a missing `build` runs `npm install`; `"build": { "commands": [] }` means
+there is no build step. A missing `start` means there is no process. An empty command string `""` is
+invalid and is rejected.
+
+## Examples
+
+**Express API only** — no build step, the server serves everything:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": { "commands": ["npm ci"] },
+      "start": { "commands": ["node server.js"] }
+    }
+  }
+}
+```
+
+**Vite static site** — built once, served by the platform, no process:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "web": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": { "commands": ["npm ci", "npm run build"] },
+      "static": [{ "path": "/", "dir": "dist" }]
+    }
+  }
+}
+```
+
+**Express API + Vite frontend** — the frontend in `client/` is built into `client/dist` and served at
+`/`; requests that match no file reach the API. `VITE_API_URL` is scoped to the build as well because
+Vite inlines it while building:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": {
+        "commands": ["npm ci", "npm ci --prefix client", "npm run build --prefix client"]
+      },
+      "start": { "commands": ["node server.js"] },
+      "static": [{ "path": "/", "dir": "client/dist" }]
+    }
+  },
+  "env": {
+    "VITE_API_URL": { "value": "/api", "scopes": ["build", "runtime"] },
+    "STRIPE_SECRET_KEY": { "type": "secret" }
+  }
+}
+```
+
+## Setting up a project
+
+Follow these steps in order. Do not skip the verification step.
+
+1. **Inspect `package.json`.** Read `scripts`, `engines.node`, `type` and the dependencies. Note which
+   framework builds the frontend (Vite, Next.js, Create React App, Angular, Astro…) and what runs the
+   server (Express, Fastify, Koa, Hono, NestJS, a framework's own server…).
+
+2. **Pick the install command from the lockfile.**
+   - `package-lock.json` in sync with `package.json` → `npm ci`. If it is stale or missing, use
+     `npm install`.
+   - `pnpm-lock.yaml` → `corepack enable && pnpm install --frozen-lockfile`.
+   - `yarn.lock` → `corepack enable && yarn install --frozen-lockfile` (Yarn 1) or
+     `corepack enable && yarn install --immutable` (Yarn 2+).
+
+   Only npm is preinstalled in the build image; `corepack enable` makes pnpm and Yarn available at the
+   version `packageManager` in `package.json` names.
+
+3. **Find the build output.** Vite writes `dist/`, Create React App and Angular write `build/` or
+   `dist/<project>/browser`, Astro writes `dist/`, Next.js needs `next build` and its own server
+   (`next start`), not a static mount, unless `output: 'export'` is set. Check the framework config for
+   a changed `outDir`.
+
+4. **Check the start script.** `vite`, `vite preview`, `react-scripts start`, `next dev`, `nodemon`,
+   `ts-node-dev` and `tsx watch` are development servers. Do not use them. Replace them with a
+   production start (`node dist/server.js` after a TypeScript build, `next start`, `node server.js`)
+   or, for a pure frontend, a static mount and no `start`. Do not add database migrations to
+   `start.commands`: every container runs them on every start, several at once during a rollout,
+   and a slow one is killed by the health check partway through. Leave migrations out of the file
+   and tell the user to run them against the environment's database before deploying. A step may go
+   first in `start.commands` only if it is fast and safe to run in parallel, such as `prisma generate`.
+
+5. **Make the server read `PORT`.** The listen call must use `process.env.PORT`, for example
+   `app.listen(Number(process.env.PORT) || 3000)`. Bind to all interfaces (the default), not to
+   `127.0.0.1` only. If the frontend and the API are served together, the server must be the one
+   process — the static mount handles the frontend files, the server handles everything else.
+
+6. **Use the injected database.** If the project needs MongoDB, read the connection string from
+   `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. Other databases are not
+   provided — see [Compatibility](#when-the-project-is-not-compatible).
+
+7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
+   entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
+   `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
+   lives in a subdirectory. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
+
+8. **Verify locally.** Run the build commands, then the start commands with `PORT=3000` set, in
+   order — exactly as written in the file — and confirm the app answers on
+   `http://localhost:3000` (for a static site, confirm the `dir` exists after the build and holds
+   `index.html`). Fix the file or the code until this works; a deploy runs the same commands.
+
+9. **Commit `modelence.config.json`** together with any code changes (the `PORT` change, the
+   production start script).
+
+10. **Tell the user to run `npx modelence deploy`** in the project directory. On the first run it
+    opens the browser to sign in and pick the application and environment; afterwards it remembers
+    them.
+
+### Runtime values and secrets
+
+When the app needs a value at runtime that must not be committed — an API key, an OAuth secret, a
+third-party URL — tell the user to add it in the Modelence Cloud dashboard under **Environment
+variables** for the target environment, marked as secret. Values only a build needs (a `VITE_*` or
+`NEXT_PUBLIC_*` variable that is inlined into the frontend) must additionally be ticked **available at
+build time**; leave that unticked for anything the browser must not see. Read runtime values from
+`process.env` as usual.
+
+Non-secret settings that belong with the code (a base path, a public API path) go in the file's
+`env` section instead, with a `value`, so they are versioned with the repository. Give anything a
+bundler inlines `"scopes": ["build", "runtime"]` so it reaches the build as well as the running app.
+
+## When the project is not compatible
+
+Report the project as not compatible with Modelence Cloud, and say why, when:
+
+- **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
+  Node.js frontend in front. The image runs Node.js only.
+- **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
+  process, or a database other than the provided MongoDB (PostgreSQL, MySQL, Redis…). One web
+  process is run, and MongoDB is the only database provisioned.
+- **It needs Docker Compose** or a custom Dockerfile to run.
+
+Then suggest what the user can do instead: replace the database with the provided MongoDB (a Mongoose
+or MongoDB driver connection using `MONGODB_URI`), or keep the incompatible parts on another host and
+deploy only the Node.js web app.
+
+Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
+several replicas, and each one would run every job — emails sent twice, charges made twice. If the
+user wants to do it anyway, tell them that each job needs a lock held in the database, so that only
+one replica runs it at a time.
+
+## Meteor
+
+<Note>Early support — the commands below work but Meteor is not yet a first-class runtime.</Note>
+
+Meteor bundles its own server; build it into a directory outside the source tree and start the bundle
+with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are already injected. Match
+`image` to the Meteor release: Meteor 3 runs on Node 22.
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "app": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": {
+        "commands": [
+          "curl https://install.meteor.com/ | sh",
+          "meteor npm install",
+          "meteor build --directory /tmp/meteor-build --server-only",
+          "cd /tmp/meteor-build/bundle/programs/server && npm install"
+        ]
+      },
+      "start": { "commands": ["node /tmp/meteor-build/bundle/main.js"] }
+    }
+  }
+}
+```
