@@ -99,11 +99,20 @@ export function startTransaction(
   };
 }
 
-export function captureError(error: Error) {
+export function captureError(error: unknown, message?: string) {
+  const cause = error instanceof Error ? error : new Error(String(error));
   if (!isTelemetryEnabled()) {
-    console.error(error);
+    if (message) {
+      console.error(message, error);
+    } else {
+      console.error(cause);
+    }
     return;
   }
 
-  getApm().captureError(error);
+  if (message) {
+    getApm().captureError(cause, { message });
+  } else {
+    getApm().captureError(cause);
+  }
 }
