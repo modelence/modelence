@@ -180,6 +180,28 @@ describe('telemetry/index', () => {
     expect(consoleError).toHaveBeenCalledWith(error);
   });
 
+  test('captureError keeps handler context in the console fallback', () => {
+    mockIsTelemetryEnabled.mockReturnValue(false);
+    const error = new Error('boom');
+
+    telemetry.captureError(error, 'Error handling password reset landing:');
+
+    expect(consoleError).toHaveBeenCalledWith('Error handling password reset landing:', error);
+  });
+
+  test('captureError gives the handler context to APM', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn();
+    mockGetApm.mockReturnValue({ captureError });
+    const error = new Error('boom');
+
+    telemetry.captureError(error, 'Error handling password reset landing:');
+
+    expect(captureError).toHaveBeenCalledWith(error, {
+      message: 'Error handling password reset landing:',
+    });
+  });
+
   test('captureError delegates to APM when telemetry enabled', () => {
     mockIsTelemetryEnabled.mockReturnValue(true);
     const captureError = vi.fn();

@@ -1,4 +1,5 @@
 import { getConfig } from '@/server';
+import { captureError } from '@/telemetry';
 import {
   Router,
   type Request,
@@ -132,7 +133,7 @@ async function handleGoogleAuthenticationCallback(req: Request, res: Response) {
       await handleOAuthUserAuthentication(req, res, userData, outcome);
     }
   } catch (error) {
-    console.error('Google OAuth error:', error);
+    captureError(error, 'Google OAuth error:');
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }
