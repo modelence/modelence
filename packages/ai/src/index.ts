@@ -82,7 +82,13 @@ export async function generateText(
   const transaction = startTransaction('ai', 'ai:generateText', {
     provider, 
     model,
-    messageCount: Array.isArray(options.messages) ? options.messages.length : 0,
+    messageCount: Array.isArray(options.messages)
+      ? options.messages.length
+      : Array.isArray(options.prompt)
+        ? options.prompt.length
+        : options.prompt
+          ? 1
+          : 0,
     temperature: options.temperature
   });
 
