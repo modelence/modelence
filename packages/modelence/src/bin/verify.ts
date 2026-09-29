@@ -4,6 +4,7 @@ import { connect as netConnect, createServer } from 'net';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { APP_SPEC_FILE_NAME, type AppResource, type AppSpec } from './appSpec';
+import { resolveDeployKind } from './deployKind';
 import { prepareSpec } from './deploySpec';
 import { listSourceFiles } from './source';
 
@@ -35,7 +36,19 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
     throw new Error('--timeout must be a positive number of seconds.');
   }
+  if (process.platform === 'win32') {
+    throw new Error(
+      'modelence verify needs a POSIX shell and process groups; run it on macOS, Linux or WSL.'
+    );
+  }
   const cwd = process.cwd();
+  if ((await resolveDeployKind(cwd, {})).reason === 'modelence-dependency') {
+    throw new Error(
+      `No ${APP_SPEC_FILE_NAME} found. This Modelence app is deployed as a local build, which ` +
+        `verify does not rehearse: run \`modelence build\` to check it, or add a ${APP_SPEC_FILE_NAME} ` +
+        'to build it on Modelence Cloud.'
+    );
+  }
   const spec = await prepareSpec(cwd);
   const resources = Object.values(spec.resources ?? {});
   if (resources.length !== 1) {
@@ -101,7 +114,7 @@ async function rehearse(
   options: VerifyOptions,
   run: Run
 ): Promise<boolean> {
-  const baseEnv = withoutPlatformEnv(process.env);
+  const baseEnv = localEnv(process.env);
 
   const buildEnv = { ...baseEnv, ...committedValues(envDeclarations, 'build') };
   for (const command of resource.build?.commands ?? ['npm install']) {
@@ -111,12 +124,16 @@ async function rehearse(
     if (run.interrupted) {
       return fail('Interrupted.');
     }
-    const code = await runToCompletion(command, appRoot, buildEnv, run);
+    const result = await runToCompletion(command, appRoot, buildEnv, run);
     if (run.interrupted) {
       return fail('Interrupted.');
     }
-    if (code !== 0) {
-      return fail(`Build command "${command}" exited with code ${code}.`);
+    if (result !== 0) {
+      return fail(
+        typeof result === 'string'
+          ? `Build command "${command}" was killed by ${result}.`
+          : `Build command "${command}" exited with code ${result}.`
+      );
     }
   }
 
@@ -135,10 +152,12 @@ async function rehearse(
     cwd: appRoot,
     env: {
       ...baseEnv,
+      ...localDatabase(process.env),
       ...committedValues(envDeclarations, 'runtime'),
       PORT: String(port),
       MODELENCE_APP_PORT: String(appPort),
-      MODELENCE_APP_START_TIMEOUT: String(timeoutSeconds),
+      // Longer than ours, so verify's own message explains a timeout.
+      MODELENCE_APP_START_TIMEOUT: String(timeoutSeconds + 30),
       // Studio runs the start commands in order as one shell line.
       MODELENCE_WEB: JSON.stringify({
         start: start.length > 0 ? start.join(' && ') : null,
@@ -182,8 +201,8 @@ async function rehearse(
         return fail(`The app exited (${app.exitCode ?? app.signalCode}) before answering on PORT.`);
       }
       return fail(
-        `Nothing answered on PORT ${port} within ${timeoutSeconds}s. The server must listen on ` +
-          'process.env.PORT; a hard-coded port never receives traffic in the cloud.'
+        `Nothing answered on 127.0.0.1:${port} within ${timeoutSeconds}s. The server must listen on ` +
+          'process.env.PORT on all interfaces; a hard-coded port or a single address never receives traffic in the cloud.'
       );
     }
 
@@ -233,12 +252,41 @@ async function copySource(cwd: string, dir: string): Promise<void> {
   );
 }
 
-// A service token in the shell would make the runtime fetch a real
-// environment's variables; PORT is chosen here.
-function withoutPlatformEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/*
+  Only what the build and the app need to run on this machine, not the
+  developer's whole shell: a variable the app reads without declaring it in
+  "env" must fail here as it would in the cloud. A service token in the
+  shell would also make the runtime fetch a real environment's variables.
+*/
+const PASSTHROUGH_ENV = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+];
+
+function localEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(
-    Object.entries(env).filter(([name]) => name !== 'PORT' && !name.startsWith('MODELENCE_'))
+    PASSTHROUGH_ENV.filter((name) => env[name]).map((name) => [name, env[name]])
   );
+}
+
+// The cloud provisions a database; a local one from the shell stands in for it.
+function localDatabase(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const uri = env.MONGODB_URI ?? env.MONGO_URL;
+  return uri ? { MONGODB_URI: uri, MONGO_URL: uri } : {};
 }
 
 function runToCompletion(
@@ -246,7 +294,8 @@ function runToCompletion(
   cwd: string,
   env: NodeJS.ProcessEnv,
   run: Run
-): Promise<number> {
+): Promise<number | NodeJS.Signals> {
+  // The exit code, or the signal that killed the command.
   return new Promise((resolve) => {
     const child = spawn('sh', ['-c', command], {
       cwd,
@@ -255,11 +304,11 @@ function runToCompletion(
       detached: true,
     });
     run.children.add(child);
-    const done = (code: number) => {
+    const done = (result: number | NodeJS.Signals) => {
       run.children.delete(child);
-      resolve(code);
+      resolve(result);
     };
-    child.once('exit', (code, signal) => done(code ?? (signal ? 128 : 1)));
+    child.once('exit', (code, signal) => done(code ?? signal ?? 1));
     child.once('error', () => done(127));
   });
 }

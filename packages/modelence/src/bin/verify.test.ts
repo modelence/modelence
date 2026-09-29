@@ -15,9 +15,9 @@ let dir: string;
 let runtimeDir: string;
 let logged: string[];
 
-const FAKE_RUNTIME = `
+const fakeRuntime = (record: string) => `
 const { spawn } = require('child_process');
-require('fs').writeFileSync(process.env.RECORD, JSON.stringify(process.env));
+require('fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env));
 const web = JSON.parse(process.env.MODELENCE_WEB);
 const app = spawn('sh', ['-c', web.start], { stdio: 'inherit', env: process.env });
 app.on('exit', (code) => process.exit(code ?? 1));
@@ -27,13 +27,12 @@ process.on('SIGTERM', () => app.kill('SIGTERM'));
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'modelence-verify-test-'));
   runtimeDir = await mkdtemp(join(tmpdir(), 'modelence-verify-runtime-'));
-  await writeFile(join(runtimeDir, 'runtime.cjs'), FAKE_RUNTIME);
+  await writeFile(join(runtimeDir, 'runtime.cjs'), fakeRuntime(join(runtimeDir, 'env.json')));
   logged = [];
   vi.spyOn(process, 'cwd').mockReturnValue(dir);
   vi.spyOn(console, 'log').mockImplementation((line: string) => {
     logged.push(String(line));
   });
-  vi.stubEnv('RECORD', join(runtimeDir, 'env.json'));
 });
 
 afterEach(async () => {
@@ -185,7 +184,7 @@ describe('verify', () => {
       { build: { commands: [] }, start: { commands: ['node server.js'] } }
     );
     expect(await run('2')).toBe(false);
-    expect(output()).toMatch(/Nothing answered on PORT \d+ within 2s/);
+    expect(output()).toMatch(/Nothing answered on 127\.0\.0\.1:\d+ within 2s/);
   }, 20_000);
 
   it('builds only the uploaded files, without local .env files', async () => {
@@ -278,6 +277,50 @@ describe('verify', () => {
     await expect(verify({ timeout: 'soon' })).rejects.toThrow(
       '--timeout must be a positive number'
     );
+  });
+
+  it('passes only the local essentials and a local database, not the whole shell', async () => {
+    vi.stubEnv('SHELL_ONLY', 'leaked');
+    vi.stubEnv('MONGODB_URI', 'mongodb://127.0.0.1:27017/verify');
+    const record = join(runtimeDir, 'build.txt');
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      {
+        build: { commands: [`echo "$SHELL_ONLY|$MONGODB_URI|$PATH" > ${record}`] },
+        start: { commands: ['node server.js'] },
+      }
+    );
+    expect(await run()).toBe(true);
+    const [shellOnly, buildDb, path] = (await readFile(record, 'utf8')).trim().split('|');
+    expect([shellOnly, buildDb]).toEqual(['', '']);
+    expect(path).toBe(process.env.PATH);
+    const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+    expect(env.SHELL_ONLY).toBeUndefined();
+    expect([env.MONGODB_URI, env.MONGO_URL]).toEqual([
+      'mongodb://127.0.0.1:27017/verify',
+      'mongodb://127.0.0.1:27017/verify',
+    ]);
+  }, 20_000);
+
+  it('names the signal that killed a build command', async () => {
+    await project({}, { build: { commands: ['kill -KILL $$'] }, start: { commands: ['node .'] } });
+    expect(await run()).toBe(false);
+    expect(output()).toContain('Build command "kill -KILL $$" was killed by SIGKILL.');
+  });
+
+  it('points a Modelence framework app without a config file to modelence build', async () => {
+    await writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { modelence: '^0.26.0' } })
+    );
+    await expect(run()).rejects.toThrow(
+      /This Modelence app is deployed as a local build.*modelence build/
+    );
+  });
+
+  it('refuses to run on Windows', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    await expect(run()).rejects.toThrow('POSIX shell');
   });
 
   it('requires exactly one resource', async () => {
