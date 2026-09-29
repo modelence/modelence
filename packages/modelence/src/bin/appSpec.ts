@@ -5,8 +5,8 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
 /*
   modelence.config.json — how the project is built and run on Modelence Cloud. The
   CLI reads it as-is and sends it to Studio, which validates it and fills in
-  the defaults. The types here mirror Studio's schema; the server is the
-  authority.
+  the defaults. The format is defined by schema/v<N>/modelence.config.json at
+  the root of this repo; the types here describe it for the CLI.
 
   A missing `build` inherits the runtime default (npm install), and
   `"commands": []` means no build step. A missing `start` means no process.

@@ -1,10 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Modelence app spec (version 1)",
   "description": "How this project is built and run on Modelence Cloud.",
+  "allowComments": true,
+  "allowTrailingCommas": true,
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "$schema": {
-      "description": "URL of this JSON Schema, for editor validation. The version in it names the format version the file is written for: https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
+      "description": "URL of this JSON Schema, for editor validation. The version in its path names the format version the file is written for: https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
       "type": "string"
     },
     "resources": {
@@ -12,143 +16,245 @@
       "type": "object",
       "propertyNames": {
         "type": "string",
-        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$",
+        "errorMessage": "must start with a letter and use letters, digits, dashes or underscores"
       },
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "description": "What this resource is. \"service\": a Node.js app built from this repository.",
-            "type": "string",
-            "enum": [
-              "service"
-            ]
-          },
-          "image": {
-            "description": "Base image: node-<version>-<variant>, with a Node.js major (\"node-22-slim\") or exact version (\"node-22.23.1-alpine\"). Variants: \"slim\" (glibc, the default) and \"alpine\". Default \"node-22-slim\".",
-            "type": "string",
-            "pattern": "^node-(\\d{1,2}(?:\\.\\d{1,3}){0,2})-(alpine|slim)$"
-          },
-          "root": {
-            "description": "Subdirectory containing this resource, for monorepos (e.g. \"apps/api\"). Commands run there; the whole repository is still copied.",
-            "type": "string",
-            "maxLength": 200,
-            "pattern": "^\\.?$|^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*\\/?$"
-          },
-          "build": {
-            "description": "Commands that install dependencies and build this resource, run in order in root with the build-scoped entries of env. Default [\"npm install\"]; an empty list means no build step. Only npm is preinstalled; use \"corepack enable && pnpm install --frozen-lockfile\" for pnpm or yarn.",
-            "type": "object",
-            "properties": {
-              "commands": {
-                "minItems": 0,
-                "maxItems": 20,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "maxLength": 1000
-                }
-              }
-            },
-            "required": [
-              "commands"
-            ],
-            "additionalProperties": false
-          },
-          "start": {
-            "description": "Commands that start the process, run in order; the last one must keep running and listen on the PORT environment variable. Missing means no process: a client-only site serves its static mounts alone.",
-            "type": "object",
-            "properties": {
-              "commands": {
-                "minItems": 1,
-                "maxItems": 20,
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "maxLength": 1000
-                }
-              }
-            },
-            "required": [
-              "commands"
-            ],
-            "additionalProperties": false
-          },
-          "static": {
-            "description": "Built directories served by the platform in front of the process, with single-page-app fallback to their index.html. Requests no mount answers are proxied to start. Without start these are the whole app.",
-            "maxItems": 20,
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "description": "URL prefix the directory is served at, e.g. \"/\" or \"/docs\". Longest prefix wins.",
-                  "type": "string",
-                  "maxLength": 200,
-                  "pattern": "^\\/([A-Za-z0-9._~-]+(\\/[A-Za-z0-9._~-]+)*\\/?)?$"
-                },
-                "dir": {
-                  "description": "Directory with the built files, relative to build.root, e.g. \"dist\".",
-                  "type": "string",
-                  "maxLength": 200,
-                  "pattern": "^\\.?$|^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*\\/?$"
-                }
-              },
-              "required": [
-                "path",
-                "dir"
-              ],
-              "additionalProperties": false
-            }
-          }
-        },
-        "required": [
-          "type"
-        ],
-        "additionalProperties": false
+        "$ref": "#/$defs/resource"
       }
     },
     "env": {
       "description": "Variables the app expects, by name. Declaring one makes it visible in the dashboard; PORT and MODELENCE_* are set by the platform and refused.",
       "type": "object",
+      "allOf": [
+        {
+          "maxProperties": 100,
+          "errorMessage": "must declare at most 100 variables"
+        }
+      ],
       "propertyNames": {
         "type": "string",
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,255}$"
+        "allOf": [
+          {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,255}$",
+            "errorMessage": "must be a valid environment variable name"
+          },
+          {
+            "not": {
+              "pattern": "^(PORT|MODELENCE_.*)$"
+            },
+            "errorMessage": "PORT and MODELENCE_* names are set by the platform"
+          }
+        ]
       },
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "description": "\"text\" (default) is shown in the dashboard; \"secret\" is write-only.",
-            "type": "string",
-            "enum": [
-              "text",
-              "secret"
-            ]
-          },
-          "scopes": {
-            "description": "Phases the value reaches: \"runtime\" is the running app, \"build\" the build commands. Default [\"runtime\"]; anything a bundler inlines (VITE_*) needs \"build\".",
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "build",
-                "runtime"
-              ]
-            }
-          },
-          "value": {
-            "description": "A non-secret literal committed with the repo, e.g. a base path. Values that differ per environment, and all secrets, belong in the dashboard.",
-            "type": "string",
-            "maxLength": 2000
-          }
-        },
-        "additionalProperties": false
+        "$ref": "#/$defs/envDeclaration"
       }
     }
   },
-  "additionalProperties": false,
-  "title": "Modelence app spec (version 1)",
-  "allowComments": true,
-  "allowTrailingCommas": true
+  "$defs": {
+    "command": {
+      "type": "string",
+      "maxLength": 1000,
+      "allOf": [
+        {
+          "pattern": "\\S",
+          "errorMessage": "must not be empty"
+        },
+        {
+          "pattern": "^[^\\r\\n]*$",
+          "errorMessage": "must be a single line"
+        },
+        {
+          "not": {
+            "pattern": "^\\s*EOL\\s*$"
+          },
+          "errorMessage": "reserved value"
+        }
+      ]
+    },
+    "relativeDirectory": {
+      "type": "string",
+      "maxLength": 200,
+      "allOf": [
+        {
+          "pattern": "^\\.?$|^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$",
+          "errorMessage": "must be a relative path"
+        },
+        {
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          },
+          "errorMessage": "must not contain .."
+        }
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "description": "What this resource is. \"service\": a Node.js app built from this repository.",
+          "type": "string",
+          "enum": [
+            "service"
+          ]
+        },
+        "image": {
+          "description": "Base image: node-<version>-<variant>, with a Node.js major (\"node-22-slim\") or exact version (\"node-22.23.1-alpine\"). Variants: \"slim\" (glibc, the default) and \"alpine\". Default \"node-22-slim\".",
+          "type": "string",
+          "allOf": [
+            {
+              "pattern": "^node-\\d{1,2}(\\.\\d{1,3}){0,2}-(alpine|slim)$",
+              "errorMessage": "must look like node-22-slim or node-22.23.1-alpine (variants: alpine, slim)"
+            },
+            {
+              "pattern": "^(?!node-\\d{1,2}(\\D|$))|^node-(1[89]|[2-9]\\d)(\\D|$)",
+              "errorMessage": "must be Node.js 18 or newer"
+            }
+          ]
+        },
+        "root": {
+          "description": "Subdirectory containing this resource, for monorepos (e.g. \"apps/api\"). Commands run there; the whole repository is still copied.",
+          "$ref": "#/$defs/relativeDirectory"
+        },
+        "build": {
+          "description": "Commands that install dependencies and build this resource, run in order in root with the build-scoped entries of env. Default [\"npm install\"]; an empty list means no build step. Only npm is preinstalled; use \"corepack enable && pnpm install --frozen-lockfile\" for pnpm or yarn.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commands"
+          ],
+          "properties": {
+            "commands": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/$defs/command"
+              }
+            }
+          }
+        },
+        "start": {
+          "description": "Commands that start the process, run in order; the last one must keep running and listen on the PORT environment variable. Missing means no process: a client-only site serves its static mounts alone.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commands"
+          ],
+          "properties": {
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/$defs/command"
+              }
+            }
+          }
+        },
+        "static": {
+          "description": "Built directories served by the platform in front of the process, with single-page-app fallback to their index.html. Requests no mount answers are proxied to start. Without start these are the whole app. Mount paths must be unique.",
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "dir"
+            ],
+            "properties": {
+              "path": {
+                "description": "URL prefix the directory is served at, e.g. \"/\" or \"/docs\". Longest prefix wins.",
+                "type": "string",
+                "maxLength": 200,
+                "pattern": "^/([A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*/?)?$",
+                "errorMessage": "must be an absolute URL path like / or /docs"
+              },
+              "dir": {
+                "description": "Directory with the built files, relative to build.root, e.g. \"dist\".",
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/relativeDirectory"
+                  },
+                  {
+                    "not": {
+                      "pattern": "^(\\./)?\\.?/*$"
+                    },
+                    "errorMessage": "must be a subdirectory, e.g. dist"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "envDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "\"text\" (default) is shown in the dashboard; \"secret\" is write-only.",
+          "type": "string",
+          "enum": [
+            "text",
+            "secret"
+          ]
+        },
+        "scopes": {
+          "description": "Phases the value reaches: \"runtime\" is the running app, \"build\" the build commands. Default [\"runtime\"]; anything a bundler inlines (VITE_*) needs \"build\".",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [
+              "build",
+              "runtime"
+            ]
+          },
+          "allOf": [
+            {
+              "uniqueItems": true,
+              "errorMessage": "must not repeat a scope"
+            }
+          ]
+        },
+        "value": {
+          "description": "A non-secret literal committed with the repo, e.g. a base path. Values that differ per environment, and all secrets, belong in the dashboard.",
+          "type": "string",
+          "maxLength": 2000,
+          "allOf": [
+            {
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "errorMessage": "must not contain control characters"
+            }
+          ]
+        }
+      },
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "secret"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "value"
+          ]
+        },
+        "errorMessage": "a secret must not carry a value in this file; set it in the dashboard"
+      }
+    }
+  }
 }

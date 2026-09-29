@@ -87,7 +87,8 @@ export async function authenticateCli(
 }
 
 async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
-  const pollInterval = 5 * 1000; // 5 seconds
+  // Short, since the browser moves on to the deployment page right away.
+  const pollInterval = 2 * 1000;
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
   const pollExpireTs = Date.now() + pollTimeout;
   while (Date.now() < pollExpireTs) {
