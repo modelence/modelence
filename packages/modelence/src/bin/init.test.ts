@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { init } from './init';
-import { AGENT_SETUP_PROMPT } from './appSpec';
+import { AGENT_SETUP_PROMPT, APP_SPEC_SCHEMA_URL } from './appSpec';
 
 let dir: string;
 let logged: string[];
@@ -23,10 +23,12 @@ afterEach(async () => {
 });
 
 describe('init', () => {
-  it('writes the template with the schema of the given host and prints the agent prompt', async () => {
-    await init({ host: 'https://studio.example/' });
+  // VS Code only downloads schemas from trusted hosts, raw GitHub among them.
+  it('writes the template with the GitHub-hosted schema and prints the agent prompt', async () => {
+    await init({});
     expect(JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'))).toEqual({
-      $schema: 'https://studio.example/schema/modelence.config.json?version=1',
+      $schema:
+        'https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json',
       resources: {
         app: {
           type: 'service',
@@ -38,7 +40,7 @@ describe('init', () => {
       env: {},
     });
     expect(logged).toContain(`  ${AGENT_SETUP_PROMPT}`);
-    expect(logged.at(-1)).toMatch(/modelence deploy/);
+    expect(logged.at(-1)).toContain('npx modelence@latest deploy');
   });
 
   it('refuses to overwrite an existing file unless forced', async () => {
@@ -46,9 +48,7 @@ describe('init', () => {
     await expect(init({})).rejects.toThrow('already exists');
     await init({ force: true });
     const written = JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'));
-    expect(written.$schema).toBe(
-      'https://cloud.modelence.com/schema/modelence.config.json?version=1'
-    );
+    expect(written.$schema).toBe(APP_SPEC_SCHEMA_URL);
     expect(written.resources.app.type).toBe('service');
   });
 });

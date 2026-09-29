@@ -2,9 +2,9 @@ import { promises as fs } from 'fs';
 import {
   AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
+  APP_SPEC_SCHEMA_URL,
   SETUP_DOCS_URL,
   getAppSpecFilePath,
-  getAppSpecSchemaUrl,
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
@@ -15,11 +15,8 @@ import {
   inspected — the file is the contract, and the agent reads the code.
 */
 
-const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
-
 export interface InitOptions {
   force?: boolean;
-  host?: string;
 }
 
 export async function init(options: InitOptions) {
@@ -30,7 +27,7 @@ export async function init(options: InitOptions) {
   }
 
   const template: AppSpec = {
-    $schema: getAppSpecSchemaUrl(options.host ?? DEFAULT_SCHEMA_HOST),
+    $schema: APP_SPEC_SCHEMA_URL,
     resources: {
       app: {
         type: 'service',
@@ -49,7 +46,9 @@ export async function init(options: InitOptions) {
   console.log(`  ${AGENT_SETUP_PROMPT}`);
   console.log('');
   console.log(`Reference: ${SETUP_DOCS_URL}`);
-  console.log(`Once ${APP_SPEC_FILE_NAME} describes your app, run \`modelence deploy\`.`);
+  console.log(
+    `Once ${APP_SPEC_FILE_NAME} describes your app, run \`npx modelence@latest deploy\`.`
+  );
 }
 
 async function exists(path: string): Promise<boolean> {

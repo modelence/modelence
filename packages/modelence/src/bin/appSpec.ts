@@ -4,9 +4,9 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
 
 /*
   modelence.config.json — how the project is built and run on Modelence Cloud. The
-  CLI reads it as-is and sends it to Studio, which validates it against the
-  schema published at /schema/modelence.config.json and fills in the defaults.
-  The types here mirror that schema; the server is the authority.
+  CLI reads it as-is and sends it to Studio, which validates it and fills in
+  the defaults. The types here mirror Studio's schema; the server is the
+  authority.
 
   A missing `build` inherits the runtime default (npm install), and
   `"commands": []` means no build step. A missing `start` means no process.
@@ -14,8 +14,14 @@ import { parse as parseJsonc, printParseErrorCode, type ParseError } from 'jsonc
 */
 
 export const APP_SPEC_FILE_NAME = 'modelence.config.json';
-// The format version the CLI writes into $schema; Studio publishes the schema.
+// The format version the CLI writes into $schema.
 export const APP_SPEC_VERSION = 1;
+/*
+  Generated from Studio's schema into schema/v<N>/ at the root of this repo.
+  Served from raw GitHub because VS Code only downloads schemas from trusted
+  hosts; one on cloud.modelence.com is refused as "untrusted".
+*/
+export const APP_SPEC_SCHEMA_URL = `https://raw.githubusercontent.com/modelence/modelence/main/schema/v${APP_SPEC_VERSION}/modelence.config.json`;
 
 // The file is written by the user's coding agent from the hosted setup
 // guide; Mintlify serves the same page raw at the .md URL for agents.
@@ -63,10 +69,6 @@ export interface AppSpec {
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
   env?: Record<string, EnvDeclaration>;
-}
-
-export function getAppSpecSchemaUrl(host: string): string {
-  return `${host.replace(/\/$/, '')}/schema/${APP_SPEC_FILE_NAME}?version=${APP_SPEC_VERSION}`;
 }
 
 export function getAppSpecFilePath(cwd = process.cwd()): string {
