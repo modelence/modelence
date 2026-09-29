@@ -11,6 +11,7 @@ import { dev } from './dev';
 import { start } from './start';
 import { logout } from './logout';
 import { init } from './init';
+import { verify } from './verify';
 import { loadEnv } from './config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -74,6 +75,21 @@ program
       await init(options);
     } catch (error) {
       console.error(`Init failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('verify')
+  .description(
+    'Rehearse a deploy locally: build the files deploy uploads and start them through the Modelence runtime'
+  )
+  .option('--timeout <seconds>', 'How long the app gets to open PORT', '120')
+  .action(async (options) => {
+    try {
+      process.exit((await verify(options)) ? 0 : 1);
+    } catch (error) {
+      console.error(`Verify failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   });
