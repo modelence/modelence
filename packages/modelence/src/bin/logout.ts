@@ -1,4 +1,5 @@
 import { clearCachedToken, getAuthCachePath, listCachedTokens } from './authCache';
+import { normalizeHost } from './deploySession';
 import { studioRequest } from './studioApi';
 
 // Forgets the saved deploy login (all hosts, or one with --host). The token
@@ -6,13 +7,13 @@ import { studioRequest } from './studioApi';
 // too; that part is best effort — offline or already-revoked, the local
 // entry still goes.
 export async function logout(options: { host?: string }) {
-  const cached = await listCachedTokens(options.host);
-  await Promise.all(cached.map(({ host, token }) => revokeToken(host, token)));
-  await clearCachedToken(options.host);
+  // Normalized like deploy's resolveHost, so the cache key matches.
+  const host = options.host ? normalizeHost(options.host) : undefined;
+  const cached = await listCachedTokens(host);
+  await Promise.all(cached.map((entry) => revokeToken(entry.host, entry.token)));
+  await clearCachedToken(host);
   console.log(
-    options.host
-      ? `Removed the saved login for ${options.host}.`
-      : `Removed saved logins (${getAuthCachePath()}).`
+    host ? `Removed the saved login for ${host}.` : `Removed saved logins (${getAuthCachePath()}).`
   );
 }
 

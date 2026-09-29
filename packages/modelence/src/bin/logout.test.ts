@@ -56,6 +56,13 @@ describe('logout', () => {
     expect(await readCachedToken(other)).toBe('tok-2');
   });
 
+  it('matches the host as typed, like deploy does', async () => {
+    await logout({ host: 'cloud.example.com/' });
+    expect(request).toHaveBeenCalledWith(host, '/api/cli/logout', expect.anything());
+    expect(await readCachedToken(host)).toBeNull();
+    expect(await readCachedToken(other)).toBe('tok-2');
+  });
+
   it('still clears the cache when the server rejects or is unreachable', async () => {
     request
       .mockRejectedValueOnce(new StudioApiError('Unknown token', 401))
