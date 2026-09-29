@@ -22,6 +22,7 @@ import {
   resolveToken,
   rememberToken,
   rememberTarget,
+  projectForHost,
   isUnauthorized,
   type Session,
 } from './deploySession';
@@ -67,7 +68,7 @@ export async function deploy(options: DeployOptions) {
   if (kindNote) {
     console.log(kindNote);
   }
-  const project = await readProject(cwd);
+  const project = projectForHost(await readProject(cwd), host);
   let target = resolveTargetFromOptions(options, project);
   let token = await resolveToken(host);
   if ((!token || !target) && !isInteractive()) {
@@ -103,7 +104,7 @@ export async function deploy(options: DeployOptions) {
       await rememberToken(host, auth.token, auth.expiresAt);
       if (auth.target) {
         target = { environmentId: auth.target.environmentId };
-        await rememberTarget(auth.target);
+        await rememberTarget(auth.target, host);
       }
     }
     if (!target) {
@@ -133,7 +134,7 @@ export async function deploy(options: DeployOptions) {
       await rememberToken(host, auth.token, auth.expiresAt);
       if (auth.target) {
         target = { environmentId: auth.target.environmentId };
-        await rememberTarget(auth.target);
+        await rememberTarget(auth.target, host);
       }
       session.token = auth.token;
     };

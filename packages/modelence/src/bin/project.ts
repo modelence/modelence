@@ -17,6 +17,9 @@ export interface DeployTarget {
   environmentId: string;
   appAlias: string;
   envAlias: string;
+  // The Studio the target was picked on; absent in files written before it
+  // was recorded, which means Modelence Cloud.
+  host?: string;
 }
 
 export interface ProjectFile {

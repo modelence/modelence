@@ -1,5 +1,6 @@
 import { StudioApiError, studioRequest } from './studioApi';
 import { isUnauthorized, type Session } from './deploySession';
+import { describeMissingEnvVars } from './missingEnv';
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1000;
@@ -15,6 +16,9 @@ interface DeployStatus {
   siteUrl: string | null;
   // Last output of the containers a failed rollout tried to start.
   containerLogs?: string[];
+  // On a failure: declared variables still without a value, and where to set them.
+  missingEnvVars?: string[];
+  configUrl?: string;
 }
 
 // An environment created moments ago in the browser is still provisioning
@@ -121,6 +125,13 @@ export async function followDeploy(
         for (const line of status.containerLogs) {
           console.error(`  │ ${line.replace(/\n$/, '')}`);
         }
+      }
+      // Last, so it is what is left on screen: the likely cause and the fix.
+      const missing = describeMissingEnvVars(status.missingEnvVars, status.configUrl, {
+        deployAgain: true,
+      });
+      if (missing) {
+        console.error(missing);
       }
       process.exitCode = 1;
       return;

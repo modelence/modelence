@@ -52,6 +52,7 @@ beforeEach(async () => {
   vi.spyOn(process, 'cwd').mockReturnValue(project);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   vi.stubEnv('MODELENCE_TOKEN', 'original-token');
   vi.stubEnv('MODELENCE_HOME', join(dir, 'auth'));
@@ -269,13 +270,49 @@ describe('deploy orchestration', () => {
     await deploy(options);
     expect(process.exitCode).toBe(1);
   });
+
+  // The app's own crash ("DATABASE_URL must be set") says nothing about where to set it.
+  it('names declared variables without a value and where to set them', async () => {
+    const configUrl = 'https://studio.example/environments/env-id/config';
+    const original = request.getMockImplementation()!;
+    request.mockImplementation(async (host, path, args) => {
+      if (path === '/api/deploy') {
+        return {
+          ...((await original(host, path, args)) as object),
+          missingEnvVars: ['DATABASE_URL'],
+          configUrl,
+        };
+      }
+      if (path === '/api/deploy/status') {
+        return {
+          ...completed,
+          status: 'deploy-failed',
+          errors: [],
+          missingEnvVars: ['DATABASE_URL', 'CLERK_SECRET_KEY'],
+          configUrl,
+        };
+      }
+      return original(host, path, args);
+    });
+    await deploy(options);
+    expect(console.warn).toHaveBeenCalledWith(
+      `Warning: DATABASE_URL is declared in modelence.config.json but has no value in this environment. Set it at ${configUrl}`
+    );
+    expect(vi.mocked(console.error).mock.calls.at(-1)?.[0]).toBe(
+      `DATABASE_URL, CLERK_SECRET_KEY are declared in modelence.config.json but have no value in this environment. Set them at ${configUrl}, then deploy again.`
+    );
+    expect(process.exitCode).toBe(1);
+  });
 });
 
-async function saveTarget(appAlias: string, envAlias: string) {
+async function saveTarget(appAlias: string, envAlias: string, host: string | null = options.host) {
   await mkdir(join(project, '.modelence'), { recursive: true });
   await writeFile(
     join(project, '.modelence/project.json'),
-    JSON.stringify({ deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias } })
+    JSON.stringify({
+      appId: `${appAlias}-id`,
+      deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias, ...(host ? { host } : {}) },
+    })
   );
 }
 
@@ -342,8 +379,44 @@ describe('deploy target', () => {
     await deploy({ host: options.host });
     expect(await readSavedProject()).toEqual({
       appId: 'app-id',
-      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
+      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod', host: options.host },
     });
+  });
+
+  // Environment ids only mean something on the Studio they were picked on.
+  it('ignores a target saved for another host and picks one in the browser', async () => {
+    await saveTarget('app', 'staging', 'https://other.example');
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await deploy({ host: options.host });
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy', appId: undefined })
+    );
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
+    expect(args?.body).toMatchObject({ environmentId: 'env-id' });
+    expect((await readSavedProject()).deploy.host).toBe(options.host);
+  });
+
+  it('takes a target saved without a host as one for Modelence Cloud', async () => {
+    await saveTarget('app', 'staging', null);
+    await deploy({ host: 'https://cloud.modelence.com' });
+    expect(authenticateCli).not.toHaveBeenCalled();
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
+    expect(args?.body).toMatchObject({ environmentId: 'staging-id' });
+
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await saveTarget('app', 'staging', null);
+    await deploy({ host: options.host });
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy' })
+    );
   });
 
   it('names the saved target before building', async () => {

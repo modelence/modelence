@@ -4,6 +4,7 @@ import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
 import { spawnSync } from 'child_process';
 import { authenticateCli } from './auth';
+import { normalizeHost } from './deploySession';
 import { MODELENCE_DIR, PROJECT_FILE, readProject, updateProject } from './project';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
@@ -225,7 +226,9 @@ async function backupEnvFile(envPath: string): Promise<void> {
   }
 }
 
-export async function setup(options: { token?: string; host: string }) {
+export async function setup(rawOptions: { token?: string; host: string }) {
+  // Also written to .modelence.env, where the app reads it as a URL prefix.
+  const options = { ...rawOptions, host: normalizeHost(rawOptions.host) };
   try {
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
     let existingEnv = {};
