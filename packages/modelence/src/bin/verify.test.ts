@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verify } from './verify';
@@ -231,6 +231,53 @@ describe('verify', () => {
     expect(await tempDirs()).toEqual(before);
     expect(process.listenerCount('SIGTERM')).toBe(listeners);
     await chmod(join(dir, 'secret.txt'), 0o600);
+  });
+
+  it('kills what ignores the stop request after an interrupt', async () => {
+    const pidFile = join(runtimeDir, 'app.pid');
+    await project(
+      {
+        'server.js':
+          `process.on('SIGTERM', () => {});\n` +
+          `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\n` +
+          server('0'),
+      },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    setTimeout(() => process.emit('SIGTERM'), 1000);
+    const started = Date.now();
+    expect(await run('60')).toBe(false);
+    // The grace period, not the 60s start timeout.
+    expect(Date.now() - started).toBeLessThan(12_000);
+    expect(output()).toContain('Interrupted.');
+    const pid = Number(await readFile(pidFile, 'utf8'));
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 20_000);
+
+  it('gives build commands no stdin, as in the cloud', async () => {
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: ['cat > /dev/null'] }, start: { commands: ['node server.js'] } }
+    );
+    expect(await run()).toBe(true);
+  }, 20_000);
+
+  it('fails when root holds none of the uploaded files', async () => {
+    await mkdir(join(dir, 'web'));
+    await project(
+      { 'web/.env': 'LOCAL=1' },
+      { root: 'web', build: { commands: [] }, start: { commands: ['node .'] } }
+    );
+    expect(await run()).toBe(false);
+    expect(output()).toContain('"root" is "web", but none of the uploaded files are in it');
+  });
+
+  it('rejects a timeout that is not a positive number', async () => {
+    await project({}, { build: { commands: [] }, start: { commands: ['node .'] } });
+    await expect(verify({ timeout: '-5' })).rejects.toThrow('--timeout must be a positive number');
+    await expect(verify({ timeout: 'soon' })).rejects.toThrow(
+      '--timeout must be a positive number'
+    );
   });
 
   it('requires exactly one resource', async () => {

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
-import { promises as fs } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import { connect as netConnect, createServer } from 'net';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
@@ -31,6 +31,10 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const STOP_GRACE_MS = 5_000;
 
 export async function verify(options: VerifyOptions = {}): Promise<boolean> {
+  const timeoutSeconds = Number(options.timeout ?? DEFAULT_TIMEOUT_SECONDS);
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
+    throw new Error('--timeout must be a positive number of seconds.');
+  }
   const cwd = process.cwd();
   const spec = await prepareSpec(cwd);
   const resources = Object.values(spec.resources ?? {});
@@ -52,25 +56,35 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     for (const child of run.children) {
       signalGroup(child, 'SIGTERM');
     }
+    // Whatever ignores the stop request is killed, so a cancel always ends.
+    setTimeout(() => {
+      for (const child of run.children) {
+        signalGroup(child, 'SIGKILL');
+      }
+    }, STOP_GRACE_MS).unref();
   };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
 
-  const tempDir = await fs.mkdtemp(join(tmpdir(), 'modelence-verify-'));
+  let tempDir: string | undefined;
   try {
+    tempDir = await fs.mkdtemp(join(tmpdir(), 'modelence-verify-'));
     const workDir = join(tempDir, 'app');
     await copySource(cwd, workDir);
-    return await rehearse(
-      resource,
-      spec.env ?? {},
-      join(workDir, resource.root ?? '.'),
-      options,
-      run
-    );
+    const root = resource.root ?? '.';
+    const appRoot = join(workDir, root);
+    if (!existsSync(appRoot)) {
+      return fail(
+        `"root" is "${root}", but none of the uploaded files are in it, so the cloud build would have nothing to run in.`
+      );
+    }
+    return await rehearse(resource, spec.env ?? {}, appRoot, timeoutSeconds, options, run);
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
-    await fs.rm(tempDir, { recursive: true, force: true });
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -83,6 +97,7 @@ async function rehearse(
   resource: AppResource,
   envDeclarations: NonNullable<AppSpec['env']>,
   appRoot: string,
+  timeoutSeconds: number,
   options: VerifyOptions,
   run: Run
 ): Promise<boolean> {
@@ -106,8 +121,10 @@ async function rehearse(
   }
 
   const port = await freePort();
-  const appPort = await freePort();
-  const timeoutSeconds = Number(options.timeout) || DEFAULT_TIMEOUT_SECONDS;
+  let appPort = await freePort();
+  while (appPort === port) {
+    appPort = await freePort();
+  }
   const start = resource.start?.commands ?? [];
   const [command, ...args] = options.runtimeCommand ?? RUNTIME_COMMAND;
   console.log(`\nStarting through @modelence/runtime on PORT=${port}`);
@@ -130,7 +147,9 @@ async function rehearse(
       SITE_URL: `http://localhost:${port}`,
       ROOT_URL: `http://localhost:${port}`,
     },
-    stdio: 'inherit',
+    // No stdin, as in the cloud: a process group in the background that
+    // reads the terminal would be stopped and never finish.
+    stdio: ['ignore', 'inherit', 'inherit'],
     detached: true,
   });
   run.children.add(app);
@@ -144,9 +163,13 @@ async function rehearse(
   });
 
   try {
+    let hasExited = false;
     const opened = await Promise.race([
-      waitForPort(port, timeoutSeconds * 1000),
-      exited.then(() => false),
+      waitForPort(port, timeoutSeconds * 1000, () => hasExited),
+      exited.then(() => {
+        hasExited = true;
+        return false;
+      }),
     ]);
     if (run.interrupted) {
       return fail('Interrupted.');
@@ -225,7 +248,12 @@ function runToCompletion(
   run: Run
 ): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], { cwd, env, stdio: 'inherit', detached: true });
+    const child = spawn('sh', ['-c', command], {
+      cwd,
+      env,
+      stdio: ['ignore', 'inherit', 'inherit'],
+      detached: true,
+    });
     run.children.add(child);
     const done = (code: number) => {
       run.children.delete(child);
@@ -283,10 +311,14 @@ function canConnect(port: number): Promise<boolean> {
   });
 }
 
-async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
+async function waitForPort(
+  port: number,
+  timeoutMs: number,
+  gaveUp: () => boolean
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (!(await canConnect(port))) {
-    if (Date.now() >= deadline) {
+    if (gaveUp() || Date.now() >= deadline) {
       return false;
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
