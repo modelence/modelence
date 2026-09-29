@@ -177,7 +177,9 @@ Follow these steps in order. Do not skip the verification step.
 
 6. **Use the injected database.** If the project needs MongoDB, read the connection string from
    `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. Other databases are not
-   provided — see [Compatibility](#when-the-project-is-not-compatible).
+   provisioned, but one hosted elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep
+   the connection code and read its URL and keys from environment variables. See
+   [Compatibility](#when-the-project-is-not-compatible).
 
 7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
    entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
@@ -216,9 +218,16 @@ Report the project as not compatible with Modelence Cloud, and say why, when:
 - **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
   Node.js frontend in front. The image runs Node.js only.
 - **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
-  process, or a database other than the provided MongoDB (PostgreSQL, MySQL, Redis…). One web
-  process is run, and MongoDB is the only database provisioned.
+  process, or a database other than the provided MongoDB (PostgreSQL, MySQL, Redis…) that would have
+  to run alongside the app. One web process is run, and MongoDB is the only database provisioned.
 - **It needs Docker Compose** or a custom Dockerfile to run.
+
+A database hosted elsewhere is not a reason to report the project as not compatible. An app that
+connects over the network to Supabase, Neon, PlanetScale, a managed Redis or any other hosted
+database deploys as usual: keep its connection code, and tell the user to add the URL and keys in the
+dashboard under **Environment variables**, marked as secret. A key the frontend bundler inlines, such
+as `VITE_SUPABASE_URL`, also needs to be available at build time, as described in
+[Runtime values and secrets](#runtime-values-and-secrets).
 
 Then suggest what the user can do instead: replace the database with the provided MongoDB (a Mongoose
 or MongoDB driver connection using `MONGODB_URI`), or keep the incompatible parts on another host and
