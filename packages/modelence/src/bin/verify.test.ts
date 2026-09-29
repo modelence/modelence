@@ -95,6 +95,56 @@ describe('verify', () => {
     expect(env.MODELENCE_SERVICE_TOKEN).toBeUndefined();
   }, 20_000);
 
+  it('gives each phase only the committed values scoped to it', async () => {
+    const record = join(runtimeDir, 'build.txt');
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      {
+        build: { commands: [`echo "$BUILD_ONLY|$RUNTIME_ONLY|$BOTH" > ${record}`] },
+        start: { commands: ['node server.js'] },
+      },
+      {
+        BUILD_ONLY: { value: 'b', scopes: ['build'] },
+        RUNTIME_ONLY: { value: 'r' },
+        BOTH: { value: 'x', scopes: ['build', 'runtime'] },
+      }
+    );
+    expect(await run()).toBe(true);
+    expect((await readFile(record, 'utf8')).trim()).toBe('b||x');
+    const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+    expect([env.BUILD_ONLY, env.RUNTIME_ONLY, env.BOTH]).toEqual([undefined, 'r', 'x']);
+  }, 20_000);
+
+  it('reports a runtime that cannot be started, without signalling its own process group', async () => {
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    const passed = await verify({
+      timeout: '5',
+      runtimeCommand: [join(runtimeDir, 'does-not-exist')],
+    });
+    // Signalling group 0 would have taken this test process down with it.
+    expect(passed).toBe(false);
+    expect(output()).toMatch(/Could not start ".*does-not-exist": spawn .* ENOENT/);
+  }, 20_000);
+
+  it('stops the runtime and the app when interrupted', async () => {
+    const pidFile = join(runtimeDir, 'app.pid');
+    await project(
+      {
+        'server.js': `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\n${server('0')}`,
+      },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    setTimeout(() => process.emit('SIGTERM'), 1500);
+    expect(await run('10')).toBe(false);
+    expect(output()).toContain('Interrupted.');
+    const pid = Number(await readFile(pidFile, 'utf8'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 20_000);
+
   it('fails an app that ignores PORT', async () => {
     await project(
       { 'server.js': server('0') },

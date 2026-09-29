@@ -41,32 +41,58 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
   }
   const resource = resources[0];
 
+  /*
+    Build commands and the runtime run in process groups of their own, so a
+    stop reaches everything they start; Ctrl+C or a SIGTERM from an agent is
+    forwarded to them, and the temporary copy is still removed.
+  */
+  const run: Run = { children: new Set(), interrupted: false };
+  const onSignal = () => {
+    run.interrupted = true;
+    for (const child of run.children) {
+      signalGroup(child, 'SIGTERM');
+    }
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+
   const workDir = await copySource(cwd);
   try {
-    return await rehearse(resource, spec.env ?? {}, join(workDir, resource.root ?? '.'), options);
+    return await rehearse(
+      resource,
+      spec.env ?? {},
+      join(workDir, resource.root ?? '.'),
+      options,
+      run
+    );
   } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
     await fs.rm(dirname(workDir), { recursive: true, force: true });
   }
+}
+
+interface Run {
+  children: Set<ChildProcess>;
+  interrupted: boolean;
 }
 
 async function rehearse(
   resource: AppResource,
   envDeclarations: NonNullable<AppSpec['env']>,
   appRoot: string,
-  options: VerifyOptions
+  options: VerifyOptions,
+  run: Run
 ): Promise<boolean> {
-  // Values committed in the file; dashboard values are not available here.
-  const declared: Record<string, string> = {};
-  for (const [name, declaration] of Object.entries(envDeclarations)) {
-    if (declaration?.value !== undefined) {
-      declared[name] = declaration.value;
-    }
-  }
-  const env = { ...withoutPlatformEnv(process.env), ...declared };
+  const baseEnv = withoutPlatformEnv(process.env);
 
+  const buildEnv = { ...baseEnv, ...committedValues(envDeclarations, 'build') };
   for (const command of resource.build?.commands ?? ['npm install']) {
     console.log(`\n$ ${command}`);
-    const code = await runToCompletion(command, appRoot, env);
+    const code = await runToCompletion(command, appRoot, buildEnv, run);
+    if (run.interrupted) {
+      return fail('Interrupted.');
+    }
     if (code !== 0) {
       return fail(`Build command "${command}" exited with code ${code}.`);
     }
@@ -80,7 +106,8 @@ async function rehearse(
   const app = spawn(command, args, {
     cwd: appRoot,
     env: {
-      ...env,
+      ...baseEnv,
+      ...committedValues(envDeclarations, 'runtime'),
       PORT: String(port),
       MODELENCE_APP_PORT: String(await freePort()),
       MODELENCE_APP_START_TIMEOUT: String(timeoutSeconds),
@@ -93,12 +120,16 @@ async function rehearse(
       ROOT_URL: `http://localhost:${port}`,
     },
     stdio: 'inherit',
-    // Its own process group, so stopping it reaches everything it started.
     detached: true,
   });
+  run.children.add(app);
+  let spawnError: Error | null = null;
   const exited = new Promise<void>((resolve) => {
     app.once('exit', () => resolve());
-    app.once('error', () => resolve());
+    app.once('error', (error) => {
+      spawnError = error;
+      resolve();
+    });
   });
 
   try {
@@ -106,6 +137,12 @@ async function rehearse(
       waitForPort(port, timeoutSeconds * 1000),
       exited.then(() => false),
     ]);
+    if (run.interrupted) {
+      return fail('Interrupted.');
+    }
+    if (spawnError) {
+      return fail(`Could not start "${command}": ${(spawnError as Error).message}`);
+    }
     if (!opened) {
       if (app.exitCode !== null || app.signalCode !== null) {
         return fail(`The app exited (${app.exitCode ?? app.signalCode}) before answering on PORT.`);
@@ -127,7 +164,23 @@ async function rehearse(
     return true;
   } finally {
     await stop(app, exited);
+    run.children.delete(app);
   }
+}
+
+// Values committed in the file for one phase; a declaration without scopes
+// reaches the runtime only. Dashboard values are not available here.
+function committedValues(
+  declarations: NonNullable<AppSpec['env']>,
+  scope: 'build' | 'runtime'
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [name, declaration] of Object.entries(declarations)) {
+    if (declaration?.value !== undefined && (declaration.scopes ?? ['runtime']).includes(scope)) {
+      values[name] = declaration.value;
+    }
+  }
+  return values;
 }
 
 // Copies the upload's file list into a fresh directory and returns it.
@@ -156,16 +209,26 @@ function withoutPlatformEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   );
 }
 
-function runToCompletion(command: string, cwd: string, env: NodeJS.ProcessEnv): Promise<number> {
+function runToCompletion(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  run: Run
+): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], { cwd, env, stdio: 'inherit' });
-    child.once('exit', (code, signal) => resolve(code ?? (signal ? 128 : 1)));
-    child.once('error', () => resolve(127));
+    const child = spawn('sh', ['-c', command], { cwd, env, stdio: 'inherit', detached: true });
+    run.children.add(child);
+    const done = (code: number) => {
+      run.children.delete(child);
+      resolve(code);
+    };
+    child.once('exit', (code, signal) => done(code ?? (signal ? 128 : 1)));
+    child.once('error', () => done(127));
   });
 }
 
 async function stop(child: ChildProcess, exited: Promise<void>): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
   signalGroup(child, 'SIGTERM');
@@ -175,8 +238,12 @@ async function stop(child: ChildProcess, exited: Promise<void>): Promise<void> {
 }
 
 function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  // Without a pid the spawn failed; -0 would be this process's own group.
+  if (!child.pid) {
+    return;
+  }
   try {
-    process.kill(-(child.pid ?? 0), signal);
+    process.kill(-child.pid, signal);
   } catch {
     // Already gone.
   }
