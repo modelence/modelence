@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
 import { connect as netConnect, createServer } from 'net';
 import { tmpdir } from 'os';
@@ -72,7 +72,7 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     // Whatever ignores the stop request is killed, so a cancel always ends.
     setTimeout(() => {
       for (const child of run.children) {
-        signalGroup(child, 'SIGKILL');
+        killTree(child);
       }
     }, STOP_GRACE_MS).unref();
   };
@@ -318,7 +318,7 @@ async function stop(child: ChildProcess, exited: Promise<void>): Promise<void> {
     return;
   }
   signalGroup(child, 'SIGTERM');
-  const timer = setTimeout(() => signalGroup(child, 'SIGKILL'), STOP_GRACE_MS);
+  const timer = setTimeout(() => killTree(child), STOP_GRACE_MS);
   await exited;
   clearTimeout(timer);
 }
@@ -332,6 +332,61 @@ function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
     process.kill(-child.pid, signal);
   } catch {
     // Already gone.
+  }
+}
+
+/*
+  SIGKILLs the process groups of `child` and of everything below it. The
+  runtime starts the app in a group of its own, and a SIGKILL to the
+  runtime is neither caught nor forwarded, so the app's group is found in
+  the process table while the runtime is still its parent and is killed
+  with it. This process's own group is never signalled.
+*/
+function killTree(child: ChildProcess): void {
+  if (!child.pid) {
+    return;
+  }
+  for (const group of processGroupsBelow(child.pid)) {
+    try {
+      process.kill(-group, 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+export function processGroupsBelow(pid: number, table = readProcessTable()): number[] {
+  const own = table.find((row) => row.pid === process.pid)?.pgid;
+  const groups = new Set<number>([pid]);
+  const pending = [pid];
+  while (pending.length > 0) {
+    const parent = pending.pop();
+    for (const row of table) {
+      if (row.ppid === parent) {
+        pending.push(row.pid);
+        groups.add(row.pgid);
+      }
+    }
+  }
+  return [...groups].filter((group) => group > 1 && group !== own);
+}
+
+interface ProcessRow {
+  pid: number;
+  ppid: number;
+  pgid: number;
+}
+
+// An empty table leaves only the child's own group to signal.
+function readProcessTable(): ProcessRow[] {
+  try {
+    return execFileSync('ps', ['-A', '-o', 'pid=,ppid=,pgid='], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.trim().split(/\s+/).map(Number))
+      .filter((fields) => fields.length === 3 && fields.every(Number.isInteger))
+      .map(([pid, ppid, pgid]) => ({ pid, ppid, pgid }));
+  } catch {
+    return [];
   }
 }
 

@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verify } from './verify';
+import { processGroupsBelow, verify } from './verify';
 
 /*
   The copy, the build commands and the child processes are real. The runtime
   is a stand-in that runs MODELENCE_WEB.start the way @modelence/runtime does
-  for a start-only app and records what it was given, so the tests need no
-  network for `npx`.
+  for a start-only app, in a process group of its own, and records what it
+  was given, so the tests need no network for `npx`.
 */
 
 let dir: string;
@@ -19,9 +19,13 @@ const fakeRuntime = (record: string) => `
 const { spawn } = require('child_process');
 require('fs').writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env));
 const web = JSON.parse(process.env.MODELENCE_WEB);
-const app = spawn('sh', ['-c', web.start], { stdio: 'inherit', env: process.env });
+// Like @modelence/runtime: the app gets a process group of its own, and a
+// stop signal is forwarded to that group.
+const app = spawn('sh', ['-c', web.start], { stdio: 'inherit', env: process.env, detached: true });
 app.on('exit', (code) => process.exit(code ?? 1));
-process.on('SIGTERM', () => app.kill('SIGTERM'));
+process.on('SIGTERM', () => {
+  try { process.kill(-app.pid, 'SIGTERM'); } catch {}
+});
 `;
 
 beforeEach(async () => {
@@ -326,5 +330,27 @@ describe('verify', () => {
   it('requires exactly one resource', async () => {
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: {} }));
     await expect(run()).rejects.toThrow('exactly one resource (found 0)');
+  });
+});
+
+describe('processGroupsBelow', () => {
+  it("collects the groups of a process and its descendants, never this process's own", () => {
+    const own = 500;
+    const table = [
+      { pid: process.pid, ppid: 1, pgid: own },
+      // verify's runtime, in its own group, and the app it detached.
+      { pid: 10, ppid: process.pid, pgid: 10 },
+      { pid: 11, ppid: 10, pgid: 10 },
+      { pid: 20, ppid: 11, pgid: 20 },
+      { pid: 21, ppid: 20, pgid: 20 },
+      // A descendant that joined this process's group, and an unrelated one.
+      { pid: 30, ppid: 21, pgid: own },
+      { pid: 40, ppid: 1, pgid: 40 },
+    ];
+    expect(processGroupsBelow(10, table).sort((a, b) => a - b)).toEqual([10, 20]);
+  });
+
+  it('falls back to the process group itself without a process table', () => {
+    expect(processGroupsBelow(10, [])).toEqual([10]);
   });
 });
