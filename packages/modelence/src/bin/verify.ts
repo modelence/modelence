@@ -56,8 +56,10 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
 
-  const workDir = await copySource(cwd);
+  const tempDir = await fs.mkdtemp(join(tmpdir(), 'modelence-verify-'));
   try {
+    const workDir = join(tempDir, 'app');
+    await copySource(cwd, workDir);
     return await rehearse(
       resource,
       spec.env ?? {},
@@ -68,7 +70,7 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
-    await fs.rm(dirname(workDir), { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -89,6 +91,11 @@ async function rehearse(
   const buildEnv = { ...baseEnv, ...committedValues(envDeclarations, 'build') };
   for (const command of resource.build?.commands ?? ['npm install']) {
     console.log(`\n$ ${command}`);
+    // Checked right before every spawn: a signal between phases has no child
+    // to reach, so the next one must not start.
+    if (run.interrupted) {
+      return fail('Interrupted.');
+    }
     const code = await runToCompletion(command, appRoot, buildEnv, run);
     if (run.interrupted) {
       return fail('Interrupted.');
@@ -99,17 +106,21 @@ async function rehearse(
   }
 
   const port = await freePort();
+  const appPort = await freePort();
   const timeoutSeconds = Number(options.timeout) || DEFAULT_TIMEOUT_SECONDS;
   const start = resource.start?.commands ?? [];
   const [command, ...args] = options.runtimeCommand ?? RUNTIME_COMMAND;
   console.log(`\nStarting through @modelence/runtime on PORT=${port}`);
+  if (run.interrupted) {
+    return fail('Interrupted.');
+  }
   const app = spawn(command, args, {
     cwd: appRoot,
     env: {
       ...baseEnv,
       ...committedValues(envDeclarations, 'runtime'),
       PORT: String(port),
-      MODELENCE_APP_PORT: String(await freePort()),
+      MODELENCE_APP_PORT: String(appPort),
       MODELENCE_APP_START_TIMEOUT: String(timeoutSeconds),
       // Studio runs the start commands in order as one shell line.
       MODELENCE_WEB: JSON.stringify({
@@ -183,10 +194,9 @@ function committedValues(
   return values;
 }
 
-// Copies the upload's file list into a fresh directory and returns it.
-async function copySource(cwd: string): Promise<string> {
+// Copies the upload's file list into `dir`.
+async function copySource(cwd: string, dir: string): Promise<void> {
   const listing = await listSourceFiles(cwd);
-  const dir = join(await fs.mkdtemp(join(tmpdir(), 'modelence-verify-')), 'app');
   for (const file of listing.files) {
     await fs.mkdir(dirname(join(dir, file)), { recursive: true });
     await fs.copyFile(join(cwd, file), join(dir, file));
@@ -198,7 +208,6 @@ async function copySource(cwd: string): Promise<string> {
   console.log(
     `Copied the ${listing.files.length + listing.symlinks.length} files \`modelence deploy\` uploads to ${dir}`
   );
-  return dir;
 }
 
 // A service token in the shell would make the runtime fetch a real

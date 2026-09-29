@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verify } from './verify';
@@ -145,6 +145,40 @@ describe('verify', () => {
     expect(() => process.kill(pid, 0)).toThrow();
   }, 20_000);
 
+  it('starts nothing new once interrupted between phases', async () => {
+    const marker = join(runtimeDir, 'built');
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [`touch ${marker}`] }, start: { commands: ['node server.js'] } }
+    );
+    // The signal lands after the command is announced and before it is spawned.
+    vi.mocked(console.log).mockImplementation((line: string) => {
+      logged.push(String(line));
+      if (String(line).includes(`$ touch ${marker}`)) {
+        process.emit('SIGTERM');
+      }
+    });
+    expect(await run()).toBe(false);
+    expect(output()).toContain('Interrupted.');
+    await expect(readFile(marker)).rejects.toThrow();
+
+    // The same between the build and the runtime.
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    logged = [];
+    vi.mocked(console.log).mockImplementation((line: string) => {
+      logged.push(String(line));
+      if (String(line).includes('Starting through @modelence/runtime')) {
+        process.emit('SIGTERM');
+      }
+    });
+    expect(await run()).toBe(false);
+    expect(output()).toContain('Interrupted.');
+    await expect(readFile(join(runtimeDir, 'env.json'))).rejects.toThrow();
+  }, 20_000);
+
   it('fails an app that ignores PORT', async () => {
     await project(
       { 'server.js': server('0') },
@@ -176,6 +210,27 @@ describe('verify', () => {
     expect(await run()).toBe(false);
     expect(output()).toContain('Build command "exit 7" exited with code 7.');
     expect(output()).not.toContain('$ touch never');
+  });
+
+  it('cleans up when the copy fails', async () => {
+    await project(
+      { 'secret.txt': 'x' },
+      { build: { commands: [] }, start: { commands: ['node .'] } }
+    );
+    await chmod(join(dir, 'secret.txt'), 0o000);
+    const tempDirs = async () =>
+      (await readdir(tmpdir())).filter(
+        (name) =>
+          name.startsWith('modelence-verify-') &&
+          !name.includes('test') &&
+          !name.includes('runtime')
+      );
+    const before = await tempDirs();
+    const listeners = process.listenerCount('SIGTERM');
+    await expect(run()).rejects.toThrow(/EACCES/);
+    expect(await tempDirs()).toEqual(before);
+    expect(process.listenerCount('SIGTERM')).toBe(listeners);
+    await chmod(join(dir, 'secret.txt'), 0o600);
   });
 
   it('requires exactly one resource', async () => {
