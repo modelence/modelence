@@ -42,7 +42,7 @@ it expects).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `$schema` | string | — | Set to `https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json` for editor validation and completion. The `v1` in the path is the format version the file is written for. |
+| `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
 | `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"web"`). Exactly one resource is supported today. |
 | `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
 
@@ -85,7 +85,7 @@ invalid and is rejected.
 
 ```json modelence.config.json
 {
-  "$schema": "https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
   "resources": {
     "api": {
       "type": "service",
@@ -101,7 +101,7 @@ invalid and is rejected.
 
 ```json modelence.config.json
 {
-  "$schema": "https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
   "resources": {
     "web": {
       "type": "service",
@@ -119,7 +119,7 @@ Vite inlines it while building:
 
 ```json modelence.config.json
 {
-  "$schema": "https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
   "resources": {
     "api": {
       "type": "service",
@@ -182,7 +182,9 @@ Follow these steps in order. Do not skip the verification step.
 7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
    entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
    `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
-   lives in a subdirectory. Add `"$schema": "https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json"`.
+   lives in a subdirectory. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
+   So VS Code and Cursor load that schema, trust its host in `.vscode/settings.json` (merge into
+   the file if it exists): `"json.schemaDownload.trustedDomains": { "https://cloud.modelence.com/": true }`.
 
 8. **Verify locally.** Run the build commands, then the start commands with `PORT=3000` set, in
    order — exactly as written in the file — and confirm the app answers on
@@ -240,7 +242,7 @@ with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are alrea
 
 ```json modelence.config.json
 {
-  "$schema": "https://raw.githubusercontent.com/modelence/modelence/main/schema/v1/modelence.config.json",
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
   "resources": {
     "app": {
       "type": "service",

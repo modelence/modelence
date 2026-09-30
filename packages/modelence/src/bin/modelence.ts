@@ -68,6 +68,7 @@ program
   .command('init')
   .description('Create a modelence.config.json template for this project')
   .option('--force', 'Overwrite an existing modelence.config.json')
+  .option('-h, --host <host>', 'Modelence host used for the schema URL')
   .action(async (options) => {
     try {
       await init(options);

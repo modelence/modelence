@@ -2,12 +2,13 @@ import { promises as fs } from 'fs';
 import {
   AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
-  APP_SPEC_SCHEMA_URL,
   SETUP_DOCS_URL,
   getAppSpecFilePath,
+  getAppSpecSchemaUrl,
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
+import { ensureSchemaHostTrusted } from './vscodeSettings';
 
 /*
   `modelence init`: write a modelence.config.json template for the user's coding
@@ -15,8 +16,11 @@ import {
   inspected — the file is the contract, and the agent reads the code.
 */
 
+const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
+
 export interface InitOptions {
   force?: boolean;
+  host?: string;
 }
 
 export async function init(options: InitOptions) {
@@ -26,8 +30,9 @@ export async function init(options: InitOptions) {
     throw new Error(`${APP_SPEC_FILE_NAME} already exists; pass --force to overwrite it.`);
   }
 
+  const schemaHost = options.host ?? DEFAULT_SCHEMA_HOST;
   const template: AppSpec = {
-    $schema: APP_SPEC_SCHEMA_URL,
+    $schema: getAppSpecSchemaUrl(schemaHost),
     resources: {
       app: {
         type: 'service',
@@ -39,6 +44,7 @@ export async function init(options: InitOptions) {
     env: {},
   };
   await writeAppSpecFile(template, cwd);
+  await ensureSchemaHostTrusted(cwd, schemaHost, { create: true });
 
   console.log(`Wrote a ${APP_SPEC_FILE_NAME} template.`);
   console.log('Ask your coding agent to fill it in with this prompt:');

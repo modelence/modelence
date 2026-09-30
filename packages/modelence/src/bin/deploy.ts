@@ -8,6 +8,7 @@ import { readProject, type ProjectFile } from './project';
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
+import { ensureSchemaHostTrusted, getSchemaHost } from './vscodeSettings';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
 import type { AppSpec } from './appSpec';
 import {
@@ -86,6 +87,10 @@ export async function deploy(options: DeployOptions) {
     await createBundle(archivePath);
   } else {
     spec = await prepareSpec(cwd);
+    const schemaHost = getSchemaHost(spec.$schema);
+    if (schemaHost) {
+      await ensureSchemaHostTrusted(cwd, schemaHost, { create: false });
+    }
     reportPackedSource(await packSource(cwd, archivePath));
   }
 

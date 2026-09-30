@@ -125,6 +125,34 @@ describe('deploy orchestration', () => {
     expect(args?.body).not.toHaveProperty('detected');
   });
 
+  it('trusts the schema host in an existing .vscode/settings.json', async () => {
+    await writeFile(
+      join(project, 'modelence.config.json'),
+      JSON.stringify({
+        ...spec,
+        $schema: 'https://studio.example/schema/modelence.config.json?version=1',
+      })
+    );
+    await mkdir(join(project, '.vscode'));
+    await writeFile(join(project, '.vscode/settings.json'), '{}\n');
+    await deploy(options);
+    expect(JSON.parse(await readFile(join(project, '.vscode/settings.json'), 'utf8'))).toEqual({
+      'json.schemaDownload.trustedDomains': { 'https://studio.example/': true },
+    });
+  });
+
+  it('does not create .vscode for a project that has none', async () => {
+    await writeFile(
+      join(project, 'modelence.config.json'),
+      JSON.stringify({
+        ...spec,
+        $schema: 'https://studio.example/schema/modelence.config.json?version=1',
+      })
+    );
+    await deploy(options);
+    await expect(access(join(project, '.vscode'))).rejects.toThrow();
+  });
+
   it('names the files left out of the upload', async () => {
     await writeFile(join(project, '.env'), 'SECRET=1');
     await deploy(options);
