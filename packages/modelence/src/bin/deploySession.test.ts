@@ -22,6 +22,16 @@ describe('normalizeHost', () => {
   it('refuses something that is not a host', () => {
     expect(() => normalizeHost('not a host')).toThrow('Invalid Modelence host');
   });
+
+  // An unknown scheme parses, with the origin "null".
+  it('refuses a scheme other than http and https', () => {
+    expect(() => normalizeHost('htps://cloud.modelence.com')).toThrow('Invalid Modelence host');
+    expect(() => normalizeHost('ftp://cloud.modelence.com')).toThrow('Invalid Modelence host');
+  });
+
+  it('keeps the path of a Studio served under a prefix', () => {
+    expect(normalizeHost('https://corp.example/studio/')).toBe('https://corp.example/studio');
+  });
 });
 
 describe('resolveHost', () => {

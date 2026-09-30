@@ -4,14 +4,15 @@ import archiver from 'archiver';
 import { authenticateCli } from './auth';
 import { clearCachedToken } from './authCache';
 import { loadEnv, getProjectPath } from './config';
-import { readProject, type ProjectFile } from './project';
+import { otherTargetHosts, projectForHost, readProject, type HostProject } from './project';
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
-import { ensureSchemaHostTrusted, getSchemaHost } from './vscodeSettings';
+import { ensureSchemaHostTrusted, getSchemaHost, isKnownSchemaHost } from './vscodeSettings';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
 import type { AppSpec } from './appSpec';
 import {
+  describeOtherHosts,
   describeTarget,
   differsFromSavedTarget,
   resolveTargetFromOptions,
@@ -23,7 +24,6 @@ import {
   resolveToken,
   rememberToken,
   rememberTarget,
-  projectForHost,
   isUnauthorized,
   type Session,
 } from './deploySession';
@@ -69,11 +69,20 @@ export async function deploy(options: DeployOptions) {
   if (kindNote) {
     console.log(kindNote);
   }
-  const project = projectForHost(await readProject(cwd), host);
-  let target = resolveTargetFromOptions(options, project);
+  const savedProject = await readProject(cwd);
+  const project = projectForHost(savedProject, host);
+  // Targets saved for another Studio don't apply here, but say so: a picker
+  // or a "pass --app and --env" out of the blue would be a puzzle.
+  const otherHosts = project.deploy ? [] : otherTargetHosts(savedProject, host);
+  let target = resolveTargetFromOptions(options, project, otherHosts);
   let token = await resolveToken(host);
   if ((!token || !target) && !isInteractive()) {
-    throw new Error(nonInteractiveMessage(Boolean(token), Boolean(target)));
+    throw new Error(nonInteractiveMessage(Boolean(token), Boolean(target), otherHosts));
+  }
+  if (!target && otherHosts.length > 0) {
+    console.log(
+      `Note: ${describeOtherHosts(otherHosts)} Pick a target for ${host} in the browser, or pass --host to deploy there.`
+    );
   }
   await confirmTarget(target, project, options.yes);
 
@@ -87,8 +96,10 @@ export async function deploy(options: DeployOptions) {
     await createBundle(archivePath);
   } else {
     spec = await prepareSpec(cwd);
+    // Only a Modelence host: a cloned repo's $schema must not get an
+    // arbitrary domain trusted by the editor.
     const schemaHost = getSchemaHost(spec.$schema);
-    if (schemaHost) {
+    if (schemaHost && isKnownSchemaHost(schemaHost, host)) {
       await ensureSchemaHostTrusted(cwd, schemaHost, { create: false });
     }
     reportPackedSource(await packSource(cwd, archivePath));
@@ -162,14 +173,22 @@ export async function deploy(options: DeployOptions) {
   }
 }
 
-function nonInteractiveMessage(hasToken: boolean, hasTarget: boolean): string {
+function nonInteractiveMessage(
+  hasToken: boolean,
+  hasTarget: boolean,
+  otherHosts: string[]
+): string {
   const needed = [
     hasTarget ? null : 'pass --app and --env',
     hasToken ? null : 'set MODELENCE_TOKEN',
   ].filter(Boolean);
+  const hostNote =
+    !hasTarget && otherHosts.length > 0
+      ? ` Note: ${describeOtherHosts(otherHosts)} Pass --host to deploy there.`
+      : '';
   return (
     'Nobody is at the terminal to sign in or pick a target in the browser (CI or a non-interactive shell). ' +
-    `To deploy from here, ${needed.join(' and ')}.`
+    `To deploy from here, ${needed.join(' and ')}.${hostNote}`
   );
 }
 
@@ -177,7 +196,7 @@ function nonInteractiveMessage(hasToken: boolean, hasTarget: boolean): string {
 // flags point away from the environment this project normally deploys to.
 async function confirmTarget(
   target: CliTarget | null,
-  project: ProjectFile,
+  project: HostProject,
   yes: boolean | undefined
 ): Promise<void> {
   if (!target) {

@@ -70,17 +70,37 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-// The Studio host a $schema URL points at, when it is the Modelence schema.
+const SCHEMA_PATH = `/schema/${APP_SPEC_FILE_NAME}`;
+
+// The Studio host a $schema URL points at, when it is the Modelence schema;
+// a path before /schema/ is kept, for a Studio served under a prefix.
 export function getSchemaHost(schemaUrl: unknown): string | null {
-  if (typeof schemaUrl !== 'string') {
+  if (typeof schemaUrl !== 'string' || !URL.canParse(schemaUrl)) {
     return null;
   }
-  try {
-    const url = new URL(schemaUrl);
-    return url.pathname === `/schema/${APP_SPEC_FILE_NAME}` ? url.origin : null;
-  } catch {
-    return null;
+  const url = new URL(schemaUrl);
+  return url.pathname.endsWith(SCHEMA_PATH)
+    ? `${url.origin}${url.pathname.slice(0, -SCHEMA_PATH.length)}`
+    : null;
+}
+
+/*
+  Whether deploy may trust a schema host it read from the project. The file
+  comes with the repository, so any other domain would get trusted just by
+  cloning and deploying — and VS Code then fetches from it without asking.
+*/
+export function isKnownSchemaHost(schemaHost: string, deployHost: string): boolean {
+  if (schemaHost === deployHost) {
+    return true;
   }
+  const { protocol, hostname } = new URL(schemaHost);
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return true;
+  }
+  return (
+    protocol === 'https:' &&
+    (hostname === 'cloud.modelence.com' || hostname.endsWith('.modelence.dev'))
+  );
 }
 
 // trustSchemaHost for the commands: says what it changed, and a failure is

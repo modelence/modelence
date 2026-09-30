@@ -117,21 +117,24 @@ export async function followDeploy(
       return;
     }
     if (status.status === 'build-failed' || status.status === 'deploy-failed') {
-      for (const error of status.errors) {
-        console.error(`  ${error}`);
-      }
-      if (status.containerLogs && status.containerLogs.length > 0) {
-        console.error('Container output:');
-        for (const line of status.containerLogs) {
-          console.error(`  │ ${line.replace(/\n$/, '')}`);
-        }
-      }
-      // Last, so it is what is left on screen: the likely cause and the fix.
+      const containerLogs = status.containerLogs ?? [];
+      // First, so the errors and container output below it stay what is left
+      // on screen: a missing value is only the cause when nothing else failed,
+      // so "deploy again" is only suggested then.
       const missing = describeMissingEnvVars(status.missingEnvVars, status.configUrl, {
-        deployAgain: true,
+        deployAgain: status.errors.length === 0 && containerLogs.length === 0,
       });
       if (missing) {
         console.error(missing);
+      }
+      for (const error of status.errors) {
+        console.error(`  ${error}`);
+      }
+      if (containerLogs.length > 0) {
+        console.error('Container output:');
+        for (const line of containerLogs) {
+          console.error(`  │ ${line.replace(/\n$/, '')}`);
+        }
       }
       process.exitCode = 1;
       return;

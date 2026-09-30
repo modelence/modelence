@@ -86,11 +86,15 @@ export async function authenticateCli(
   return await waitForAuth(host, code);
 }
 
+// The code can no longer be approved: it expired, was used, or never existed.
+class DeadCodeError extends Error {}
+
 async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
   // Short, since the browser moves on to the deployment page right away.
   const pollInterval = 2 * 1000;
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
   const pollExpireTs = Date.now() + pollTimeout;
+  let reportedError = false;
   while (Date.now() < pollExpireTs) {
     try {
       const result = await pollForToken(host, code);
@@ -98,7 +102,15 @@ async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
         return result;
       }
     } catch (error) {
-      console.error('Error polling for CLI token:', error);
+      if (error instanceof DeadCodeError) {
+        throw error;
+      }
+      // Network trouble or a server hiccup: keep polling, and say so once
+      // rather than on every poll.
+      if (!reportedError) {
+        reportedError = true;
+        console.error('Error polling for CLI token (retrying):', error);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
@@ -112,7 +124,16 @@ async function pollForToken(host: string, code: string): Promise<CliAuthResult |
   });
 
   if (!response.ok) {
-    throw new Error(`CLI token polling failed: ${response.statusText}`);
+    const body = await response.text().catch(() => '');
+    // Studio answers a dead code with a 4xx, or — older versions — a 500
+    // carrying this message; polling longer cannot revive it.
+    const clientError = response.status >= 400 && response.status < 500 && response.status !== 429;
+    if (clientError || body.includes('Invalid or expired code')) {
+      throw new DeadCodeError(
+        'The sign-in code has expired or is no longer valid. Please run the command again.'
+      );
+    }
+    throw new Error(`CLI token polling failed: ${response.status} ${response.statusText}`);
   }
 
   const { token, expiresAt, target } = await response.json();

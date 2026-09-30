@@ -12,6 +12,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'modelence-init-'));
   logged = [];
   vi.spyOn(process, 'cwd').mockReturnValue(dir);
+  vi.stubEnv('MODELENCE_SERVICE_ENDPOINT', '');
   vi.spyOn(console, 'log').mockImplementation((line: string) => {
     logged.push(line);
   });
@@ -19,6 +20,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -47,6 +49,24 @@ describe('init', () => {
     expect(JSON.parse(await readFile(join(dir, '.vscode/settings.json'), 'utf8'))).toEqual({
       'json.schemaDownload.trustedDomains': { 'https://studio.example/': true },
     });
+  });
+
+  // Studio refuses a $schema that is not a URL.
+  it('writes a full URL for a bare host name', async () => {
+    await init({ host: 'hayk.modelence.dev' });
+    const written = JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'));
+    expect(written.$schema).toBe(
+      'https://hayk.modelence.dev/schema/modelence.config.json?version=1'
+    );
+  });
+
+  it('uses the host deploy would use when none is given', async () => {
+    await writeFile(join(dir, '.modelence.env'), 'MODELENCE_SERVICE_ENDPOINT=hayk.modelence.dev\n');
+    await init({});
+    const written = JSON.parse(await readFile(join(dir, 'modelence.config.json'), 'utf8'));
+    expect(written.$schema).toBe(
+      'https://hayk.modelence.dev/schema/modelence.config.json?version=1'
+    );
   });
 
   it('refuses to overwrite an existing file unless forced', async () => {

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'jsonc-parser';
-import { trustSchemaHost } from './vscodeSettings';
+import { getSchemaHost, isKnownSchemaHost, trustSchemaHost } from './vscodeSettings';
 
 const SETTING = 'json.schemaDownload.trustedDomains';
 let dir: string;
@@ -75,5 +75,31 @@ describe('trustSchemaHost', () => {
       'skipped'
     );
     expect(await readFile(settingsPath(), 'utf8')).toBe('{ "editor.tabSize": ');
+  });
+});
+
+describe('getSchemaHost', () => {
+  it('reads the host, with any path prefix, from a Modelence schema URL', () => {
+    expect(
+      getSchemaHost('https://cloud.modelence.com/schema/modelence.config.json?version=1')
+    ).toBe('https://cloud.modelence.com');
+    expect(getSchemaHost('https://corp.example/studio/schema/modelence.config.json')).toBe(
+      'https://corp.example/studio'
+    );
+    expect(getSchemaHost('https://example.com/other.json')).toBeNull();
+    expect(getSchemaHost('hayk.modelence.dev/schema/modelence.config.json')).toBeNull();
+  });
+});
+
+describe('isKnownSchemaHost', () => {
+  it('accepts the deploy host and Modelence hosts only', () => {
+    expect(isKnownSchemaHost('https://corp.example', 'https://corp.example')).toBe(true);
+    expect(isKnownSchemaHost('https://cloud.modelence.com', 'https://corp.example')).toBe(true);
+    expect(isKnownSchemaHost('https://hayk.modelence.dev', 'https://corp.example')).toBe(true);
+    expect(isKnownSchemaHost('http://localhost:3000', 'https://corp.example')).toBe(true);
+    expect(isKnownSchemaHost('https://attacker.example', 'https://corp.example')).toBe(false);
+    expect(isKnownSchemaHost('https://modelence.dev.attacker.example', 'https://x.example')).toBe(
+      false
+    );
   });
 });

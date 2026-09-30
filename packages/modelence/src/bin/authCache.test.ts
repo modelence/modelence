@@ -66,9 +66,12 @@ describe('auth cache', () => {
 describe('project file', () => {
   it('reads an empty project when the file is missing and merges updates', async () => {
     expect(await readProject(home)).toEqual({});
-    await updateProject({ appId: 'app1' }, home);
+    await updateProject((project) => ({ ...project, appId: 'app1' }), home);
     await updateProject(
-      { deploy: { environmentId: 'env1', appAlias: 'my-app', envAlias: 'prod' } },
+      (project) => ({
+        ...project,
+        deploy: { environmentId: 'env1', appAlias: 'my-app', envAlias: 'prod' },
+      }),
       home
     );
     expect(await readProject(home)).toEqual({

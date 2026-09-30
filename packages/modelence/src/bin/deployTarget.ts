@@ -1,5 +1,5 @@
 import type { DeployOptions } from './deploy';
-import type { ProjectFile } from './project';
+import type { HostProject } from './project';
 
 export type CliTarget =
   | { environmentId: string }
@@ -8,7 +8,9 @@ export type CliTarget =
 
 export function resolveTargetFromOptions(
   options: DeployOptions,
-  project: ProjectFile
+  project: HostProject,
+  // Studios the project has a saved target for, when it has none for this one.
+  otherHosts: string[] = []
 ): CliTarget | null {
   if (options.app && options.env) {
     return { appAlias: options.app, envAlias: options.env };
@@ -19,6 +21,11 @@ export function resolveTargetFromOptions(
   if (options.env && project.appId) {
     return { appId: project.appId, envAlias: options.env };
   }
+  if (options.env && !options.app && otherHosts.length > 0) {
+    throw new Error(
+      `--env needs --app here: ${describeOtherHosts(otherHosts)} Pass --app too, or --host to deploy there.`
+    );
+  }
   if (options.app || options.env) {
     throw new Error('Pass both --app and --env, or neither to pick the target in the browser.');
   }
@@ -28,8 +35,12 @@ export function resolveTargetFromOptions(
   return null;
 }
 
+export function describeOtherHosts(otherHosts: string[]): string {
+  return `the target saved in .modelence/project.json is for ${otherHosts.join(', ')}, not this Studio.`;
+}
+
 // How the target reads in the CLI output, with where it came from.
-export function describeTarget(target: CliTarget, project: ProjectFile): string {
+export function describeTarget(target: CliTarget, project: HostProject): string {
   if ('environmentId' in target) {
     const saved = project.deploy;
     const name =
@@ -49,7 +60,7 @@ export function describeTarget(target: CliTarget, project: ProjectFile): string 
   deploys to. A plain `modelence deploy` goes to the saved target, so a
   flag that points elsewhere (production, say) is worth a second look.
 */
-export function differsFromSavedTarget(target: CliTarget, project: ProjectFile): boolean {
+export function differsFromSavedTarget(target: CliTarget, project: HostProject): boolean {
   const saved = project.deploy;
   if (!saved || 'environmentId' in target) {
     return false;

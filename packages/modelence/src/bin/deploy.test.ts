@@ -141,6 +141,21 @@ describe('deploy orchestration', () => {
     });
   });
 
+  // $schema comes with the repository; deploying a clone must not trust any domain it names.
+  it('does not trust a schema host that is not a Modelence host', async () => {
+    await writeFile(
+      join(project, 'modelence.config.json'),
+      JSON.stringify({
+        ...spec,
+        $schema: 'https://attacker.example/schema/modelence.config.json?version=1',
+      })
+    );
+    await mkdir(join(project, '.vscode'));
+    await writeFile(join(project, '.vscode/settings.json'), '{}\n');
+    await deploy(options);
+    expect(await readFile(join(project, '.vscode/settings.json'), 'utf8')).toBe('{}\n');
+  });
+
   it('does not create .vscode for a project that has none', async () => {
     await writeFile(
       join(project, 'modelence.config.json'),
@@ -331,6 +346,29 @@ describe('deploy orchestration', () => {
     );
     expect(process.exitCode).toBe(1);
   });
+
+  // A failing build is not fixed by setting variables; its errors stay last on screen.
+  it('names missing variables before other errors, without suggesting a redeploy', async () => {
+    const configUrl = 'https://studio.example/environments/env-id/config';
+    const original = request.getMockImplementation()!;
+    request.mockImplementation(async (host, path, args) =>
+      path === '/api/deploy/status'
+        ? {
+            ...completed,
+            status: 'build-failed',
+            errors: ['npm ci failed'],
+            missingEnvVars: ['DATABASE_URL'],
+            configUrl,
+          }
+        : original(host, path, args)
+    );
+    await deploy(options);
+    const errors = vi.mocked(console.error).mock.calls.map(([line]) => line);
+    expect(errors).toEqual([
+      `DATABASE_URL is declared in modelence.config.json but has no value in this environment. Set it at ${configUrl}`,
+      '  npm ci failed',
+    ]);
+  });
 });
 
 async function saveTarget(appAlias: string, envAlias: string, host: string | null = options.host) {
@@ -406,9 +444,65 @@ describe('deploy target', () => {
     });
     await deploy({ host: options.host });
     expect(await readSavedProject()).toEqual({
-      appId: 'app-id',
-      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod', host: options.host },
+      hosts: {
+        [options.host]: {
+          appId: 'app-id',
+          deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
+        },
+      },
     });
+  });
+
+  it('records a Modelence Cloud target at the top level, where released CLIs read it', async () => {
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await deploy({ host: 'https://cloud.modelence.com' });
+    expect(await readSavedProject()).toEqual({
+      appId: 'app-id',
+      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
+    });
+  });
+
+  // A deploy to a staging Studio must not change what CI deploys to on Cloud.
+  it('keeps targets for different Studios side by side', async () => {
+    await saveTarget('app', 'prod', null);
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'dev-app-id', appAlias: 'app', environmentId: 'dev-id', envAlias: 'dev' },
+    });
+    await deploy({ host: options.host });
+    expect(await readSavedProject()).toEqual({
+      appId: 'app-id',
+      deploy: { environmentId: 'prod-id', appAlias: 'app', envAlias: 'prod' },
+      hosts: {
+        [options.host]: {
+          appId: 'dev-app-id',
+          deploy: { environmentId: 'dev-id', appAlias: 'app', envAlias: 'dev' },
+        },
+      },
+    });
+
+    vi.mocked(authenticateCli).mockClear();
+    await deploy({ host: 'https://cloud.modelence.com' });
+    await deploy({ host: options.host });
+    expect(authenticateCli).not.toHaveBeenCalled();
+    const environmentIds = request.mock.calls
+      .filter(([, path]) => path === '/api/upload-bundle')
+      .map(([, , args]) => (args?.body as { environmentId: string }).environmentId);
+    expect(environmentIds.slice(-2)).toEqual(['prod-id', 'dev-id']);
+  });
+
+  it('says which Studio the saved target is for when it does not apply', async () => {
+    await saveTarget('app', 'staging', 'https://other.example');
+    vi.mocked(isInteractive).mockReturnValue(false);
+    await expect(deploy({ host: options.host })).rejects.toThrow(
+      'is for https://other.example, not this Studio. Pass --host to deploy there.'
+    );
+    await expect(deploy({ host: options.host, env: 'prod' })).rejects.toThrow(
+      '--env needs --app here: the target saved in .modelence/project.json is for https://other.example'
+    );
   });
 
   // Environment ids only mean something on the Studio they were picked on.
@@ -425,7 +519,14 @@ describe('deploy target', () => {
     );
     const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
     expect(args?.body).toMatchObject({ environmentId: 'env-id' });
-    expect((await readSavedProject()).deploy.host).toBe(options.host);
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('is for https://other.example, not this Studio')
+    );
+    // The other Studio's target is kept, moved off the top level.
+    const saved = await readSavedProject();
+    expect(saved.deploy).toBeUndefined();
+    expect(saved.hosts['https://other.example'].deploy.environmentId).toBe('staging-id');
+    expect(saved.hosts[options.host].deploy.environmentId).toBe('env-id');
   });
 
   it('takes a target saved without a host as one for Modelence Cloud', async () => {
