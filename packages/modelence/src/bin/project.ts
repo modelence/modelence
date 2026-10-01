@@ -19,9 +19,6 @@ export interface DeployTarget {
   environmentId: string;
   appAlias: string;
   envAlias: string;
-  // Only in files written by pre-release CLIs, which kept one target for
-  // whichever Studio was used last; absent means Modelence Cloud.
-  host?: string;
 }
 
 // What the file records for one Studio. Ids and aliases only exist on the
@@ -67,11 +64,6 @@ export async function updateProject(
   await fs.writeFile(getProjectFilePath(cwd), JSON.stringify(next, null, 2) + '\n');
 }
 
-// The Studio the top-level target was picked on.
-function topLevelHost(project: ProjectFile): string {
-  return typeof project.deploy?.host === 'string' ? project.deploy.host : DEFAULT_HOST;
-}
-
 function asHostProject(value: unknown): HostProject {
   if (!value || typeof value !== 'object') {
     return {};
@@ -84,13 +76,10 @@ function asHostProject(value: unknown): HostProject {
 }
 
 export function projectForHost(project: ProjectFile, host: string): HostProject {
-  // The top level is Modelence Cloud's, or — in a pre-release file — belongs
-  // to the Studio its deploy.host names.
-  const topLevel = topLevelHost(project) === host ? asHostProject(project) : {};
   if (host === DEFAULT_HOST) {
-    return topLevel;
+    return asHostProject(project);
   }
-  return { ...topLevel, ...asHostProject(project.hosts?.[host]) };
+  return asHostProject(project.hosts?.[host]);
 }
 
 // Other Studios this project has a deploy target for, to explain why none
@@ -100,38 +89,22 @@ export function otherTargetHosts(project: ProjectFile, host: string): string[] {
     (key) => asHostProject(project.hosts?.[key]).deploy
   );
   if (asHostProject(project).deploy) {
-    hosts.unshift(topLevelHost(project));
+    hosts.unshift(DEFAULT_HOST);
   }
   return [...new Set(hosts)].filter((key) => key !== host);
 }
 
-/*
-  The file with `patch` recorded for `host`. A pre-release file that holds
-  another Studio's target at the top level has it moved under `hosts` first,
-  so the top level is Modelence Cloud's again.
-*/
+// The file with `patch` recorded for `host`.
 export function withHostProject(
   project: ProjectFile,
   host: string,
   patch: HostProject
 ): ProjectFile {
-  const base = liftTopLevelTarget(project);
   if (host === DEFAULT_HOST) {
-    return { ...base, ...patch };
+    return { ...project, ...patch };
   }
-  return { ...base, hosts: { ...base.hosts, [host]: { ...base.hosts?.[host], ...patch } } };
-}
-
-function liftTopLevelTarget(project: ProjectFile): ProjectFile {
-  const legacyHost = topLevelHost(project);
-  if (!project.deploy || legacyHost === DEFAULT_HOST) {
-    return project;
-  }
-  // The top-level appId was written together with that target.
-  const { deploy, appId, ...rest } = project;
-  const { host: _host, ...target } = deploy;
   return {
-    ...rest,
-    hosts: { [legacyHost]: { appId, deploy: target }, ...project.hosts },
+    ...project,
+    hosts: { ...project.hosts, [host]: { ...project.hosts?.[host], ...patch } },
   };
 }

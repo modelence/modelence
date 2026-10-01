@@ -30,19 +30,6 @@ describe('projectForHost', () => {
     expect(projectForHost(project, 'https://unknown.example')).toEqual({});
   });
 
-  // Pre-release CLIs kept the last Studio's target at the top level.
-  it('reads a top-level target with a host as belonging to that Studio', () => {
-    const legacy: ProjectFile = {
-      appId: 'staging-app',
-      deploy: { ...stagingTarget, host: STAGING },
-    };
-    expect(projectForHost(legacy, DEFAULT_HOST)).toEqual({});
-    expect(projectForHost(legacy, STAGING)).toMatchObject({
-      appId: 'staging-app',
-      deploy: stagingTarget,
-    });
-  });
-
   it('ignores malformed entries', () => {
     const broken = { deploy: 'x', hosts: { [STAGING]: { deploy: {} } } } as unknown as ProjectFile;
     expect(projectForHost(broken, DEFAULT_HOST)).toEqual({});
@@ -90,20 +77,6 @@ describe('withHostProject', () => {
   it('merges into an existing host entry', () => {
     const project: ProjectFile = { hosts: { [STAGING]: { deploy: stagingTarget } } };
     expect(withHostProject(project, STAGING, { appId: 'staging-app' })).toEqual({
-      hosts: { [STAGING]: { appId: 'staging-app', deploy: stagingTarget } },
-    });
-  });
-
-  it('moves a pre-release top-level target for another Studio under hosts', () => {
-    const legacy: ProjectFile = {
-      appId: 'staging-app',
-      deploy: { ...stagingTarget, host: STAGING },
-    };
-    expect(
-      withHostProject(legacy, DEFAULT_HOST, { appId: 'cloud-app', deploy: cloudTarget })
-    ).toEqual({
-      appId: 'cloud-app',
-      deploy: cloudTarget,
       hosts: { [STAGING]: { appId: 'staging-app', deploy: stagingTarget } },
     });
   });

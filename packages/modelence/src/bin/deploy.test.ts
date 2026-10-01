@@ -330,12 +330,13 @@ describe('deploy orchestration', () => {
 
 async function saveTarget(appAlias: string, envAlias: string, host: string | null = options.host) {
   await mkdir(join(project, '.modelence'), { recursive: true });
+  const target = {
+    appId: `${appAlias}-id`,
+    deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias },
+  };
   await writeFile(
     join(project, '.modelence/project.json'),
-    JSON.stringify({
-      appId: `${appAlias}-id`,
-      deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias, ...(host ? { host } : {}) },
-    })
+    JSON.stringify(host ? { hosts: { [host]: target } } : target)
   );
 }
 
@@ -386,7 +387,7 @@ describe('deploy target', () => {
     await saveTarget('app', 'staging');
     vi.mocked(confirm).mockResolvedValue(true);
     await deploy(options);
-    expect((await readSavedProject()).deploy.envAlias).toBe('staging');
+    expect((await readSavedProject()).hosts[options.host].deploy.envAlias).toBe('staging');
   });
 
   it('does not record a target given by flags when none is saved', async () => {
@@ -479,9 +480,8 @@ describe('deploy target', () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('is for https://other.example, not this Studio')
     );
-    // The other Studio's target is kept, moved off the top level.
+    // The other Studio's target is kept.
     const saved = await readSavedProject();
-    expect(saved.deploy).toBeUndefined();
     expect(saved.hosts['https://other.example'].deploy.environmentId).toBe('staging-id');
     expect(saved.hosts[options.host].deploy.environmentId).toBe('env-id');
   });
