@@ -52,6 +52,7 @@ beforeEach(async () => {
   vi.spyOn(process, 'cwd').mockReturnValue(project);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   vi.stubEnv('MODELENCE_TOKEN', 'original-token');
   vi.stubEnv('MODELENCE_HOME', join(dir, 'auth'));
@@ -269,13 +270,73 @@ describe('deploy orchestration', () => {
     await deploy(options);
     expect(process.exitCode).toBe(1);
   });
+
+  // The app's own crash ("DATABASE_URL must be set") says nothing about where to set it.
+  it('names declared variables without a value and where to set them', async () => {
+    const configUrl = 'https://studio.example/environments/env-id/config';
+    const original = request.getMockImplementation()!;
+    request.mockImplementation(async (host, path, args) => {
+      if (path === '/api/deploy') {
+        return {
+          ...((await original(host, path, args)) as object),
+          missingEnvVars: ['DATABASE_URL'],
+          configUrl,
+        };
+      }
+      if (path === '/api/deploy/status') {
+        return {
+          ...completed,
+          status: 'deploy-failed',
+          errors: [],
+          missingEnvVars: ['DATABASE_URL', 'CLERK_SECRET_KEY'],
+          configUrl,
+        };
+      }
+      return original(host, path, args);
+    });
+    await deploy(options);
+    expect(console.warn).toHaveBeenCalledWith(
+      `Warning: DATABASE_URL is declared in modelence.config.json but has no value in this environment. Set it at ${configUrl}`
+    );
+    expect(vi.mocked(console.error).mock.calls.at(-1)?.[0]).toBe(
+      `DATABASE_URL, CLERK_SECRET_KEY are declared in modelence.config.json but have no value in this environment. Set them at ${configUrl}, then deploy again.`
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  // A failing build is not fixed by setting variables; its errors stay last on screen.
+  it('names missing variables before other errors, without suggesting a redeploy', async () => {
+    const configUrl = 'https://studio.example/environments/env-id/config';
+    const original = request.getMockImplementation()!;
+    request.mockImplementation(async (host, path, args) =>
+      path === '/api/deploy/status'
+        ? {
+            ...completed,
+            status: 'build-failed',
+            errors: ['npm ci failed'],
+            missingEnvVars: ['DATABASE_URL'],
+            configUrl,
+          }
+        : original(host, path, args)
+    );
+    await deploy(options);
+    const errors = vi.mocked(console.error).mock.calls.map(([line]) => line);
+    expect(errors).toEqual([
+      `DATABASE_URL is declared in modelence.config.json but has no value in this environment. Set it at ${configUrl}`,
+      '  npm ci failed',
+    ]);
+  });
 });
 
-async function saveTarget(appAlias: string, envAlias: string) {
+async function saveTarget(appAlias: string, envAlias: string, host: string | null = options.host) {
   await mkdir(join(project, '.modelence'), { recursive: true });
+  const target = {
+    appId: `${appAlias}-id`,
+    deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias },
+  };
   await writeFile(
     join(project, '.modelence/project.json'),
-    JSON.stringify({ deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias } })
+    JSON.stringify(host ? { hosts: { [host]: target } } : target)
   );
 }
 
@@ -326,7 +387,7 @@ describe('deploy target', () => {
     await saveTarget('app', 'staging');
     vi.mocked(confirm).mockResolvedValue(true);
     await deploy(options);
-    expect((await readSavedProject()).deploy.envAlias).toBe('staging');
+    expect((await readSavedProject()).hosts[options.host].deploy.envAlias).toBe('staging');
   });
 
   it('does not record a target given by flags when none is saved', async () => {
@@ -341,9 +402,107 @@ describe('deploy target', () => {
     });
     await deploy({ host: options.host });
     expect(await readSavedProject()).toEqual({
+      hosts: {
+        [options.host]: {
+          appId: 'app-id',
+          deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
+        },
+      },
+    });
+  });
+
+  it('records a Modelence Cloud target at the top level, where released CLIs read it', async () => {
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await deploy({ host: 'https://cloud.modelence.com' });
+    expect(await readSavedProject()).toEqual({
       appId: 'app-id',
       deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
     });
+  });
+
+  // A deploy to a staging Studio must not change what CI deploys to on Cloud.
+  it('keeps targets for different Studios side by side', async () => {
+    await saveTarget('app', 'prod', null);
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'dev-app-id', appAlias: 'app', environmentId: 'dev-id', envAlias: 'dev' },
+    });
+    await deploy({ host: options.host });
+    expect(await readSavedProject()).toEqual({
+      appId: 'app-id',
+      deploy: { environmentId: 'prod-id', appAlias: 'app', envAlias: 'prod' },
+      hosts: {
+        [options.host]: {
+          appId: 'dev-app-id',
+          deploy: { environmentId: 'dev-id', appAlias: 'app', envAlias: 'dev' },
+        },
+      },
+    });
+
+    vi.mocked(authenticateCli).mockClear();
+    await deploy({ host: 'https://cloud.modelence.com' });
+    await deploy({ host: options.host });
+    expect(authenticateCli).not.toHaveBeenCalled();
+    const environmentIds = request.mock.calls
+      .filter(([, path]) => path === '/api/upload-bundle')
+      .map(([, , args]) => (args?.body as { environmentId: string }).environmentId);
+    expect(environmentIds.slice(-2)).toEqual(['prod-id', 'dev-id']);
+  });
+
+  it('says which Studio the saved target is for when it does not apply', async () => {
+    await saveTarget('app', 'staging', 'https://other.example');
+    vi.mocked(isInteractive).mockReturnValue(false);
+    await expect(deploy({ host: options.host })).rejects.toThrow(
+      'is for https://other.example, not this Studio. Pass --host to deploy there.'
+    );
+    await expect(deploy({ host: options.host, env: 'prod' })).rejects.toThrow(
+      '--env needs --app here: the target saved in .modelence/project.json is for https://other.example'
+    );
+  });
+
+  // Environment ids only mean something on the Studio they were picked on.
+  it('ignores a target saved for another host and picks one in the browser', async () => {
+    await saveTarget('app', 'staging', 'https://other.example');
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await deploy({ host: options.host });
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy', appId: undefined })
+    );
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
+    expect(args?.body).toMatchObject({ environmentId: 'env-id' });
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('is for https://other.example, not this Studio')
+    );
+    // The other Studio's target is kept.
+    const saved = await readSavedProject();
+    expect(saved.hosts['https://other.example'].deploy.environmentId).toBe('staging-id');
+    expect(saved.hosts[options.host].deploy.environmentId).toBe('env-id');
+  });
+
+  it('takes a target saved without a host as one for Modelence Cloud', async () => {
+    await saveTarget('app', 'staging', null);
+    await deploy({ host: 'https://cloud.modelence.com' });
+    expect(authenticateCli).not.toHaveBeenCalled();
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
+    expect(args?.body).toMatchObject({ environmentId: 'staging-id' });
+
+    vi.mocked(authenticateCli).mockResolvedValue({
+      token: 'browser-token',
+      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
+    });
+    await saveTarget('app', 'staging', null);
+    await deploy({ host: options.host });
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy' })
+    );
   });
 
   it('names the saved target before building', async () => {

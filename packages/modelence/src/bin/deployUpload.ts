@@ -5,6 +5,7 @@ import type { Session } from './deploySession';
 import type { ResolvedSpec } from './deploySpec';
 import { waitForEnvironmentReady } from './deployStatus';
 import { studioRequest } from './studioApi';
+import { describeMissingEnvVars } from './missingEnv';
 
 export type UploadKind = 'bundle' | 'source';
 
@@ -78,6 +79,9 @@ export async function runDeploy({
     buildId: string | null;
     // The spec Studio resolved the file against its runtime defaults to.
     spec?: ResolvedSpec | null;
+    // Absent on Studio versions before it was reported.
+    missingEnvVars?: string[];
+    configUrl?: string;
   }>(host, '/api/deploy', {
     method: 'POST',
     token,
@@ -90,6 +94,10 @@ export async function runDeploy({
   });
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
+  const missing = describeMissingEnvVars(result.missingEnvVars, result.configUrl);
+  if (missing) {
+    console.warn(`Warning: ${missing}`);
+  }
   return { environmentId: result.environmentId, buildId: result.buildId };
 }
 

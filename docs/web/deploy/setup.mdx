@@ -194,9 +194,10 @@ Follow these steps in order. Do not skip the verification step.
 9. **Commit `modelence.config.json`** together with any code changes (the `PORT` change, the
    production start script).
 
-10. **Tell the user to run `npx modelence deploy`** in the project directory. On the first run it
-    opens the browser to sign in and pick the application and environment; afterwards it remembers
-    them.
+10. **Tell the user to run `npx modelence@latest deploy`** in the project directory. No flags are
+    needed: on the first run it opens the browser to sign in and pick the organization, application
+    and environment (or create a new application or environment there); afterwards it remembers
+    them in `.modelence/project.json`.
 
 ### Runtime values and secrets
 

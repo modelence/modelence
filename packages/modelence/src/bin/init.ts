@@ -8,14 +8,13 @@ import {
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
+import { resolveHost } from './deploySession';
 
 /*
   `modelence init`: write a modelence.config.json template for the user's coding
   agent to fill in from the hosted setup guide. Nothing about the project is
   inspected — the file is the contract, and the agent reads the code.
 */
-
-const DEFAULT_SCHEMA_HOST = 'https://cloud.modelence.com';
 
 export interface InitOptions {
   force?: boolean;
@@ -29,8 +28,11 @@ export async function init(options: InitOptions) {
     throw new Error(`${APP_SPEC_FILE_NAME} already exists; pass --force to overwrite it.`);
   }
 
+  // The host deploy will use, so the schema comes from the Studio that
+  // validates the file.
+  const schemaHost = await resolveHost(options.host, cwd);
   const template: AppSpec = {
-    $schema: getAppSpecSchemaUrl(options.host ?? DEFAULT_SCHEMA_HOST),
+    $schema: getAppSpecSchemaUrl(schemaHost),
     resources: {
       app: {
         type: 'service',
@@ -49,7 +51,9 @@ export async function init(options: InitOptions) {
   console.log(`  ${AGENT_SETUP_PROMPT}`);
   console.log('');
   console.log(`Reference: ${SETUP_DOCS_URL}`);
-  console.log(`Once ${APP_SPEC_FILE_NAME} describes your app, run \`modelence deploy\`.`);
+  console.log(
+    `Once ${APP_SPEC_FILE_NAME} describes your app, run \`npx modelence@latest deploy\`.`
+  );
 }
 
 async function exists(path: string): Promise<boolean> {
