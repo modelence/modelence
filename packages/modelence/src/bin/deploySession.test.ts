@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { normalizeHost, resolveHost } from './deploySession';
+import { assertEnvTokenHost, normalizeHost, resolveHost } from './deploySession';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -55,5 +55,33 @@ describe('resolveHost', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('assertEnvTokenHost', () => {
+  it('refuses to send an environment token to a host from .modelence.env', () => {
+    vi.stubEnv('MODELENCE_TOKEN', 'secret');
+    vi.stubEnv('MODELENCE_SERVICE_ENDPOINT', '');
+    expect(() => assertEnvTokenHost(undefined, 'https://evil.example')).toThrow(
+      'Refusing to send MODELENCE_TOKEN to https://evil.example'
+    );
+  });
+
+  it('allows a host the flag, the environment or the default chose', () => {
+    vi.stubEnv('MODELENCE_TOKEN', 'secret');
+    vi.stubEnv('MODELENCE_SERVICE_ENDPOINT', '');
+    expect(() => assertEnvTokenHost(undefined, 'https://cloud.modelence.com')).not.toThrow();
+    expect(() =>
+      assertEnvTokenHost('hayk.modelence.dev', 'https://hayk.modelence.dev')
+    ).not.toThrow();
+
+    vi.stubEnv('MODELENCE_SERVICE_ENDPOINT', 'hayk.modelence.dev');
+    expect(() => assertEnvTokenHost(undefined, 'https://hayk.modelence.dev')).not.toThrow();
+  });
+
+  it('allows any host without an environment token', () => {
+    vi.stubEnv('MODELENCE_TOKEN', '');
+    vi.stubEnv('MODELENCE_SERVICE_ENDPOINT', '');
+    expect(() => assertEnvTokenHost(undefined, 'https://hayk.modelence.dev')).not.toThrow();
   });
 });

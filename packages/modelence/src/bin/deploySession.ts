@@ -84,3 +84,25 @@ export async function resolveHost(flag: string | undefined, cwd: string): Promis
     ? normalizeHost(env.MODELENCE_SERVICE_ENDPOINT)
     : DEFAULT_HOST;
 }
+
+/*
+  A MODELENCE_TOKEN from the environment (CI) is only sent to a Studio the
+  environment chose too. .modelence.env is a file in the checkout, and a
+  repository that commits one pointing elsewhere would otherwise receive the
+  token on the first deploy. A cached token is per host, so it never leaks
+  this way.
+*/
+export function assertEnvTokenHost(flag: string | undefined, host: string) {
+  if (
+    !process.env.MODELENCE_TOKEN ||
+    flag ||
+    process.env.MODELENCE_SERVICE_ENDPOINT ||
+    host === DEFAULT_HOST
+  ) {
+    return;
+  }
+  throw new Error(
+    `Refusing to send MODELENCE_TOKEN to ${host}, which comes from .modelence.env. ` +
+      `Pass --host ${host} or set MODELENCE_SERVICE_ENDPOINT if that is the Studio to deploy to.`
+  );
+}

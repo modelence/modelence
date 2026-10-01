@@ -19,6 +19,7 @@ import {
 } from './deployTarget';
 import { confirm, isInteractive } from './terminal';
 import {
+  assertEnvTokenHost,
   resolveHost,
   resolveToken,
   rememberToken,
@@ -62,6 +63,7 @@ export interface DeployOptions {
 export async function deploy(options: DeployOptions) {
   const cwd = process.cwd();
   const host = await resolveHost(options.host, cwd);
+  assertEnvTokenHost(options.host, host);
   const decision = await resolveDeployKind(cwd, options);
   const kind: UploadKind = decision.kind;
   const kindNote = describeDeployKind(decision);
