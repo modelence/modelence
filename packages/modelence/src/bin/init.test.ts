@@ -43,14 +43,6 @@ describe('init', () => {
     expect(logged.at(-1)).toContain('npx modelence@latest deploy');
   });
 
-  // VS Code refuses to download the schema from a host the project does not trust.
-  it('trusts the schema host in .vscode/settings.json', async () => {
-    await init({ host: 'https://studio.example/' });
-    expect(JSON.parse(await readFile(join(dir, '.vscode/settings.json'), 'utf8'))).toEqual({
-      'json.schemaDownload.trustedDomains': { 'https://studio.example/': true },
-    });
-  });
-
   // Studio refuses a $schema that is not a URL.
   it('writes a full URL for a bare host name', async () => {
     await init({ host: 'hayk.modelence.dev' });

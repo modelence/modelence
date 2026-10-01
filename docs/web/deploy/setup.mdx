@@ -183,8 +183,6 @@ Follow these steps in order. Do not skip the verification step.
    entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
    `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
    lives in a subdirectory. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
-   So VS Code and Cursor load that schema, trust its host in `.vscode/settings.json` (merge into
-   the file if it exists): `"json.schemaDownload.trustedDomains": { "https://cloud.modelence.com/": true }`.
 
 8. **Verify locally.** Run the build commands, then the start commands with `PORT=3000` set, in
    order — exactly as written in the file — and confirm the app answers on

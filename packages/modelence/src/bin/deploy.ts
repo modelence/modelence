@@ -8,7 +8,6 @@ import { otherTargetHosts, projectForHost, readProject, type HostProject } from 
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
-import { ensureSchemaHostTrusted, getSchemaHost, isKnownSchemaHost } from './vscodeSettings';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
 import type { AppSpec } from './appSpec';
 import {
@@ -96,12 +95,6 @@ export async function deploy(options: DeployOptions) {
     await createBundle(archivePath);
   } else {
     spec = await prepareSpec(cwd);
-    // Only a Modelence host: a cloned repo's $schema must not get an
-    // arbitrary domain trusted by the editor.
-    const schemaHost = getSchemaHost(spec.$schema);
-    if (schemaHost && isKnownSchemaHost(schemaHost, host)) {
-      await ensureSchemaHostTrusted(cwd, schemaHost, { create: false });
-    }
     reportPackedSource(await packSource(cwd, archivePath));
   }
 

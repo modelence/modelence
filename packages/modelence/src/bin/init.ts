@@ -8,7 +8,6 @@ import {
   writeAppSpecFile,
   type AppSpec,
 } from './appSpec';
-import { ensureSchemaHostTrusted } from './vscodeSettings';
 import { resolveHost } from './deploySession';
 
 /*
@@ -45,7 +44,6 @@ export async function init(options: InitOptions) {
     env: {},
   };
   await writeAppSpecFile(template, cwd);
-  await ensureSchemaHostTrusted(cwd, schemaHost, { create: true });
 
   console.log(`Wrote a ${APP_SPEC_FILE_NAME} template.`);
   console.log('Ask your coding agent to fill it in with this prompt:');
