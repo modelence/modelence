@@ -40,7 +40,9 @@ function initializeAmazonSESClient() {
   smtpClient = nodemailer.createTransport({
     host,
     port,
-    secure: true,
+    // Implicit TLS only on 465. Other ports (587, 25, 2525) start in plaintext
+    // and upgrade with STARTTLS, which nodemailer does when the server offers it.
+    secure: port === 465,
     auth: {
       user,
       pass,
