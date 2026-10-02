@@ -85,9 +85,9 @@ export async function sendEmail(
     replyTo,
     headers,
     attachments: attachments?.map(attachment => ({
-      name: attachment.filename,
+      filename: attachment.filename,
       content: attachment.content,
-      type: attachment.contentType,
+      contentType: attachment.contentType,
     })),
   });
 
