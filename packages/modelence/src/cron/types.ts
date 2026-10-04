@@ -12,6 +12,7 @@ export type CronJob = {
     startTs?: number;
     scheduledRunTs?: number;
     isRunning: boolean;
+    timedOutAt?: number;
   };
 };
 
