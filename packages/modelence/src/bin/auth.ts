@@ -1,4 +1,5 @@
 import open from 'open';
+import type { EnvDeclaration } from './appSpec';
 
 /*
   Browser device authorization: the CLI mints a code, the user approves it in
@@ -19,6 +20,11 @@ import open from 'open';
   .modelence/project.json. `pick: 'deploy'` implies it.
 
   `appId` is the hint from .modelence/project.json used to preselect the app.
+
+  `env` is what modelence.config.json declares. With the deploy picker, the
+  page asks for those variables' values as a separate step after the target,
+  so a new environment has them before its first build. Studio versions
+  without that step ignore the body.
 */
 
 export type CliAuthPick = 'environment' | 'deploy';
@@ -44,15 +50,25 @@ export async function authenticateCli(
     purpose,
     pickEnvironment = false,
     appId,
+    env,
   }: {
     pick?: CliAuthPick;
     purpose?: 'deploy';
     pickEnvironment?: boolean;
     appId?: string;
+    env?: Record<string, EnvDeclaration>;
   } = {}
 ): Promise<CliAuthResult> {
+  // Only the picker has a variables step; nothing is sent otherwise.
+  const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
+    ...(declaredEnv
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env: declaredEnv }),
+        }
+      : {}),
   });
 
   if (!response.ok) {

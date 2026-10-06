@@ -110,6 +110,7 @@ export async function deploy(options: DeployOptions) {
         pick: target ? undefined : 'deploy',
         purpose: 'deploy',
         appId: project.appId,
+        env: spec?.env,
       });
       token = auth.token;
       await rememberToken(host, auth.token, auth.expiresAt);
@@ -141,6 +142,7 @@ export async function deploy(options: DeployOptions) {
         pick: target ? undefined : 'deploy',
         purpose: 'deploy',
         appId: project.appId,
+        env: spec?.env,
       });
       await rememberToken(host, auth.token, auth.expiresAt);
       if (auth.target) {
