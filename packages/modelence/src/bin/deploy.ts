@@ -28,6 +28,7 @@ import {
   type Session,
 } from './deploySession';
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
+import { fillMissingEnvVars } from './deployEnv';
 import { followDeploy } from './deployStatus';
 
 /*
@@ -100,6 +101,9 @@ export async function deploy(options: DeployOptions) {
     reportPackedSource(await packSource(cwd, archivePath));
   }
 
+  // Set when the browser picker ran this time: its variables step already
+  // asked for the missing values, so the terminal doesn't ask again.
+  let pickedInBrowser = false;
   try {
     if (!token || !target) {
       // The browser flow hands back a token and, when the target is not known
@@ -117,6 +121,7 @@ export async function deploy(options: DeployOptions) {
       if (auth.target) {
         target = { environmentId: auth.target.environmentId };
         await rememberTarget(auth.target, host);
+        pickedInBrowser = true;
       }
     }
     if (!target) {
@@ -151,6 +156,20 @@ export async function deploy(options: DeployOptions) {
       }
       session.token = auth.token;
     };
+
+    if (!pickedInBrowser && isInteractive()) {
+      const envTarget = target;
+      const fill = () => fillMissingEnvVars({ session, target: envTarget, env: spec?.env });
+      try {
+        await fill();
+      } catch (error) {
+        if (!isUnauthorized(error)) {
+          throw error;
+        }
+        await signInAgain();
+        await fill();
+      }
+    }
 
     let started: StartedDeploy;
     try {
