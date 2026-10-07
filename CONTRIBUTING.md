@@ -83,7 +83,7 @@ A good issue includes what you expected, what happened instead, steps to reprodu
 
 ## Security
 
-**Please don't report security vulnerabilities in a public issue.** Email [support@modelence.com](mailto:support@modelence.com) instead, and give us a chance to ship a fix before the details are public.
+**Please don't report security vulnerabilities in a public issue.** Email [security@modelence.com](mailto:security@modelence.com) instead, so we can ship a fix before sharing publicly. See [SECURITY.md](SECURITY.md) for the full policy.
 
 ## Where to reach us
 
