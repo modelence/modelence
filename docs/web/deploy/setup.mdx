@@ -64,6 +64,7 @@ Each entry of `env` declares one variable:
 | `type` | `"text"` \| `"secret"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. |
 | `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build commands — needed for anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. |
 | `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
+| `required` | boolean | `true` | Whether the app needs a value to run. A deploy asks for every required variable that has no value, and a CI deploy fails without one. Set `false` for a variable the app runs without (an optional integration's key). |
 
 A value set in the dashboard overrides a `value` written here, so a literal in the file is the
 committed default rather than a fixed constant.
@@ -194,19 +195,23 @@ Follow these steps in order. Do not skip the verification step.
 9. **Commit `modelence.config.json`** together with any code changes (the `PORT` change, the
    production start script).
 
-10. **Tell the user to run `npx modelence@latest deploy`** in the project directory. No flags are
-    needed: on the first run it opens the browser to sign in and pick the organization, application
-    and environment (or create a new application or environment there); afterwards it remembers
-    them in `.modelence/project.json`.
+10. **Run `npx modelence@latest deploy`** in the project directory yourself, with a timeout of at
+    least 15 minutes. It opens the browser, where the user signs in, picks the organization,
+    application and environment (or creates a new application or environment there) and enters the
+    values of any required variables the environment does not have yet. Tell the user to confirm
+    there, then wait for the command to finish: it uploads the project and follows the build until
+    the app is live. If you know the target, pass `--app <app> --env <env>` to preselect it; the
+    user still confirms it in the browser.
 
 ### Runtime values and secrets
 
-When the app needs a value at runtime that must not be committed — an API key, an OAuth secret, a
-third-party URL — tell the user to add it in the Modelence Cloud dashboard under **Environment
-variables** for the target environment, marked as secret. Values only a build needs (a `VITE_*` or
-`NEXT_PUBLIC_*` variable that is inlined into the frontend) must additionally be ticked **available at
-build time**; leave that unticked for anything the browser must not see. Read runtime values from
-`process.env` as usual.
+When the app needs a value that must not be committed — an API key, an OAuth secret, a third-party
+URL — declare it by name in the file's `env` section, without a `value` and with `"type": "secret"`
+for anything sensitive. The deploy asks the user for it in the browser; it can be changed later in
+the Modelence Cloud dashboard under **Environment variables**. A value only the build needs (a
+`VITE_*` or `NEXT_PUBLIC_*` variable that is inlined into the frontend) gets
+`"scopes": ["build", "runtime"]`; never give a build scope to anything the browser must not see. Mark
+a variable the app runs without `"required": false`. Read the values from `process.env` as usual.
 
 Non-secret settings that belong with the code (a base path, a public API path) go in the file's
 `env` section instead, with a `value`, so they are versioned with the repository. Give anything a

@@ -1,4 +1,6 @@
 import open from 'open';
+import type { EnvDeclaration } from './appSpec';
+import type { CliTarget } from './deployTarget';
 
 /*
   Browser device authorization: the CLI mints a code, the user approves it in
@@ -15,10 +17,17 @@ import open from 'open';
   Without `pick` the page only authorizes the device.
 
   `purpose: 'deploy'` asks for a deploy-lifetime token (one hour) without a
-  picker — for a deploy whose target is already known from flags or
-  .modelence/project.json. `pick: 'deploy'` implies it.
+  picker — for signing in again during a deploy whose target is already
+  picked. `pick: 'deploy'` implies it.
 
   `appId` is the hint from .modelence/project.json used to preselect the app.
+  `hint` is the deploy target -a/-e or .modelence/project.json name, which
+  the deploy picker preselects.
+
+  `env` is what modelence.config.json declares. With the deploy picker, the
+  page asks for those variables' values as a separate step after the target,
+  so a new environment has them before its first build. Studio versions
+  without that step ignore the body.
 */
 
 export type CliAuthPick = 'environment' | 'deploy';
@@ -44,15 +53,27 @@ export async function authenticateCli(
     purpose,
     pickEnvironment = false,
     appId,
+    hint,
+    env,
   }: {
     pick?: CliAuthPick;
     purpose?: 'deploy';
     pickEnvironment?: boolean;
     appId?: string;
+    hint?: CliTarget;
+    env?: Record<string, EnvDeclaration>;
   } = {}
 ): Promise<CliAuthResult> {
+  // Only the picker has a variables step; nothing is sent otherwise.
+  const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
+    ...(declaredEnv
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env: declaredEnv }),
+        }
+      : {}),
   });
 
   if (!response.ok) {
@@ -70,6 +91,9 @@ export async function authenticateCli(
   }
   if (appId) {
     url.searchParams.set('appId', appId);
+  }
+  for (const [key, value] of Object.entries(hint ?? {})) {
+    url.searchParams.set(key, value);
   }
 
   console.log(`Please visit ${url} to authenticate`);

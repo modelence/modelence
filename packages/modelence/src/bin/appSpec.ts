@@ -52,6 +52,8 @@ export interface EnvDeclaration {
   // The phases the value reaches; default ["runtime"].
   scopes?: EnvDeclarationScope[];
   value?: string;
+  // False for a variable the app runs without; a declaration is required by default.
+  required?: boolean;
 }
 
 export interface AppSpec {

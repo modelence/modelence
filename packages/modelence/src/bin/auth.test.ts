@@ -55,3 +55,38 @@ describe('authenticateCli polling', () => {
     expect(console.error).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('authenticateCli declared variables', () => {
+  const env = { DATABASE_URL: { type: 'secret' as const } };
+  const authRequest = () =>
+    vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/api/cli/auth'))?.[1];
+
+  it('sends what modelence.config.json declares to the deploy picker', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { pick: 'deploy', purpose: 'deploy', env });
+    expect(JSON.parse(String(authRequest()?.body))).toEqual({ env });
+  });
+
+  // No picker, no variables step to fill.
+  it('sends nothing when the page only authorizes', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { purpose: 'deploy', env });
+    expect(authRequest()?.body).toBeUndefined();
+  });
+});
+
+describe('authenticateCli deploy target hint', () => {
+  it('passes the named target for the picker to preselect', async () => {
+    const open = (await import('open')).default;
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, {
+      pick: 'deploy',
+      purpose: 'deploy',
+      hint: { appAlias: 'app', envAlias: 'prod' },
+    });
+    const url = new URL(String(vi.mocked(open).mock.calls.at(-1)?.[0]));
+    expect(url.searchParams.get('appAlias')).toBe('app');
+    expect(url.searchParams.get('envAlias')).toBe('prod');
+    expect(url.searchParams.get('pick')).toBe('deploy');
+  });
+});
