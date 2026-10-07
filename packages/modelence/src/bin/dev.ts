@@ -62,6 +62,9 @@ export function dev(options: { takeover?: boolean } = {}) {
 
   process.on('SIGINT', () => forwardSignal('SIGINT'));
   process.on('SIGTERM', () => forwardSignal('SIGTERM'));
+  // A terminal hangup reaches this process but not the detached watcher
+  // (its own session has no controlling terminal), so forward it too.
+  process.on('SIGHUP', () => forwardSignal('SIGHUP'));
 
   // Last resort: if the parent exits without going through a handled signal,
   // do not leave the watcher tree behind.
