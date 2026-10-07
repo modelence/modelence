@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -42,19 +42,21 @@ program
 program
   .command('deploy')
   .description(
-    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser on first run)'
+    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser; in CI from --app/--env or the saved target)'
   )
-  .option('-a, --app <app>', 'Application alias')
-  .option('-e, --env <env>', 'Environment alias')
+  .option('-a, --app <app>', 'Application alias (preselected in the browser; the target in CI)')
+  .option('-e, --env <env>', 'Environment alias (preselected in the browser; the target in CI)')
   .option('-h, --host <host>', 'Modelence host')
   .option(
     '--prebuilt',
     'Build locally and upload the .modelence/build bundle (Modelence apps only)'
   )
   .option(
-    '-y, --yes',
-    'Deploy to the given --app/--env without asking, even if it is not the saved target'
+    '--skip-env-check',
+    'In CI, deploy even when variables modelence.config.json requires have no value'
   )
+  // Nothing asks for confirmation any more; still accepted so scripts keep working.
+  .addOption(new Option('-y, --yes').hideHelp())
   .action(async (options) => {
     try {
       await deploy(options);

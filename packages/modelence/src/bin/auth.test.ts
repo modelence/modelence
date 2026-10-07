@@ -74,3 +74,19 @@ describe('authenticateCli declared variables', () => {
     expect(authRequest()?.body).toBeUndefined();
   });
 });
+
+describe('authenticateCli deploy target hint', () => {
+  it('passes the named target for the picker to preselect', async () => {
+    const open = (await import('open')).default;
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, {
+      pick: 'deploy',
+      purpose: 'deploy',
+      hint: { appAlias: 'app', envAlias: 'prod' },
+    });
+    const url = new URL(String(vi.mocked(open).mock.calls.at(-1)?.[0]));
+    expect(url.searchParams.get('appAlias')).toBe('app');
+    expect(url.searchParams.get('envAlias')).toBe('prod');
+    expect(url.searchParams.get('pick')).toBe('deploy');
+  });
+});
