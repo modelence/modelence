@@ -25,6 +25,7 @@ class FakeChild extends EventEmitter {
 type Listener = (...args: unknown[]) => void;
 
 describe('dev', () => {
+  let sighupBefore: Listener[];
   let sigintBefore: Listener[];
   let sigtermBefore: Listener[];
   let exitBefore: Listener[];
@@ -42,6 +43,7 @@ describe('dev', () => {
   };
 
   beforeEach(async () => {
+    sighupBefore = process.listeners('SIGHUP') as Listener[];
     sigintBefore = process.listeners('SIGINT') as Listener[];
     sigtermBefore = process.listeners('SIGTERM') as Listener[];
     exitBefore = process.listeners('exit') as Listener[];
@@ -59,6 +61,7 @@ describe('dev', () => {
   });
 
   afterEach(() => {
+    removeAddedListeners('SIGHUP', sighupBefore);
     removeAddedListeners('SIGINT', sigintBefore);
     removeAddedListeners('SIGTERM', sigtermBefore);
     removeAddedListeners('exit', exitBefore);
@@ -78,6 +81,11 @@ describe('dev', () => {
   it('forwards SIGTERM to the whole child process group', () => {
     process.emit('SIGTERM');
     expect(killSpy).toHaveBeenCalledWith(-fakeChild.pid, 'SIGTERM');
+  });
+
+  it('forwards SIGHUP to the whole child process group', () => {
+    process.emit('SIGHUP');
+    expect(killSpy).toHaveBeenCalledWith(-fakeChild.pid, 'SIGHUP');
   });
 
   it('forwards SIGINT to the whole child process group', () => {
@@ -116,6 +124,7 @@ describe('dev', () => {
 
   it('uses a shell and taskkill /T on Windows', async () => {
     platformSpy.mockReturnValue('win32');
+    removeAddedListeners('SIGHUP', sighupBefore);
     removeAddedListeners('SIGINT', sigintBefore);
     removeAddedListeners('SIGTERM', sigtermBefore);
     removeAddedListeners('exit', exitBefore);
