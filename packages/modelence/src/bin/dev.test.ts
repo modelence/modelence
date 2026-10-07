@@ -20,12 +20,15 @@ vi.mock('./config', () => ({
 class FakeChild extends EventEmitter {
   pid = 12345;
   killed = false;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
 }
 
 type Listener = (...args: unknown[]) => void;
 
 describe('dev', () => {
   let sighupBefore: Listener[];
+  let sigquitBefore: Listener[];
   let sigintBefore: Listener[];
   let sigtermBefore: Listener[];
   let exitBefore: Listener[];
@@ -44,6 +47,7 @@ describe('dev', () => {
 
   beforeEach(async () => {
     sighupBefore = process.listeners('SIGHUP') as Listener[];
+    sigquitBefore = process.listeners('SIGQUIT') as Listener[];
     sigintBefore = process.listeners('SIGINT') as Listener[];
     sigtermBefore = process.listeners('SIGTERM') as Listener[];
     exitBefore = process.listeners('exit') as Listener[];
@@ -62,6 +66,7 @@ describe('dev', () => {
 
   afterEach(() => {
     removeAddedListeners('SIGHUP', sighupBefore);
+    removeAddedListeners('SIGQUIT', sigquitBefore);
     removeAddedListeners('SIGINT', sigintBefore);
     removeAddedListeners('SIGTERM', sigtermBefore);
     removeAddedListeners('exit', exitBefore);
@@ -86,6 +91,41 @@ describe('dev', () => {
   it('forwards SIGHUP to the whole child process group', () => {
     process.emit('SIGHUP');
     expect(killSpy).toHaveBeenCalledWith(-fakeChild.pid, 'SIGHUP');
+  });
+
+  it('forwards SIGQUIT to the whole child process group', () => {
+    process.emit('SIGQUIT');
+    expect(killSpy).toHaveBeenCalledWith(-fakeChild.pid, 'SIGQUIT');
+  });
+
+  it.each(['exitCode', 'signalCode'] as const)(
+    'skips the Windows exit backstop when %s indicates the child exited',
+    (field) => {
+      platformSpy.mockReturnValue('win32');
+      if (field === 'exitCode') {
+        fakeChild.exitCode = 0;
+      } else {
+        fakeChild.signalCode = 'SIGTERM';
+      }
+      process.emit('exit', 0);
+      expect(spawnSyncMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps the Windows exit backstop for a running child', () => {
+    platformSpy.mockReturnValue('win32');
+    process.emit('exit', 0);
+    expect(spawnSyncMock).toHaveBeenCalledWith(
+      'taskkill',
+      ['/pid', String(fakeChild.pid), '/T', '/F'],
+      { stdio: 'ignore' }
+    );
+  });
+
+  it('keeps the POSIX exit backstop after the group leader exits', () => {
+    fakeChild.exitCode = 0;
+    process.emit('exit', 0);
+    expect(killSpy).toHaveBeenCalledWith(-fakeChild.pid, 'SIGKILL');
   });
 
   it('forwards SIGINT to the whole child process group', () => {
@@ -125,6 +165,7 @@ describe('dev', () => {
   it('uses a shell and taskkill /T on Windows', async () => {
     platformSpy.mockReturnValue('win32');
     removeAddedListeners('SIGHUP', sighupBefore);
+    removeAddedListeners('SIGQUIT', sigquitBefore);
     removeAddedListeners('SIGINT', sigintBefore);
     removeAddedListeners('SIGTERM', sigtermBefore);
     removeAddedListeners('exit', exitBefore);
