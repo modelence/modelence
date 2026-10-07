@@ -65,10 +65,15 @@ export function dev(options: { takeover?: boolean } = {}) {
   // A terminal hangup reaches this process but not the detached watcher
   // (its own session has no controlling terminal), so forward it too.
   process.on('SIGHUP', () => forwardSignal('SIGHUP'));
+  process.on('SIGQUIT', () => forwardSignal('SIGQUIT'));
 
   // Last resort: if the parent exits without going through a handled signal,
   // do not leave the watcher tree behind.
   process.on('exit', () => {
+    const exited = child.exitCode !== null || child.signalCode !== null;
+    if (process.platform === 'win32' && exited) {
+      return;
+    }
     killProcessTree(child, 'SIGKILL');
   });
 
