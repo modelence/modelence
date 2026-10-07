@@ -7,9 +7,11 @@ import type { CliTarget } from './deployTarget';
   the browser, and the CLI polls until approval binds a token to the code.
 
   Two approval modes, chosen by `pick`:
-    'environment' — `modelence setup`: the page also asks which environment to
-                    connect the local project to. The choice is stamped on the
-                    token; /api/setup derives its target from there.
+    'environment' — `modelence setup`: the page also asks which sandbox to
+                    connect the project to (an existing one, or one created
+                    there in an existing or new app). The choice is stamped
+                    on the token; /api/setup derives its target from there.
+                    `createOnly` (`setup --new`) leaves out existing ones.
     'deploy'      — `modelence deploy`: the page asks where to deploy (an
                     existing or newly created app / cloud environment) and the
                     token route reports the pick back so the CLI can record it
@@ -52,6 +54,7 @@ export async function authenticateCli(
     pick,
     purpose,
     pickEnvironment = false,
+    createOnly = false,
     appId,
     hint,
     env,
@@ -59,6 +62,7 @@ export async function authenticateCli(
     pick?: CliAuthPick;
     purpose?: 'deploy';
     pickEnvironment?: boolean;
+    createOnly?: boolean;
     appId?: string;
     hint?: CliTarget;
     env?: Record<string, EnvDeclaration>;
@@ -85,6 +89,9 @@ export async function authenticateCli(
   const resolvedPick = pick ?? (pickEnvironment ? 'environment' : undefined);
   if (resolvedPick) {
     url.searchParams.set('pick', resolvedPick);
+  }
+  if (resolvedPick === 'environment' && createOnly) {
+    url.searchParams.set('new', '1');
   }
   if (purpose) {
     url.searchParams.set('purpose', purpose);
