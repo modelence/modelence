@@ -3,44 +3,9 @@ title: 'Quick Start'
 icon: 'rocket'
 ---
 
-## Build with the App Builder
+Scaffold a new project with the Modelence CLI and run it locally.
 
-The fastest way to create a Modelence app - no local setup needed.
-
-<Steps>
-  <Step title="Go to Modelence Cloud">
-    Open [cloud.modelence.com](https://cloud.modelence.com) and sign up for a free account.
-  </Step>
-
-  <Step title="Create an app">
-    Describe what you want to build in the prompt field. For example:
-
-    > "A task management app with user accounts, project boards, and due date reminders"
-
-    The App Builder will generate your full application - frontend, backend, database, and hosting - in minutes.
-  </Step>
-
-  <Step title="Iterate on your app">
-    Once your app is generated, you can continue chatting with the App Builder to refine it. Ask it to add features, change the design, fix issues, or adjust functionality.
-  </Step>
-
-  <Step title="Share or deploy">
-    Once ready, click `Publish`, and your app is automatically deployed to a live URL on Modelence Cloud.
-    You can share it immediately or connect a custom domain.
-  </Step>
-</Steps>
-
-<Tip>
-Every app built with the App Builder generates a clean, readable TypeScript + React + MongoDB codebase. You can view, edit, and download the source code at any time.
-</Tip>
-
----
-
-## Developer Quick Start (CLI)
-
-If you prefer working locally with your own editor and terminal, you can scaffold a project with the Modelence CLI.
-
-### Prerequisites
+## Prerequisites
 
 <AccordionGroup>
   <Accordion icon="node-js" title="Node.js">
@@ -59,7 +24,7 @@ If you prefer working locally with your own editor and terminal, you can scaffol
   </Accordion>
 </AccordionGroup>
 
-### Creating a new project
+## Creating a new project
 
 You can create a new Modelence project using the `create-modelence-app` command.
 
@@ -69,11 +34,11 @@ npx create-modelence-app@latest my-app
 
 This command will create a new directory named `my-app` with the necessary files and folders for your project.
 
-### Project structure
+## Project structure
 
 For a detailed breakdown of the project structure, see [Project Structure](/core-concepts/project-structure).
 
-### Start your application
+## Start your application
 
 <Steps>
   <Step title="Install dependencies">
@@ -101,8 +66,8 @@ For a detailed breakdown of the project structure, see [Project Structure](/core
   </Step>
 </Steps>
 
-### Next steps
+## Next steps
 
-Once your local project is running, you can [connect it to Modelence Cloud](/setup) for hosting, database provisioning, and monitoring.
+Once your local project is running, you can [connect it to a local environment](/setup) for its database and monitoring, or [deploy it](/deploy/setup) to Modelence Cloud.
 
 If you build with an AI coding agent, see [AI Coding Agents](/ai-coding-agents) to set up Claude Code, Cursor, or Codex with Modelence's framework rules and documentation access.
