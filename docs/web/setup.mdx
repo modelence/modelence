@@ -1,198 +1,57 @@
 ---
-title: 'Setup'
-icon: 'gear'
+title: 'Local Setup'
+description: 'Connect a project running on your machine to a Modelence local environment'
+icon: 'laptop'
 ---
 
-You can either continue using your Modelence project as it is, or connect it to <a href="https://cloud.modelence.com" target="_blank">Modelence Cloud</a>.
+This page is written for a coding agent. It describes what a local environment is and the steps to
+connect a project to one. If you are a person, hand it to your agent:
 
-We've built **Modelence Cloud** to seamlessly host and monitor Modelence applications,
-and it's designed for both scalable production apps as well as local development environments.
-By connecting your local project, you can use a free remote MongoDB database without having to set up your own,
-and you will also get access to logs, metrics and performance insights of your locally running application.
-
-<Note>
-If you want to skip this for now, feel free to ignore the "Connecting to Modelence Cloud" section below and continue with the MongoDB setup section.
-</Note>
-
-## Connecting to Modelence Cloud
-
-<Steps>
-  <Step title="Create a Modelence Account">
-    First, you need to create a free Modelence account by going to [Modelence Cloud](https://cloud.modelence.com).
-  </Step>
-  
-  <Step title="Create an Application">
-    After you've logged in, create a new application and name it after your project.
-  </Step>
-  
-  <Step title="Create an Environment">
-    After you've created an application, create a new environment. There are 2 types of environments: **cloud** and **local**. The cloud environment will provision and deploy your application to Modelence Cloud servers, while the local environment will only provision a remote MongoDB database for your local development.
-
-    <Note>
-    You can also connect to an external MongoDB database instead of using Modelence's provisioned database. See the "Setting up MongoDB" section below for more details.
-    </Note>
-  </Step>
-  
-  <Step title="Connect Your Project">
-    After you've created a new environment, open its Settings page and click on `Setup Local Environment` button.
-
-    It will open a modal with 2 steps. The first step creates a project (it's optional) by running the following command.
-
-    ```bash
-    npx create-modelence-app@latest testenv --template ai-chat
-    ```
-
-    The second command should be executed in the project directory and it connects the project to Modelence Cloud. Here is how the command looks like: 
-
-    ```bash
-    npx modelence@latest setup --token <token>
-    ```
-    
-    It will automatically create a `.modelence.env` file with the necessary environment variables.
-  </Step>
-  
-  <Step title="Starting The Development Server">
-    Run the following command in the project directory `npm run dev` to start the development server.
-    
-    Now, if everything is set up correctly, you should see your environment status go from `inactive` to `active` in the Modelence Cloud dashboard.
-  </Step>
-</Steps>
-
-## Deploy to Modelence Cloud
-
-To deploy your Modelence application to the cloud, follow these steps:
-
-<Steps>
-  <Step title="Create a Cloud Environment">
-    In your Modelence Cloud dashboard, navigate to your application and create a new environment. This time, select **cloud** as the environment type instead of local. Cloud environments will provision infrastructure and deploy your application to Modelence Cloud servers.
-  </Step>
-
-  <Step title="Open Environment Settings">
-    After creating the cloud environment, navigate to its Settings page. You'll find deployment configuration and commands here.
-  </Step>
-
-  <Step title="(Optional) Create a New Project">
-    If you don't have an existing project, you can create one using the command from Step 1 in the settings modal:
-
-    ```bash
-    npx create-modelence-app@latest my-app --template ai-chat
-    ```
-
-    Replace `my-app` with your preferred project name and choose the template that fits your needs.
-  </Step>
-
-  <Step title="Deploy Your Project">
-    Copy the deployment command from Step 2 in the settings page. The command will look like this:
-
-    ```bash
-    npx modelence@latest deploy --app <app-name> --env <env-name>
-    ```
-
-    The browser opens with that environment preselected; confirm it there to start the deploy.
-
-    Run this command in your project directory to deploy your application to Modelence Cloud. The deployment process will:
-    - Build your application
-    - Upload it to Modelence Cloud
-    - Provision necessary resources (MongoDB database, server infrastructure)
-    - Start your application
-
-    Once deployment completes, your environment status will change to `active` and you'll receive a URL to access your deployed application.
-  </Step>
-</Steps>
-
-<Note>
-Cloud deployments include automatic scaling, monitoring, and a production-ready MongoDB database. You can view logs, metrics, and manage your deployment from the Modelence Cloud dashboard.
-</Note>
-
-
-## Setting up MongoDB
-
-<Note>
-If you've connected your local project to Modelence Cloud, as described in the section above, **no more setup is needed** - you are automatically set up with a MongoDB database that is included with your remote environment and can skip this section.
-</Note>
-
-If you skipped the Modelence Cloud setup, the easiest way to set up MongoDB is to use the [MongoDB Atlas](https://www.mongodb.com/atlas) free tier. While you can set up your own local MongoDB instance, we recommend Atlas because it eliminates the need for local installation and provides cloud storage for your development data, protecting it from local environment issues or data loss.
-
-### Setting up MongoDB with Atlas
-
-<AccordionGroup>
-  <Accordion icon="user-plus" title="Create an Atlas Account">
-    - Go to [MongoDB Atlas](https://www.mongodb.com/atlas)
-    - Sign up for a new account or log in if you already have one
-    
-    For more detailed instructions, you can refer to the [MongoDB Atlas documentation](https://www.mongodb.com/docs/guides/atlas/cluster/)
-  </Accordion>
-  
-  <Accordion icon="database" title="Create a Free Cluster">
-    - Click "Build a Database"
-    - Choose the "FREE" tier (labeled as "Shared" or "M0")
-    - Select your preferred cloud provider and region
-    - Click "Create" to deploy your cluster (this may take a few minutes)
-  </Accordion>
-  
-  <Accordion icon="shield-check" title="Set up Database Access">
-    - In the Security Quickstart page, select "Username and Password" authentication
-    - Enter a username in the first text field
-    - For the password, either:
-      - Enter your own secure password, or
-      - Click "Autogenerate Secure Password" to let Atlas create one
-    - Click "Create User"
-    
-    For more detailed instructions, you can refer to the [MongoDB user setup guide](https://www.mongodb.com/docs/guides/atlas/db-user/)
-  </Accordion>
-  
-  <Accordion icon="network-wired" title="Configure Network Access">
-    - In the Security Quickstart page, select "My Local Environment"
-    - In the "Add entries to your IP Access List" section, you can either:
-      - Click "Add My Current IP Address" to add your current IP
-      - For development, click "Allow Access from Anywhere" (0.0.0.0/0)
-    - Click "Finish and Close"
-    
-    For more detailed instructions, you can refer to the [MongoDB network access guide](https://www.mongodb.com/docs/guides/atlas/network-connections/)
-  </Accordion>
-  
-  <Accordion icon="link" title="Get Your Connection String">
-    - Return to the "Database" page
-    - Click "Connect" on your cluster
-    - Select "Drivers" under "Connect Your Application"
-    - Choose the latest Node.js version and copy the connection string
-    - Replace the `<username>` and `<password>` in the string with your database user's username and password
-    - Add your desired database name to the connection string (otherwise it will default to `test`), so it looks like this:
-    
-    ```
-    mongodb+srv://<username>:<password>@<cluster_name>.mongodb.net/<database-name>?retryWrites=true&w=majority
-    ```
-    
-    For more detailed instructions, you can refer to the [MongoDB connection string guide](https://www.mongodb.com/docs/guides/atlas/connection-string/)
-  </Accordion>
-</AccordionGroup>
-
-<Warning>
-Do not load sample data into your newly created database if prompted - Modelence already provisions what you need and will work perfectly with an empty database on the first run.
-</Warning>
-
-### Configure Environment Variables
-
-Without the Modelence Cloud setup, you need to manually add your database configuration.
-Once you have your connection string, you'll need to add it to your Modelence environment variables. Create a `.modelence.env` file in your project root (if it doesn't exist already) and add:
-
-```env
-MONGODB_URI="<your_connection_string_here>"
+```text
+Use https://docs.modelence.com/setup.md to connect this project to a Modelence local environment
 ```
 
-<Warning>
-Make sure that your `.modelence.env` file is added to your `.gitignore` to keep your credentials secure.
-</Warning>
+## What a local environment is
 
-## Next Steps
+- **The app runs on the user's machine**, started from the project directory. Modelence does not
+  build or host it; to put the app online, deploy it to a cloud environment as described in
+  [Deploy Setup](/deploy/setup).
+- **The environment holds what the app uses**: the connection strings of its resources (databases,
+  caches) and its settings. They reach the app when it starts, so they never need to be copied into
+  the project.
+- **The dashboard shows the running app** on the environment's **Overview**, so the user can see
+  whether it is up.
 
+## Connecting a project
 
-<CardGroup cols={1}>
-  <Card
-    title="Todo App Tutorial"
-    icon="code"
-    href="/tutorial"
-  >
-    Check out an example Todo app 
-  </Card>
-</CardGroup>
+Follow these steps in order.
+
+1. **Check whether the project is already connected.** A `.modelence.env` file at the project root
+   means it is. Ask the user whether to connect it to a different environment before going on; if
+   they want to, the command in the next step asks to overwrite the file, so run it as
+   `echo y | npx modelence@latest setup`.
+
+2. **Run `npx modelence@latest setup`** in the project root yourself, with a timeout of at least
+   10 minutes. It opens the browser, where the user signs in and picks the organization, application
+   and environment, or creates a new application or environment there. Tell the user to confirm
+   there, then wait for the command to finish. Pass `--new` when the user wants a new environment
+   rather than an existing one.
+
+3. **Check the files it wrote.**
+   - `.modelence.env` holds the project's connection to the environment, including a secret token.
+     It must never be committed: add it to `.gitignore` if it is not there yet.
+   - `.modelence/project.json` records which application the project belongs to. Commit it, so the
+     next setup or deploy from any copy of the repository preselects that application.
+
+4. **Start the app with `npx modelence@latest dev`** in the project root, in place of the project's
+   own development command. It starts the project with the environment's values and reports it to
+   the environment. It keeps running; leave it running in the background.
+
+5. **Confirm it is connected.** Tell the user to open the environment in the Modelence dashboard: its
+   **Overview** shows the app as running instead of waiting for it.
+
+<Note>
+Apps built on the Modelence framework (with the `modelence` dependency) need no
+`modelence.config.json`, and one must not be added to them: `modelence dev` recognizes the
+dependency and starts them as it always has.
+</Note>
