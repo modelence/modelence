@@ -24,34 +24,13 @@ Use https://docs.modelence.com/setup.md to connect this project to a Modelence l
 
 ## Connecting a project
 
-Follow these steps in order.
+1. **Run `npx modelence@latest setup`** in the project root, with a timeout of at least 10 minutes.
+   It opens the browser, where the user signs in and picks the organization, application and
+   environment, or creates a new application or environment there. Tell the user to confirm there,
+   then wait for the command to finish. Pass `--new` when the user wants a new environment rather
+   than an existing one.
 
-1. **Check whether the project is already connected.** A `.modelence.env` file at the project root
-   means it is. Ask the user whether to connect it to a different environment before going on; if
-   they want to, the command in the next step asks to overwrite the file, so run it as
-   `echo y | npx modelence@latest setup`.
-
-2. **Run `npx modelence@latest setup`** in the project root yourself, with a timeout of at least
-   10 minutes. It opens the browser, where the user signs in and picks the organization, application
-   and environment, or creates a new application or environment there. Tell the user to confirm
-   there, then wait for the command to finish. Pass `--new` when the user wants a new environment
-   rather than an existing one.
-
-3. **Check the files it wrote.**
-   - `.modelence.env` holds the project's connection to the environment, including a secret token.
-     It must never be committed: add it to `.gitignore` if it is not there yet.
-   - `.modelence/project.json` records which application the project belongs to. Commit it, so the
-     next setup or deploy from any copy of the repository preselects that application.
-
-4. **Start the app with `npx modelence@latest dev`** in the project root, in place of the project's
-   own development command. It starts the project with the environment's values and reports it to
-   the environment. It keeps running; leave it running in the background.
-
-5. **Confirm it is connected.** Tell the user to open the environment in the Modelence dashboard: its
-   **Overview** shows the app as running instead of waiting for it.
-
-<Note>
-Apps built on the Modelence framework (with the `modelence` dependency) need no
-`modelence.config.json`, and one must not be added to them: `modelence dev` recognizes the
-dependency and starts them as it always has.
-</Note>
+2. **Tell the user the project is connected**, and that they start it by running
+   `npx modelence@latest dev` in the project directory, in place of the project's own development
+   command. Do not start it yourself unless the user asks you to. Once it runs, the environment's
+   **Overview** in the Modelence dashboard shows it.
