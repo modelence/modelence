@@ -7,10 +7,11 @@ import type { CliTarget } from './deployTarget';
   the browser, and the CLI polls until approval binds a token to the code.
 
   Two approval modes, chosen by `pick`:
-    'environment' — `modelence setup`: the page also asks which sandbox to
-                    connect the project to (an existing one, or one created
-                    there in an existing or new app). The choice is stamped
-                    on the token; /api/setup derives its target from there.
+    'environment' — `modelence setup`: the page also asks which local
+                    environment to connect the project to (an existing one,
+                    or one created there in an existing or new app). The
+                    choice is stamped on the token; /api/setup derives its
+                    target from there.
                     `createOnly` (`setup --new`) leaves out existing ones.
     'deploy'      — `modelence deploy`: the page asks where to deploy (an
                     existing or newly created app / cloud environment) and the
