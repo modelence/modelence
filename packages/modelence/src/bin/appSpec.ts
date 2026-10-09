@@ -24,7 +24,8 @@ export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence 
 
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvDeclarationScope = 'build' | 'runtime';
-export type ResourceType = 'service';
+export type ManagedResourceType = 'postgres' | 'redis';
+export type ResourceType = 'service' | ManagedResourceType;
 
 export interface StaticMount {
   path: string;
@@ -37,8 +38,8 @@ export interface CommandList {
 }
 
 // A client-only site is a service without `start`, serving its `static` mounts.
-export interface AppResource {
-  type: ResourceType;
+export interface ServiceResource {
+  type: 'service';
   // node-<version>-<variant>, e.g. "node-22-slim" or "node-22.23.1-alpine".
   image?: string;
   root?: string;
@@ -47,7 +48,22 @@ export interface AppResource {
   static?: StaticMount[];
 }
 
-export interface EnvDeclaration {
+// A database or cache the deploy creates in the environment.
+export interface ManagedResource {
+  type: ManagedResourceType;
+  // A plan name such as "postgres-1gb"; the server picks the smallest without it.
+  plan?: string;
+}
+
+export type AppResource = ServiceResource | ManagedResource;
+
+// Checked by name: the CLI reads the file before Studio validates it, so a
+// missing or misspelled type must not pass as a managed resource.
+export function isManagedResource(resource: AppResource): resource is ManagedResource {
+  return resource.type === 'postgres' || resource.type === 'redis';
+}
+
+export interface ValueEnvDeclaration {
   type?: EnvDeclarationType;
   // The phases the value reaches; default ["runtime"].
   scopes?: EnvDeclarationScope[];
@@ -56,11 +72,21 @@ export interface EnvDeclaration {
   required?: boolean;
 }
 
+// A variable whose value is one output of a managed resource, e.g. main-db's url.
+export interface ResourceEnvDeclaration {
+  type: 'resource';
+  resource: string;
+  output: string;
+}
+
+export type EnvDeclaration = ValueEnvDeclaration | ResourceEnvDeclaration;
+
 export interface AppSpec {
   $schema?: string;
   /*
-    Everything the app is made of, by the name the project chose. Each entry
-    takes type/image/root/build/start/static. One resource is supported today.
+    Everything the app is made of, by the name the project chose: services
+    (type/image/root/build/start/static; one is supported today) and the
+    postgres and redis resources a deploy creates (type/plan).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -116,10 +142,13 @@ export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Prom
 export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
   const entries = Object.entries(spec.resources ?? {});
+  const services = entries.flatMap(([name, resource]) =>
+    isManagedResource(resource) ? [] : [[name, resource] as const]
+  );
 
-  for (const [name, resource] of entries) {
-    // Only label the resource when there is more than one to tell apart.
-    if (entries.length > 1) {
+  for (const [name, resource] of services) {
+    // Only label the service when there is more than one to tell apart.
+    if (services.length > 1) {
       lines.push(`  resource: ${name}`);
     }
     lines.push(`  image:   ${resource.image ?? 'default (node-22-slim)'}`);
@@ -133,12 +162,22 @@ export function formatAppSpec(spec: AppSpec): string[] {
     }
   }
 
+  for (const [name, resource] of entries) {
+    if (isManagedResource(resource)) {
+      lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
+    }
+  }
+
   /*
     Values are not printed: a declaration carries only a name and a type, and
     the literal on a build-scoped entry is not worth the width here.
   */
   for (const [key, declaration] of Object.entries(spec.env ?? {})) {
-    lines.push(`  env:     ${key} (${declaration.type ?? 'text'})`);
+    const kind =
+      declaration.type === 'resource'
+        ? `${declaration.resource}.${declaration.output}`
+        : (declaration.type ?? 'text');
+    lines.push(`  env:     ${key} (${kind})`);
   }
 
   return lines;
