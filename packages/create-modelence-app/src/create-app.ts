@@ -1,21 +1,15 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { execSync } from 'child_process';
-import fetch from 'node-fetch';
-import AdmZip from 'adm-zip';
+import { downloadTemplate } from 'giget';
 
-const EXAMPLES_REPO_ZIP_URL = 'https://github.com/modelence/examples/archive/refs/heads/main.zip';
-const DEFAULT_TEMPLATE = 'empty-project';
+// Use GitHub's archive URL rather than giget's `github:` provider, which goes through
+// api.github.com and is limited to 60 unauthenticated requests per hour per IP
+const TEMPLATE_SOURCE =
+  'https://github.com/modelence/app-builder-empty-project/archive/refs/heads/main.tar.gz';
 
-interface CreateAppOptions {
-  template?: string;
-}
-
-export async function createApp(projectName: string, options: CreateAppOptions = {}) {
-  const template = options.template || DEFAULT_TEMPLATE;
-
+export async function createApp(projectName: string) {
   console.log(`Creating new Modelence app: ${projectName}`);
-  console.log(`Using template: ${template}`);
 
   // Validate project name
   if (!/^[a-zA-Z0-9-_]+$/.test(projectName)) {
@@ -29,49 +23,8 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     throw new Error(`Directory ${projectName} already exists`);
   }
 
-  // Download and extract the examples repo
-  const tempDir = path.resolve(process.cwd(), `.temp-modelence-examples-${Date.now()}`);
-  const zipPath = path.join(tempDir, 'examples.zip');
-  
   try {
-    // Create temp directory
-    fs.ensureDirSync(tempDir);
-
-    const response = await fetch(EXAMPLES_REPO_ZIP_URL);
-    if (!response.ok) {
-      throw new Error(`Failed to download examples: ${response.statusText}`);
-    }
-    
-    // Save zip file
-    const zipArrayBuffer = await response.arrayBuffer();
-    const zipBuffer = Buffer.from(zipArrayBuffer);
-    fs.writeFileSync(zipPath, zipBuffer);
-    
-    // Extract zip
-    const zip = new AdmZip(zipPath);
-    zip.extractAllTo(tempDir, true);
-    
-    // Find the extracted directory (GitHub adds a folder name like "examples-main")
-    const extractedDirs = fs.readdirSync(tempDir).filter(item => 
-      fs.statSync(path.join(tempDir, item)).isDirectory() && item !== '__MACOSX'
-    );
-    
-    if (extractedDirs.length === 0) {
-      throw new Error('The template is not found');
-    }
-    
-    const extractedRepoDir = path.join(tempDir, extractedDirs[0]);
-    const templatePath = path.join(extractedRepoDir, template);
-    
-    if (!fs.existsSync(templatePath)) {
-      throw new Error(`Template "${template}" not found`);
-    }
-
-    // Copy template files to project directory
-    fs.copySync(templatePath, projectPath);
-
-    // Clean up temp directory
-    fs.removeSync(tempDir);
+    await downloadTemplate(TEMPLATE_SOURCE, { dir: projectPath });
 
     // Update package.json
     const packageJsonPath = path.join(projectPath, 'package.json');
@@ -89,10 +42,6 @@ export async function createApp(projectName: string, options: CreateAppOptions =
     // Clean up on error
     if (fs.existsSync(projectPath)) {
       fs.removeSync(projectPath);
-    }
-    // Clean up temp dir if exists
-    if (fs.existsSync(tempDir)) {
-      fs.removeSync(tempDir);
     }
     throw error;
   }
