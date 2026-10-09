@@ -8,6 +8,8 @@ import { setup } from './setup';
 import { build } from './build';
 import { deploy } from './deploy';
 import { dev } from './dev';
+import { run } from './run';
+import { loadLocalEnv } from './localEnv';
 import { start } from './start';
 import { logout } from './logout';
 import { init } from './init';
@@ -20,7 +22,9 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'
 const program = new Command()
   .name('modelence')
   .description('Modelence CLI tool')
-  .version(packageJson.version);
+  .version(packageJson.version)
+  // Lets `run` pass flags like `--port` through to the script untouched.
+  .enablePositionalOptions();
 
 program
   .command('setup')
@@ -97,7 +101,21 @@ program
   )
   .action(async (options) => {
     await loadEnv();
-    dev(options);
+    dev(options, await loadLocalEnv());
+  });
+
+program
+  .command('run')
+  .description(
+    "Run a package.json script (or any command) with the connected environment's variables"
+  )
+  .argument('<script>', 'Script name from package.json, or a command')
+  .argument('[args...]', 'Arguments passed on to the script')
+  .helpOption(false)
+  .allowUnknownOption()
+  .passThroughOptions()
+  .action(async (script: string, args: string[]) => {
+    await run(script, args);
   });
 
 program
