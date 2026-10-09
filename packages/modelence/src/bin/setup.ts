@@ -232,8 +232,12 @@ async function backupEnvFile(envPath: string): Promise<void> {
   }
 }
 
-export async function setup(rawOptions: { token?: string; host: string }) {
+export async function setup(rawOptions: { token?: string; host: string; new?: boolean }) {
   try {
+    if (rawOptions.new && rawOptions.token) {
+      // A setup token is already bound to an existing environment.
+      throw new Error('--new cannot be combined with --token');
+    }
     // Also written to .modelence.env, where the app reads it as a URL prefix.
     const options = { ...rawOptions, host: normalizeHost(rawOptions.host) };
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
@@ -264,9 +268,10 @@ export async function setup(rawOptions: { token?: string; host: string }) {
       auth = { setupToken: options.token };
     } else {
       // No token given: authorize in the browser, where the approval page
-      // also asks which environment to connect to.
+      // also asks which environment to connect to, or creates it.
       const { token: cliToken } = await authenticateCli(options.host, {
         pickEnvironment: true,
+        createOnly: options.new,
         appId: await readProjectAppId(options.host),
       });
       auth = { cliToken };

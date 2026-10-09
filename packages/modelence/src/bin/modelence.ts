@@ -30,6 +30,7 @@ program
   .command('setup')
   .description('Setup Modelence environment variables')
   .option('-t, --token <token>', 'Modelence setup token (omit to authorize in the browser)')
+  .option('--new', 'Connect to a new environment, created in the browser')
   .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     await setup(options);
