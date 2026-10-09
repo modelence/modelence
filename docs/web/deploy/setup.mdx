@@ -246,7 +246,7 @@ Follow these steps in order. Do not skip the verification step.
    [Compatibility](#when-the-project-is-not-compatible).
 
 7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
-   entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
+   service entry in `resources` (`"type": "service"`). Pick `image` from `engines.node` (default
    `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
    lives in a subdirectory. Add any managed resources from step 6 next to the service, with their
    variables in `env`. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.

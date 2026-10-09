@@ -235,10 +235,19 @@ describe('plan formatting', () => {
       '  image:   default (node-22-slim)',
       '  build:   default (npm install)',
       '  start:   node server.js',
-      '  postgres: main-db (postgres-1gb)',
-      '  redis:   cache (default plan)',
+      '  db:      main-db (postgres, postgres-1gb)',
+      '  db:      cache (redis, default plan)',
       '  env:     DATABASE_URL (main-db.url)',
     ]);
+  });
+
+  // The file isn't validated yet here: a misspelled type is shown as a service.
+  it('does not take a misspelled type for a managed resource', () => {
+    const lines = formatAppSpec({
+      resources: { api: { type: 'servce' } },
+    } as unknown as Parameters<typeof formatAppSpec>[0]);
+    expect(lines).toContain('  image:   default (node-22-slim)');
+    expect(lines.some((line) => line.startsWith('  db:'))).toBe(false);
   });
 });
 

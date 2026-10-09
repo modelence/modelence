@@ -57,8 +57,10 @@ export interface ManagedResource {
 
 export type AppResource = ServiceResource | ManagedResource;
 
+// Checked by name: the CLI reads the file before Studio validates it, so a
+// missing or misspelled type must not pass as a managed resource.
 export function isManagedResource(resource: AppResource): resource is ManagedResource {
-  return resource.type !== 'service';
+  return resource.type === 'postgres' || resource.type === 'redis';
 }
 
 export interface ValueEnvDeclaration {
@@ -162,7 +164,7 @@ export function formatAppSpec(spec: AppSpec): string[] {
 
   for (const [name, resource] of entries) {
     if (isManagedResource(resource)) {
-      lines.push(`  ${`${resource.type}:`.padEnd(8)} ${name} (${resource.plan ?? 'default plan'})`);
+      lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
     }
   }
 
