@@ -22,12 +22,17 @@ Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment fo
 - **Optional static directories** (the resource's `static`) served in front of that process by the platform.
   Requests that match no file fall back to the directory's `index.html`, so single-page apps route on
   the client.
+- **Optional managed PostgreSQL databases and Redis caches**, declared in `resources` next to the
+  service. A deploy creates each one in the environment's region, and the app gets its connection
+  details through the variables `env` ties to it. They need a paid Modelence Cloud plan.
 - **Environment variables injected at start:**
   - `MONGODB_URI` and `MONGO_URL` — a MongoDB Atlas database provisioned for this environment
     (both hold the same connection string).
   - `SITE_URL` and `ROOT_URL` — the environment's public URL (both hold the same value).
   - `PORT` — the port the web process must listen on.
   - Any variables the user defines in the dashboard under **Environment variables**.
+  - The variables `env` ties to a managed resource, such as `DATABASE_URL` from a PostgreSQL
+    database's `url`.
 
   Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be defined by the user.
 
@@ -43,10 +48,10 @@ it expects).
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
-| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"web"`). Exactly one resource is supported today. |
+| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): the service, and any managed databases and caches. Exactly one service is supported today. |
 | `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
 
-Each entry of `resources` takes:
+A service entry of `resources` takes:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -57,17 +62,50 @@ Each entry of `resources` takes:
 | `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
 
+A managed resource entry of `resources` takes:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"postgres"` \| `"redis"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache. |
+| `plan` | string | the smallest | The size to create it with. PostgreSQL: `postgres-1gb`, `postgres-2gb`, `postgres-4gb`, `postgres-8gb`, `postgres-16gb` (the RAM of the database). Redis: `redis-250mb`, `redis-1gb`, `redis-5gb` (the data it holds). |
+
+A deploy creates every managed resource the file declares that the environment doesn't have yet, and
+the new version starts only once they are ready. Resources are matched by name, so the same file works
+in every environment:
+
+- A resource that already exists is kept as it is, with its data. `plan` is read only when the resource
+  is created, so changing it later has no effect.
+- A resource removed from the file is not deleted. Delete it in the dashboard under **Resources** when
+  it is no longer needed; it is billed until then.
+- Renaming a resource creates a new, empty one. The old one stays until it is deleted.
+
+An environment can have up to 5 managed resources.
+
 Each entry of `env` declares one variable:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `type` | `"text"` \| `"secret"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. |
+| `type` | `"text"` \| `"secret"` \| `"resource"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. `"resource"` takes the value from a managed resource; see below. |
 | `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build commands — needed for anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. |
 | `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
 | `required` | boolean | `true` | Whether the app needs a value to run. A deploy asks for every required variable that has no value, and a CI deploy fails without one. Set `false` for a variable the app runs without (an optional integration's key). |
 
 A value set in the dashboard overrides a `value` written here, so a literal in the file is the
 committed default rather than a fixed constant.
+
+A variable with `"type": "resource"` takes its value from one output of a managed resource in the same
+file, and takes only these keys:
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"resource"` | Required. |
+| `resource` | string | The name of a `postgres` or `redis` entry in `resources`. |
+| `output` | string | Which value of the resource. PostgreSQL: `url`, `host`, `port`, `user`, `password`, `database`. Redis: `url`, `host`, `port`, `password`. |
+
+The `url` output is a full connection string: `postgresql://...?sslmode=require` for PostgreSQL and
+`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them separately,
+such as `PGHOST` and `PGPASSWORD`. These variables reach the running app only, not the build commands.
+They can't be set or changed in the dashboard, where they are listed with the resource they come from.
 
 <Note>
 Apps built on the Modelence framework need no file: `modelence deploy` recognizes the `modelence`
@@ -139,6 +177,29 @@ Vite inlines it while building:
 }
 ```
 
+**Express API with PostgreSQL and Redis** - the deploy creates the database and the cache, and the
+app reads them from `DATABASE_URL` and `REDIS_URL`:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "image": "node-22-slim",
+      "build": { "commands": ["npm ci"] },
+      "start": { "commands": ["node server.js"] }
+    },
+    "main-db": { "type": "postgres", "plan": "postgres-1gb" },
+    "cache": { "type": "redis" }
+  },
+  "env": {
+    "DATABASE_URL": { "type": "resource", "resource": "main-db", "output": "url" },
+    "REDIS_URL": { "type": "resource", "resource": "cache", "output": "url" }
+  }
+}
+```
+
 ## Setting up a project
 
 Follow these steps in order. Do not skip the verification step.
@@ -176,16 +237,19 @@ Follow these steps in order. Do not skip the verification step.
    `127.0.0.1` only. If the frontend and the API are served together, the server must be the one
    process — the static mount handles the frontend files, the server handles everything else.
 
-6. **Use the injected database.** If the project needs MongoDB, read the connection string from
-   `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. Other databases are not
-   provisioned, but one hosted elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep
-   the connection code and read its URL and keys from environment variables. See
+6. **Use the provided databases.** If the project needs MongoDB, read the connection string from
+   `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. If it needs PostgreSQL or
+   Redis that it doesn't already have hosted somewhere, declare a managed resource for it in step 7 and
+   tie the variable the code reads (`DATABASE_URL`, `REDIS_URL`) to its `url` output. A database hosted
+   elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep the connection code and read
+   its URL and keys from environment variables. Other databases, such as MySQL, are not provisioned. See
    [Compatibility](#when-the-project-is-not-compatible).
 
 7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
    entry of `resources` with `"type": "service"`. Pick `image` from `engines.node` (default
    `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
-   lives in a subdirectory. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
+   lives in a subdirectory. Add any managed resources from step 6 next to the service, with their
+   variables in `env`. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
 
 8. **Verify locally.** Run the build commands, then the start commands with `PORT=3000` set, in
    order — exactly as written in the file — and confirm the app answers on
@@ -224,8 +288,9 @@ Report the project as not compatible with Modelence Cloud, and say why, when:
 - **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
   Node.js frontend in front. The image runs Node.js only.
 - **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
-  process, or a database other than the provided MongoDB (PostgreSQL, MySQL, Redis…) that would have
-  to run alongside the app. One web process is run, and MongoDB is the only database provisioned.
+  process, or a database other than the provided ones (MySQL, Elasticsearch…) that would have to run
+  alongside the app. One web process is run, and MongoDB, PostgreSQL and Redis are the only databases
+  provisioned.
 - **It needs Docker Compose** or a custom Dockerfile to run.
 
 A database hosted elsewhere is not a reason to report the project as not compatible. An app that
@@ -235,9 +300,9 @@ dashboard under **Environment variables**, marked as secret. A key the frontend 
 as `VITE_SUPABASE_URL`, also needs to be available at build time, as described in
 [Runtime values and secrets](#runtime-values-and-secrets).
 
-Then suggest what the user can do instead: replace the database with the provided MongoDB (a Mongoose
-or MongoDB driver connection using `MONGODB_URI`), or keep the incompatible parts on another host and
-deploy only the Node.js web app.
+Then suggest what the user can do instead: replace the database with one that is provided (MongoDB
+through `MONGODB_URI`, or a managed PostgreSQL or Redis resource), or keep the incompatible parts on
+another host and deploy only the Node.js web app.
 
 Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
 several replicas, and each one would run every job — emails sent twice, charges made twice. If the

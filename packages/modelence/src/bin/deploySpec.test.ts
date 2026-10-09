@@ -151,7 +151,7 @@ describe('root', () => {
       join(dir, 'modelence.config.json'),
       JSON.stringify({ resources: { api: { type: 'service', root: 'apps/api' } } })
     );
-    expect((await prepareSpec(dir)).resources?.api.root).toBe('apps/api');
+    expect((await prepareSpec(dir)).resources?.api).toMatchObject({ root: 'apps/api' });
     expect(logged).toContain('  root:    apps/api');
   });
 
@@ -219,6 +219,26 @@ describe('plan formatting', () => {
     });
     expect(lines).toContain('  resource: api');
     expect(lines).toContain('  resource: web');
+  });
+
+  it('lists managed resources apart from the service, with what each variable takes', () => {
+    expect(
+      formatAppSpec({
+        resources: {
+          api: { type: 'service', start: { commands: ['node server.js'] } },
+          'main-db': { type: 'postgres', plan: 'postgres-1gb' },
+          cache: { type: 'redis' },
+        },
+        env: { DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' } },
+      })
+    ).toEqual([
+      '  image:   default (node-22-slim)',
+      '  build:   default (npm install)',
+      '  start:   node server.js',
+      '  postgres: main-db (postgres-1gb)',
+      '  redis:   cache (default plan)',
+      '  env:     DATABASE_URL (main-db.url)',
+    ]);
   });
 });
 
