@@ -3,7 +3,10 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { downloadTemplate } from 'giget';
 
-const TEMPLATE_SOURCE = 'github:modelence/app-builder-empty-project';
+// Use GitHub's archive URL rather than giget's `github:` provider, which goes through
+// api.github.com and is limited to 60 unauthenticated requests per hour per IP
+const TEMPLATE_SOURCE =
+  'https://github.com/modelence/app-builder-empty-project/archive/refs/heads/main.tar.gz';
 
 export async function createApp(projectName: string) {
   console.log(`Creating new Modelence app: ${projectName}`);
