@@ -250,7 +250,7 @@ describe('cron/jobs', () => {
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
 
-  test('cron loop handles and captures timeout when job runs past its timeout limit', async () => {
+  test('cron loop captures timeout when job runs past its timeout limit', async () => {
     mockCaptureError.mockClear();
     let resolveHandler: () => void;
     const handlerPromise = new Promise<void>((resolve) => {
@@ -281,6 +281,73 @@ describe('cron/jobs', () => {
         message: expect.stringContaining("Cron job 'timeoutJob' timed out after 5000ms"),
       })
     );
+
+    resolveHandler!();
+    (Date.now as Mock).mockRestore();
+  });
+
+  test('cron loop does not capture timeout error on every tick', async () => {
+    mockCaptureError.mockClear();
+    let resolveHandler: () => void;
+    const handlerPromise = new Promise<void>((resolve) => {
+      resolveHandler = resolve;
+    });
+    const handler = vi.fn(async () => {
+      await handlerPromise;
+    });
+
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('timeoutJob', {
+      interval: mockSeconds(10),
+      timeout: 5000,
+      handler,
+    });
+
+    await startCronJobs();
+
+    const startTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(startTs);
+    await intervalCallback?.();
+
+    (Date.now as Mock).mockReturnValue(startTs + 6000);
+    await intervalCallback?.();
+
+    (Date.now as Mock).mockReturnValue(startTs + 12000);
+    await intervalCallback?.();
+
+    expect(mockCaptureError).toHaveBeenCalledTimes(1);
+
+    resolveHandler!();
+    (Date.now as Mock).mockRestore();
+  });
+
+  test('cron loop does not restart timed-out job while handler is still in flight', async () => {
+    mockCaptureError.mockClear();
+    let resolveHandler: () => void;
+    const handlerPromise = new Promise<void>((resolve) => {
+      resolveHandler = resolve;
+    });
+    const handler = vi.fn(async () => {
+      await handlerPromise;
+    });
+
+    cronStoreMocks.fetch.mockResolvedValue([] as never);
+    defineCronJob('timeoutJob', {
+      interval: mockSeconds(10),
+      timeout: 5000,
+      handler,
+    });
+
+    await startCronJobs();
+
+    const startTs = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(startTs);
+    await intervalCallback?.();
+
+    (Date.now as Mock).mockReturnValue(startTs + 6000);
+    await intervalCallback?.();
+
+    expect(handler).toHaveBeenCalledTimes(1);
 
     resolveHandler!();
     (Date.now as Mock).mockRestore();
