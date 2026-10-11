@@ -130,10 +130,12 @@ Changes made in the cloud dashboard are automatically synced to your application
 ### Connecting to Modelence Cloud
 
 ```bash
-npx modelence@latest setup --token <your_token>
+npx modelence@latest setup
 ```
 
-This command creates a `.modelence.env` file with your cloud connection token.
+This opens the browser, where you pick the environment to connect the project to: an existing one, or a new one created right there, in an existing app or a new one. Pass `--new` to always create a new environment. A setup token from the dashboard (`--token <your_token>`) connects without the browser.
+
+The command creates a `.modelence.env` file with your cloud connection token.
 
 <Tip>
 See the [Setup documentation](/setup) for detailed instructions on connecting to Modelence Cloud.

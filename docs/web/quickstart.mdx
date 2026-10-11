@@ -3,9 +3,7 @@ title: 'Quick Start'
 icon: 'rocket'
 ---
 
-Scaffold a new project with the Modelence CLI and run it locally.
-
-## Prerequisites
+### Prerequisites
 
 <AccordionGroup>
   <Accordion icon="node-js" title="Node.js">
@@ -24,50 +22,44 @@ Scaffold a new project with the Modelence CLI and run it locally.
   </Accordion>
 </AccordionGroup>
 
-## Creating a new project
-
-You can create a new Modelence project using the `create-modelence-app` command.
+### Create a new project
 
 ```bash
 npx create-modelence-app@latest my-app
+cd my-app
 ```
 
-This command will create a new directory named `my-app` with the necessary files and folders for your project.
+This creates a `my-app` directory with a new Modelence app and installs its dependencies. For a breakdown of
+what's inside, see [Project Structure](/core-concepts/project-structure).
 
-## Project structure
+### Connect to Modelence Cloud
 
-For a detailed breakdown of the project structure, see [Project Structure](/core-concepts/project-structure).
+```bash
+npx modelence@latest setup
+```
 
-## Start your application
+Your browser opens so you can sign in to [Modelence Cloud](https://cloud.modelence.com) and pick or create
+the environment to connect to. The environment provisions a MongoDB database for your app, and setup
+writes its connection details to `.modelence.env`. See [Local Setup](/setup) for the details.
 
-<Steps>
-  <Step title="Install dependencies">
-    Navigate to your project directory and install the required packages:
+### Run the app
 
-    ```bash
-    cd my-app
-    npm install
-    ```
-  </Step>
+```bash
+npm run dev
+```
 
-  <Step title="Run the development server">
-    Start the development server:
+This starts the development server at http://localhost:3000/ (or the port you set in `.env`).
 
-    ```bash
-    npm run dev
-    ```
+### Deploy
 
-    The `npm run dev` command builds your website locally and serves it through a Vite development server,
-    ready for you to view at http://localhost:3000/ (or the port you specified in the `.env` file).
-  </Step>
+```bash
+npx modelence@latest deploy
+```
 
-  <Step title="View your application">
-    If everything is set up correctly, you should see the Modelence new project home page in your browser.
-  </Step>
-</Steps>
+Your browser opens so you can pick or create the cloud environment to deploy to, and the app goes live on
+its URL once the deploy finishes. See [Deploy Setup](/deploy/setup) for the details.
 
-## Next steps
+### Next steps
 
-Once your local project is running, you can [connect it to a local environment](/setup) for its database and monitoring, or [deploy it](/deploy/setup) to Modelence Cloud.
-
-If you build with an AI coding agent, see [AI Coding Agents](/ai-coding-agents) to set up Claude Code, Cursor, or Codex with Modelence's framework rules and documentation access.
+If you build with an AI coding agent, see [AI Coding Agents](/ai-coding-agents) to set up Claude Code,
+Cursor, or Codex with Modelence's coding rules and documentation access.

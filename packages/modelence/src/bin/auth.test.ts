@@ -90,3 +90,32 @@ describe('authenticateCli deploy target hint', () => {
     expect(url.searchParams.get('pick')).toBe('deploy');
   });
 });
+
+describe('authenticateCli setup picker', () => {
+  const openedUrl = async () => {
+    const open = (await import('open')).default;
+    return new URL(String(vi.mocked(open).mock.calls.at(-1)?.[0]));
+  };
+
+  it('asks the picker for a new environment only with createOnly', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { pickEnvironment: true, createOnly: true, appId: 'a1' });
+    const url = await openedUrl();
+    expect(url.searchParams.get('pick')).toBe('environment');
+    expect(url.searchParams.get('new')).toBe('1');
+    expect(url.searchParams.get('appId')).toBe('a1');
+  });
+
+  it('lets the picker offer existing environments by default', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { pickEnvironment: true });
+    expect((await openedUrl()).searchParams.has('new')).toBe(false);
+  });
+
+  // Only the setup picker creates; a deploy target is always the user's choice.
+  it('ignores createOnly outside the setup picker', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { pick: 'deploy', purpose: 'deploy', createOnly: true });
+    expect((await openedUrl()).searchParams.has('new')).toBe(false);
+  });
+});
