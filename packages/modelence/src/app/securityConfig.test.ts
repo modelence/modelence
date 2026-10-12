@@ -190,4 +190,44 @@ describe('securityConfig', () => {
 
     expect(getSecurityConfig().clientIpHeader).toBe('cf-connecting-ip');
   });
+
+  test('normalizes scriptSrc at startup', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ scriptSrc: [' https://js.stripe.com '] });
+
+    expect(getSecurityConfig().scriptSrc).toEqual(['https://js.stripe.com']);
+  });
+
+  test('rejects an unquoted scriptSrc keyword at startup', async () => {
+    const { setSecurityConfig } = await import('./securityConfig');
+
+    expect(() => setSecurityConfig({ scriptSrc: ['self'] })).toThrow(/single-quoted/);
+  });
+
+  test('rejects an invalid hsts config at startup', async () => {
+    const { setSecurityConfig } = await import('./securityConfig');
+
+    expect(() => setSecurityConfig({ hsts: { preload: true } })).toThrow(/includeSubDomains/);
+  });
+
+  test('rejects an unknown referrerPolicy at startup', async () => {
+    const { setSecurityConfig } = await import('./securityConfig');
+
+    expect(() =>
+      setSecurityConfig({ referrerPolicy: 'never' as unknown as 'no-referrer' })
+    ).toThrow(/security\.referrerPolicy/);
+  });
+
+  test('stores header toggles as given', async () => {
+    const { setSecurityConfig, getSecurityConfig } = await import('./securityConfig');
+
+    setSecurityConfig({ hsts: true, referrerPolicy: false, noSniff: false });
+
+    expect(getSecurityConfig()).toMatchObject({
+      hsts: true,
+      referrerPolicy: false,
+      noSniff: false,
+    });
+  });
 });
