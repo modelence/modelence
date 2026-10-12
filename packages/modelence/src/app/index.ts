@@ -69,6 +69,7 @@ export type AppOptions = {
   /** @internal */
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
+  /** WebSocket settings, used by live queries and channels. See {@link WebsocketConfig}. */
   websocket?: WebsocketConfig;
   /** Enable server-side rendering of the user's React tree. */
   ssr?: boolean;
@@ -177,10 +178,18 @@ export async function startApp({
   }
   setAuthConfig(auth);
   setSecurityConfig(security);
+  const websocketsEnabled = websocket.enabled !== false;
   setWebsocketConfig({
     ...websocket,
-    provider: websocket.provider || socketioServer,
+    provider: websocketsEnabled ? websocket.provider || socketioServer : undefined,
   });
+  if (!websocketsEnabled && channels.length > 0) {
+    const channelNames = channels.map((channel) => channel.category).join(', ');
+    console.warn(
+      `Channels are defined (${channelNames}) but websocket.enabled is false, ` +
+        'so their broadcasts will not be delivered.'
+    );
+  }
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
