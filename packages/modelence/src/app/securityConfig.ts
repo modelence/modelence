@@ -1,22 +1,9 @@
-import {
-  HstsConfig,
-  ReferrerPolicy,
-  normalizeHsts,
-  normalizeNoSniff,
-  normalizeReferrerPolicy,
-  normalizeScriptSrc,
-} from './securityHeaders';
-
 /**
  * Security configuration for the application
  *
- * By default, every response carries:
- * - `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`,
- *   preventing the app from being embedded in iframes on other domains
- * - `X-Content-Type-Options: nosniff`
- * - `Referrer-Policy: strict-origin-when-cross-origin`
- *
- * `script-src` and `Strict-Transport-Security` are opt-in.
+ * By default, the app is protected against clickjacking by setting
+ * `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`
+ * on all responses, preventing the app from being embedded in iframes on other domains.
  *
  * @example
  * ```typescript
@@ -28,18 +15,6 @@ import {
  *     frameAncestors: ['https://modelence.com', 'https://app.example.com'],
  *     trustedProxies: ['loopback', 'linklocal', 'uniquelocal'],
  *     clientIpHeader: 'cf-connecting-ip',
- *   },
- * });
- * ```
- *
- * @example
- * ```typescript
- * // Only run scripts served by the app itself or by Stripe, and require HTTPS
- * startApp({
- *   security: {
- *     scriptSrc: ['https://js.stripe.com'],
- *     hsts: { maxAge: 31536000, includeSubDomains: true },
- *     referrerPolicy: 'same-origin',
  *   },
  * });
  * ```
@@ -65,56 +40,6 @@ export type SecurityConfig = {
    * When set, `X-Frame-Options` is omitted since it cannot express multiple origins.
    */
   frameAncestors?: string[];
-
-  /**
-   * Sources allowed to load scripts, sent as the CSP `script-src` directive.
-   * The app's own origin (`'self'`) is always included automatically, so an
-   * empty list yields `script-src 'self'` — the strictest policy that still
-   * runs the app's bundle.
-   *
-   * When not set, no `script-src` directive is sent and scripts are unrestricted.
-   * Setting it is the main defence against injected scripts reading the session
-   * token, which the client keeps in `localStorage`.
-   *
-   * Each entry is a single CSP source: a host (`https://js.stripe.com`), a
-   * scheme (`https:`), or a single-quoted keyword or hash (`'unsafe-eval'`,
-   * `'sha256-...'`). Unquoted or unrecognised keywords, `*`, `'none'`,
-   * `'strict-dynamic'`, static nonces, and entries holding more than one
-   * source throw at startup.
-   *
-   * Inline scripts in `index.html` (analytics snippets, theme bootstrapping) are
-   * blocked unless allowed by hash. Outside production (`NODE_ENV !== 'production'`),
-   * `'unsafe-inline'` is added (and hashes dropped, since they would disable it)
-   * so the Vite dev server's inline React Refresh preamble can run; test the
-   * policy against a production build.
-   */
-  scriptSrc?: string[];
-
-  /**
-   * Sends `Strict-Transport-Security`, telling browsers to reach this host
-   * over HTTPS only. `true` uses `max-age=31536000` (one year) without
-   * subdomains; pass an object to tune it.
-   *
-   * Off by default: browsers cache the policy for `maxAge`, so enabling it on
-   * a host that still needs plain HTTP (or `includeSubDomains` on a domain with
-   * HTTP-only subdomains) is hard to undo. Browsers ignore the header on
-   * plain-HTTP responses, so it is safe to leave on in local development.
-   */
-  hsts?: boolean | HstsConfig;
-
-  /**
-   * Value of the `Referrer-Policy` header. Defaults to
-   * `'strict-origin-when-cross-origin'`, which sends only the origin to other
-   * sites and nothing on HTTPS→HTTP navigations. Set `false` to omit the header.
-   */
-  referrerPolicy?: ReferrerPolicy | false;
-
-  /**
-   * Sends `X-Content-Type-Options: nosniff`, so browsers refuse to run a
-   * response as a script or stylesheet unless its `Content-Type` says so.
-   * Defaults to `true`; set `false` to omit the header.
-   */
-  noSniff?: boolean;
   /**
    * Origins allowed to read this app's responses from a browser (CORS).
    *
@@ -308,17 +233,12 @@ function normalizeAllowedOrigins(allowedOrigins: string[]): string[] {
 }
 
 export function setSecurityConfig(newSecurityConfig: SecurityConfig) {
-  const { allowedOrigins, scriptSrc, hsts, referrerPolicy, noSniff } = newSecurityConfig;
-  const validated: SecurityConfig = {
-    ...newSecurityConfig,
-    ...(allowedOrigins && { allowedOrigins: normalizeAllowedOrigins(allowedOrigins) }),
-    ...(scriptSrc && { scriptSrc: normalizeScriptSrc(scriptSrc) }),
-    ...(hsts !== undefined && { hsts: normalizeHsts(hsts) }),
-    ...(referrerPolicy !== undefined && {
-      referrerPolicy: normalizeReferrerPolicy(referrerPolicy),
-    }),
-    ...(noSniff !== undefined && { noSniff: normalizeNoSniff(noSniff) }),
-  };
+  const validated = newSecurityConfig.allowedOrigins
+    ? {
+        ...newSecurityConfig,
+        allowedOrigins: normalizeAllowedOrigins(newSecurityConfig.allowedOrigins),
+      }
+    : newSecurityConfig;
   securityConfig = Object.freeze(Object.assign({}, securityConfig, validated));
 }
 

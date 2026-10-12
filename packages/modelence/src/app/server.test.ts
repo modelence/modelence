@@ -716,15 +716,6 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self'"
     );
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'SAMEORIGIN');
-    expect(mockRes.setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
-    expect(mockRes.setHeader).toHaveBeenCalledWith(
-      'Referrer-Policy',
-      'strict-origin-when-cross-origin'
-    );
-    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
-      'Strict-Transport-Security',
-      expect.anything()
-    );
   });
 
   test('preserves the legacy trust-all proxy behavior by default', async () => {
@@ -833,52 +824,6 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self' https://modelence.com https://example.com"
     );
     expect(mockRes.setHeader).not.toHaveBeenCalledWith('X-Frame-Options', expect.anything());
-  });
-
-  test('sets script-src, HSTS, Referrer-Policy and nosniff from the security config', async () => {
-    process.env.NODE_ENV = 'production';
-    mockGetSecurityConfig.mockReturnValue({
-      scriptSrc: ['https://js.stripe.com'],
-      hsts: { maxAge: 63072000, includeSubDomains: true },
-      referrerPolicy: 'no-referrer',
-    });
-
-    await startServer(createMockServer(), {
-      combinedModules: [],
-      channels: [],
-    });
-
-    const mockRes = { setHeader: vi.fn() };
-    findSecurityMiddleware(mockApp)!({}, mockRes, () => {});
-
-    expect(mockRes.setHeader).toHaveBeenCalledWith(
-      'Content-Security-Policy',
-      "frame-ancestors 'self'; script-src 'self' https://js.stripe.com"
-    );
-    expect(mockRes.setHeader).toHaveBeenCalledWith(
-      'Strict-Transport-Security',
-      'max-age=63072000; includeSubDomains'
-    );
-    expect(mockRes.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
-    expect(mockRes.setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
-  });
-
-  test("allows inline scripts outside production so Vite's dev preamble runs", async () => {
-    process.env.NODE_ENV = 'development';
-    mockGetSecurityConfig.mockReturnValue({ scriptSrc: [] });
-
-    await startServer(createMockServer(), {
-      combinedModules: [],
-      channels: [],
-    });
-
-    const mockRes = { setHeader: vi.fn() };
-    findSecurityMiddleware(mockApp)!({}, mockRes, () => {});
-
-    expect(mockRes.setHeader).toHaveBeenCalledWith(
-      'Content-Security-Policy',
-      "frame-ancestors 'self'; script-src 'self' 'unsafe-inline'"
-    );
   });
 
   test('does not register CORS headers when allowedOrigins is unset', async () => {

@@ -6,7 +6,6 @@ export type {
   AuthRateLimitsConfig,
 } from './app/authConfig';
 export type { SecurityConfig } from './app/securityConfig';
-export type { HstsConfig, ReferrerPolicy } from './app/securityHeaders';
 export { Module } from './app/module';
 export {
   RouteHandler,
