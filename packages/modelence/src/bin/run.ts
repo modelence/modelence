@@ -78,9 +78,16 @@ export function resolveInvocation(
   return { command: packageManager, args: ['run', name, ...separator, ...args] };
 }
 
-function withLocalBinPath(env: ProcessEnv, cwd: string): ProcessEnv {
+/*
+  Windows names the variable `Path`, and a copy of process.env is no longer
+  case-insensitive, so prepend to whichever key holds it rather than adding a
+  second `PATH` that would hide the system one.
+*/
+export function withLocalBinPath(env: ProcessEnv, cwd: string): ProcessEnv {
   const binDir = join(cwd, 'node_modules', '.bin');
-  return { ...env, PATH: env.PATH ? `${binDir}${delimiter}${env.PATH}` : binDir };
+  const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') ?? 'PATH';
+  const current = env[key];
+  return { ...env, [key]: current ? `${binDir}${delimiter}${current}` : binDir };
 }
 
 function exitCodeOf(code: number | null, signal: NodeJS.Signals | null): number {

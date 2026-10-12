@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { detectPackageManager, resolveInvocation } from './run';
+import { delimiter, join } from 'node:path';
+import { detectPackageManager, resolveInvocation, withLocalBinPath } from './run';
 
 describe('resolveInvocation', () => {
   const scripts = { dev: 'next dev' };
@@ -37,6 +37,26 @@ describe('resolveInvocation', () => {
       command: 'toString',
       args: [],
     });
+  });
+});
+
+describe('withLocalBinPath', () => {
+  const binDir = join('/app', 'node_modules', '.bin');
+
+  it('prepends the local bin directory to PATH', () => {
+    expect(withLocalBinPath({ PATH: '/usr/bin' }, '/app')).toEqual({
+      PATH: `${binDir}${delimiter}/usr/bin`,
+    });
+  });
+
+  it('keeps the Windows `Path` key instead of adding a second PATH', () => {
+    expect(withLocalBinPath({ Path: 'C:\\Windows' }, '/app')).toEqual({
+      Path: `${binDir}${delimiter}C:\\Windows`,
+    });
+  });
+
+  it('sets PATH to the bin directory when there is none', () => {
+    expect(withLocalBinPath({}, '/app')).toEqual({ PATH: binDir });
   });
 });
 
