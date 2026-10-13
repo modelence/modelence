@@ -16,11 +16,13 @@ const LOCKFILES: [string, PackageManager][] = [
   ['package-lock.json', 'npm'],
 ];
 
+export const DEV_SCRIPT = 'dev';
+
 /*
-  Scripts started by `modelence run` in this process tree, so a script that
-  runs itself (`"dev": "modelence run dev"`) fails instead of looping.
+  Set while the project's dev script runs, so a script that starts
+  `modelence dev` again (`"dev": "modelence dev"`) fails instead of looping.
 */
-const RUN_STACK_ENV_NAME = 'MODELENCE_RUN_SCRIPTS';
+const DEV_SCRIPT_ENV_NAME = 'MODELENCE_DEV_SCRIPT';
 
 type PackageJson = { scripts?: Record<string, string>; packageManager?: string };
 
@@ -61,19 +63,14 @@ export function detectPackageManager(cwd: string): PackageManager {
 }
 
 /*
-  A package.json script runs through the package manager, like `npm run`;
-  any other name runs as a command, so `modelence run next dev` works too.
+  Runs a package.json script through the package manager, like `npm run`.
   npm is the only one that needs `--` before arguments meant for the script.
 */
-export function resolveInvocation(
+export function resolveScriptInvocation(
   name: string,
   args: string[],
-  scripts: Record<string, string>,
   packageManager: PackageManager
 ): Invocation {
-  if (!Object.prototype.hasOwnProperty.call(scripts, name)) {
-    return { command: name, args };
-  }
   const separator = packageManager === 'npm' && args.length > 0 ? ['--'] : [];
   return { command: packageManager, args: ['run', name, ...separator, ...args] };
 }
@@ -127,31 +124,38 @@ function spawnAndExit(
   child.on('exit', (code, signal) => process.exit(exitCodeOf(code, signal)));
 }
 
+function hasScript(cwd: string, name: string): boolean {
+  const scripts = readPackageJson(cwd)?.scripts ?? {};
+  return Object.prototype.hasOwnProperty.call(scripts, name);
+}
+
 /*
-  `modelence run <script|command> [args...]`: runs a package.json script (or
-  any command) with the connected Modelence environment's variables loaded,
-  so resources like DATABASE_URL reach apps that aren't built on Modelence.
+  `modelence dev` outside a Modelence framework app: runs the project's own
+  package.json `dev` script with the connected Modelence environment's
+  variables loaded, so resources like DATABASE_URL reach any Node.js app.
 */
-export async function run(name: string, args: string[], cwd: string = process.cwd()) {
-  const stack = (process.env[RUN_STACK_ENV_NAME] ?? '').split(',').filter(Boolean);
-  if (stack.includes(name)) {
+export async function runDevScript(args: string[], cwd: string = process.cwd()) {
+  if (process.env[DEV_SCRIPT_ENV_NAME]) {
     console.error(
-      `"${name}" runs \`modelence run ${name}\` again. Point the script at your app's own ` +
-        `command (e.g. "next dev") and start it with \`modelence run ${name}\`.`
+      `The "${DEV_SCRIPT}" script in package.json runs \`modelence dev\` again. Set it to ` +
+        `your app's own dev command (e.g. "next dev") and start it with \`npx modelence dev\`.`
+    );
+    process.exit(1);
+  }
+  if (!hasScript(cwd, DEV_SCRIPT)) {
+    console.error(
+      `No "${DEV_SCRIPT}" script in package.json. Add one that starts your app's dev server ` +
+        '(e.g. "next dev"), or a modelence.config.ts for a Modelence framework app.'
     );
     process.exit(1);
   }
 
-  const scripts = readPackageJson(cwd)?.scripts ?? {};
-  const invocation = resolveInvocation(name, args, scripts, detectPackageManager(cwd));
+  const packageManager = detectPackageManager(cwd);
   const env = await loadLocalEnv(cwd, process.env);
-  const notFoundMessage = Object.prototype.hasOwnProperty.call(scripts, name)
-    ? `${invocation.command} is not installed (this project's lockfile asks for it).`
-    : `No script named "${name}" in package.json, and no command "${name}" found.`;
   spawnAndExit(
-    invocation,
+    resolveScriptInvocation(DEV_SCRIPT, args, packageManager),
     cwd,
-    withLocalBinPath({ ...env, [RUN_STACK_ENV_NAME]: [...stack, name].join(',') }, cwd),
-    notFoundMessage
+    withLocalBinPath({ ...env, [DEV_SCRIPT_ENV_NAME]: '1' }, cwd),
+    `${packageManager} is not installed (this project's lockfile asks for it).`
   );
 }

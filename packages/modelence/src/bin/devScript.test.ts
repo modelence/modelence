@@ -2,40 +2,24 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { detectPackageManager, resolveInvocation, withLocalBinPath } from './run';
+import { detectPackageManager, resolveScriptInvocation, withLocalBinPath } from './devScript';
 
-describe('resolveInvocation', () => {
-  const scripts = { dev: 'next dev' };
-
+describe('resolveScriptInvocation', () => {
   it('runs a package.json script through the package manager', () => {
-    expect(resolveInvocation('dev', [], scripts, 'pnpm')).toEqual({
+    expect(resolveScriptInvocation('dev', [], 'pnpm')).toEqual({
       command: 'pnpm',
       args: ['run', 'dev'],
     });
   });
 
   it('separates script arguments with -- for npm only', () => {
-    expect(resolveInvocation('dev', ['--port', '4000'], scripts, 'npm')).toEqual({
+    expect(resolveScriptInvocation('dev', ['--port', '4000'], 'npm')).toEqual({
       command: 'npm',
       args: ['run', 'dev', '--', '--port', '4000'],
     });
-    expect(resolveInvocation('dev', ['--port', '4000'], scripts, 'yarn')).toEqual({
+    expect(resolveScriptInvocation('dev', ['--port', '4000'], 'yarn')).toEqual({
       command: 'yarn',
       args: ['run', 'dev', '--port', '4000'],
-    });
-  });
-
-  it('runs anything that is not a script as a command', () => {
-    expect(resolveInvocation('next', ['dev'], scripts, 'npm')).toEqual({
-      command: 'next',
-      args: ['dev'],
-    });
-  });
-
-  it('does not treat inherited object keys as scripts', () => {
-    expect(resolveInvocation('toString', [], scripts, 'npm')).toEqual({
-      command: 'toString',
-      args: [],
     });
   });
 });
@@ -64,7 +48,7 @@ describe('detectPackageManager', () => {
   let root: string;
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'modelence-run-'));
+    root = await mkdtemp(join(tmpdir(), 'modelence-dev-'));
   });
 
   afterEach(async () => {
