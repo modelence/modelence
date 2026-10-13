@@ -20,7 +20,9 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'
 const program = new Command()
   .name('modelence')
   .description('Modelence CLI tool')
-  .version(packageJson.version);
+  .version(packageJson.version)
+  // Lets `dev` pass flags like `--port` through to the script untouched.
+  .enablePositionalOptions();
 
 program
   .command('setup')
@@ -91,14 +93,18 @@ program
 
 program
   .command('dev')
-  .description('Start development server')
+  .description(
+    "Start the development server with the connected environment's variables (the package.json dev script outside Modelence framework apps)"
+  )
+  .argument('[args...]', 'Arguments passed on to the dev script')
   .option(
     '--takeover',
     'Disconnect any instance currently holding the environment and connect this one'
   )
-  .action(async (options) => {
-    await loadEnv();
-    dev(options);
+  .allowUnknownOption()
+  .passThroughOptions()
+  .action(async (args: string[], options) => {
+    await dev(options, args);
   });
 
 program
