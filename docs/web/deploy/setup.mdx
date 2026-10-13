@@ -108,8 +108,8 @@ such as `PGHOST` and `PGPASSWORD`. These variables reach the running app only, n
 They can't be set or changed in the dashboard, where they are listed with the resource they come from.
 
 <Note>
-Apps built on the Modelence framework need no file: `modelence deploy` recognizes the `modelence`
-dependency and keeps building them locally, as it always has. To build one on Modelence Cloud
+Apps built on the Modelence framework need no file: `npx modelence@latest deploy` recognizes the
+`modelence` dependency and keeps building them locally, as it always has. To build one on Modelence Cloud
 instead, describe it like any other Node.js app: `"build": { "commands": ["npm ci", "npm run build"] }`
 and `"start": { "commands": ["npm start"] }`.
 </Note>
