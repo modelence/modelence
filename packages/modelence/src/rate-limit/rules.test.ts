@@ -7,6 +7,7 @@ type SetupResult = {
   mocks: {
     findOne: Mock;
     upsertOne: Mock;
+    updateOne: Mock;
   };
 };
 
@@ -15,11 +16,13 @@ async function loadModule(): Promise<SetupResult> {
 
   const mockFindOne = vi.fn();
   const mockUpsertOne = vi.fn();
+  const mockUpdateOne = vi.fn();
 
   vi.doMock('./db', () => ({
     dbRateLimits: {
       findOne: mockFindOne,
       upsertOne: mockUpsertOne,
+      updateOne: mockUpdateOne,
     },
   }));
 
@@ -31,6 +34,7 @@ async function loadModule(): Promise<SetupResult> {
     mocks: {
       findOne: mockFindOne,
       upsertOne: mockUpsertOne,
+      updateOne: mockUpdateOne,
     },
   };
 }
@@ -153,5 +157,138 @@ describe('rate-limit/rules', () => {
     ).rejects.toThrow('Rate limit exceeded for login');
 
     expect(mocks.upsertOne).not.toHaveBeenCalled();
+  });
+
+  test('sustained over-limit burst results in zero write operations for rejected requests', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'signup', type: 'ip', window: 60_000, limit: 2 }]);
+
+    mocks.findOne.mockResolvedValue({
+      bucket: 'signup',
+      type: 'ip',
+      value: '10.0.0.2',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      windowCount: 2,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:03:00.000Z'),
+    } as never);
+
+    // Simulate burst of 10 rejected requests
+    for (let i = 0; i < 10; i++) {
+      await expect(
+        consumeRateLimit({ bucket: 'signup', type: 'ip', value: '10.0.0.2' })
+      ).rejects.toThrow('Rate limit exceeded for signup');
+    }
+
+    // Verify exactly 0 upsertOne calls were issued across all rejected burst requests
+    expect(mocks.upsertOne).toHaveBeenCalledTimes(0);
+    expect(mocks.findOne).toHaveBeenCalledTimes(10);
+  });
+
+  test('sliding-window boundary case executes optimistic increment then compensating decrement when count exceeds limit', async () => {
+    // At t = 10s into a 60s window (weight for prev window = 50/60 = 0.833)
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:10.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
+
+    // windowCount is 1 (< limit of 5), but prevWindowCount is 5.
+    // Weighted count = 1 + round(5 * (50/60)) = 1 + 4 = 5.
+    mocks.findOne.mockResolvedValue({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 1,
+      prevWindowCount: 5,
+      expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+    } as never);
+
+    await expect(
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' })
+    ).rejects.toThrow('Rate limit exceeded for api');
+
+    // Fast-path did not trigger because windowCount (1) < limit (5).
+    // Initial increment was issued, followed by compensating decrement.
+    expect(mocks.upsertOne).toHaveBeenCalledTimes(1);
+    expect(mocks.upsertOne).toHaveBeenCalledWith(
+      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000 },
+      {
+        $inc: { windowCount: 1 },
+        $setOnInsert: {
+          windowStart: new Date('2024-01-01T00:00:00.000Z'),
+          prevWindowCount: 0,
+          expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+        },
+      }
+    );
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000, windowCount: { $gt: 0 } },
+      { $inc: { windowCount: -1 } }
+    );
+  });
+
+  test('compensating decrement under concurrent window rollover requests never pushes windowCount below 0', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);
+
+    // Record from previous window (windowStart = T0, prev window)
+    // When consumed at T1, getCount returns modifier with $set windowCount to 1
+    const record = {
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 1,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+    };
+
+    mocks.findOne.mockResolvedValue(record as never);
+
+    let stateWindowCount = 1; // start state in DB before rollover call succeeds
+    const observedWindowCounts: number[] = [];
+
+    // Simulate stateful execution of upsertOne and updateOne
+    mocks.upsertOne.mockImplementation(async (_filter, modifier) => {
+      if (modifier.$set && typeof modifier.$set.windowCount === 'number') {
+        stateWindowCount = modifier.$set.windowCount;
+      } else if (modifier.$inc && typeof modifier.$inc.windowCount === 'number') {
+        stateWindowCount += modifier.$inc.windowCount;
+      }
+      observedWindowCounts.push(stateWindowCount);
+    });
+
+    mocks.updateOne.mockImplementation(async (filter, modifier) => {
+      if (filter.windowCount && filter.windowCount.$gt !== undefined) {
+        if (stateWindowCount > filter.windowCount.$gt) {
+          if (modifier.$inc && typeof modifier.$inc.windowCount === 'number') {
+            stateWindowCount += modifier.$inc.windowCount;
+          }
+        }
+      }
+      observedWindowCounts.push(stateWindowCount);
+    });
+
+    // Run 5 concurrent over-limit requests at rollover
+    await Promise.allSettled([
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' }),
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' }),
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' }),
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' }),
+      consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' }),
+    ]);
+
+    expect(stateWindowCount).toBeGreaterThanOrEqual(0);
+    for (const count of observedWindowCounts) {
+      expect(count).toBeGreaterThanOrEqual(0);
+    }
   });
 });

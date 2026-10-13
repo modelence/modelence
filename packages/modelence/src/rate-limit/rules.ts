@@ -62,6 +62,15 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
   const now = Date.now();
   const currentWindowStart = Math.floor(now / rule.window) * rule.window;
 
+  // Fast-path pre-check: if current window count alone meets/exceeds limit, fail immediately without writing
+  if (
+    record &&
+    record.windowStart.getTime() === currentWindowStart &&
+    record.windowCount >= rule.limit
+  ) {
+    throw createRateLimitError();
+  }
+
   const { count, modifier } = record
     ? getCount(record, currentWindowStart, now)
     : {
@@ -76,15 +85,15 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
         },
       };
 
-  if (count >= rule.limit) {
+  await dbRateLimits.upsertOne(filter, modifier);
+
+  if (count + 1 > rule.limit) {
+    await dbRateLimits.updateOne(
+      { ...filter, windowCount: { $gt: 0 } },
+      { $inc: { windowCount: -1 } }
+    );
     throw createRateLimitError();
   }
-
-  /*
-    Always use upsert, because there is a small chance the document might be auto-removed
-    based on the expiration TTL index in between the check and the update
-  */
-  await dbRateLimits.upsertOne(filter, modifier);
 }
 
 function getCount(record: (typeof dbRateLimits)['Doc'], currentWindowStart: number, now: number) {
