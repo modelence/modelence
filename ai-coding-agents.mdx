@@ -47,8 +47,8 @@ confirm, run `/plugin`: `modelence` should appear under installed plugins.
 
 <Note>
 The plugin requires Claude Code v2.1.195 or later, and the `claude` command on your PATH. The desktop
-app and the IDE extensions ship a private copy that isn't on your PATH, so `npx modelence setup` can't
-use it — if `claude` isn't found, install the standalone CLI from
+app and the IDE extensions ship a private copy that isn't on your PATH, so
+`npx modelence@latest setup` can't use it — if `claude` isn't found, install the standalone CLI from
 [code.claude.com](https://code.claude.com/docs/en/setup) first.
 </Note>
 
@@ -175,8 +175,8 @@ other environments and apps when you ask it to, which is handy for comparing aga
 borrowing context from a related app.
 
 <Note>
-If you switch environments by re-running `modelence setup`, start a new agent session so it picks up
-the new environment id. There's nothing to reconnect — the sign-in stays valid.
+If you switch environments by re-running `npx modelence@latest setup`, start a new agent session so
+it picks up the new environment id. There's nothing to reconnect — the sign-in stays valid.
 </Note>
 
 ### From other clients
