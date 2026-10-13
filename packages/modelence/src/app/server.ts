@@ -13,7 +13,7 @@ import type { AppServer } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
-import { ModelenceError } from '../error';
+import { ModelenceError, ValidationError } from '../error';
 import { Module } from './module';
 import { isSetupRequired } from './setupStatus';
 import { ConnectionInfo } from '@/methods/types';
@@ -323,8 +323,10 @@ export async function getCallContext(req: Request, res: Response | null = null) 
   };
 }
 
-function handleMethodError(res: Response, methodName: string, error: unknown) {
+function handleMethodError(res: Response, methodName: string, rawError: unknown) {
   // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
+
+  const error = isZodError(rawError) ? toValidationError(rawError, methodName) : rawError;
 
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
@@ -340,30 +342,55 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     return;
   }
 
-  if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
-    let errorMessage = '';
-    try {
-      errorMessage = parseZodError(error as z.ZodError);
-    } catch (parsingError) {
-      console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
-      errorMessage = 'Validation failed';
-    }
-    res.status(400).send(errorMessage);
-    return;
-  }
-
   console.error(`Error calling ${methodName}:`, error);
   res.status(500).send(error instanceof Error ? error.message : String(error));
 }
 
-function parseZodError(zodError: z.ZodError): string {
-  const flattened = zodError.flatten();
-  const fieldMessages = Object.entries(flattened.fieldErrors).map(
-    ([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`
+type ZodIssueLike = { path: PropertyKey[]; message: string };
+type ZodErrorLike = Error & { issues: ZodIssueLike[] };
+
+// Apps may bring their own zod (3 or 4, classic or mini) rather than the copy bundled
+// with the framework, so `instanceof` can't be used. Every version exposes `issues`;
+// zod 3 and zod 4 classic name the error `ZodError`, zod 4 mini names it `$ZodError`.
+const ZOD_ERROR_NAMES = new Set(['ZodError', '$ZodError']);
+
+function isZodError(error: unknown): error is ZodErrorLike {
+  return (
+    error instanceof Error &&
+    ZOD_ERROR_NAMES.has(error.name) &&
+    'issues' in error &&
+    Array.isArray(error.issues)
   );
-  const formMessages = flattened.formErrors;
-  const allMessages = [...fieldMessages, ...formMessages].filter(Boolean);
-  return allMessages.join('; ');
+}
+
+function toValidationError(zodError: ZodErrorLike, methodName: string): ValidationError {
+  try {
+    return new ValidationError(formatZodIssues(zodError.issues) || 'Validation failed');
+  } catch (parsingError) {
+    console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+    return new ValidationError('Validation failed');
+  }
+}
+
+// Mirrors zod's `flatten()`: issues are grouped by their top-level field, and issues
+// without a path (e.g. object-level refinements) are listed after the field messages.
+function formatZodIssues(issues: ZodIssueLike[]): string {
+  const fieldErrors = new Map<string, string[]>();
+  const formErrors: string[] = [];
+
+  for (const issue of issues) {
+    if (issue.path.length === 0) {
+      formErrors.push(issue.message);
+      continue;
+    }
+    const field = String(issue.path[0]);
+    fieldErrors.set(field, [...(fieldErrors.get(field) ?? []), issue.message]);
+  }
+
+  const fieldMessages = [...fieldErrors].map(
+    ([field, messages]) => `${field}: ${messages.join(', ')}`
+  );
+  return [...fieldMessages, ...formErrors].join('; ');
 }
 
 function securityHeadersMiddleware(): express.RequestHandler {
