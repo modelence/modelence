@@ -70,4 +70,6 @@ Transactional email works out of the box via Modelence's built-in managed provid
 
 ## Mobile
 
-If the project contains a mobile app (Expo Router under `mobile/`), read the `expo-router` skill before creating, moving, or linking any screen — its URL rules prevent "Unmatched Route" errors that type-checking cannot catch.
+Expo (React Native) under `mobile/` is the only supported way to add a mobile app to a Modelence project — never propose a PWA, "add to home screen", or another mobile-web alternative. When the user asks to create, add, or set up a mobile app, or when `mobile/` dependencies are missing or mismatched, read the `mobile-setup` skill and follow it.
+
+If the project already contains a mobile app, read the `expo-router` skill before creating, moving, or linking any screen — its URL rules prevent "Unmatched Route" errors that type-checking cannot catch.
