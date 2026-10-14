@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { SignupProps, Context, Args } from '../methods/types';
+import { SignupProps, Context, Args, UpdateProfileProps } from '../methods/types';
 import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
@@ -41,6 +41,33 @@ export async function handleSignupWithPassword(
 
     // TODO: captcha check
 
+    // Everything that can reject the request runs before the duplicate-email
+    // check below. If any of it came after, a probe that fails it would get a
+    // different error depending on whether the email is registered, which
+    // would reveal the account without creating one.
+    const profileFields = validateProfileFields({
+      firstName,
+      lastName,
+      avatarUrl,
+      handle,
+    });
+
+    await authConfig.validateSignup?.({
+      email,
+      password,
+      ...profileFields,
+    });
+
+    // Runs on every password-setting path (see `resetPassword`), so a policy
+    // configured here can't be bypassed by resetting to a weaker password.
+    await authConfig.validatePassword?.({
+      password,
+      email,
+      context: 'signup',
+    });
+
+    const resolvedHandle = await resolveSignupHandle(profileFields, email);
+
     const existingUser = await usersCollection.findOne(
       { 'emails.address': email },
       { collation: { locale: 'en', strength: 2 } }
@@ -65,47 +92,6 @@ export async function handleSignupWithPassword(
         type: 'ip',
         value: ip,
       });
-    }
-
-    // Validate optional profile fields (firstName, lastName, avatarUrl, handle)
-    const profileFields = validateProfileFields({
-      firstName,
-      lastName,
-      avatarUrl,
-      handle,
-    });
-
-    await authConfig.validateSignup?.({
-      email,
-      password,
-      ...profileFields,
-    });
-
-    // Runs on every password-setting path (see `resetPassword`), so a policy
-    // configured here can't be bypassed by resetting to a weaker password.
-    await authConfig.validatePassword?.({
-      password,
-      email,
-      context: 'signup',
-    });
-
-    // Resolve unique handle
-    let resolvedHandle: string;
-
-    if (profileFields.handle) {
-      resolvedHandle = await resolveUniqueHandle(profileFields.handle, email);
-    } else if (authConfig.generateHandle) {
-      const generated = await authConfig.generateHandle({
-        email,
-        firstName: profileFields.firstName,
-        lastName: profileFields.lastName,
-      });
-
-      resolvedHandle = await resolveUniqueHandle(generated, email, {
-        throwOnConflict: false,
-      });
-    } else {
-      resolvedHandle = await resolveUniqueHandle(undefined, email);
     }
 
     // Hash password with bcrypt (salt is automatically generated)
@@ -180,4 +166,26 @@ export async function handleSignupWithPassword(
     }
     throw error;
   }
+}
+
+async function resolveSignupHandle(
+  profileFields: Partial<UpdateProfileProps>,
+  email: string
+): Promise<string> {
+  if (profileFields.handle) {
+    return resolveUniqueHandle(profileFields.handle, email);
+  }
+
+  const { generateHandle } = getAuthConfig();
+  if (generateHandle) {
+    const generated = await generateHandle({
+      email,
+      firstName: profileFields.firstName,
+      lastName: profileFields.lastName,
+    });
+
+    return resolveUniqueHandle(generated, email, { throwOnConflict: false });
+  }
+
+  return resolveUniqueHandle(undefined, email);
 }

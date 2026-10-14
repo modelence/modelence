@@ -104,7 +104,7 @@ validatePassword: async ({ password, context }) => {
 
 <Note>Available since `modelence@0.17.0`.</Note>
 
-Called after `validateSignup` and the built-in disposable-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
+Called after `validateSignup`, `validatePassword`, the built-in disposable-email check and the duplicate-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
 
 Invoked for `'email'` and `'magicLink'` provider signups. OAuth signups are not gated because OAuth providers (Google, GitHub, etc.) do not issue disposable accounts.
 

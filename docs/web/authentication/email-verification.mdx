@@ -96,7 +96,7 @@ This endpoint enforces the following limits via the `verification` rate limit bu
 
 - **1 per 60 seconds** — per user, a new verification email cannot be sent until 60 seconds have passed since the previous one.
 - **10 per day** — per user, a maximum of 10 verification emails can be sent within a 24-hour window.
-- **IP-based rate limiting** — repeated calls from the same IP are also rate-limited.
+- **10 per 15 minutes, 100 per day** — per IP, counted on every call whether or not the address is registered, so one client can't cycle through many addresses.
 
 ```typescript
 import { resendEmailVerification } from 'modelence/client';
