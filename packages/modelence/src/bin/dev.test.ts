@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 const spawnMock = vi.fn();
 const spawnSyncMock = vi.fn();
@@ -32,13 +32,14 @@ describe('dev', () => {
   let sigintBefore: Listener[];
   let sigtermBefore: Listener[];
   let exitBefore: Listener[];
-  let killSpy: ReturnType<typeof vi.spyOn>;
-  let exitSpy: ReturnType<typeof vi.spyOn>;
+  let killSpy: MockInstance<typeof process.kill>;
+  let exitSpy: MockInstance<typeof process.exit>;
   let platformSpy: ReturnType<typeof vi.spyOn>;
   let fakeChild: FakeChild;
 
-  const removeAddedListeners = (event: string, before: Listener[]) => {
-    for (const listener of process.listeners(event)) {
+  const removeAddedListeners = (event: NodeJS.Signals | 'exit', before: Listener[]) => {
+    const listeners = event === 'exit' ? process.listeners('exit') : process.listeners(event);
+    for (const listener of listeners) {
       if (!before.includes(listener as Listener)) {
         process.removeListener(event, listener);
       }
