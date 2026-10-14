@@ -19,6 +19,7 @@ import { isSetupRequired } from './setupStatus';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
+import { buildSecurityHeaders } from './securityHeaders';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
@@ -118,8 +119,8 @@ export async function startServer(
 
   app.use(cookieParser());
 
-  // CSP and X-Frame-Options belong on every response, SSR pages included, so
-  // this one stays global.
+  // Security headers belong on every response, SSR pages included, so this
+  // one stays global.
   app.use(securityHeadersMiddleware());
   // Preflights only. The matching response headers are attached per-route below,
   // which keeps SSR pages and static assets out of CORS scope.
@@ -399,17 +400,13 @@ function formatZodIssues(issues: ZodIssueLike[]): string {
 }
 
 function securityHeadersMiddleware(): express.RequestHandler {
-  const { frameAncestors } = getSecurityConfig();
-  const hasCustomAncestors = frameAncestors && frameAncestors.length > 0;
-  const ancestors = hasCustomAncestors ? ["'self'", ...frameAncestors].join(' ') : "'self'";
+  const headers = buildSecurityHeaders(getSecurityConfig(), {
+    dev: process.env.NODE_ENV !== 'production',
+  });
 
   return (_req, res, next) => {
-    res.setHeader('Content-Security-Policy', `frame-ancestors ${ancestors}`);
-    // X-Frame-Options only supports DENY and SAMEORIGIN (ALLOW-FROM is deprecated).
-    // When custom ancestors are configured, only CSP frame-ancestors can express that,
-    // so we omit X-Frame-Options to avoid conflicting with the CSP directive.
-    if (!hasCustomAncestors) {
-      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    for (const [name, value] of headers) {
+      res.setHeader(name, value);
     }
     next();
   };
