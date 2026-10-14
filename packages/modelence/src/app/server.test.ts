@@ -1587,31 +1587,13 @@ describe('app/server method endpoint', () => {
     expect(res.setHeader).toHaveBeenCalledWith('X-Modelence-Error-Code', 'EMAIL_NOT_VERIFIED');
   });
 
-  test('handles ZodError with validation messages', async () => {
+  const callMethodRejectingWith = async (error: unknown) => {
     const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    const zodError: Error & {
-      constructor: { name: string };
-      errors: unknown[];
-      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
-    } = new Error('Validation failed') as Error & {
-      constructor: { name: string };
-      errors: unknown[];
-      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
-    };
-    zodError.constructor = { name: 'ZodError' };
-    zodError.errors = [];
-    zodError.flatten = () => ({
-      fieldErrors: { email: ['Invalid email'], age: ['Must be positive'] },
-      formErrors: ['Form invalid'],
-    });
+    mockRunMethod.mockRejectedValue(error);
 
-    mockRunMethod.mockRejectedValue(zodError);
-
-    const mockServer = createMockServer();
-
-    await startServer(mockServer, {
+    await startServer(createMockServer(), {
       combinedModules: [],
       channels: [],
     });
@@ -1628,11 +1610,97 @@ describe('app/server method endpoint', () => {
     mockGetMongodbUri.mockReturnValue('');
 
     await methodHandler(req, res);
+    return res;
+  };
+
+  const catchError = (fn: () => unknown): unknown => {
+    try {
+      fn();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('Expected function to throw');
+  };
+
+  test('handles zod 3 errors with validation messages', async () => {
+    const { z } = await import('zod');
+    const schema = z
+      .object({ email: z.string().email(), age: z.number().positive() })
+      .refine(() => false, { message: 'Form invalid' });
+    const zodError = catchError(() => schema.parse({ email: 'nope', age: -1 }));
+
+    const res = await callMethodRejectingWith(zodError);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      'email: Invalid email; age: Must be positive; Form invalid'
+      'email: Invalid email; age: Number must be greater than 0; Form invalid'
     );
+  });
+
+  test('handles zod 4 errors as validation errors', async () => {
+    const { z } = await import('zod/v4');
+    const schema = z.object({ email: z.email(), tags: z.array(z.string()) });
+    const zodError = catchError(() => schema.parse({ email: 'nope', tags: [1] }));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      'email: Invalid email address; tags: Invalid input: expected string, received number'
+    );
+  });
+
+  test('handles zod 4 mini errors as validation errors', async () => {
+    const z = await import('zod/v4-mini');
+    const schema = z.object({ name: z.string() });
+    const zodError = catchError(() => schema.parse({ name: 42 }));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Invalid input: expected string, received number');
+  });
+
+  test('reports root-level zod issues without a field prefix', async () => {
+    const { z } = await import('zod/v4');
+    const zodError = catchError(() => z.string().parse(5));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('Invalid input: expected string, received number');
+  });
+
+  test('handles a thrown zod 4 safeParseAsync error as a validation error', async () => {
+    const { z } = await import('zod/v4');
+    const result = await z.object({ name: z.string() }).safeParseAsync({ name: 42 });
+
+    const res = await callMethodRejectingWith(result.error);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Invalid input: expected string, received number');
+  });
+
+  test('handles a manually constructed zod 4 error that does not extend Error', async () => {
+    const { z } = await import('zod/v4');
+    const zodError = new z.ZodError([
+      { code: 'custom', path: ['name'], message: 'Name is taken', input: 'bob' },
+    ]);
+    expect(zodError).not.toBeInstanceOf(Error);
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Name is taken');
+  });
+
+  test('does not treat an unrelated error with an issues array as a validation error', async () => {
+    const error = Object.assign(new Error('Upstream failed'), { issues: [] });
+
+    const res = await callMethodRejectingWith(error);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('Upstream failed');
   });
 
   test('handles generic error with 500 status', async () => {
