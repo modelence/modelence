@@ -14,7 +14,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { hashToken } from './tokenHash';
-import { resolveUrl } from './utils';
+import { setQueryParams, resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
@@ -195,7 +195,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
     return {
       status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${resetPasswordUrl}?status=error&message=${encodeURIComponent(message)}`,
+      redirect: setQueryParams(resetPasswordUrl, { status: 'error', message }),
     };
   }
 }
