@@ -347,16 +347,21 @@ function handleMethodError(res: Response, methodName: string, rawError: unknown)
 }
 
 type ZodIssueLike = { path: PropertyKey[]; message: string };
-type ZodErrorLike = Error & { issues: ZodIssueLike[] };
+type ZodErrorLike = { name: string; issues: ZodIssueLike[] };
 
 // Apps may bring their own zod (3 or 4, classic or mini) rather than the copy bundled
 // with the framework, so `instanceof` can't be used. Every version exposes `issues`;
 // zod 3 and zod 4 classic name the error `ZodError`, zod 4 mini names it `$ZodError`.
+// Zod 4 errors constructed directly (`new z.ZodError(issues)`) don't extend `Error`,
+// so only the shape is checked.
 const ZOD_ERROR_NAMES = new Set(['ZodError', '$ZodError']);
 
 function isZodError(error: unknown): error is ZodErrorLike {
   return (
-    error instanceof Error &&
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    typeof error.name === 'string' &&
     ZOD_ERROR_NAMES.has(error.name) &&
     'issues' in error &&
     Array.isArray(error.issues)

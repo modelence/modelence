@@ -1671,6 +1671,29 @@ describe('app/server method endpoint', () => {
     expect(res.send).toHaveBeenCalledWith('Invalid input: expected string, received number');
   });
 
+  test('handles a thrown zod 4 safeParseAsync error as a validation error', async () => {
+    const { z } = await import('zod/v4');
+    const result = await z.object({ name: z.string() }).safeParseAsync({ name: 42 });
+
+    const res = await callMethodRejectingWith(result.error);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Invalid input: expected string, received number');
+  });
+
+  test('handles a manually constructed zod 4 error that does not extend Error', async () => {
+    const { z } = await import('zod/v4');
+    const zodError = new z.ZodError([
+      { code: 'custom', path: ['name'], message: 'Name is taken', input: 'bob' },
+    ]);
+    expect(zodError).not.toBeInstanceOf(Error);
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Name is taken');
+  });
+
   test('does not treat an unrelated error with an issues array as a validation error', async () => {
     const error = Object.assign(new Error('Upstream failed'), { issues: [] });
 
