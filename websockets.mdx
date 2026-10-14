@@ -400,6 +400,21 @@ export default function ChatPage() {
 }
 ```
 
+## Disabling WebSockets
+
+The WebSocket server starts by default. If your app uses neither channels nor [live queries](/live-queries), you can turn it off so no WebSocket endpoint is exposed:
+
+```typescript
+// src/server/app.ts
+import { startApp } from "modelence/server";
+
+startApp({
+  websocket: { enabled: false },
+});
+```
+
+With WebSockets disabled, `ServerChannel.broadcast()` logs an error instead of delivering messages, and live queries cannot connect. Modelence logs a warning at startup if any module still registers channels.
+
 ## Horizontal Scaling
 
 Modelence WebSockets use the Socket.IO MongoDB adapter, which enables horizontal scaling across multiple server instances:
