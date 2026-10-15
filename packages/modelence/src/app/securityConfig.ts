@@ -148,6 +148,12 @@ export type SecurityConfig = {
    * `localhost:8081` and `localhost:3000` differ only by port, and port is not
    * part of a site.
    *
+   * Listed origins are also the only foreign origins allowed to call methods
+   * and the OAuth linking endpoints from a browser. Those routes act as the
+   * signed-in user, so a browser request to them from any other origin —
+   * including a sibling subdomain of the same site — is rejected with 403.
+   * List only origins you trust to act on behalf of your users.
+   *
    * Opt-in by design: when unset, no CORS headers are sent at all. Deployments
    * that already add CORS at a proxy or router therefore stay untouched — a
    * duplicated `Access-Control-Allow-Origin` is invalid and would break them.
