@@ -13,6 +13,12 @@ import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
+import {
+  clearAuthCookie,
+  readAuthCookie,
+  setAuthCookie,
+  type OAuthStateCookie,
+} from '@/auth/cookies';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
@@ -617,13 +623,7 @@ export async function handleOAuthUserAuthentication(
 
 export function clearOAuthLinkCookie(res: Response) {
   // Important: must clear the httpOnly cookie used during OAuth linking
-  res.cookie('oauthLinkToken', '', {
-    httpOnly: true,
-    maxAge: 0,
-    path: '/api/_internal/auth/',
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-  });
+  clearAuthCookie(res, 'oauthLinkToken');
 }
 
 function safelyCallHook(hook?: () => void) {
@@ -710,10 +710,10 @@ function decodeOAuthState(storedState: string): {
 export function validateOAuthStateAndGetMode(
   req: Request,
   res: Response,
-  stateCookieName: string
+  stateCookieName: OAuthStateCookie
 ): OAuthStateResult | null {
   const state = req.query.state as string;
-  const storedState = req.cookies[stateCookieName];
+  const storedState = readAuthCookie(req, stateCookieName);
 
   const decoded = decodeOAuthState(storedState || '');
 
@@ -743,7 +743,7 @@ export function validateOAuthStateAndGetMode(
     return null;
   }
 
-  res.clearCookie(stateCookieName);
+  clearAuthCookie(res, stateCookieName);
 
   if (decoded.platform === 'mobile' && !mobileOutcome) {
     sendOAuthError(
@@ -791,9 +791,9 @@ function resolveDecodedMobileOutcome(decoded: {
  */
 export function resolveMobileOutcomeFromCookie(
   req: Request,
-  stateCookieName: string
+  stateCookieName: OAuthStateCookie
 ): OAuthErrorTarget | null {
-  return resolveDecodedMobileOutcome(decodeOAuthState(req.cookies?.[stateCookieName] || ''));
+  return resolveDecodedMobileOutcome(decodeOAuthState(readAuthCookie(req, stateCookieName) || ''));
 }
 
 /**
@@ -923,7 +923,7 @@ export function resolveMobileRedirectRequest(
 export async function prepareOAuthInitiation(
   req: Request,
   res: Response,
-  stateCookieName: string
+  stateCookieName: OAuthStateCookie
 ): Promise<{ state: string; mode: string } | null> {
   const state = randomBytes(32).toString('hex');
   const mode = req.query.mode === 'link' ? 'link' : 'login';
@@ -964,12 +964,7 @@ export async function prepareOAuthInitiation(
     codeChallenge,
   });
 
-  res.cookie(stateCookieName, stateValue, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: time.minutes(10),
-  });
+  setAuthCookie(res, stateCookieName, stateValue, time.minutes(10));
 
   return { state, mode };
 }

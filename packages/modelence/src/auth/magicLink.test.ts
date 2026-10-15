@@ -531,7 +531,7 @@ describe('auth/magicLink', () => {
         expect.objectContaining({
           httpOnly: true,
           sameSite: 'lax',
-          path: '/api/_internal/',
+          path: '/',
         })
       );
       // No token in the redirect target — it lives only in the cookie.
@@ -641,7 +641,7 @@ describe('auth/magicLink', () => {
         httpOnly: true,
         secure: false,
         sameSite: 'lax',
-        path: '/api/_internal/',
+        path: '/',
       });
       expect(mockSetSessionUser).not.toHaveBeenCalled();
     });

@@ -418,6 +418,54 @@ describe('app/server getCallContext', () => {
     expect(ctx.session?.authToken).toBe('body-token');
   });
 
+  describe('in production', () => {
+    beforeEach(() => {
+      vi.stubEnv('NODE_ENV', 'production');
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    test('authenticates from the __Host- prefixed cookie', async () => {
+      const req = createRequest({
+        cookies: { '__Host-authToken': 'real-token', authToken: 'attacker-token' },
+        headers: { host: 'localhost' },
+      });
+
+      await getCallContext(req, {} as Response);
+
+      expect(mockAuthenticate).toHaveBeenCalledWith('real-token');
+    });
+
+    test('ignores an unprefixed authToken a sibling subdomain could plant', async () => {
+      // A tossed cookie must not displace the body token the client holds in
+      // its origin-scoped localStorage.
+      const req = createRequest({
+        cookies: { authToken: 'attacker-token' },
+        body: { authToken: 'body-token' },
+        headers: { host: 'localhost' },
+      });
+
+      await getCallContext(req, {} as Response);
+
+      expect(mockAuthenticate).toHaveBeenCalledWith('body-token');
+    });
+
+    test('ignores an unprefixed oauthLinkToken on the OAuth callback', async () => {
+      const req = createRequest({
+        path: '/api/_internal/auth/google/callback',
+        cookies: { oauthLinkToken: 'attacker-token' },
+        headers: { host: 'localhost' },
+      });
+
+      await getCallContext(req, {} as Response);
+
+      expect(mockAuthenticate).toHaveBeenCalledWith(null);
+    });
+  });
+
   test('handles null authToken', async () => {
     const req = createRequest({
       headers: { host: 'localhost' },
@@ -1993,7 +2041,7 @@ describe('app/server set-link-cookie endpoint', () => {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      path: '/api/_internal/auth/',
+      path: '/',
       maxAge: 10 * 60 * 1000,
     });
     expect(res.json).toHaveBeenCalledWith({ ok: true });

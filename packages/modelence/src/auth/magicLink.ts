@@ -13,6 +13,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { isDisposableEmail } from './disposableEmails';
 import { setAuthTokenCookie, setSessionUser } from './session';
+import { clearAuthCookie, readAuthCookie, setAuthCookie } from './cookies';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
@@ -26,23 +27,6 @@ import { Session, User } from './types';
 // Short-lived httpOnly cookie carrying the magic link token from the landing
 // route to the `loginWithMagicLink` mutation, so it never appears on a
 // client-rendered URL.
-const MAGIC_LINK_COOKIE = 'magicLinkToken';
-
-// Scope the cookie to the API surface so it's only sent on the loginWithMagicLink request.
-const MAGIC_LINK_COOKIE_PATH = '/api/_internal/';
-
-// Attributes shared by the set and clear calls. Browsers only remove a cookie
-// when the clearing Set-Cookie matches the same path/secure/sameSite/httpOnly,
-// so both sites must use these identical flags or the httpOnly cookie can linger.
-const MAGIC_LINK_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  // `lax` so the cookie survives the email-link navigation; `strict` can drop
-  // it when the SPA is reached cross-site (some webviews).
-  sameSite: 'lax',
-  path: MAGIC_LINK_COOKIE_PATH,
-} as const;
-
 const MAGIC_LINK_EXPIRY_MINUTES = 15;
 
 const ONE_TIME_CODE_LENGTH = 6;
@@ -263,10 +247,7 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
       throw new Error('This sign-in link is invalid or has expired.');
     }
 
-    params.res.cookie(MAGIC_LINK_COOKIE, token, {
-      ...MAGIC_LINK_COOKIE_OPTIONS,
-      maxAge: time.minutes(MAGIC_LINK_EXPIRY_MINUTES),
-    });
+    setAuthCookie(params.res, 'magicLinkToken', token, time.minutes(MAGIC_LINK_EXPIRY_MINUTES));
 
     return {
       status: 302,
@@ -580,13 +561,13 @@ export async function handleLoginWithMagicLink(args: Args, context: Context) {
 
   // The token travels only in the httpOnly cookie set by the landing route —
   // there is deliberately no args fallback (new API, no legacy clients).
-  const token = z.string().parse(req?.cookies?.[MAGIC_LINK_COOKIE]);
+  const token = z.string().parse(readAuthCookie(req, 'magicLinkToken'));
 
   const clearCookie = () => {
     // `res` is null for in-process invocations (no response to mutate).
-    // Clear with the same flags used to set it; browsers ignore a clear whose
-    // attributes don't match, which would leave the httpOnly cookie behind.
-    res?.clearCookie(MAGIC_LINK_COOKIE, MAGIC_LINK_COOKIE_OPTIONS);
+    if (res) {
+      clearAuthCookie(res, 'magicLinkToken');
+    }
   };
 
   // Look up WITHOUT consuming: if a later step fails transiently, the link

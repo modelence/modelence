@@ -7,6 +7,7 @@ import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
 import { time } from '../time';
+import { clearAuthCookie, getAuthCookieName, setAuthCookie } from './cookies';
 import { hashToken } from './tokenHash';
 import { OAuthProvider, Session } from './types';
 
@@ -236,22 +237,16 @@ async function processSessionHeartbeat(session: Session) {
 }
 
 export function setAuthTokenCookie(res: Response, authToken: string) {
-  res.cookie('authToken', authToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: time.days(7),
-  });
+  setAuthCookie(res, 'authToken', authToken, time.days(7));
 }
 
 export function clearAuthTokenCookie(res: Response) {
-  res.clearCookie('authToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  clearAuthCookie(res, 'authToken');
+  // Also drop the unprefixed cookie older versions set in production, so it
+  // doesn't outlive the logout. Same name as above outside production.
+  if (getAuthCookieName('authToken') !== 'authToken') {
+    res.clearCookie('authToken', { httpOnly: true, secure: true, sameSite: 'lax', path: '/' });
+  }
 }
 
 export default new Module('_system.session', {
