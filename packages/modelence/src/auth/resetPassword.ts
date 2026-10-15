@@ -13,28 +13,12 @@ import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
+import { clearAuthCookie, readAuthCookie, setAuthCookie } from './cookies';
 import { hashToken } from './tokenHash';
 import { resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
-const RESET_PASSWORD_COOKIE = 'resetPasswordToken';
-
-// Scope the cookie to the API surface so it's only sent on the resetPassword request.
-const RESET_PASSWORD_COOKIE_PATH = '/api/_internal/';
-
-// Attributes shared by the set and clear calls. Browsers only remove a cookie
-// when the clearing Set-Cookie matches the same path/secure/sameSite/httpOnly,
-// so both sites must use these identical flags or the httpOnly cookie can linger.
-const RESET_PASSWORD_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  // `lax` so the cookie survives the email-link navigation; `strict` can drop
-  // it when the SPA is reached cross-site (some webviews).
-  sameSite: 'lax',
-  path: RESET_PASSWORD_COOKIE_PATH,
-} as const;
-
 /**
  * Looks up a reset token without consuming it. Only matches the hashed form:
  * tokens are stored as `hashToken(rawToken)`, and the caller must present the
@@ -176,10 +160,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
       throw new Error('This password reset link is invalid or has expired.');
     }
 
-    params.res.cookie(RESET_PASSWORD_COOKIE, token, {
-      ...RESET_PASSWORD_COOKIE_OPTIONS,
-      maxAge: time.hours(1),
-    });
+    setAuthCookie(params.res, 'resetPasswordToken', token, time.hours(1));
 
     return {
       status: 302,
@@ -203,7 +184,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
 export async function handleResetPassword(args: Args, context: Context) {
   // Prefer the token from the httpOnly cookie set by the landing route.
   // `req` is null for in-process invocations (no cookie to read).
-  const cookieToken = context.req?.cookies?.[RESET_PASSWORD_COOKIE];
+  const cookieToken = readAuthCookie(context.req, 'resetPasswordToken');
 
   // DEPRECATED fallback: token from request args, for older clients that submit it
   // directly. Reintroduces the leak risk the cookie exchange closes — rollout only.
@@ -221,9 +202,9 @@ export async function handleResetPassword(args: Args, context: Context) {
 
   const clearCookie = () => {
     // `res` is null for in-process invocations (no response to mutate).
-    // Clear with the same flags used to set it; browsers ignore a clear whose
-    // attributes don't match, which would leave the httpOnly cookie behind.
-    context.res?.clearCookie(RESET_PASSWORD_COOKIE, RESET_PASSWORD_COOKIE_OPTIONS);
+    if (context.res) {
+      clearAuthCookie(context.res, 'resetPasswordToken');
+    }
   };
 
   // Look up WITHOUT consuming: if validation/hashing fails (or the user is

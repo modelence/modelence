@@ -56,6 +56,7 @@ const moduleExports = await import('./oauthCommon');
 describe('auth/providers/oauthCommon', () => {
   const res = {
     cookie: vi.fn(),
+    clearCookie: vi.fn(),
     status: vi.fn().mockReturnThis(),
     redirect: vi.fn(),
     json: vi.fn(),

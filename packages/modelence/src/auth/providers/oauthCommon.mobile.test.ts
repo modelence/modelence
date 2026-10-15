@@ -168,9 +168,9 @@ describe('auth/providers/oauthCommon — mobile', () => {
       });
 
       const result = oauth.validateOAuthStateAndGetMode(
-        { query: { state: 'abc' }, cookies: { s: cookie } } as unknown as Request,
+        { query: { state: 'abc' }, cookies: { authStateGoogle: cookie } } as unknown as Request,
         res,
-        's'
+        'authStateGoogle'
       );
 
       expect(result).toEqual({ mode: 'login', platform: 'mobile', redirectUri });
@@ -184,10 +184,10 @@ describe('auth/providers/oauthCommon — mobile', () => {
       const result = oauth.validateOAuthStateAndGetMode(
         {
           query: { state: 'abc' },
-          cookies: { s: 'abc:link:507f1f77bcf86cd799439011' },
+          cookies: { authStateGoogle: 'abc:link:507f1f77bcf86cd799439011' },
         } as unknown as Request,
         res,
-        's'
+        'authStateGoogle'
       );
 
       expect(result).toEqual({
@@ -207,9 +207,9 @@ describe('auth/providers/oauthCommon — mobile', () => {
       });
 
       const result = oauth.validateOAuthStateAndGetMode(
-        { query: { state: 'abc' }, cookies: { s: cookie } } as unknown as Request,
+        { query: { state: 'abc' }, cookies: { authStateGoogle: cookie } } as unknown as Request,
         res,
-        's'
+        'authStateGoogle'
       );
 
       expect(result).toEqual({
@@ -222,9 +222,12 @@ describe('auth/providers/oauthCommon — mobile', () => {
 
     test('rejects a mismatched state as before', () => {
       const result = oauth.validateOAuthStateAndGetMode(
-        { query: { state: 'attacker' }, cookies: { s: 'abc:login:' } } as unknown as Request,
+        {
+          query: { state: 'attacker' },
+          cookies: { authStateGoogle: 'abc:login:' },
+        } as unknown as Request,
         res,
-        's'
+        'authStateGoogle'
       );
 
       expect(result).toBeNull();
@@ -243,9 +246,9 @@ describe('auth/providers/oauthCommon — mobile', () => {
       mockGetConfig.mockImplementation(() => '');
 
       const result = oauth.validateOAuthStateAndGetMode(
-        { query: { state: 'abc' }, cookies: { s: cookie } } as unknown as Request,
+        { query: { state: 'abc' }, cookies: { authStateGoogle: cookie } } as unknown as Request,
         res,
-        's'
+        'authStateGoogle'
       );
 
       expect(result).toBeNull();

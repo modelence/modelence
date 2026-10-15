@@ -34,6 +34,7 @@ export {
   invalidateAllUserSessions,
   setAuthTokenCookie,
 } from './auth/session';
+export { getAuthTokenFromCookies } from './auth/cookies';
 
 // Database
 export { schema } from './data/types';

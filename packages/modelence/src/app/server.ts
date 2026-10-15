@@ -25,6 +25,8 @@ import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { issueLinkNonce } from '@/auth/session';
+import { readAuthCookie, setAuthCookie } from '@/auth/cookies';
+import { time } from '@/time';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -160,13 +162,7 @@ export async function startServer(
         return;
       }
 
-      res.cookie('oauthLinkToken', session.authToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/api/_internal/auth/',
-        maxAge: 10 * 60 * 1000, // 10 minutes
-      });
+      setAuthCookie(res, 'oauthLinkToken', session.authToken, time.minutes(10));
 
       res.json({ ok: true });
     }
@@ -288,8 +284,8 @@ export async function getCallContext(req: Request, res: Response | null = null) 
     .nullish()
     .transform((val) => val ?? null)
     .parse(
-      req.cookies.authToken ||
-        (isOAuthCallback ? req.cookies.oauthLinkToken : null) ||
+      readAuthCookie(req, 'authToken') ||
+        (isOAuthCallback ? readAuthCookie(req, 'oauthLinkToken') : null) ||
         body.authToken
     );
 
