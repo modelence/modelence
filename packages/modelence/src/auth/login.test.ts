@@ -4,8 +4,14 @@ import { ObjectId } from 'mongodb';
 
 const mockConsumeRateLimit = vi.fn();
 const mockFindOne = vi.fn();
-const mockSetSessionUser = vi.fn();
+const FRESH_AUTH_TOKEN = 'fresh-auth-token';
+const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, userId: unknown) => ({
+  authToken: FRESH_AUTH_TOKEN,
+  userId,
+  expiresAt: new Date(),
+}));
 const mockClearSessionUser = vi.fn();
+const mockSetAuthTokenCookie = vi.fn();
 const mockSendVerificationEmail = vi.fn();
 const mockValidateEmail = vi.fn();
 const mockGetEmailConfig = vi.fn();
@@ -25,9 +31,9 @@ vi.doMock('./db', () => ({
 }));
 
 vi.doMock('./session', () => ({
-  setSessionUser: mockSetSessionUser,
+  startUserSession: mockStartUserSession,
   clearSessionUser: mockClearSessionUser,
-  setAuthTokenCookie: vi.fn(),
+  setAuthTokenCookie: mockSetAuthTokenCookie,
   clearAuthTokenCookie: vi.fn(),
 }));
 
@@ -127,11 +133,11 @@ describe('auth/login', () => {
       value: '203.0.113.1',
     });
     expect(mockCompare).toHaveBeenCalledWith('Secret123', 'hashed');
-    expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
+    expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
     expect(authConfig.onAfterLogin).toHaveBeenCalledWith({
       provider: 'email',
       user: expect.objectContaining({ _id: userId }),
-      session: baseContext.session,
+      session: expect.objectContaining({ authToken: FRESH_AUTH_TOKEN, userId }),
       connectionInfo: baseContext.connectionInfo,
     });
     expect(authConfig.login.onSuccess).toHaveBeenCalledWith(
@@ -146,7 +152,7 @@ describe('auth/login', () => {
         lastName: undefined,
         avatarUrl: undefined,
       },
-      session: { authToken: 'token-1' },
+      session: { authToken: FRESH_AUTH_TOKEN },
     });
   });
 
@@ -257,8 +263,31 @@ describe('auth/login', () => {
       baseContext as never
     );
 
-    expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
-    expect(result.session).toEqual({ authToken: 'token-1' });
+    expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
+    expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+  });
+
+  test('issues a new token instead of authenticating the pre-login one', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439011');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    const res = {};
+
+    const result = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      { ...baseContext, res } as never
+    );
+
+    // A token planted before sign-in (session fixation) must not become the
+    // user's session: the pre-login token is retired and a new one is sent back.
+    expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
+    expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+    expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(res, FRESH_AUTH_TOKEN);
+    expect(mockSetAuthTokenCookie).not.toHaveBeenCalledWith(res, 'token-1');
   });
 
   test('allows unverified login when no email provider is configured', async () => {
@@ -278,8 +307,8 @@ describe('auth/login', () => {
       baseContext as never
     );
 
-    expect(mockSetSessionUser).toHaveBeenCalledWith('token-1', userId);
-    expect(result.session).toEqual({ authToken: 'token-1' });
+    expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
+    expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
   });
 
   test('throws incorrect credentials error when password comparison fails', async () => {
@@ -299,7 +328,7 @@ describe('auth/login', () => {
       )
     ).rejects.toThrow('Incorrect email/password combination');
 
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
     expect(authConfig.onLoginError).toHaveBeenCalled();
     expect(authConfig.login.onError).toHaveBeenCalled();
   });
