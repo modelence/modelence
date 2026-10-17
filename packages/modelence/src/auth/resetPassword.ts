@@ -296,6 +296,12 @@ export async function handleResetPassword(args: Args, context: Context) {
   // are forced to re-authenticate with the new password
   await invalidateAllUserSessions(userDoc._id);
 
+  // Revoke the user's other outstanding reset links too. Each request issues a new
+  // token without revoking earlier ones, so a link sent before this reset (valid for
+  // up to 1 hour) would otherwise let whoever holds it set a new password again —
+  // undoing the lockout below.
+  await resetPasswordTokensCollection.deleteMany({ userId: userDoc._id });
+
   // Revoke every outstanding magic link token and one-time code for this user's
   // email addresses. A reset is meant to lock out anyone who had access; without
   // this, a magic link or code issued before the reset (valid for up to 15
