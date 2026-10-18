@@ -33,6 +33,9 @@ const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
 const mockInvalidateAllUserSessions = vi.fn();
 const mockMagicLinkTokensDeleteMany = vi.fn();
+const mockCaptureError = vi.fn();
+
+vi.doMock('@/telemetry', () => ({ captureError: mockCaptureError }));
 
 vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
@@ -1240,6 +1243,10 @@ describe('auth/resetPassword', () => {
       expect(result?.redirect).toContain('status=error');
       expect(result?.redirect).toContain(friendlyParam);
       expect(result?.redirect).not.toContain('bad-token');
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        'Error handling password reset landing:'
+      );
     });
 
     test('redirects with the friendly error when the token is expired', async () => {
