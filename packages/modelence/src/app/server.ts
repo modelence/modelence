@@ -20,6 +20,7 @@ import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
 import { buildSecurityHeaders } from './securityHeaders';
+import { crossOriginProtection, requireJsonBody } from './requestGuards';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
@@ -141,53 +142,73 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
+  // The routes below act as the user identified by the authToken cookie, so a
+  // page on a sibling subdomain must not be able to trigger them with a plain
+  // form post (see requestGuards).
+  const cookieAuthGuards = [crossOriginProtection(), requireJsonBody()];
+
   // Browser OAuth linking: set httpOnly cookie so the authToken never travels in a URL.
-  app.post('/api/_internal/auth/set-link-cookie', cors, async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req, res);
+  app.post(
+    '/api/_internal/auth/set-link-cookie',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const { session } = await getCallContext(req, res);
 
-    if (!session?.userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
+      if (!session?.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      res.cookie('oauthLinkToken', session.authToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/api/_internal/auth/',
+        maxAge: 10 * 60 * 1000, // 10 minutes
+      });
+
+      res.json({ ok: true });
     }
-
-    res.cookie('oauthLinkToken', session.authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/api/_internal/auth/',
-      maxAge: 10 * 60 * 1000, // 10 minutes
-    });
-
-    res.json({ ok: true });
-  });
+  );
 
   // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
-  app.post('/api/_internal/auth/issue-link-nonce', cors, async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req, res);
+  app.post(
+    '/api/_internal/auth/issue-link-nonce',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const { session } = await getCallContext(req, res);
 
-    if (!session?.userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
+      if (!session?.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const nonce = await issueLinkNonce(String(session.userId));
+      res.json({ nonce });
     }
+  );
 
-    const nonce = await issueLinkNonce(String(session.userId));
-    res.json({ nonce });
-  });
+  app.post(
+    '/api/_internal/method/:methodName(*)',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const methodName = req.params.methodName as string;
+      const context = await getCallContext(req, res);
 
-  app.post('/api/_internal/method/:methodName(*)', cors, async (req: Request, res: Response) => {
-    const methodName = req.params.methodName as string;
-    const context = await getCallContext(req, res);
-
-    try {
-      const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
-      res.json({
-        data: result,
-        typeMap: getResponseTypeMap(result),
-      });
-    } catch (error) {
-      handleMethodError(res, methodName, error);
+      try {
+        const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
+        res.json({
+          data: result,
+          typeMap: getResponseTypeMap(result),
+        });
+      } catch (error) {
+        handleMethodError(res, methodName, error);
+      }
     }
-  });
+  );
 
   const httpServer = http.createServer(app);
 

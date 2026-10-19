@@ -148,7 +148,15 @@ function findSecurityMiddleware(app: MockExpressApp): MiddlewareFn | undefined {
 // calls res.vary('Origin') so a shared cache cannot replay one origin's
 // response to another, and Express provides it on the real response object.
 function createMockRes() {
-  return { setHeader: vi.fn(), sendStatus: vi.fn(), vary: vi.fn() };
+  const res = {
+    setHeader: vi.fn(),
+    sendStatus: vi.fn(),
+    vary: vi.fn(),
+    status: vi.fn(),
+    send: vi.fn(),
+  };
+  res.status.mockReturnValue(res);
+  return res;
 }
 
 // A preflight is OPTIONS *plus* Access-Control-Request-Method — the middleware
@@ -899,7 +907,7 @@ describe('app/server startServer', () => {
     for (const fn of everyRegisteredFn) {
       const mockRes = createMockRes();
       (fn as MiddlewareFn)(
-        { method: 'POST', headers: { origin: 'http://localhost:8081' } },
+        { method: 'POST', headers: { origin: 'http://localhost:8081' }, is: () => false },
         mockRes,
         () => {}
       );
@@ -1295,13 +1303,95 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
-    // CORS sits between the path and the handler: the API surface opts in
-    // per-route, rather than CORS being applied globally.
+    // CORS and the forged-request guards sit between the path and the handler:
+    // the API surface opts in per-route, rather than being applied globally.
     expect(mockApp.post).toHaveBeenCalledWith(
       '/api/_internal/method/:methodName(*)',
       expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
       expect.any(Function)
     );
+  });
+
+  describe('cookie-authenticated routes reject forged browser requests', () => {
+    const guardedRoutes = [
+      '/api/_internal/method/:methodName(*)',
+      '/api/_internal/auth/set-link-cookie',
+      '/api/_internal/auth/issue-link-nonce',
+    ];
+
+    // Runs the route's middleware the way Express would, stopping at the first
+    // one that answers instead of calling next(). Returns whether the final
+    // handler was reached.
+    async function runRoute(
+      path: string,
+      req: Record<string, unknown>,
+      res: ReturnType<typeof createMockRes>
+    ) {
+      const call = mockApp.post.mock.calls.find(([p]) => p === path);
+      if (!call) throw new Error(`${path} not registered`);
+      const middlewares = call.slice(1, -1) as MiddlewareFn[];
+      for (const middleware of middlewares) {
+        let proceeded = false;
+        await middleware(req, res, () => {
+          proceeded = true;
+        });
+        if (!proceeded) return false;
+      }
+      return true;
+    }
+
+    function postReq(headers: Record<string, string>, contentType: string | null) {
+      return {
+        method: 'POST',
+        headers,
+        is: (type: string) => (contentType === type ? type : false),
+      };
+    }
+
+    beforeEach(async () => {
+      await startServer(createMockServer(), { combinedModules: [], channels: [] });
+    });
+
+    test.each(guardedRoutes)('%s rejects a form-encoded body with 415', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq({ 'sec-fetch-site': 'same-origin' }, 'application/x-www-form-urlencoded'),
+        res
+      );
+
+      expect(reached).toBe(false);
+      expect(res.status).toHaveBeenCalledWith(415);
+    });
+
+    test.each(guardedRoutes)('%s rejects a same-site sibling origin with 403', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq(
+          { origin: 'https://attacker.example.com', 'sec-fetch-site': 'same-site' },
+          'application/json'
+        ),
+        res
+      );
+
+      expect(reached).toBe(false);
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test.each(guardedRoutes)('%s lets a same-origin JSON call through', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq({ 'sec-fetch-site': 'same-origin' }, 'application/json'),
+        res
+      );
+
+      expect(reached).toBe(true);
+      expect(res.status).not.toHaveBeenCalled();
+    });
   });
 
   test('calls server init before adding middlewares', async () => {
