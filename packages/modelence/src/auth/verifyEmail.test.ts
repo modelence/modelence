@@ -17,19 +17,13 @@ const userId = new ObjectId('507f1f77bcf86cd799439011');
 const callerId = new ObjectId('507f1f77bcf86cd799439012');
 const onAfterEmailVerification = vi.fn();
 const onEmailVerificationError = vi.fn();
+type VerificationToken = typeof emailVerificationTokensCollection.Doc;
 
 describe('verifyEmail server mutation', () => {
   let user: User;
   let context: Context;
   let restoreTransport: () => void;
-  let tokenDoc: {
-    _id: ObjectId;
-    userId: ObjectId;
-    email: string;
-    token: string;
-    createdAt: Date;
-    expiresAt: Date;
-  } | null;
+  let tokenDoc: VerificationToken | null;
 
   beforeAll(() => {
     // Register the real module definitions through the same registry used at startup.
@@ -55,7 +49,7 @@ describe('verifyEmail server mutation', () => {
       token,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
-    };
+    } as VerificationToken;
     context = {
       user: null,
       session: null,
