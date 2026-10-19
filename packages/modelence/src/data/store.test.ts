@@ -265,6 +265,76 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).toHaveBeenCalledTimes(1);
   });
 
+  test('createIndexes keeps a collation index that MongoDB reports with its expanded collation', async () => {
+    const store = createStore({
+      indexes: [{ key: { handle: 1 }, unique: true, collation: { locale: 'en', strength: 2 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          {
+            name: '_modelence_handle_1',
+            key: { handle: 1 },
+            unique: true,
+            // listIndexes returns every collation option, not just the ones the index declared
+            collation: {
+              locale: 'en',
+              caseLevel: false,
+              caseFirst: 'off',
+              strength: 2,
+              numericOrdering: false,
+              alternate: 'non-ignorable',
+              maxVariable: 'punct',
+              normalization: false,
+              backwards: false,
+              version: '57.1',
+            },
+          },
+        ] as never),
+      }),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes rebuilds a collation index when a declared collation field changes', async () => {
+    const store = createStore({
+      indexes: [{ key: { handle: 1 }, unique: true, collation: { locale: 'en', strength: 2 } }],
+    });
+
+    const collectionMock = {
+      listIndexes: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { name: '_id_', key: { _id: 1 } },
+          {
+            name: '_modelence_handle_1',
+            key: { handle: 1 },
+            unique: true,
+            collation: { locale: 'en', strength: 3, caseLevel: false, version: '57.1' },
+          },
+        ] as never),
+      }),
+      createIndexes: vi.fn().mockResolvedValue(undefined as never),
+      dropIndex: vi.fn().mockResolvedValue(undefined as never),
+    };
+
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_handle_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalledTimes(1);
+  });
+
   test('createIndexes replaces conflicting manual indexes with code-defined index names', async () => {
     const store = createStore({
       indexes: [{ key: { environmentId: 1, chatId: 1, position: 1 } }],

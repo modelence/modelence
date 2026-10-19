@@ -199,12 +199,33 @@ const isSameIndexKey = (left: unknown, right: unknown): boolean => {
   });
 };
 
+/**
+ * MongoDB reports an index's collation fully expanded (every option plus the ICU `version`),
+ * while code declares only the fields it sets, e.g. { locale: 'en', strength: 2 }. Compare the
+ * declared fields only, or an unchanged index looks different on every startup and is rebuilt.
+ */
+const isSameCollation = (existing: unknown, desired: unknown): boolean => {
+  if (!isDocumentRecord(existing) || !isDocumentRecord(desired)) {
+    return isDeepStrictEqual(existing, desired);
+  }
+
+  return Object.entries(desired).every(([field, value]) =>
+    isDeepStrictEqual(existing[field], value)
+  );
+};
+
 const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
   if (!isSameIndexKey(existing.key, desired.key)) {
     return false;
   }
 
-  return isDeepStrictEqual(getComparableIndexOptions(existing), getComparableIndexOptions(desired));
+  const { collation: existingCollation, ...existingOptions } = getComparableIndexOptions(existing);
+  const { collation: desiredCollation, ...desiredOptions } = getComparableIndexOptions(desired);
+
+  return (
+    isSameCollation(existingCollation, desiredCollation) &&
+    isDeepStrictEqual(existingOptions, desiredOptions)
+  );
 };
 
 const getIndexKeySignature = (key: unknown): string | null => {
