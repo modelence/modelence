@@ -35,6 +35,7 @@ vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
   captureError: mockCaptureError,
+  logError: vi.fn(),
 }));
 
 const { ValidationError } = await import('../error');
