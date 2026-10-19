@@ -69,6 +69,8 @@ startApp({
 
 You can also manually complete email verification from the client using a verification token:
 
+Manual verification confirms the email address without creating or replacing the caller's login session. It triggers the `onAfterEmailVerification` or `onEmailVerificationError` hook with the current session and connection information.
+
 ```typescript
 import { verifyEmail } from 'modelence/client';
 
