@@ -1,0 +1,37 @@
+---
+title: 'Availability'
+description: 'Failovers and deploys'
+icon: 'heart-pulse'
+---
+
+Modelence Cloud operates production services to a 99.9% uptime target. Real-time and historical
+availability, and any ongoing incidents, are published at
+[status.modelence.com](https://status.modelence.com).
+
+## Containers
+
+An environment's service runs as one or more containers on AWS Fargate, spread across two
+availability zones in the environment's [region](/cloud/regions). Each container is checked every 30
+seconds to confirm the app still accepts connections on its `PORT`, and a container that fails three
+checks in a row is replaced.
+
+Deploys and container replacements never take the app down: a new container is always started and
+checked before the one it replaces is stopped. To also keep serving through an app crash or the loss
+of a whole availability zone, run two or more containers, so the others handle traffic while one is
+replaced. Each container is billed separately.
+
+## Deploys
+
+A deploy starts the new version's containers next to the running ones, and the old containers are
+stopped only once the new ones are up and passing checks. If the new version keeps crashing, the
+deploy is rolled back automatically and the previous version keeps serving, so a broken build never
+replaces a working one.
+
+## Databases
+
+Managed databases keep their data on several replicas, so a failed node doesn't lose data. When the
+node serving a database fails, the database moves to a healthy one automatically, which takes from a
+few seconds to a few minutes depending on the database, and most database clients reconnect on their
+own once it's back.
+
+Production databases are also [backed up](/cloud/backups) at least every six hours.

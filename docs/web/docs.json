@@ -11,22 +11,40 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Cloud",
         "groups": [
           {
             "group": "Get Started",
             "pages": [
               "index",
-              "quickstart",
-              "setup",
-              "ai-coding-agents",
-              "react-native"
+              "deploy/setup",
+              "setup"
             ]
           },
           {
-            "group": "Deploy",
+            "group": "Infrastructure",
             "pages": [
-              "deploy/setup"
+              "cloud/regions",
+              "cloud/availability"
+            ]
+          },
+          {
+            "group": "Data",
+            "pages": [
+              "cloud/backups"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Framework",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "quickstart",
+              "ai-coding-agents",
+              "react-native"
             ]
           },
           {
@@ -34,9 +52,12 @@
             "pages": [
               "core-concepts/project-structure",
               "core-concepts/modules",
-              "core-concepts/migrations",
               "core-concepts/queries",
               "core-concepts/mutations",
+              "stores",
+              "indexes",
+              "core-concepts/migrations",
+              "configuration",
               "core-concepts/environment-and-setup"
             ]
           },
@@ -68,14 +89,11 @@
                 ]
               },
               "files",
-              "stores",
-              "indexes",
               "live-queries",
-              "ssr",
-              "configuration",
               "websockets",
-              "telemetry",
-              "rate-limiting"
+              "ssr",
+              "rate-limiting",
+              "telemetry"
             ]
           },
           {
