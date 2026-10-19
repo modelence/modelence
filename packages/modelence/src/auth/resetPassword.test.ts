@@ -771,8 +771,9 @@ describe('auth/resetPassword', () => {
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
       expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
       // ...and the token stays unclaimed so the same link can be retried with a
-      // compliant password.
+      // compliant password, along with the user's other reset links.
       expect(mockResetTokensFindOneAndDelete).not.toHaveBeenCalled();
+      expect(mockResetTokensDeleteMany).not.toHaveBeenCalled();
     });
 
     test('awaits an async validatePassword hook before setting the password', async () => {
@@ -889,6 +890,29 @@ describe('auth/resetPassword', () => {
       await handleResetPassword({ token, password }, createContext());
 
       // A link requested before this reset must not be able to set the password again.
+      expect(mockResetTokensDeleteMany).toHaveBeenCalledWith({ userId });
+    });
+
+    test('revokes the other reset tokens even if a later step fails', async () => {
+      const token = 'validtoken123';
+      const password = 'NewP@ssw0rd!';
+      const userId = new ObjectId();
+
+      mockValidatePassword.mockReturnValue(password);
+      mockUsersFindOne.mockResolvedValue(createMockUser({ _id: userId }));
+      mockBcryptHash.mockResolvedValue('hashedNewPassword');
+      mockInvalidateAllUserSessions.mockRejectedValueOnce(new Error('database unavailable'));
+
+      const tokenDoc = createMockResetToken({ userId, email: 'user@example.com', token });
+      mockResetTokensFindOne.mockResolvedValue(tokenDoc);
+      mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+
+      await expect(handleResetPassword({ token, password }, createContext())).rejects.toThrow(
+        'database unavailable'
+      );
+
+      // The password has already changed, so the other links must already be gone.
+      expect(mockUsersUpdateOne).toHaveBeenCalled();
       expect(mockResetTokensDeleteMany).toHaveBeenCalledWith({ userId });
     });
 
