@@ -22,16 +22,23 @@
             ]
           },
           {
-            "group": "Infrastructure",
+            "group": "Configuration",
             "pages": [
-              "cloud/regions",
-              "cloud/availability"
+              "cloud/environment-variables"
             ]
           },
           {
             "group": "Data",
             "pages": [
+              "cloud/databases",
               "cloud/backups"
+            ]
+          },
+          {
+            "group": "Infrastructure",
+            "pages": [
+              "cloud/regions",
+              "cloud/availability"
             ]
           }
         ]
