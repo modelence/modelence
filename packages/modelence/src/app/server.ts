@@ -4,7 +4,7 @@ import { runMethod } from '@/methods';
 import { getResponseTypeMap, sanitizeResult } from '@/methods/serialize';
 import { createRouteHandler } from '@/routes/handler';
 import { HttpMethod } from '@/server';
-import { logInfo } from '@/telemetry';
+import { logError, logInfo } from '@/telemetry';
 import cookieParser from 'cookie-parser';
 import express, { Request, Response } from 'express';
 import http from 'http';
@@ -236,15 +236,12 @@ export async function startServer(
   if (!globalProcessListenersRegistered) {
     globalProcessListenersRegistered = true;
     process.on('unhandledRejection', (reason, promise) => {
-      console.error('Unhandled Promise Rejection:');
-      console.error(reason instanceof Error ? reason.stack : reason);
-      console.error('Promise:', promise);
+      logError('Unhandled Promise Rejection:', { error: reason, promise });
     });
 
     // Global uncaught exceptions
     process.on('uncaughtException', (error) => {
-      console.error('Uncaught Exception:');
-      console.error(error.stack); // This gives you the full stack trace
+      logError('Uncaught Exception:', { error });
       console.trace('Full application stack:'); // Additional context
     });
   }
@@ -352,7 +349,7 @@ function handleMethodError(res: Response, methodName: string, rawError: unknown)
 
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
-      console.error(`Error calling ${methodName}:`, error);
+      logError('Error calling method:', { error, methodName });
     }
     // Surface a machine-readable code (when present) via a header so clients can
     // branch on the error kind without parsing the human-readable message. The
@@ -364,7 +361,7 @@ function handleMethodError(res: Response, methodName: string, rawError: unknown)
     return;
   }
 
-  console.error(`Error calling ${methodName}:`, error);
+  logError('Error calling method:', { error, methodName });
   res.status(500).send(error instanceof Error ? error.message : String(error));
 }
 
@@ -394,7 +391,7 @@ function toValidationError(zodError: ZodErrorLike, methodName: string): Validati
   try {
     return new ValidationError(formatZodIssues(zodError.issues) || 'Validation failed');
   } catch (parsingError) {
-    console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+    logError('Error parsing Zod error:', { error: parsingError, methodName });
     return new ValidationError('Validation failed');
   }
 }
