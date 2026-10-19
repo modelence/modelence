@@ -87,6 +87,32 @@ async function verifyEmailToken(token: string) {
   return { userDoc: updatedUserDoc, email };
 }
 
+export async function handleVerifyEmailMutation(args: Args, { session, connectionInfo }: Context) {
+  const authConfig = getAuthConfig();
+
+  try {
+    const token = z.string().min(1).parse(args.token);
+    const { userDoc } = await verifyEmailToken(token);
+
+    authConfig.onAfterEmailVerification?.({
+      provider: 'email',
+      user: userDoc as User,
+      session,
+      connectionInfo,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      authConfig.onEmailVerificationError?.({
+        provider: 'email',
+        error,
+        session,
+        connectionInfo,
+      });
+    }
+    throw error;
+  }
+}
+
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = getConfig('_system.site.url') as string | undefined;
   const emailVerifiedRedirectUrl =
