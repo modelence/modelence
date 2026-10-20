@@ -228,9 +228,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 24 rules covering all auth buckets', () => {
+    test('produces exactly 26 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(24);
+      expect(rules).toHaveLength(26);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -246,6 +246,33 @@ describe('auth/user', () => {
           'updateProfile',
         ])
       );
+    });
+
+    test('limits verification resends per IP as well as per user by default', () => {
+      const rules = buildAuthRateLimits();
+
+      const verificationRules = rules.filter((r) => r.bucket === 'verification');
+      expect(verificationRules).toEqual([
+        { bucket: 'verification', type: 'user', window: 60 * 1000, limit: 1 },
+        { bucket: 'verification', type: 'user', window: 24 * 60 * 60 * 1000, limit: 10 },
+        { bucket: 'verification', type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'verification', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 100 },
+      ]);
+    });
+
+    test('allows the per-IP verification limits to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        verification: [{ type: 'ip', window: 15 * 60 * 1000, limit: 3 }],
+      });
+
+      const ip15m = rules.find(
+        (r) => r.bucket === 'verification' && r.type === 'ip' && r.window === 15 * 60 * 1000
+      );
+      const ipDay = rules.find(
+        (r) => r.bucket === 'verification' && r.type === 'ip' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(ip15m?.limit).toBe(3);
+      expect(ipDay?.limit).toBe(100);
     });
 
     test('allows profile update limits to be overridden', () => {

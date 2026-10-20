@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { constants } from 'os';
 import { delimiter, dirname, join } from 'path';
 import { resolveAppRoot } from './appRoot';
-import { APP_SPEC_FILE_NAME, type AppSpec } from './appSpec';
+import { APP_SPEC_FILE_NAME, isManagedResource, type AppSpec } from './appSpec';
 import { assertCommandList } from './deploySpec';
 import { loadLocalEnv, type ProcessEnv } from './localEnv';
 
@@ -128,8 +128,8 @@ export function resolveCommandsInvocation(
   runs, since that is where a Node project keeps it.
 */
 export async function resolveDevTarget(spec: AppSpec, cwd: string): Promise<DevTarget> {
-  const services = Object.entries(spec.resources ?? {}).filter(
-    ([, resource]) => resource?.type === 'service'
+  const services = Object.entries(spec.resources ?? {}).flatMap(([name, resource]) =>
+    isManagedResource(resource) ? [] : [[name, resource] as const]
   );
   if (services.length > 1) {
     throw new Error(

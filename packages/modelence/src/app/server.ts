@@ -13,12 +13,14 @@ import type { AppServer } from '../types';
 import { authenticate } from '../auth';
 import { getUnauthenticatedRoles } from '../auth/role';
 import { getMongodbUri } from '../db/client';
-import { ModelenceError } from '../error';
+import { ModelenceError, ValidationError } from '../error';
 import { Module } from './module';
 import { isSetupRequired } from './setupStatus';
 import { ConnectionInfo } from '@/methods/types';
 import { ServerChannel } from '@/websocket/serverChannel';
 import { getSecurityConfig } from './securityConfig';
+import { buildSecurityHeaders } from './securityHeaders';
+import { crossOriginProtection, requireJsonBody } from './requestGuards';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
@@ -118,8 +120,8 @@ export async function startServer(
 
   app.use(cookieParser());
 
-  // CSP and X-Frame-Options belong on every response, SSR pages included, so
-  // this one stays global.
+  // Security headers belong on every response, SSR pages included, so this
+  // one stays global.
   app.use(securityHeadersMiddleware());
   // Preflights only. The matching response headers are attached per-route below,
   // which keeps SSR pages and static assets out of CORS scope.
@@ -140,53 +142,73 @@ export async function startServer(
   app.use(googleAuthRouter());
   app.use(githubAuthRouter());
 
+  // The routes below act as the user identified by the authToken cookie, so a
+  // page on a sibling subdomain must not be able to trigger them with a plain
+  // form post (see requestGuards).
+  const cookieAuthGuards = [crossOriginProtection(), requireJsonBody()];
+
   // Browser OAuth linking: set httpOnly cookie so the authToken never travels in a URL.
-  app.post('/api/_internal/auth/set-link-cookie', cors, async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req, res);
+  app.post(
+    '/api/_internal/auth/set-link-cookie',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const { session } = await getCallContext(req, res);
 
-    if (!session?.userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
+      if (!session?.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      res.cookie('oauthLinkToken', session.authToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/api/_internal/auth/',
+        maxAge: 10 * 60 * 1000, // 10 minutes
+      });
+
+      res.json({ ok: true });
     }
-
-    res.cookie('oauthLinkToken', session.authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/api/_internal/auth/',
-      maxAge: 10 * 60 * 1000, // 10 minutes
-    });
-
-    res.json({ ok: true });
-  });
+  );
 
   // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
-  app.post('/api/_internal/auth/issue-link-nonce', cors, async (req: Request, res: Response) => {
-    const { session } = await getCallContext(req, res);
+  app.post(
+    '/api/_internal/auth/issue-link-nonce',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const { session } = await getCallContext(req, res);
 
-    if (!session?.userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
+      if (!session?.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const nonce = await issueLinkNonce(String(session.userId));
+      res.json({ nonce });
     }
+  );
 
-    const nonce = await issueLinkNonce(String(session.userId));
-    res.json({ nonce });
-  });
+  app.post(
+    '/api/_internal/method/:methodName(*)',
+    cors,
+    ...cookieAuthGuards,
+    async (req: Request, res: Response) => {
+      const methodName = req.params.methodName as string;
+      const context = await getCallContext(req, res);
 
-  app.post('/api/_internal/method/:methodName(*)', cors, async (req: Request, res: Response) => {
-    const methodName = req.params.methodName as string;
-    const context = await getCallContext(req, res);
-
-    try {
-      const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
-      res.json({
-        data: result,
-        typeMap: getResponseTypeMap(result),
-      });
-    } catch (error) {
-      handleMethodError(res, methodName, error);
+      try {
+        const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
+        res.json({
+          data: result,
+          typeMap: getResponseTypeMap(result),
+        });
+      } catch (error) {
+        handleMethodError(res, methodName, error);
+      }
     }
-  });
+  );
 
   const httpServer = http.createServer(app);
 
@@ -323,8 +345,10 @@ export async function getCallContext(req: Request, res: Response | null = null) 
   };
 }
 
-function handleMethodError(res: Response, methodName: string, error: unknown) {
+function handleMethodError(res: Response, methodName: string, rawError: unknown) {
   // TODO: add an option to silence these error console logs, especially when Elastic logs are configured
+
+  const error = isZodError(rawError) ? toValidationError(rawError, methodName) : rawError;
 
   if (error instanceof ModelenceError) {
     if (error.status >= 500 && error.status < 600) {
@@ -340,44 +364,70 @@ function handleMethodError(res: Response, methodName: string, error: unknown) {
     return;
   }
 
-  if (error instanceof Error && error?.constructor?.name === 'ZodError' && 'errors' in error) {
-    let errorMessage = '';
-    try {
-      errorMessage = parseZodError(error as z.ZodError);
-    } catch (parsingError) {
-      console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
-      errorMessage = 'Validation failed';
-    }
-    res.status(400).send(errorMessage);
-    return;
-  }
-
   console.error(`Error calling ${methodName}:`, error);
   res.status(500).send(error instanceof Error ? error.message : String(error));
 }
 
-function parseZodError(zodError: z.ZodError): string {
-  const flattened = zodError.flatten();
-  const fieldMessages = Object.entries(flattened.fieldErrors).map(
-    ([key, errors]) => `${key}: ${(errors ?? []).join(', ')}`
+type ZodIssueLike = { path: PropertyKey[]; message: string };
+type ZodErrorLike = { name: string; issues: ZodIssueLike[] };
+
+// Apps may bring their own zod (3 or 4, classic or mini) rather than the copy bundled
+// with the framework, so `instanceof` can't be used. Every version exposes `issues`;
+// zod 3 and zod 4 classic name the error `ZodError`, zod 4 mini names it `$ZodError`.
+// Zod 4 errors constructed directly (`new z.ZodError(issues)`) don't extend `Error`,
+// so only the shape is checked.
+const ZOD_ERROR_NAMES = new Set(['ZodError', '$ZodError']);
+
+function isZodError(error: unknown): error is ZodErrorLike {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    typeof error.name === 'string' &&
+    ZOD_ERROR_NAMES.has(error.name) &&
+    'issues' in error &&
+    Array.isArray(error.issues)
   );
-  const formMessages = flattened.formErrors;
-  const allMessages = [...fieldMessages, ...formMessages].filter(Boolean);
-  return allMessages.join('; ');
+}
+
+function toValidationError(zodError: ZodErrorLike, methodName: string): ValidationError {
+  try {
+    return new ValidationError(formatZodIssues(zodError.issues) || 'Validation failed');
+  } catch (parsingError) {
+    console.error(`Error parsing Zod error in ${methodName}:`, parsingError);
+    return new ValidationError('Validation failed');
+  }
+}
+
+// Mirrors zod's `flatten()`: issues are grouped by their top-level field, and issues
+// without a path (e.g. object-level refinements) are listed after the field messages.
+function formatZodIssues(issues: ZodIssueLike[]): string {
+  const fieldErrors = new Map<string, string[]>();
+  const formErrors: string[] = [];
+
+  for (const issue of issues) {
+    if (issue.path.length === 0) {
+      formErrors.push(issue.message);
+      continue;
+    }
+    const field = String(issue.path[0]);
+    fieldErrors.set(field, [...(fieldErrors.get(field) ?? []), issue.message]);
+  }
+
+  const fieldMessages = [...fieldErrors].map(
+    ([field, messages]) => `${field}: ${messages.join(', ')}`
+  );
+  return [...fieldMessages, ...formErrors].join('; ');
 }
 
 function securityHeadersMiddleware(): express.RequestHandler {
-  const { frameAncestors } = getSecurityConfig();
-  const hasCustomAncestors = frameAncestors && frameAncestors.length > 0;
-  const ancestors = hasCustomAncestors ? ["'self'", ...frameAncestors].join(' ') : "'self'";
+  const headers = buildSecurityHeaders(getSecurityConfig(), {
+    dev: process.env.NODE_ENV !== 'production',
+  });
 
   return (_req, res, next) => {
-    res.setHeader('Content-Security-Policy', `frame-ancestors ${ancestors}`);
-    // X-Frame-Options only supports DENY and SAMEORIGIN (ALLOW-FROM is deprecated).
-    // When custom ancestors are configured, only CSP frame-ancestors can express that,
-    // so we omit X-Frame-Options to avoid conflicting with the CSP directive.
-    if (!hasCustomAncestors) {
-      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    for (const [name, value] of headers) {
+      res.setHeader(name, value);
     }
     next();
   };

@@ -528,7 +528,12 @@ describe('auth/verification', () => {
       );
 
       expect(mockValidateEmail).toHaveBeenCalledWith('user@example.com');
-      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '203.0.113.10',
+      });
       expect(result).toEqual({
         success: true,
         message:
@@ -548,12 +553,43 @@ describe('auth/verification', () => {
         baseContext as never
       );
 
-      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({ bucket: 'verification', type: 'ip' })
+      );
       expect(result).toEqual({
         success: true,
         message:
           'If that email is registered and not yet verified, a verification email has been sent',
       });
+    });
+
+    test('rate limits by IP before looking up the user', async () => {
+      mockConsumeRateLimit.mockRejectedValueOnce(new Error('Rate limit exceeded') as never);
+
+      await expect(
+        handleResendEmailVerification({ email: 'user@example.com' } as never, baseContext as never)
+      ).rejects.toThrow('Rate limit exceeded');
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '203.0.113.10',
+      });
+      expect(mockUsersFindOne).not.toHaveBeenCalled();
+    });
+
+    test('skips the per-IP limit when the client IP is unknown', async () => {
+      mockUsersFindOne.mockResolvedValue(null as never);
+
+      await handleResendEmailVerification(
+        { email: 'user@example.com' } as never,
+        {
+          connectionInfo: { baseUrl: 'https://app.example.com' },
+        } as never
+      );
+
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
     });
 
     test('throws when email provider is missing', async () => {
@@ -590,6 +626,11 @@ describe('auth/verification', () => {
         baseContext as never
       );
 
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '203.0.113.10',
+      });
       expect(mockConsumeRateLimit).toHaveBeenCalledWith({
         bucket: 'verification',
         type: 'user',

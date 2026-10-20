@@ -18,7 +18,8 @@ const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 
 const program = new Command()
-  .name('modelence')
+  // Shown in --help as the command to run; always point users at the latest CLI.
+  .name('npx modelence@latest')
   .description('Modelence CLI tool')
   .version(packageJson.version)
   // Lets `dev` pass flags like `--port` through to the script untouched.

@@ -200,6 +200,17 @@ const resendVerificationResponse = {
 
 export async function handleResendEmailVerification(args: Args, { connectionInfo }: Context) {
   const email = validateEmail(args.email as string);
+  const ip = connectionInfo?.ip;
+
+  // Consumed before the lookup so every request counts the same, whether or
+  // not the address is registered.
+  if (ip) {
+    await consumeRateLimit({
+      bucket: 'verification',
+      type: 'ip',
+      value: ip,
+    });
+  }
 
   // Find user by email, excluding deleted/disabled accounts
   const userDoc = await usersCollection.findOne(

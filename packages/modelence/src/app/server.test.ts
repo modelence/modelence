@@ -148,7 +148,15 @@ function findSecurityMiddleware(app: MockExpressApp): MiddlewareFn | undefined {
 // calls res.vary('Origin') so a shared cache cannot replay one origin's
 // response to another, and Express provides it on the real response object.
 function createMockRes() {
-  return { setHeader: vi.fn(), sendStatus: vi.fn(), vary: vi.fn() };
+  const res = {
+    setHeader: vi.fn(),
+    sendStatus: vi.fn(),
+    vary: vi.fn(),
+    status: vi.fn(),
+    send: vi.fn(),
+  };
+  res.status.mockReturnValue(res);
+  return res;
 }
 
 // A preflight is OPTIONS *plus* Access-Control-Request-Method — the middleware
@@ -716,6 +724,15 @@ describe('app/server startServer', () => {
       "frame-ancestors 'self'"
     );
     expect(mockRes.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'SAMEORIGIN');
+    expect(mockRes.setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Referrer-Policy',
+      'strict-origin-when-cross-origin'
+    );
+    expect(mockRes.setHeader).not.toHaveBeenCalledWith(
+      'Strict-Transport-Security',
+      expect.anything()
+    );
   });
 
   test('preserves the legacy trust-all proxy behavior by default', async () => {
@@ -826,6 +843,52 @@ describe('app/server startServer', () => {
     expect(mockRes.setHeader).not.toHaveBeenCalledWith('X-Frame-Options', expect.anything());
   });
 
+  test('sets script-src, HSTS, Referrer-Policy and nosniff from the security config', async () => {
+    process.env.NODE_ENV = 'production';
+    mockGetSecurityConfig.mockReturnValue({
+      scriptSrc: ['https://js.stripe.com'],
+      hsts: { maxAge: 63072000, includeSubDomains: true },
+      referrerPolicy: 'no-referrer',
+    });
+
+    await startServer(createMockServer(), {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const mockRes = { setHeader: vi.fn() };
+    findSecurityMiddleware(mockApp)!({}, mockRes, () => {});
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Content-Security-Policy',
+      "frame-ancestors 'self'; script-src 'self' https://js.stripe.com"
+    );
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Strict-Transport-Security',
+      'max-age=63072000; includeSubDomains'
+    );
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
+    expect(mockRes.setHeader).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+  });
+
+  test("allows inline scripts outside production so Vite's dev preamble runs", async () => {
+    process.env.NODE_ENV = 'development';
+    mockGetSecurityConfig.mockReturnValue({ scriptSrc: [] });
+
+    await startServer(createMockServer(), {
+      combinedModules: [],
+      channels: [],
+    });
+
+    const mockRes = { setHeader: vi.fn() };
+    findSecurityMiddleware(mockApp)!({}, mockRes, () => {});
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Content-Security-Policy',
+      "frame-ancestors 'self'; script-src 'self' 'unsafe-inline'"
+    );
+  });
+
   test('does not register CORS headers when allowedOrigins is unset', async () => {
     const mockServer = createMockServer();
 
@@ -844,7 +907,7 @@ describe('app/server startServer', () => {
     for (const fn of everyRegisteredFn) {
       const mockRes = createMockRes();
       (fn as MiddlewareFn)(
-        { method: 'POST', headers: { origin: 'http://localhost:8081' } },
+        { method: 'POST', headers: { origin: 'http://localhost:8081' }, is: () => false },
         mockRes,
         () => {}
       );
@@ -1240,13 +1303,95 @@ describe('app/server startServer', () => {
       channels: [],
     });
 
-    // CORS sits between the path and the handler: the API surface opts in
-    // per-route, rather than CORS being applied globally.
+    // CORS and the forged-request guards sit between the path and the handler:
+    // the API surface opts in per-route, rather than being applied globally.
     expect(mockApp.post).toHaveBeenCalledWith(
       '/api/_internal/method/:methodName(*)',
       expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
       expect.any(Function)
     );
+  });
+
+  describe('cookie-authenticated routes reject forged browser requests', () => {
+    const guardedRoutes = [
+      '/api/_internal/method/:methodName(*)',
+      '/api/_internal/auth/set-link-cookie',
+      '/api/_internal/auth/issue-link-nonce',
+    ];
+
+    // Runs the route's middleware the way Express would, stopping at the first
+    // one that answers instead of calling next(). Returns whether the final
+    // handler was reached.
+    async function runRoute(
+      path: string,
+      req: Record<string, unknown>,
+      res: ReturnType<typeof createMockRes>
+    ) {
+      const call = mockApp.post.mock.calls.find(([p]) => p === path);
+      if (!call) throw new Error(`${path} not registered`);
+      const middlewares = call.slice(1, -1) as MiddlewareFn[];
+      for (const middleware of middlewares) {
+        let proceeded = false;
+        await middleware(req, res, () => {
+          proceeded = true;
+        });
+        if (!proceeded) return false;
+      }
+      return true;
+    }
+
+    function postReq(headers: Record<string, string>, contentType: string | null) {
+      return {
+        method: 'POST',
+        headers,
+        is: (type: string) => (contentType === type ? type : false),
+      };
+    }
+
+    beforeEach(async () => {
+      await startServer(createMockServer(), { combinedModules: [], channels: [] });
+    });
+
+    test.each(guardedRoutes)('%s rejects a form-encoded body with 415', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq({ 'sec-fetch-site': 'same-origin' }, 'application/x-www-form-urlencoded'),
+        res
+      );
+
+      expect(reached).toBe(false);
+      expect(res.status).toHaveBeenCalledWith(415);
+    });
+
+    test.each(guardedRoutes)('%s rejects a same-site sibling origin with 403', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq(
+          { origin: 'https://attacker.example.com', 'sec-fetch-site': 'same-site' },
+          'application/json'
+        ),
+        res
+      );
+
+      expect(reached).toBe(false);
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test.each(guardedRoutes)('%s lets a same-origin JSON call through', async (path) => {
+      const res = createMockRes();
+      const reached = await runRoute(
+        path,
+        postReq({ 'sec-fetch-site': 'same-origin' }, 'application/json'),
+        res
+      );
+
+      expect(reached).toBe(true);
+      expect(res.status).not.toHaveBeenCalled();
+    });
   });
 
   test('calls server init before adding middlewares', async () => {
@@ -1587,31 +1732,13 @@ describe('app/server method endpoint', () => {
     expect(res.setHeader).toHaveBeenCalledWith('X-Modelence-Error-Code', 'EMAIL_NOT_VERIFIED');
   });
 
-  test('handles ZodError with validation messages', async () => {
+  const callMethodRejectingWith = async (error: unknown) => {
     const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    const zodError: Error & {
-      constructor: { name: string };
-      errors: unknown[];
-      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
-    } = new Error('Validation failed') as Error & {
-      constructor: { name: string };
-      errors: unknown[];
-      flatten: () => { fieldErrors: Record<string, string[]>; formErrors: string[] };
-    };
-    zodError.constructor = { name: 'ZodError' };
-    zodError.errors = [];
-    zodError.flatten = () => ({
-      fieldErrors: { email: ['Invalid email'], age: ['Must be positive'] },
-      formErrors: ['Form invalid'],
-    });
+    mockRunMethod.mockRejectedValue(error);
 
-    mockRunMethod.mockRejectedValue(zodError);
-
-    const mockServer = createMockServer();
-
-    await startServer(mockServer, {
+    await startServer(createMockServer(), {
       combinedModules: [],
       channels: [],
     });
@@ -1628,11 +1755,97 @@ describe('app/server method endpoint', () => {
     mockGetMongodbUri.mockReturnValue('');
 
     await methodHandler(req, res);
+    return res;
+  };
+
+  const catchError = (fn: () => unknown): unknown => {
+    try {
+      fn();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('Expected function to throw');
+  };
+
+  test('handles zod 3 errors with validation messages', async () => {
+    const { z } = await import('zod');
+    const schema = z
+      .object({ email: z.string().email(), age: z.number().positive() })
+      .refine(() => false, { message: 'Form invalid' });
+    const zodError = catchError(() => schema.parse({ email: 'nope', age: -1 }));
+
+    const res = await callMethodRejectingWith(zodError);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      'email: Invalid email; age: Must be positive; Form invalid'
+      'email: Invalid email; age: Number must be greater than 0; Form invalid'
     );
+  });
+
+  test('handles zod 4 errors as validation errors', async () => {
+    const { z } = await import('zod/v4');
+    const schema = z.object({ email: z.email(), tags: z.array(z.string()) });
+    const zodError = catchError(() => schema.parse({ email: 'nope', tags: [1] }));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      'email: Invalid email address; tags: Invalid input: expected string, received number'
+    );
+  });
+
+  test('handles zod 4 mini errors as validation errors', async () => {
+    const z = await import('zod/v4-mini');
+    const schema = z.object({ name: z.string() });
+    const zodError = catchError(() => schema.parse({ name: 42 }));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Invalid input: expected string, received number');
+  });
+
+  test('reports root-level zod issues without a field prefix', async () => {
+    const { z } = await import('zod/v4');
+    const zodError = catchError(() => z.string().parse(5));
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('Invalid input: expected string, received number');
+  });
+
+  test('handles a thrown zod 4 safeParseAsync error as a validation error', async () => {
+    const { z } = await import('zod/v4');
+    const result = await z.object({ name: z.string() }).safeParseAsync({ name: 42 });
+
+    const res = await callMethodRejectingWith(result.error);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Invalid input: expected string, received number');
+  });
+
+  test('handles a manually constructed zod 4 error that does not extend Error', async () => {
+    const { z } = await import('zod/v4');
+    const zodError = new z.ZodError([
+      { code: 'custom', path: ['name'], message: 'Name is taken', input: 'bob' },
+    ]);
+    expect(zodError).not.toBeInstanceOf(Error);
+
+    const res = await callMethodRejectingWith(zodError);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith('name: Name is taken');
+  });
+
+  test('does not treat an unrelated error with an issues array as a validation error', async () => {
+    const error = Object.assign(new Error('Upstream failed'), { issues: [] });
+
+    const res = await callMethodRejectingWith(error);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith('Upstream failed');
   });
 
   test('handles generic error with 500 status', async () => {

@@ -227,6 +227,92 @@ describe('cron/jobs', () => {
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
 
+  test.each([
+    ['older', 'success'],
+    ['older', 'error'],
+    ['newer', 'success'],
+    ['newer', 'error'],
+  ] as const)(
+    'cron loop preserves the newer run when the %s run finishes first (%s)',
+    async (firstToFinish, outcome) => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      let resolveOlderRun!: () => void;
+      let rejectOlderRun!: (error: Error) => void;
+      let resolveNewerRun!: () => void;
+      let rejectNewerRun!: (error: Error) => void;
+      const olderRun = new Promise<void>((resolve, reject) => {
+        resolveOlderRun = resolve;
+        rejectOlderRun = reject;
+      });
+      const newerRun = new Promise<void>((resolve, reject) => {
+        resolveNewerRun = resolve;
+        rejectNewerRun = reject;
+      });
+      const finishOlderRun = () =>
+        outcome === 'error' ? rejectOlderRun(new Error('older run failed')) : resolveOlderRun();
+      const finishNewerRun = () =>
+        outcome === 'error' ? rejectNewerRun(new Error('newer run failed')) : resolveNewerRun();
+      const handler = vi
+        .fn()
+        .mockImplementationOnce(() => olderRun)
+        .mockImplementationOnce(() => newerRun)
+        .mockResolvedValue(undefined);
+      cronStoreMocks.fetch.mockResolvedValue([] as never);
+      defineCronJob('overlappingJob', {
+        interval: 10_000,
+        timeout: 15_000,
+        handler,
+      });
+
+      try {
+        await startCronJobs();
+        await intervalCallback?.();
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        // Time out the original run, then start its replacement on the next tick.
+        nowSpy.mockReturnValue(1_016_000);
+        await intervalCallback?.();
+        nowSpy.mockReturnValue(1_017_000);
+        await intervalCallback?.();
+        expect(handler).toHaveBeenCalledTimes(2);
+
+        nowSpy.mockReturnValue(1_018_000);
+        (firstToFinish === 'older' ? finishOlderRun : finishNewerRun)();
+        await (firstToFinish === 'older' ? olderRun : newerRun).catch(() => {});
+
+        if (firstToFinish === 'older') {
+          // The replacement is still running when its next scheduled run becomes due.
+          nowSpy.mockReturnValue(1_027_000);
+          await intervalCallback?.();
+          expect(handler).toHaveBeenCalledTimes(2);
+
+          nowSpy.mockReturnValue(1_028_000);
+          finishNewerRun();
+          await newerRun.catch(() => {});
+          nowSpy.mockReturnValue(1_028_001);
+        } else {
+          nowSpy.mockReturnValue(1_019_000);
+          finishOlderRun();
+          await olderRun.catch(() => {});
+
+          // The older run must not move the replacement's next scheduled run forward.
+          nowSpy.mockReturnValue(1_026_999);
+          await intervalCallback?.();
+          expect(handler).toHaveBeenCalledTimes(2);
+          nowSpy.mockReturnValue(1_027_000);
+        }
+
+        await intervalCallback?.();
+        expect(handler).toHaveBeenCalledTimes(3);
+      } finally {
+        resolveOlderRun();
+        resolveNewerRun();
+        await Promise.all([olderRun.catch(() => {}), newerRun.catch(() => {})]);
+        nowSpy.mockRestore();
+      }
+    }
+  );
+
   test('cron loop recovers when the lastStartDate write fails', async () => {
     const handler = vi.fn(async () => {});
     cronStoreMocks.fetch.mockResolvedValue([] as never);

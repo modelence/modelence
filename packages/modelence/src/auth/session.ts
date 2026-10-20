@@ -177,6 +177,33 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
   return await createSession();
 }
 
+/**
+ * Starts an authenticated session for a sign-in and retires the pre-login one.
+ *
+ * Every sign-in must use this rather than binding the user to the token the
+ * client already holds. That token existed before the user proved who they
+ * are, so anyone who planted it in the victim's browser (session fixation)
+ * would share the resulting session. A fresh token closes that: the planted
+ * copy is deleted and never becomes authenticated.
+ *
+ * The new session is created before the old one is deleted, so a failed
+ * insert leaves the client with its existing (anonymous) session rather than
+ * none. Callers must send the returned token back to the client (cookie and
+ * response body) — the old one stops working once this returns.
+ */
+export async function startUserSession(
+  previousAuthToken: string | null,
+  userId: ObjectId
+): Promise<Session> {
+  const session = await createSession(userId);
+
+  if (previousAuthToken) {
+    await sessionsCollection.deleteOne({ authToken: hashToken(previousAuthToken) });
+  }
+
+  return session;
+}
+
 export async function setSessionUser(authToken: string, userId: ObjectId) {
   await sessionsCollection.updateOne(
     { authToken: hashToken(authToken) },

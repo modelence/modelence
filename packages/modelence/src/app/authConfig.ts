@@ -77,7 +77,7 @@ export type AuthRateLimitsConfig = {
   signupAttempt?: AuthRateLimitOverride[];
   /** Per-IP limits for login attempts. */
   signin?: AuthRateLimitOverride[];
-  /** Per-user limits for email verification requests. */
+  /** Per-user and per-IP limits for email verification resend requests. */
   verification?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
   passwordReset?: AuthRateLimitOverride[];
