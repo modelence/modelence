@@ -2,6 +2,9 @@ import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { constants } from 'os';
 import { delimiter, dirname, join } from 'path';
+import { resolveAppRoot } from './appRoot';
+import { APP_SPEC_FILE_NAME, type AppSpec } from './appSpec';
+import { assertCommandList } from './deploySpec';
 import { loadLocalEnv, type ProcessEnv } from './localEnv';
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
@@ -19,14 +22,22 @@ const LOCKFILES: [string, PackageManager][] = [
 export const DEV_SCRIPT = 'dev';
 
 /*
-  Set while the project's dev script runs, so a script that starts
+  Set while the project's dev command runs, so a dev command that starts
   `modelence dev` again (`"dev": "modelence dev"`) fails instead of looping.
 */
-const DEV_SCRIPT_ENV_NAME = 'MODELENCE_DEV_SCRIPT';
+const DEV_COMMAND_ENV_NAME = 'MODELENCE_DEV_COMMAND';
 
 type PackageJson = { scripts?: Record<string, string>; packageManager?: string };
 
-export type Invocation = { command: string; args: string[] };
+export type Invocation = { command: string; args: string[]; shell: boolean };
+
+/*
+  What `modelence dev` runs: the service's `dev` commands from
+  modelence.config.json, else the package.json `dev` script in its root.
+*/
+export type DevTarget =
+  | { kind: 'commands'; commands: string[]; root: string }
+  | { kind: 'script'; root: string };
 
 function readPackageJson(dir: string): PackageJson | null {
   try {
@@ -69,10 +80,77 @@ export function detectPackageManager(cwd: string): PackageManager {
 export function resolveScriptInvocation(
   name: string,
   args: string[],
-  packageManager: PackageManager
+  packageManager: PackageManager,
+  platform: NodeJS.Platform = process.platform
 ): Invocation {
   const separator = packageManager === 'npm' && args.length > 0 ? ['--'] : [];
-  return { command: packageManager, args: ['run', name, ...separator, ...args] };
+  return {
+    command: packageManager,
+    args: ['run', name, ...separator, ...args],
+    // npm, pnpm and yarn are .cmd shims on Windows, which only a shell runs.
+    shell: platform === 'win32',
+  };
+}
+
+/*
+  Quotes an argument for the shell the commands run in: POSIX sh, or
+  cmd.exe on Windows. Plain words are left as they are.
+*/
+export function quoteShellArg(arg: string, platform: NodeJS.Platform = process.platform): string {
+  if (/^[\w@%+=:,./-]+$/.test(arg)) {
+    return arg;
+  }
+  return platform === 'win32' ? `"${arg.replace(/"/g, '""')}"` : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/*
+  Runs the config's dev commands in one shell, one after another like build
+  and start; one failing stops the rest. Arguments given to `modelence dev`
+  go to the last command, the one that keeps running.
+*/
+export function resolveCommandsInvocation(
+  commands: string[],
+  args: string[],
+  platform: NodeJS.Platform = process.platform
+): Invocation {
+  const last = [commands[commands.length - 1], ...args.map((arg) => quoteShellArg(arg, platform))];
+  return {
+    command: [...commands.slice(0, -1), last.join(' ')].join(' && '),
+    args: [],
+    shell: true,
+  };
+}
+
+/*
+  `modelence dev` runs one service. Its `dev` commands come first, so the
+  config stays the one place that says how the app is built, started and
+  run; without them the package.json `dev` script in the service's root
+  runs, since that is where a Node project keeps it.
+*/
+export async function resolveDevTarget(spec: AppSpec, cwd: string): Promise<DevTarget> {
+  const services = Object.entries(spec.resources ?? {}).filter(
+    ([, resource]) => resource?.type === 'service'
+  );
+  if (services.length > 1) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME} has more than one service; \`modelence dev\` runs only one.`
+    );
+  }
+  if (services.length === 0) {
+    return { kind: 'script', root: cwd };
+  }
+
+  const [name, resource] = services[0];
+  const path = `resources.${name}.dev`;
+  assertCommandList(resource.dev, path);
+  const root = await resolveAppRoot(cwd, resource.root);
+  if (!resource.dev) {
+    return { kind: 'script', root };
+  }
+  if (resource.dev.commands.length === 0) {
+    throw new Error(`${APP_SPEC_FILE_NAME}: "${path}.commands" must list at least one command.`);
+  }
+  return { kind: 'commands', commands: resource.dev.commands, root };
 }
 
 /*
@@ -96,18 +174,12 @@ function exitCodeOf(code: number | null, signal: NodeJS.Signals | null): number 
 }
 
 function spawnAndExit(
-  { command, args }: Invocation,
+  { command, args, shell }: Invocation,
   cwd: string,
   env: ProcessEnv,
   notFoundMessage: string
 ): void {
-  const child = spawn(command, args, {
-    cwd,
-    env,
-    stdio: 'inherit',
-    // npm, pnpm and yarn are .cmd shims on Windows, which only a shell runs.
-    shell: process.platform === 'win32',
-  });
+  const child = spawn(command, args, { cwd, env, stdio: 'inherit', shell });
 
   // Ctrl+C reaches the whole process group; wait for the child to exit
   // rather than dying first and leaving it orphaned.
@@ -129,33 +201,60 @@ function hasScript(cwd: string, name: string): boolean {
   return Object.prototype.hasOwnProperty.call(scripts, name);
 }
 
+function failWith(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
 /*
-  `modelence dev` outside a Modelence framework app: runs the project's own
-  package.json `dev` script with the connected Modelence environment's
-  variables loaded, so resources like DATABASE_URL reach any Node.js app.
+  `modelence dev` in a modern app (one with a modelence.config.json): runs
+  its dev command with the connected Modelence environment's variables
+  loaded, so resources like DATABASE_URL reach the app.
 */
-export async function runDevScript(args: string[], cwd: string = process.cwd()) {
-  if (process.env[DEV_SCRIPT_ENV_NAME]) {
-    console.error(
-      `The "${DEV_SCRIPT}" script in package.json runs \`modelence dev\` again. Set it to ` +
-        `your app's own dev command (e.g. "next dev") and start it with \`npx modelence dev\`.`
+export async function runDevCommand(
+  spec: AppSpec,
+  args: string[],
+  cwd: string,
+  extraEnv: ProcessEnv = {}
+) {
+  if (process.env[DEV_COMMAND_ENV_NAME]) {
+    failWith(
+      'The dev command runs `modelence dev` again. Set "dev" for the service in ' +
+        `${APP_SPEC_FILE_NAME} to the command that starts your dev server (e.g. ["next dev"]), ` +
+        'and start it with `npx modelence dev`.'
     );
-    process.exit(1);
   }
-  if (!hasScript(cwd, DEV_SCRIPT)) {
-    console.error(
-      `No "${DEV_SCRIPT}" script in package.json. Add one that starts your app's dev server ` +
-        '(e.g. "next dev"), or a modelence.config.ts for a Modelence framework app.'
+  let target: DevTarget;
+  try {
+    target = await resolveDevTarget(spec, cwd);
+  } catch (error) {
+    failWith(error instanceof Error ? error.message : String(error));
+  }
+  if (target.kind === 'script' && !hasScript(target.root, DEV_SCRIPT)) {
+    failWith(
+      `No dev command: add "dev": { "commands": [...] } to the service in ${APP_SPEC_FILE_NAME} ` +
+        `(e.g. ["next dev"]), or a "${DEV_SCRIPT}" script to ${join(target.root, 'package.json')}.`
     );
-    process.exit(1);
   }
 
-  const packageManager = detectPackageManager(cwd);
-  const env = await loadLocalEnv(cwd, process.env);
+  const env = withLocalBinPath(
+    { ...(await loadLocalEnv(cwd, process.env)), ...extraEnv, [DEV_COMMAND_ENV_NAME]: '1' },
+    target.root
+  );
+  if (target.kind === 'commands') {
+    spawnAndExit(
+      resolveCommandsInvocation(target.commands, args),
+      target.root,
+      env,
+      'Could not start a shell to run the dev command.'
+    );
+    return;
+  }
+  const packageManager = detectPackageManager(target.root);
   spawnAndExit(
     resolveScriptInvocation(DEV_SCRIPT, args, packageManager),
-    cwd,
-    withLocalBinPath({ ...env, [DEV_SCRIPT_ENV_NAME]: '1' }, cwd),
+    target.root,
+    env,
     `${packageManager} is not installed (this project's lockfile asks for it).`
   );
 }

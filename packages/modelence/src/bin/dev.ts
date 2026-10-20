@@ -1,8 +1,8 @@
 import { getServerPath, loadEnv } from './config';
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
 import path from 'path';
-import { runDevScript } from './devScript';
+import { readAppSpecFile, type AppSpec } from './appSpec';
+import { runDevCommand } from './devScript';
 import { loadLocalEnv, type ProcessEnv } from './localEnv';
 
 export interface DevOptions {
@@ -10,25 +10,24 @@ export interface DevOptions {
 }
 
 /*
-  A Modelence framework app is one with a modelence.config.ts: that file is
-  what the framework dev server starts from. Depending on the `modelence`
-  package doesn't make one, since any project may install it for the CLI.
-*/
-export function isFrameworkApp(cwd: string): boolean {
-  return existsSync(path.join(cwd, 'modelence.config.ts'));
-}
-
-/*
-  `modelence dev [args...]`: starts the framework dev server in a Modelence
-  framework app, and the project's package.json `dev` script in any other
-  project — both with the connected environment's variables loaded.
+  `modelence dev [args...]`, keyed on modelence.config.json like `modelence
+  deploy`. Having one makes a modern app: its dev command runs with the
+  connected environment's variables, the same for every app, Modelence
+  framework or not. Without one it is a legacy Modelence framework app, which
+  keeps starting the framework dev server.
 */
 export async function dev(options: DevOptions, args: string[], cwd: string = process.cwd()) {
-  if (!isFrameworkApp(cwd)) {
-    if (options.takeover) {
-      console.warn('--takeover only applies to Modelence framework apps; ignoring it.');
-    }
-    await runDevScript(args, cwd);
+  let spec: AppSpec | null;
+  try {
+    spec = await readAppSpecFile(cwd);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+
+  if (spec) {
+    // A framework app's server reads it from the environment.
+    await runDevCommand(spec, args, cwd, options.takeover ? { MODELENCE_TAKEOVER: '1' } : {});
     return;
   }
 

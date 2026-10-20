@@ -44,6 +44,9 @@ export interface AppResource {
   root?: string;
   build?: CommandList;
   start?: CommandList;
+  // What `modelence dev` runs locally; never deployed. Missing means the
+  // package.json `dev` script in root.
+  dev?: CommandList;
   static?: StaticMount[];
 }
 

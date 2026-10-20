@@ -94,9 +94,9 @@ program
 program
   .command('dev')
   .description(
-    "Start the development server with the connected environment's variables (the package.json dev script outside Modelence framework apps)"
+    "Run the project's dev command (from modelence.config.json, else the package.json dev script) with the connected environment's variables"
   )
-  .argument('[args...]', 'Arguments passed on to the dev script')
+  .argument('[args...]', 'Arguments passed on to the dev command')
   .option(
     '--takeover',
     'Disconnect any instance currently holding the environment and connect this one'

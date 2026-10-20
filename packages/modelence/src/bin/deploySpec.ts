@@ -75,13 +75,13 @@ function assertKnownKeys(spec: AppSpec): void {
     if (!isPlainObject(resource)) {
       throw new Error(`${APP_SPEC_FILE_NAME}: "resources.${name}" must be an object.`);
     }
-    for (const section of ['build', 'start'] as const) {
+    for (const section of ['build', 'start', 'dev'] as const) {
       assertCommandList(resource[section], `resources.${name}.${section}`);
     }
   }
 }
 
-function assertCommandList(list: unknown, path: string): void {
+export function assertCommandList(list: unknown, path: string): void {
   if (list === undefined) {
     return;
   }
