@@ -2,14 +2,21 @@ import { ObjectId } from 'mongodb';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockConsumeOAuthExchangeCode = vi.fn();
-const mockSetSessionUser = vi.fn();
+const FRESH_AUTH_TOKEN = 'fresh-auth-token';
+const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, userId: unknown) => ({
+  authToken: FRESH_AUTH_TOKEN,
+  userId,
+  expiresAt: new Date(),
+}));
 const mockFindOne = vi.fn();
+const mockSetAuthTokenCookie = vi.fn();
 const mockConsumeRateLimit = vi.fn();
 const mockGetAuthConfig = vi.fn<() => Record<string, unknown>>();
 
 vi.doMock('./session', () => ({
   consumeOAuthExchangeCode: mockConsumeOAuthExchangeCode,
-  setSessionUser: mockSetSessionUser,
+  startUserSession: mockStartUserSession,
+  setAuthTokenCookie: mockSetAuthTokenCookie,
 }));
 
 vi.doMock('./db', () => ({
@@ -58,11 +65,21 @@ describe('auth/loginWithOAuth', () => {
     const result = await handleLoginWithOAuth({ code: 'valid-code' }, makeContext());
 
     expect(mockConsumeOAuthExchangeCode).toHaveBeenCalledWith('valid-code', undefined);
-    expect(mockSetSessionUser).toHaveBeenCalledWith('session-token', USER_ID);
+    expect(mockStartUserSession).toHaveBeenCalledWith('session-token', USER_ID);
     expect(result).toEqual({
       user: expect.objectContaining({ id: USER_ID, handle: 'user' }),
-      session: { authToken: 'session-token' },
+      session: { authToken: FRESH_AUTH_TOKEN },
     });
+  });
+
+  test('issues a new token instead of authenticating the pre-login one', async () => {
+    const res = {};
+    const result = await handleLoginWithOAuth({ code: 'valid-code' }, makeContext({ res }));
+
+    // A token planted before sign-in must not become the user's session.
+    expect(result).toMatchObject({ session: { authToken: FRESH_AUTH_TOKEN } });
+    expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(res, FRESH_AUTH_TOKEN);
+    expect(mockSetAuthTokenCookie).not.toHaveBeenCalledWith(res, 'session-token');
   });
 
   test('forwards the code verifier so the device binding can be checked', async () => {
@@ -82,7 +99,7 @@ describe('auth/loginWithOAuth', () => {
     ).rejects.toThrow('User is already authenticated');
 
     expect(mockConsumeOAuthExchangeCode).not.toHaveBeenCalled();
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
   });
 
   test('excludes deleted and disabled users from the lookup', async () => {
@@ -100,7 +117,7 @@ describe('auth/loginWithOAuth', () => {
     await expect(handleLoginWithOAuth({ code: 'spent' }, makeContext())).rejects.toThrow(
       'Invalid or expired sign-in code'
     );
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
   });
 
   test('rejects when the account was disabled after the code was minted', async () => {
@@ -109,7 +126,7 @@ describe('auth/loginWithOAuth', () => {
     await expect(handleLoginWithOAuth({ code: 'valid-code' }, makeContext())).rejects.toThrow(
       'Invalid or expired sign-in code'
     );
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
   });
 
   // The message must not distinguish these cases, or it becomes a probe for

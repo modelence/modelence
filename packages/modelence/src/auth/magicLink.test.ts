@@ -29,13 +29,18 @@ const mockTime = { minutes: vi.fn() };
 const mockConsumeRateLimit = vi.fn();
 const mockGetConfig = vi.fn();
 const mockIsDisposableEmail = vi.fn();
-const mockSetSessionUser = vi.fn();
+const FRESH_AUTH_TOKEN = 'fresh-auth-token';
+const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, userId: unknown) => ({
+  authToken: FRESH_AUTH_TOKEN,
+  userId,
+  expiresAt: new Date(),
+}));
 const mockSetAuthTokenCookie = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 const mockSerializeUserForClient = vi.fn();
 
 vi.doMock('./session', () => ({
-  setSessionUser: mockSetSessionUser,
+  startUserSession: mockStartUserSession,
   setAuthTokenCookie: mockSetAuthTokenCookie,
 }));
 
@@ -643,7 +648,7 @@ describe('auth/magicLink', () => {
         sameSite: 'lax',
         path: '/api/_internal/',
       });
-      expect(mockSetSessionUser).not.toHaveBeenCalled();
+      expect(mockStartUserSession).not.toHaveBeenCalled();
     });
 
     test('deletes the token and throws when it is expired', async () => {
@@ -658,7 +663,7 @@ describe('auth/magicLink', () => {
 
       expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: expiredDoc!._id });
       expect(clearCookie).toHaveBeenCalled();
-      expect(mockSetSessionUser).not.toHaveBeenCalled();
+      expect(mockStartUserSession).not.toHaveBeenCalled();
     });
 
     describe('existing user (login branch)', () => {
@@ -722,15 +727,19 @@ describe('auth/magicLink', () => {
           { $set: { 'emails.$.verified': true } },
           { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
-        expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
-        expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(context.res, session.authToken);
+        expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
+        expect(mockSetAuthTokenCookie).toHaveBeenCalledWith(context.res, FRESH_AUTH_TOKEN);
         expect(onAfterLogin).toHaveBeenCalledWith(
-          expect.objectContaining({ provider: 'magicLink', user: verifiedDoc, session })
+          expect.objectContaining({
+            provider: 'magicLink',
+            user: verifiedDoc,
+            session: expect.objectContaining({ authToken: FRESH_AUTH_TOKEN }),
+          })
         );
         expect(clearCookie).toHaveBeenCalled();
         expect(result).toEqual({
           user: { id: userId, handle: 'testuser' },
-          session: { authToken: session.authToken },
+          session: { authToken: FRESH_AUTH_TOKEN },
         });
         // A pre-existing account is a login, never a signup.
         expect(onAfterSignup).not.toHaveBeenCalled();
@@ -902,7 +911,7 @@ describe('auth/magicLink', () => {
 
         expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
         expect(clearCookie).toHaveBeenCalled();
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         expect(onLoginError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
         );
@@ -923,7 +932,7 @@ describe('auth/magicLink', () => {
           'Invalid or expired code or magic link'
         );
 
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         // The token claim failed, so the find-or-create must never run.
         expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
         expect(mockUsersFindOneAndUpdate).not.toHaveBeenCalled();
@@ -1001,14 +1010,18 @@ describe('auth/magicLink', () => {
           },
           { upsert: true, collation: { locale: 'en', strength: 2 } }
         );
-        expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+        expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
         expect(onAfterSignup).toHaveBeenCalledWith(
-          expect.objectContaining({ provider: 'magicLink', user: newUser, session })
+          expect.objectContaining({
+            provider: 'magicLink',
+            user: newUser,
+            session: expect.objectContaining({ authToken: FRESH_AUTH_TOKEN }),
+          })
         );
         expect(clearCookie).toHaveBeenCalled();
         expect(result).toEqual({
           user: { id: userId, handle: 'newuser' },
-          session: { authToken: session.authToken },
+          session: { authToken: FRESH_AUTH_TOKEN },
         });
       });
 
@@ -1068,7 +1081,7 @@ describe('auth/magicLink', () => {
         // Signup disabled → the pre-gate (onBeforeSignup, signup rate limit,
         // handle resolution) is skipped entirely.
         expect(onBeforeSignup).not.toHaveBeenCalled();
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         expect(clearCookie).toHaveBeenCalled();
         // The token IS claimed at the commit point, then restored because no
         // account was created and the link must stay usable.
@@ -1123,7 +1136,7 @@ describe('auth/magicLink', () => {
           expect.any(Object),
           { upsert: false, collation: { locale: 'en', strength: 2 } }
         );
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         expect(clearCookie).toHaveBeenCalled();
         // Nothing was created — restore the token so the link stays usable.
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
@@ -1165,7 +1178,7 @@ describe('auth/magicLink', () => {
         // was created — the (real) user can retry after fixing the issue.
         expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         expect(onSignupError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink', error: expect.any(Error) })
         );
@@ -1198,7 +1211,7 @@ describe('auth/magicLink', () => {
         );
 
         expect(mockUsersFindOneAndUpsert).not.toHaveBeenCalled();
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         // The claim is the FIRST step, so a request losing the race (e.g. the
         // link and one-time code used together) runs no signup side effects:
         // no onBeforeSignup rerun, no signup rate-limit slot burned, and the
@@ -1249,14 +1262,18 @@ describe('auth/magicLink', () => {
         const result = await handleLoginWithMagicLink({}, context);
 
         // Logged in, not signed up: session bound, login hook fired, signup hook NOT.
-        expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+        expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
         expect(onAfterLogin).toHaveBeenCalledWith(
-          expect.objectContaining({ provider: 'magicLink', user: winnerUser, session })
+          expect.objectContaining({
+            provider: 'magicLink',
+            user: winnerUser,
+            session: expect.objectContaining({ authToken: FRESH_AUTH_TOKEN }),
+          })
         );
         expect(onAfterSignup).not.toHaveBeenCalled();
         expect(result).toEqual({
           user: { id: userId, handle: 'newuser' },
-          session: { authToken: session.authToken },
+          session: { authToken: FRESH_AUTH_TOKEN },
         });
       });
 
@@ -1337,7 +1354,7 @@ describe('auth/magicLink', () => {
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow(
           'User account is not active'
         );
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
       });
 
       test('rethrows a non-duplicate upsert error and restores the claimed token', async () => {
@@ -1352,7 +1369,7 @@ describe('auth/magicLink', () => {
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         // No account was created, so the single-use token must not stay
         // burned — the claimed doc is re-inserted and the link works on retry.
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
@@ -1377,7 +1394,7 @@ describe('auth/magicLink', () => {
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow();
-        expect(mockSetSessionUser).not.toHaveBeenCalled();
+        expect(mockStartUserSession).not.toHaveBeenCalled();
         expect(mockTokensInsertOne).toHaveBeenCalledWith(tokenDoc);
       });
 
@@ -1479,11 +1496,11 @@ describe('auth/magicLink', () => {
         attempts: { $lt: 5 },
       });
       expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
-      expect(mockSetSessionUser).toHaveBeenCalledWith(session.authToken, userId);
+      expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
       expect(onAfterLogin).toHaveBeenCalledWith(expect.objectContaining({ provider: 'magicLink' }));
       expect(result).toEqual({
         user: { id: userId, handle: 'testuser' },
-        session: { authToken: session.authToken },
+        session: { authToken: FRESH_AUTH_TOKEN },
       });
     });
 
@@ -1513,7 +1530,7 @@ describe('auth/magicLink', () => {
 
       expect(mockTokensUpdateMany).toHaveBeenCalledWith({ email }, { $inc: { attempts: 1 } });
       expect(mockTokensFindOneAndDelete).not.toHaveBeenCalled();
-      expect(mockSetSessionUser).not.toHaveBeenCalled();
+      expect(mockStartUserSession).not.toHaveBeenCalled();
     });
 
     test('throws the same generic error for an unknown email (no enumeration)', async () => {
@@ -1536,7 +1553,7 @@ describe('auth/magicLink', () => {
       );
 
       expect(mockTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: expiredDoc!._id });
-      expect(mockSetSessionUser).not.toHaveBeenCalled();
+      expect(mockStartUserSession).not.toHaveBeenCalled();
     });
 
     test('rejects an unknown email when allowSignup is not enabled', async () => {
@@ -1552,7 +1569,7 @@ describe('auth/magicLink', () => {
       await expect(handleLoginWithOneTimeCode({ email, code: CODE }, context)).rejects.toThrow(
         'Sign up with magic link is not enabled'
       );
-      expect(mockSetSessionUser).not.toHaveBeenCalled();
+      expect(mockStartUserSession).not.toHaveBeenCalled();
     });
 
     test('creates an account when the email is unknown (signup branch)', async () => {
@@ -1577,7 +1594,7 @@ describe('auth/magicLink', () => {
       });
       mockUsersFindOneAndUpsert.mockResolvedValue({ doc: newUser, isNew: true } as never);
 
-      const { context, session } = codeContext();
+      const { context } = codeContext();
       const result = await handleLoginWithOneTimeCode({ email, code: CODE }, context);
 
       expect(mockUsersFindOneAndUpsert).toHaveBeenCalledWith(
@@ -1598,7 +1615,7 @@ describe('auth/magicLink', () => {
       );
       expect(result).toEqual({
         user: { id: userId, handle: 'user' },
-        session: { authToken: session.authToken },
+        session: { authToken: FRESH_AUTH_TOKEN },
       });
     });
   });
