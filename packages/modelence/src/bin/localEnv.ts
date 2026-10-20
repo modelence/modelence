@@ -116,7 +116,9 @@ export async function loadLocalEnv(
     return { ...existing };
   }
 
-  const merged = mergeLocalEnv(remote, existing, await readProjectEnvNames(cwd));
+  // The framework loads .modelence.env with dotenv too, so its names are local overrides as well.
+  const projectNames = new Set([...(await readProjectEnvNames(cwd)), ...Object.keys(connection)]);
+  const merged = mergeLocalEnv(remote, existing, projectNames);
   const loaded = Object.keys(merged).filter((name) => existing[name] === undefined);
   if (loaded.length > 0) {
     console.log(`Loaded ${loaded.length} environment variable(s): ${loaded.join(', ')}`);

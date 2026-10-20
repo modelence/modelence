@@ -98,6 +98,21 @@ describe('loadLocalEnv', () => {
     );
   });
 
+  it('keeps names defined in .modelence.env for the framework to load', async () => {
+    await writeFile(
+      join(cwd, '.modelence.env'),
+      'MODELENCE_SERVICE_ENDPOINT="https://cloud.example.com/"\nMODELENCE_SERVICE_TOKEN="tok"\n' +
+        'MONGODB_URI="mongodb://localhost"\n'
+    );
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ env: { DATABASE_URL: 'postgres://db', MONGODB_URI: 'mongodb://remote' } })
+      )
+    );
+
+    expect(await loadLocalEnv(cwd, {})).toEqual({ DATABASE_URL: 'postgres://db' });
+  });
+
   it('warns and starts without remote values when the request fails', async () => {
     await connect();
     fetchMock.mockResolvedValue(new Response('nope', { status: 401 }));
