@@ -14,6 +14,10 @@ interface ActiveLiveSubscription {
 }
 const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
 
+// Socket.IO rooms belong to the server-side socket, and a reconnect gets a new one that is
+// in no rooms, so joined channels are tracked here and re-joined on every connect.
+const joinedChannels = new Set<string>();
+
 function getSocket(): Socket {
   if (!socketClient) {
     throw new Error('WebSocket not initialized. Call startWebsockets() first.');
@@ -44,8 +48,12 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
     },
   });
 
-  // Subscribe to all live queries on connect/reconnect
+  // Join all channels and subscribe to all live queries on connect/reconnect
   socketClient.on('connect', () => {
+    for (const channelName of joinedChannels) {
+      socketClient?.emit('joinChannel', channelName);
+    }
+
     if (activeLiveSubscriptions.size > 0) {
       console.log(
         `[Modelence] WebSocket reconnected, re-subscribing to ${activeLiveSubscriptions.size} live queries`
@@ -92,19 +100,23 @@ function emit({ eventName, category, id }: { eventName: string; category: string
 }
 
 function joinChannel({ category, id }: { category: string; id: string }) {
-  emit({
-    eventName: 'joinChannel',
-    category,
-    id,
-  });
+  const socket = getSocket();
+  const channelName = `${category}:${id}`;
+  joinedChannels.add(channelName);
+  // Only emit if already connected; otherwise the connect handler will handle it
+  if (socket.connected) {
+    socket.emit('joinChannel', channelName);
+  }
 }
 
 function leaveChannel({ category, id }: { category: string; id: string }) {
-  emit({
-    eventName: 'leaveChannel',
-    category,
-    id,
-  });
+  const socket = getSocket();
+  const channelName = `${category}:${id}`;
+  joinedChannels.delete(channelName);
+  // A disconnected socket is in no rooms, and the connect handler won't re-join this one
+  if (socket.connected) {
+    socket.emit('leaveChannel', channelName);
+  }
 }
 
 let liveQueryCounter = 0;
