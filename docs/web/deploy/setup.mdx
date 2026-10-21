@@ -26,8 +26,9 @@ Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment fo
   service. A deploy creates each one in the environment's region, and the app gets its connection
   details through the variables `env` ties to it. They need a paid Modelence Cloud plan.
 - **Optional telemetry**, a `telemetry` entry in `resources`. It gives the environment a private
-  OpenTelemetry endpoint: traces, logs and metrics the app sends there are stored under the
-  environment. It needs a Modelence Cloud plan with monitoring.
+  OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days and shown on the
+  environment's **Monitoring** page. It needs a Modelence Cloud plan with monitoring (Pro and up).
+  Logs need no setup: the app's output is collected and shown on the **Logs** page.
 - **Environment variables injected at start:**
   - `MONGODB_URI` and `MONGO_URL` — a MongoDB Atlas database provisioned for this environment
     (both hold the same connection string).
@@ -82,7 +83,7 @@ in every environment:
   it is no longer needed; a database or cache is billed until then.
 - Renaming a resource creates a new, empty one. The old one stays until it is deleted.
 
-An environment can have up to 5 managed resources, telemetry included, and at most one of them can be
+An environment can have up to 10 managed resources, telemetry included, and at most one of them can be
 telemetry.
 
 Each entry of `env` declares one variable:
@@ -209,10 +210,10 @@ app reads them from `DATABASE_URL` and `REDIS_URL`:
 }
 ```
 
-**Express API with telemetry** - the OpenTelemetry SDK reads the two variables, so requests, database
-calls and the logs of supported loggers (pino, winston, bunyan) reach the environment without code
-changes. The project depends on `@opentelemetry/auto-instrumentations-node`, which `--require` loads
-before the server:
+**Express API with telemetry** - the OpenTelemetry SDK reads the two variables, so requests and
+database calls reach the environment without code changes. Logs are already collected from the app's
+output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project depends on
+`@opentelemetry/auto-instrumentations-node`, which `--require` loads before the server:
 
 ```json modelence.config.json
 {
@@ -231,7 +232,8 @@ before the server:
   "env": {
     "OTEL_EXPORTER_OTLP_ENDPOINT": { "type": "resource", "resource": "telemetry", "output": "endpoint" },
     "OTEL_EXPORTER_OTLP_HEADERS": { "type": "resource", "resource": "telemetry", "output": "headers" },
-    "OTEL_SERVICE_NAME": { "value": "api" }
+    "OTEL_SERVICE_NAME": { "value": "api" },
+    "OTEL_LOGS_EXPORTER": { "value": "none" }
   }
 }
 ```
@@ -285,7 +287,7 @@ Follow these steps in order. Do not skip the verification step.
    service entry in `resources` (`"type": "service"`). Pick `image` from `engines.node` (default
    `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
    lives in a subdirectory. Add any managed resources from step 6 next to the service, with their
-   variables in `env`. Add a `telemetry` resource only when the user asks for traces or logs, or the
+   variables in `env`. Add a `telemetry` resource only when the user asks for traces or metrics, or the
    project already uses OpenTelemetry: a deploy fails on a plan without monitoring. Tie
    `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` to its outputs instead of a hardcoded
    collector. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
