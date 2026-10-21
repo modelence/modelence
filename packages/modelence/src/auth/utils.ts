@@ -39,6 +39,33 @@ export function resolveUrl(baseUrl: string, configuredUrl?: string): string {
   return `${baseUrl}${configuredUrl.startsWith('/') ? '' : '/'}${configuredUrl}`;
 }
 
+/**
+ * Sets query parameters on a redirect URL, replacing any existing values for
+ * the same keys so the client never reads a stale `status`, and keeping the
+ * other params. When the URL has a `#fragment` (e.g. a hash-router path like
+ * `/#/verified`), the params go into the fragment, where the app reads them.
+ * Works on relative URLs too, so it doesn't go through `URL`.
+ */
+export function setQueryParams(url: string, params: Record<string, string>): string {
+  const hashIndex = url.indexOf('#');
+  if (hashIndex !== -1) {
+    return url.slice(0, hashIndex + 1) + setQueryParams(url.slice(hashIndex + 1), params);
+  }
+
+  const queryIndex = url.indexOf('?');
+  const path = queryIndex === -1 ? url : url.slice(0, queryIndex);
+  const existing = queryIndex === -1 ? '' : url.slice(queryIndex + 1);
+
+  const replacedKeys = new Set(Object.keys(params).map((key) => encodeURIComponent(key)));
+  const kept = existing.split('&').filter((pair) => pair && !replacedKeys.has(pair.split('=')[0]));
+
+  const added = Object.entries(params).map(
+    ([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+  );
+
+  return `${path}?${[...kept, ...added].join('&')}`;
+}
+
 export function serializeUserForClient(userDoc: User) {
   return {
     id: userDoc._id,
