@@ -29,9 +29,9 @@ replaces a working one.
 
 ## Databases
 
-Managed databases keep their data on several replicas, so a failed node doesn't lose data. When the
-node serving a database fails, the database moves to a healthy one automatically, which takes from a
-few seconds to a few minutes depending on the database, and most database clients reconnect on their
-own once it's back.
+Managed databases store their data redundantly, so losing a single machine doesn't lose data. When
+the machine serving a database fails, the database is brought back on a healthy one automatically,
+which takes from a few seconds to a few minutes depending on the database, and most database clients
+reconnect on their own once it's back.
 
 Production databases are also [backed up](/cloud/backups) at least every six hours.
