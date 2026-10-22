@@ -25,8 +25,8 @@ Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment fo
 - **Optional managed PostgreSQL databases and Redis caches**, declared in `resources` next to the
   service. A deploy creates each one in the environment's region, and the app gets its connection
   details through the variables `env` ties to it. They need a paid Modelence Cloud plan.
-- **Optional telemetry**, a `telemetry` entry in `resources`. It gives the environment a private
-  OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days and shown on the
+- **Optional telemetry**, a `resources` entry of type `"telemetry"`. It gives the environment a
+  private OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days and shown on the
   environment's **Monitoring** page. It needs a Modelence Cloud plan with monitoring (Pro and up).
   Logs need no setup: the app's output is collected and shown on the **Logs** page.
 - **Environment variables injected at start:**
@@ -227,11 +227,11 @@ output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project 
         "commands": ["node --require @opentelemetry/auto-instrumentations-node/register server.js"]
       }
     },
-    "telemetry": { "type": "telemetry" }
+    "otel": { "type": "telemetry" }
   },
   "env": {
-    "OTEL_EXPORTER_OTLP_ENDPOINT": { "type": "resource", "resource": "telemetry", "output": "endpoint" },
-    "OTEL_EXPORTER_OTLP_HEADERS": { "type": "resource", "resource": "telemetry", "output": "headers" },
+    "OTEL_EXPORTER_OTLP_ENDPOINT": { "type": "resource", "resource": "otel", "output": "endpoint" },
+    "OTEL_EXPORTER_OTLP_HEADERS": { "type": "resource", "resource": "otel", "output": "headers" },
     "OTEL_SERVICE_NAME": { "value": "api" },
     "OTEL_LOGS_EXPORTER": { "value": "none" }
   }
