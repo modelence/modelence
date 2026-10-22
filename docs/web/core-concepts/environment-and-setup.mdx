@@ -114,32 +114,7 @@ Any variable not listed here is application-specific. Define it through your mod
 
 ## Modelence Cloud Configuration
 
-When connected to Modelence Cloud, you can manage configuration through the cloud dashboard at [cloud.modelence.com](https://cloud.modelence.com):
-
-1. Navigate to your application
-2. Select your environment
-3. Open the **Application** tab
-4. Configure settings like:
-   - Email providers
-   - Environment variables
-   - Database connections
-   - Custom configuration
-
-Changes made in the cloud dashboard are automatically synced to your application when it starts.
-
-### Connecting to Modelence Cloud
-
-```bash
-npx modelence@latest setup
-```
-
-This opens the browser, where you pick the environment to connect the project to: an existing one, or a new one created right there, in an existing app or a new one. Pass `--new` to always create a new environment. A setup token from the dashboard (`--token <your_token>`) connects without the browser.
-
-The command creates a `.modelence.env` file with your cloud connection token.
-
-<Tip>
-See the [Setup documentation](/setup) for detailed instructions on connecting to Modelence Cloud.
-</Tip>
+On Modelence Cloud, the environment's variables and its `configSchema` values reach the app when it starts, both when it is deployed and when it runs locally in a connected environment. See [Environment Variables](/cloud/environment-variables) for what the platform provides and how variables are declared, and [Local Setup](/setup) for connecting a project on your machine.
 
 ## Next Steps
 
