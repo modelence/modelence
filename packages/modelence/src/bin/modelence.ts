@@ -21,7 +21,9 @@ const program = new Command()
   // Shown in --help as the command to run; always point users at the latest CLI.
   .name('npx modelence@latest')
   .description('Modelence CLI tool')
-  .version(packageJson.version);
+  .version(packageJson.version)
+  // Lets `dev` pass flags like `--port` through to the script untouched.
+  .enablePositionalOptions();
 
 program
   .command('setup')
@@ -92,14 +94,18 @@ program
 
 program
   .command('dev')
-  .description('Start development server')
+  .description(
+    "Run the project's dev command (from modelence.config.json, else the package.json dev script) with the connected environment's variables"
+  )
+  .argument('[args...]', 'Arguments passed on to the dev command')
   .option(
     '--takeover',
     'Disconnect any instance currently holding the environment and connect this one'
   )
-  .action(async (options) => {
-    await loadEnv();
-    dev(options);
+  .allowUnknownOption()
+  .passThroughOptions()
+  .action(async (args: string[], options) => {
+    await dev(options, args);
   });
 
 program
