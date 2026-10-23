@@ -263,6 +263,8 @@ describe('dev routing', () => {
     const [command, args, options] = spawnMock.mock.calls[0];
     expect(command).toContain('tsx');
     expect(args).toContain('watch');
+    // It stays in the outer run's process group, which that run stops whole.
+    expect(options.detached).toBeFalsy();
     expect(options.env).toMatchObject({
       DATABASE_URL: 'mongodb://merged',
       NODE_ENV: 'development',

@@ -1,6 +1,10 @@
 import { spawn, spawnSync, type ChildProcess } from 'child_process';
 import type { ProcessEnv } from './localEnv';
 
+type SpawnTreeOptions = { cwd: string; env: ProcessEnv; shell: boolean; inParentTree?: boolean };
+
+const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGQUIT'];
+
 export function killProcessTree(child: ChildProcess, signal: NodeJS.Signals) {
   if (!child.pid) {
     return;
@@ -25,12 +29,28 @@ export function killProcessTree(child: ChildProcess, signal: NodeJS.Signals) {
   or a watcher dies on SIGTERM without passing it on, which leaves the dev
   server holding its port. On POSIX the child leads its own process group,
   and every signal goes to the whole group.
+
+  `inParentTree` is for a process already inside such a tree (the nested
+  `modelence dev` of a framework app whose dev script is `modelence dev`).
+  Its child stays in the outer group, so the outer process's signals reach
+  the child directly. That includes the SIGKILL it ends with, which kills
+  this process before it could pass anything on: a group of the child's
+  own would outlive it.
 */
 export function spawnProcessTree(
   command: string,
   args: string[],
-  options: { cwd: string; env: ProcessEnv; shell: boolean }
+  { inParentTree = false, ...options }: SpawnTreeOptions
 ): ChildProcess {
+  if (inParentTree && process.platform !== 'win32') {
+    const child = spawn(command, args, { ...options, stdio: 'inherit' });
+    // The child gets these from the group too; wait for it to exit.
+    for (const signal of FORWARDED_SIGNALS) {
+      process.on(signal, () => {});
+    }
+    return child;
+  }
+
   const child = spawn(command, args, {
     ...options,
     stdio: 'inherit',
@@ -50,13 +70,11 @@ export function spawnProcessTree(
     killProcessTree(child, signal);
   };
 
-  // The group no longer gets the terminal's Ctrl+C itself, so forward it too.
-  process.on('SIGINT', () => forwardSignal('SIGINT'));
-  process.on('SIGTERM', () => forwardSignal('SIGTERM'));
-  // A terminal hangup reaches this process but not the detached group
-  // (its own session has no controlling terminal), so forward it too.
-  process.on('SIGHUP', () => forwardSignal('SIGHUP'));
-  process.on('SIGQUIT', () => forwardSignal('SIGQUIT'));
+  // The detached group gets neither the terminal's Ctrl+C nor its hangup (its
+  // own session has no controlling terminal), so forward every signal.
+  for (const signal of FORWARDED_SIGNALS) {
+    process.on(signal, () => forwardSignal(signal));
+  }
 
   // Last resort: if the parent exits without going through a handled signal,
   // do not leave the tree behind. On POSIX that holds even after the group

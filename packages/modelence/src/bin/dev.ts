@@ -48,6 +48,8 @@ export function startFrameworkDevServer(options: DevOptions) {
   const serverPath = getServerPath();
   const tsxPath = path.resolve('./node_modules/.bin/tsx');
 
+  // Started by the outer `modelence dev`, which stops the whole tree.
+  const inParentTree = isInsideDevCommand();
   const env = {
     ...process.env,
     NODE_ENV: 'development',
@@ -60,12 +62,13 @@ export function startFrameworkDevServer(options: DevOptions) {
         spawnProcessTree(
           `"${tsxPath}" watch --ignore "vite.config.ts.timestamp-*" "${serverPath}"`,
           [],
-          { cwd: process.cwd(), env, shell: true }
+          { cwd: process.cwd(), env, shell: true, inParentTree }
         )
       : spawnProcessTree(tsxPath, ['watch', '--ignore', 'vite.config.ts.timestamp-*', serverPath], {
           cwd: process.cwd(),
           env,
           shell: false,
+          inParentTree,
         });
 
   child.on('error', (error) => {
