@@ -1,9 +1,8 @@
 import { getServerPath, loadEnv } from './config';
-import { spawn, spawnSync, type ChildProcess } from 'child_process';
 import path from 'path';
 import { readAppSpecFile, type AppSpec } from './appSpec';
-import { runDevCommand } from './devScript';
-import { loadLocalEnv, type ProcessEnv } from './localEnv';
+import { isInsideDevCommand, runDevCommand } from './devScript';
+import { spawnProcessTree } from './processTree';
 
 export interface DevOptions {
   takeover?: boolean;
@@ -14,7 +13,12 @@ export interface DevOptions {
   deploy`. Having one makes a modern app: its dev command runs with the
   connected environment's variables, the same for every app, Modelence
   framework or not. Without one it is a legacy Modelence framework app, which
-  keeps starting the framework dev server.
+  keeps starting the framework dev server with its own environment, as before.
+
+  A framework app with a config keeps `"dev": "modelence dev"`, so its dev
+  command lands here again: that nested run starts the framework dev server,
+  whose environment the outer run already merged the variables into, and
+  never runs the dev command again, so it cannot loop.
 */
 export async function dev(options: DevOptions, args: string[], cwd: string = process.cwd()) {
   let spec: AppSpec | null;
@@ -25,7 +29,7 @@ export async function dev(options: DevOptions, args: string[], cwd: string = pro
     process.exit(1);
   }
 
-  if (spec) {
+  if (spec && !isInsideDevCommand()) {
     // A framework app's server reads it from the environment.
     await runDevCommand(spec, args, cwd, options.takeover ? { MODELENCE_TAKEOVER: '1' } : {});
     return;
@@ -35,35 +39,17 @@ export async function dev(options: DevOptions, args: string[], cwd: string = pro
     console.warn(`Ignoring arguments for the Modelence dev server: ${args.join(' ')}`);
   }
   await loadEnv();
-  startFrameworkDevServer(options, await loadLocalEnv(cwd, process.env));
+  startFrameworkDevServer(options);
 }
 
-function killProcessTree(child: ChildProcess, signal: NodeJS.Signals) {
-  if (!child.pid) {
-    return;
-  }
-  if (process.platform === 'win32') {
-    // process.kill cannot address a process tree on Windows; taskkill /T walks it.
-    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-    return;
-  }
-  try {
-    // The child leads its own process group (detached), so signaling the
-    // negative pid reaches the watcher and every process it started.
-    process.kill(-child.pid, signal);
-  } catch {
-    // The process group is already gone.
-  }
-}
-
-export function startFrameworkDevServer(options: DevOptions, localEnv: ProcessEnv) {
+export function startFrameworkDevServer(options: DevOptions) {
   console.log('Starting Modelence dev server...');
 
   const serverPath = getServerPath();
   const tsxPath = path.resolve('./node_modules/.bin/tsx');
 
   const env = {
-    ...localEnv,
+    ...process.env,
     NODE_ENV: 'development',
     ...(options.takeover ? { MODELENCE_TAKEOVER: '1' } : {}),
   };
@@ -71,47 +57,16 @@ export function startFrameworkDevServer(options: DevOptions, localEnv: ProcessEn
   const child =
     process.platform === 'win32'
       ? // tsx is a .CMD shim on Windows, so it still needs a shell to launch.
-        spawn(`"${tsxPath}" watch --ignore "vite.config.ts.timestamp-*" "${serverPath}"`, {
-          stdio: 'inherit',
+        spawnProcessTree(
+          `"${tsxPath}" watch --ignore "vite.config.ts.timestamp-*" "${serverPath}"`,
+          [],
+          { cwd: process.cwd(), env, shell: true }
+        )
+      : spawnProcessTree(tsxPath, ['watch', '--ignore', 'vite.config.ts.timestamp-*', serverPath], {
           cwd: process.cwd(),
           env,
-          shell: true,
-        })
-      : spawn(tsxPath, ['watch', '--ignore', 'vite.config.ts.timestamp-*', serverPath], {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-          env,
-          detached: true,
+          shell: false,
         });
-
-  let terminating = false;
-
-  const forwardSignal = (signal: NodeJS.Signals) => {
-    if (terminating) {
-      // A second signal means the graceful teardown is taking too long.
-      killProcessTree(child, 'SIGKILL');
-      process.exit(1);
-    }
-    terminating = true;
-    killProcessTree(child, signal);
-  };
-
-  process.on('SIGINT', () => forwardSignal('SIGINT'));
-  process.on('SIGTERM', () => forwardSignal('SIGTERM'));
-  // A terminal hangup reaches this process but not the detached watcher
-  // (its own session has no controlling terminal), so forward it too.
-  process.on('SIGHUP', () => forwardSignal('SIGHUP'));
-  process.on('SIGQUIT', () => forwardSignal('SIGQUIT'));
-
-  // Last resort: if the parent exits without going through a handled signal,
-  // do not leave the watcher tree behind.
-  process.on('exit', () => {
-    const exited = child.exitCode !== null || child.signalCode !== null;
-    if (process.platform === 'win32' && exited) {
-      return;
-    }
-    killProcessTree(child, 'SIGKILL');
-  });
 
   child.on('error', (error) => {
     console.error('Failed to start the dev server:', error);

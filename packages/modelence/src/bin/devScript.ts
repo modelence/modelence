@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { constants } from 'os';
 import { delimiter, dirname, join } from 'path';
@@ -6,6 +5,7 @@ import { resolveAppRoot } from './appRoot';
 import { APP_SPEC_FILE_NAME, isManagedResource, type AppSpec } from './appSpec';
 import { assertCommandList } from './deploySpec';
 import { loadLocalEnv, type ProcessEnv } from './localEnv';
+import { spawnProcessTree } from './processTree';
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
@@ -23,9 +23,13 @@ export const DEV_SCRIPT = 'dev';
 
 /*
   Set while the project's dev command runs, so a dev command that starts
-  `modelence dev` again (`"dev": "modelence dev"`) fails instead of looping.
+  `modelence dev` again (`"dev": "modelence dev"`) does not run it again.
 */
 const DEV_COMMAND_ENV_NAME = 'MODELENCE_DEV_COMMAND';
+
+export function isInsideDevCommand(env: ProcessEnv = process.env): boolean {
+  return Boolean(env[DEV_COMMAND_ENV_NAME]);
+}
 
 type PackageJson = { scripts?: Record<string, string>; packageManager?: string };
 
@@ -179,13 +183,9 @@ function spawnAndExit(
   env: ProcessEnv,
   notFoundMessage: string
 ): void {
-  const child = spawn(command, args, { cwd, env, stdio: 'inherit', shell });
-
-  // Ctrl+C reaches the whole process group; wait for the child to exit
-  // rather than dying first and leaving it orphaned.
-  process.on('SIGINT', () => {});
-  process.on('SIGTERM', () => child.kill('SIGTERM'));
-  process.on('SIGHUP', () => child.kill('SIGHUP'));
+  // The commands run under `sh -c "a && b"`, and the script under the package
+  // manager: neither passes SIGTERM on, so signals go to the whole tree.
+  const child = spawnProcessTree(command, args, { cwd, env, shell });
 
   child.on('error', (error: NodeJS.ErrnoException) => {
     console.error(
@@ -217,13 +217,6 @@ export async function runDevCommand(
   cwd: string,
   extraEnv: ProcessEnv = {}
 ) {
-  if (process.env[DEV_COMMAND_ENV_NAME]) {
-    failWith(
-      'The dev command runs `modelence dev` again. Set "dev" for the service in ' +
-        `${APP_SPEC_FILE_NAME} to the command that starts your dev server (e.g. ["next dev"]), ` +
-        'and start it with `npx modelence dev`.'
-    );
-  }
   let target: DevTarget;
   try {
     target = await resolveDevTarget(spec, cwd);
@@ -238,7 +231,11 @@ export async function runDevCommand(
   }
 
   const env = withLocalBinPath(
-    { ...(await loadLocalEnv(cwd, process.env)), ...extraEnv, [DEV_COMMAND_ENV_NAME]: '1' },
+    {
+      ...(await loadLocalEnv(cwd, process.env, target.root)),
+      ...extraEnv,
+      [DEV_COMMAND_ENV_NAME]: '1',
+    },
     target.root
   );
   if (target.kind === 'commands') {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadLocalEnv, mergeLocalEnv } from './localEnv';
@@ -96,6 +96,23 @@ describe('loadLocalEnv', () => {
       'https://cloud.example.com/api/env',
       expect.objectContaining({ headers: { Authorization: 'Bearer tok' } })
     );
+  });
+
+  it("leaves out names a monorepo service defines in its own root's env files", async () => {
+    await connect();
+    const appRoot = join(cwd, 'apps', 'web');
+    await mkdir(appRoot, { recursive: true });
+    await writeFile(join(appRoot, '.env.local'), 'DATABASE_URL=postgres://localhost\n');
+    await writeFile(join(cwd, '.env'), 'REDIS_URL=redis://localhost\n');
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          env: { DATABASE_URL: 'postgres://db', REDIS_URL: 'redis://remote', API_KEY: 'k' },
+        })
+      )
+    );
+
+    expect(await loadLocalEnv(cwd, {}, appRoot)).toEqual({ API_KEY: 'k' });
   });
 
   it('keeps names defined in .modelence.env for the framework to load', async () => {
