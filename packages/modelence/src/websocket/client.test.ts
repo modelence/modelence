@@ -1,4 +1,11 @@
-import { setWebsocketClientProvider, getWebsocketClientProvider, startWebsockets } from './client';
+import {
+  setWebsocketClientProvider,
+  getWebsocketClientProvider,
+  startWebsockets,
+  reconnectWebsockets,
+  resetWebsockets,
+} from './client';
+import { vi } from 'vitest';
 
 describe('websocket/client', () => {
   describe('setWebsocketClientProvider', () => {
@@ -27,6 +34,45 @@ describe('websocket/client', () => {
     it('should export startWebsockets function', () => {
       expect(startWebsockets).toBeDefined();
       expect(typeof startWebsockets).toBe('function');
+    });
+  });
+
+  describe('reconnectWebsockets', () => {
+    it('should call reconnect on the provider if available', () => {
+      const mockReconnect = vi.fn();
+      const mockProvider = {
+        init: () => {},
+        on: () => {},
+        once: () => {},
+        off: () => {},
+        emit: () => {},
+        joinChannel: () => {},
+        leaveChannel: () => {},
+        reconnect: mockReconnect,
+      };
+
+      setWebsocketClientProvider(mockProvider);
+      reconnectWebsockets();
+      expect(mockReconnect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('resetWebsockets', () => {
+    it('should reset websocket client provider to null', () => {
+      const mockProvider = {
+        init: () => {},
+        on: () => {},
+        once: () => {},
+        off: () => {},
+        emit: () => {},
+        joinChannel: () => {},
+        leaveChannel: () => {},
+      };
+
+      setWebsocketClientProvider(mockProvider);
+      expect(getWebsocketClientProvider()).toBe(mockProvider);
+      resetWebsockets();
+      expect(getWebsocketClientProvider()).toBeNull();
     });
   });
 });

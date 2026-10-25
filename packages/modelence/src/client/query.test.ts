@@ -6,9 +6,11 @@ vi.doMock('./method', () => ({
 
 const mockStartWebsockets = vi.fn();
 const mockSubscribeLiveQuery = vi.fn();
+const mockReconnectWebsockets = vi.fn();
 vi.doMock('../websocket/client', () => ({
   startWebsockets: mockStartWebsockets,
   subscribeLiveQuery: mockSubscribeLiveQuery,
+  reconnectWebsockets: mockReconnectWebsockets,
 }));
 
 const {
@@ -41,6 +43,27 @@ describe('modelenceLiveQuery', () => {
     revalidateModelenceQueries();
 
     expect(mockInvalidateQueries).toHaveBeenCalledTimes(1);
+    expect(mockReconnectWebsockets).not.toHaveBeenCalled();
+  });
+
+  test('revalidateModelenceQueries reconnects websockets if websockets were started', () => {
+    // Simulate browser context
+    // @ts-expect-error — minimal stub
+    globalThis.window = {};
+
+    const fakeQueryClient = {
+      getQueryCache: () => ({ subscribe: vi.fn() }),
+      invalidateQueries: vi.fn(),
+    } as unknown as Parameters<typeof connectModelenceQueryClient>[0];
+    connectModelenceQueryClient(fakeQueryClient);
+
+    const options = modelenceLiveQuery('todos.subscribe');
+    void options.queryFn();
+
+    expect(mockStartWebsockets).toHaveBeenCalledTimes(1);
+
+    revalidateModelenceQueries();
+    expect(mockReconnectWebsockets).toHaveBeenCalledTimes(1);
   });
 
   test('queryFn returns a never-resolving promise on the server (no window)', async () => {

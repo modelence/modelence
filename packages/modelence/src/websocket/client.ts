@@ -34,3 +34,14 @@ export function startWebsockets(props?: {
     throw error;
   }
 }
+
+export function reconnectWebsockets() {
+  if (websocketClientProvider?.reconnect) {
+    websocketClientProvider.reconnect();
+  }
+}
+
+export function resetWebsockets() {
+  websocketClientProvider = null;
+}
+
