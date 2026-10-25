@@ -22,6 +22,7 @@ import {
   type Session,
 } from './deploySession';
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
+import { readSourceRevision } from './revision';
 import { followDeploy } from './deployStatus';
 
 /*
@@ -154,8 +155,9 @@ export async function deploy(options: DeployOptions) {
 
     // A deploy picked in the browser had its variables asked for there.
     const checkEnv = ci && !options.skipEnvCheck;
+    const revision = await readSourceRevision(cwd);
     const start = () =>
-      runDeploy({ session, target: deployTarget, kind, archivePath, spec, checkEnv });
+      runDeploy({ session, target: deployTarget, kind, archivePath, spec, checkEnv, revision });
     let started: StartedDeploy;
     try {
       started = await start();
