@@ -70,6 +70,7 @@ vi.doMock('bcrypt', () => ({
 }));
 
 const { handleLoginWithPassword, handleLogout } = await import('./login');
+const { AuthError } = await import('../error');
 
 describe('auth/login', () => {
   const baseContext = {
@@ -309,6 +310,38 @@ describe('auth/login', () => {
 
     expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
     expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+  });
+
+  test('answers an unknown email and a wrong password with the same 401 AuthError', async () => {
+    mockFindOne.mockResolvedValue(null as never);
+    const unknownEmail = await handleLoginWithPassword(
+      { email: 'unknown@example.com', password: 'Secret123' },
+      baseContext as never
+    ).catch((error: unknown) => error);
+
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439015'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockResolvedValue(false as never);
+    const wrongPassword = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'wrong' },
+      baseContext as never
+    ).catch((error: unknown) => error);
+
+    for (const error of [unknownEmail, wrongPassword]) {
+      expect(error).toBeInstanceOf(AuthError);
+      expect(error).toMatchObject({
+        status: 401,
+        message: 'Incorrect email/password combination',
+      });
+    }
+    // Identical responses, so a caller can't tell which emails are registered.
+    expect((wrongPassword as InstanceType<typeof AuthError>).code).toBe(
+      (unknownEmail as InstanceType<typeof AuthError>).code
+    );
   });
 
   test('throws incorrect credentials error when password comparison fails', async () => {
