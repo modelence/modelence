@@ -11,6 +11,7 @@ export type CronJob = {
   state: {
     startTs?: number;
     scheduledRunTs?: number;
+    timedOutAt?: number;
     isRunning: boolean;
   };
 };

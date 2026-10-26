@@ -109,10 +109,12 @@ async function tickCronJobs() {
   for (const job of Object.values(cronJobs)) {
     const { alias, params, state } = job;
     if (state.isRunning) {
-      if (state.startTs && state.startTs + params.timeout < now) {
+      // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
+      // Restarting it here would stack a new copy on top of a hung one.
+      if (!state.timedOutAt && state.startTs && state.startTs + params.timeout < now) {
+        state.timedOutAt = now;
         const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
         captureError(timeoutError);
-        state.isRunning = false;
       }
       continue;
     }
@@ -130,6 +132,7 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   const currentStartTs = Date.now();
   state.startTs = currentStartTs;
+  state.timedOutAt = undefined;
 
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
@@ -158,12 +161,9 @@ function handleCronJobCompletion(
   params: CronJob['params'],
   currentStartTs: number
 ) {
-  // A timed-out run may finish after a newer run has taken over.
-  if (state.startTs !== currentStartTs) {
-    return;
-  }
   state.scheduledRunTs = currentStartTs + params.interval;
   state.startTs = undefined;
+  state.timedOutAt = undefined;
   state.isRunning = false;
 }
 
