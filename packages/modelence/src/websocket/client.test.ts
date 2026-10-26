@@ -3,11 +3,13 @@ import {
   getWebsocketClientProvider,
   startWebsockets,
   reconnectWebsockets,
-  resetWebsockets,
 } from './client';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 describe('websocket/client', () => {
+  afterEach(() => {
+    setWebsocketClientProvider(null);
+  });
   describe('setWebsocketClientProvider', () => {
     it('should export setWebsocketClientProvider function', () => {
       expect(setWebsocketClientProvider).toBeDefined();
@@ -54,25 +56,6 @@ describe('websocket/client', () => {
       setWebsocketClientProvider(mockProvider);
       reconnectWebsockets();
       expect(mockReconnect).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('resetWebsockets', () => {
-    it('should reset websocket client provider to null', () => {
-      const mockProvider = {
-        init: () => {},
-        on: () => {},
-        once: () => {},
-        off: () => {},
-        emit: () => {},
-        joinChannel: () => {},
-        leaveChannel: () => {},
-      };
-
-      setWebsocketClientProvider(mockProvider);
-      expect(getWebsocketClientProvider()).toBe(mockProvider);
-      resetWebsockets();
-      expect(getWebsocketClientProvider()).toBeNull();
     });
   });
 });

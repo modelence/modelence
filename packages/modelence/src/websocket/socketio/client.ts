@@ -177,10 +177,9 @@ function reconnect() {
   socketClient.auth = {
     token: getAuthToken(),
   };
-  if (socketClient.connected) {
-    socketClient.disconnect();
+  if (!socketClient.connected) {
+    socketClient.connect();
   }
-  socketClient.connect();
 }
 
 const websocketProvider: WebsocketClientProvider = {

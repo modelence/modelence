@@ -25,6 +25,7 @@ describe('modelenceLiveQuery', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSubscribeLiveQuery.mockReturnValue(vi.fn());
     disconnectModelenceQueryClient();
   });
 

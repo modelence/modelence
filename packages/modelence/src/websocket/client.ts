@@ -40,8 +40,3 @@ export function reconnectWebsockets() {
     websocketClientProvider.reconnect();
   }
 }
-
-export function resetWebsockets() {
-  websocketClientProvider = null;
-}
-

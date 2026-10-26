@@ -2,11 +2,7 @@
 
 import { QueryClient, hashKey } from '@tanstack/react-query';
 import { callMethod } from './method';
-import {
-  startWebsockets,
-  subscribeLiveQuery,
-  reconnectWebsockets,
-} from '../websocket/client';
+import { startWebsockets, subscribeLiveQuery, reconnectWebsockets } from '../websocket/client';
 
 type Args = Record<string, unknown>;
 
