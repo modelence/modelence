@@ -12,10 +12,11 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { isDisposableEmail } from './disposableEmails';
-import { setAuthTokenCookie, setSessionUser } from './session';
+import { setAuthTokenCookie, startUserSession } from './session';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
+  setQueryParams,
   resolveUrl,
   resolveUniqueHandle,
   serializeUserForClient,
@@ -282,7 +283,7 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
     return {
       status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${magicLinkPageUrl}?status=error&message=${encodeURIComponent(message)}`,
+      redirect: setQueryParams(magicLinkPageUrl, { status: 'error', message }),
     };
   }
 }
@@ -441,10 +442,10 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
       currentUserDoc = verifiedDoc ?? userDoc;
     }
 
-    await setSessionUser(session.authToken, currentUserDoc._id);
+    const userSession = await startUserSession(session.authToken, currentUserDoc._id);
 
     if (res) {
-      setAuthTokenCookie(res, session.authToken);
+      setAuthTokenCookie(res, userSession.authToken);
     }
 
     if (isNew) {
@@ -452,7 +453,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
         authConfig.onAfterSignup?.({
           provider: 'magicLink',
           user: currentUserDoc,
-          session,
+          session: userSession,
           connectionInfo,
         })
       );
@@ -462,7 +463,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
           authConfig.onAfterEmailVerification?.({
             provider: 'magicLink',
             user: currentUserDoc,
-            session,
+            session: userSession,
             connectionInfo,
           })
         );
@@ -472,7 +473,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
         authConfig.onAfterLogin?.({
           provider: 'magicLink',
           user: currentUserDoc,
-          session,
+          session: userSession,
           connectionInfo,
         })
       );
@@ -482,7 +483,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
 
     return {
       user: serializeUserForClient(currentUserDoc),
-      session: { authToken: session.authToken },
+      session: { authToken: userSession.authToken },
     };
   } catch (error) {
     // Route the failure to the hook matching what this request was attempting.

@@ -3,47 +3,55 @@ title: Introduction
 icon: 'book-open'
 ---
 
-Modelence is a production-ready platform for building and deploying full-stack web applications. You can create a complete app - frontend, backend, database, and hosting - by describing what you want in plain English.
+Modelence is a production cloud for your backend, databases and scheduled jobs. It deploys your app
+and keeps operating it after that: crashed processes are restarted, traffic is rerouted when an
+instance fails and capacity is added under load, and you get a report of what happened.
 
-Under the hood, Modelence generates structured, readable TypeScript + React + MongoDB code on an open-source framework, so you always have full access to your codebase.
+Apps run on AWS in the region you choose. Every environment gets a MongoDB Atlas database, and your
+app can declare managed PostgreSQL databases and Redis caches next to it. Logs, metrics and job runs
+are collected from the first deploy, and production databases are [backed up](/cloud/backups)
+automatically.
 
-## Get Started
+## Get started
 
-The fastest way to create an app is through the **App Builder**:
+The quickest way to deploy is to hand it to your coding agent. Paste this into Claude Code, Cursor or
+Codex in your project:
 
-1. Go to [cloud.modelence.com](https://cloud.modelence.com)
-2. Describe the app you want to build
-3. Submit your prompt - the App Builder will generate and deploy your app
+```text
+Deploy using https://modelence.com/skill.md
+```
 
-That's it. No setup, no CLI, no configuration required.
+The agent reads your project, writes `modelence.config.json` to describe what it needs, and deploys
+it. You can also sign up at [cloud.modelence.com](https://cloud.modelence.com) and connect your
+repository from the dashboard.
 
 <CardGroup cols={2}>
   <Card
-    title="App Builder"
-    icon="wand-magic-sparkles"
-    href="https://cloud.modelence.com"
+    title="Deploy Setup"
+    icon="rocket"
+    href="/deploy/setup"
   >
-    Create an app by describing what you want in plain English
+    What Modelence Cloud runs and how `modelence.config.json` describes your app
   </Card>
   <Card
-    title="Developer Quick Start"
+    title="Backups"
+    icon="database"
+    href="/cloud/backups"
+  >
+    How production databases are backed up, restored and exported
+  </Card>
+  <Card
+    title="Local Setup"
+    icon="laptop"
+    href="/setup"
+  >
+    Connect a project running on your machine to a Modelence environment
+  </Card>
+  <Card
+    title="Start a New App"
     icon="terminal"
     href="/quickstart"
   >
-    Set up a local project with the CLI for hands-on development
-  </Card>
-  <Card
-    title="Framework Guide"
-    icon="book"
-    href="/core-concepts/project-structure"
-  >
-    Learn about the Modelence framework and project structure
-  </Card>
-  <Card
-    title="API Reference"
-    icon="code"
-    href="/api-reference"
-  >
-    Full API reference for the Modelence framework
+    Start from the open-source Modelence framework, with auth, data and email built in
   </Card>
 </CardGroup>

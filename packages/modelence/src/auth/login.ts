@@ -10,7 +10,7 @@ import {
   clearAuthTokenCookie,
   clearSessionUser,
   setAuthTokenCookie,
-  setSessionUser,
+  startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
@@ -94,23 +94,23 @@ export async function handleLoginWithPassword(
       );
     }
 
-    await setSessionUser(session.authToken, userDoc._id);
+    const userSession = await startUserSession(session.authToken, userDoc._id);
 
     if (res) {
-      setAuthTokenCookie(res, session.authToken);
+      setAuthTokenCookie(res, userSession.authToken);
     }
 
     getAuthConfig().onAfterLogin?.({
       provider: 'email',
       user: userDoc,
-      session,
+      session: userSession,
       connectionInfo,
     });
     getAuthConfig().login?.onSuccess?.(userDoc);
 
     return {
       user: serializeUserForClient(userDoc),
-      session: { authToken: session.authToken },
+      session: { authToken: userSession.authToken },
     };
   } catch (error) {
     if (error instanceof Error) {
