@@ -295,6 +295,32 @@ describe('dev routing', () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
+  it('asks a monorepo service whose dev command is `modelence dev` to set its dev command', async () => {
+    // The nested run starts in the service root, which has no modelence.config.json.
+    readAppSpecFileMock.mockResolvedValue(null);
+    vi.stubEnv('MODELENCE_DEV_COMMAND', '1');
+    existsSyncMock.mockReturnValue(false);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { dev } = await import('./dev');
+    await dev({}, [], '/repo/apps/web');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Set "dev" for the service in modelence.config.json')
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it('starts the framework dev server for a monorepo framework service run by the dev command', async () => {
+    readAppSpecFileMock.mockResolvedValue(null);
+    vi.stubEnv('MODELENCE_DEV_COMMAND', '1');
+    const { dev } = await import('./dev');
+    await dev({}, [], '/repo/apps/web');
+
+    expect(process.exit).not.toHaveBeenCalled();
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
+
   it('starts a legacy app on its own environment, without loading the connected one', async () => {
     readAppSpecFileMock.mockResolvedValue(null);
     vi.stubEnv('MODELENCE_DEV_COMMAND', '');

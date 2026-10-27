@@ -40,8 +40,10 @@ export async function dev(options: DevOptions, args: string[], cwd: string = pro
   }
 
   // Only a framework app's dev command should start `modelence dev` again;
-  // any other app has to say how its dev server starts.
-  if (spec && !existsSync(join(cwd, FRAMEWORK_CONFIG_FILE_NAME))) {
+  // any other app has to say how its dev server starts. Checked without the
+  // spec: the nested run starts in the service root, which in a monorepo
+  // has no modelence.config.json of its own.
+  if (isInsideDevCommand() && !existsSync(join(cwd, FRAMEWORK_CONFIG_FILE_NAME))) {
     console.error(
       'The dev command runs `modelence dev` again. Set "dev" for the service in ' +
         `${APP_SPEC_FILE_NAME} to the command that starts your dev server (e.g. ["next dev"]), ` +
