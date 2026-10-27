@@ -89,6 +89,7 @@ vi.doMock('./disposableEmails', () => ({
 
 vi.doMock('./utils', async () => ({
   setQueryParams: (await vi.importActual<typeof import('./utils')>('./utils')).setQueryParams,
+  fireAuthHook: (await vi.importActual<typeof import('./utils')>('./utils')).fireAuthHook,
   resolveUrl: (baseUrl: string, configuredUrl?: string) => {
     if (!configuredUrl) return baseUrl;
     if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {

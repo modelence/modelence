@@ -8,7 +8,7 @@ import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
 import { consumeOAuthExchangeCode, setAuthTokenCookie, startUserSession } from './session';
 import type { OAuthProvider } from './types';
-import { serializeUserForClient } from './utils';
+import { serializeUserForClient, fireAuthHook } from './utils';
 
 /**
  * Same message whether the code is unknown, already redeemed, expired, or bound
@@ -97,27 +97,33 @@ export async function handleLoginWithOAuth(
       setAuthTokenCookie(res, userSession.authToken);
     }
 
-    getAuthConfig().onAfterLogin?.({
-      provider,
-      user: userDoc,
-      session: userSession,
-      connectionInfo,
-    });
-    getAuthConfig().login?.onSuccess?.(userDoc);
+    fireAuthHook('onAfterLogin', () =>
+      getAuthConfig().onAfterLogin?.({
+        provider: claimed.provider,
+        user: userDoc,
+        session: userSession,
+        connectionInfo,
+      })
+    );
+    fireAuthHook('login.onSuccess', () => getAuthConfig().login?.onSuccess?.(userDoc));
 
     return {
       user: serializeUserForClient(userDoc),
       session: { authToken: userSession.authToken },
     };
   } catch (error) {
-    if (error instanceof Error && provider) {
-      getAuthConfig().onLoginError?.({
-        provider,
-        error,
-        session,
-        connectionInfo,
-      });
-      getAuthConfig().login?.onError?.(error);
+    // Copied to a const so the narrowing holds inside the hook callback.
+    const failedProvider = provider;
+    if (error instanceof Error && failedProvider) {
+      fireAuthHook('onLoginError', () =>
+        getAuthConfig().onLoginError?.({
+          provider: failedProvider,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+      fireAuthHook('login.onError', () => getAuthConfig().login?.onError?.(error));
     }
     throw error;
   }

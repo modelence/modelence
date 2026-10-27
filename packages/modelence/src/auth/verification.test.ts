@@ -213,6 +213,43 @@ describe('auth/verification', () => {
       });
     });
 
+    test('a rejecting onAfterEmailVerification hook does not fail the verification', async () => {
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'user@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      const authConfig = {
+        onAfterEmailVerification: vi.fn().mockRejectedValue(new Error('analytics down')),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValue({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      } as never);
+      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        const result = await handleVerifyEmail(baseParams as never);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(result?.redirect).toBe('/verified?status=verified');
+        expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          'Error in onAfterEmailVerification hook:',
+          expect.any(Error)
+        );
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+
     test('verifies a second address on an account that already has a verified one', async () => {
       // The reported repro: account holds a verified address A plus an
       // unverified B. The old filter's independent `'emails.verified': { $ne:

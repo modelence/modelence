@@ -156,6 +156,43 @@ describe('auth/login', () => {
     });
   });
 
+  test('a failing login hook does not fail the login', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439011');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    authConfig.onAfterLogin.mockImplementation(() => {
+      throw new Error('analytics down');
+    });
+    authConfig.login.onSuccess.mockRejectedValue(new Error('async analytics down'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const result = await handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+      expect(authConfig.onLoginError).not.toHaveBeenCalled();
+      expect(authConfig.login.onError).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error in onAfterLogin hook:',
+        expect.any(Error)
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error in login.onSuccess hook:',
+        expect.any(Error)
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   test('runs bcrypt against a dummy hash when the email is unknown', async () => {
     mockFindOne.mockResolvedValue(null as never);
 

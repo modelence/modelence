@@ -56,7 +56,8 @@ vi.doMock('./db', () => ({
   },
 }));
 
-vi.doMock('./utils', () => ({
+vi.doMock('./utils', async () => ({
+  fireAuthHook: (await vi.importActual<typeof import('./utils')>('./utils')).fireAuthHook,
   resolveUniqueHandle: mockResolveUniqueHandle,
   isDuplicateEmailError: (error: unknown) =>
     error instanceof MongoServerError &&
@@ -165,6 +166,39 @@ describe('auth/signup', () => {
 
     // The inserted document should use the email-derived handle
     expect(mockInsertOne).toHaveBeenCalledWith(expect.objectContaining({ handle: 'test' }));
+  });
+
+  test('a failing onAfterSignup hook does not fail the signup', async () => {
+    const insertedId = createObjectId('user-1');
+    mockInsertOne.mockResolvedValue({ insertedId } as never);
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: insertedId,
+      handle: 'test',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'test@example.com', verified: false }],
+    } as never);
+    authConfig.onAfterSignup.mockImplementation(() => {
+      throw new Error('analytics down');
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const result = await handleSignupWithPassword(
+        { email: 'test@example.com', password: 'Secret123' },
+        baseContext
+      );
+
+      // The account exists, so the caller must not be told the signup failed.
+      expect(result).toBe(insertedId);
+      expect(authConfig.onSignupError).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error in onAfterSignup hook:',
+        expect.any(Error)
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   test('runs the validatePassword hook with the signup context', async () => {
