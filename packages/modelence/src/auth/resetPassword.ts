@@ -272,6 +272,13 @@ export async function handleResetPassword(args: Args, context: Context) {
     throw new Error('Invalid or expired reset token');
   }
 
+  // Revoke the user's other outstanding reset links too, right after claiming this
+  // one so that a failure in a later step cannot leave them valid. Each request
+  // issues a new token without revoking earlier ones, so a link sent before this
+  // reset (valid for up to 1 hour) would otherwise let whoever holds it set a new
+  // password again — undoing the lockout below.
+  await resetPasswordTokensCollection.deleteMany({ userId: userDoc._id });
+
   // Update user's password
   await usersCollection.updateOne(
     { _id: userDoc._id },
