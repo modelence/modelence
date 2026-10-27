@@ -13,6 +13,7 @@ import { getCallContext } from '@/app/server';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
+import { captureError } from '@/telemetry';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
@@ -206,11 +207,11 @@ export function sendOAuthError(
     } catch (err) {
       // A relative `oauthErrorRedirectUrl` against an unusable base throws here.
       // Report the original failure below rather than turning it into a 500.
-      console.error(
+      captureError(
+        err,
         `[modelence] Could not build the OAuth error redirect from ` +
           `${JSON.stringify(authConfig.oauthErrorRedirectUrl)} and site URL ` +
-          `${JSON.stringify(siteUrl)}. Falling back to the default error response.`,
-        err
+          `${JSON.stringify(siteUrl)}. Falling back to the default error response.`
       );
     }
 
@@ -229,7 +230,7 @@ export function sendOAuthError(
       const html = authConfig.errorComponent({ error: errorMessage, statusCode });
       if (html) return response.send(html);
     } catch (err) {
-      console.error('Unhandled error in authConfig.errorComponent:', err);
+      captureError(err, 'Unhandled error in authConfig.errorComponent:');
     }
   }
 
@@ -632,7 +633,7 @@ function safelyCallHook(hook?: () => void) {
   try {
     hook();
   } catch (err) {
-    console.error('Error executing OAuth hook:', err);
+    captureError(err, 'Error executing OAuth hook:');
   }
 }
 
