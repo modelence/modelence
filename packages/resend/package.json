@@ -14,6 +14,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "repository": {
@@ -29,7 +30,8 @@
   "devDependencies": {
     "modelence": "^0.12.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "resend": "^6.9.2"
