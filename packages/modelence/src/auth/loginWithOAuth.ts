@@ -6,7 +6,7 @@ import { consumeRateLimit } from '@/server';
 import { AuthError, ValidationError } from '../error';
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
-import { consumeOAuthExchangeCode, setSessionUser } from './session';
+import { consumeOAuthExchangeCode, setAuthTokenCookie, startUserSession } from './session';
 import type { OAuthProvider } from './types';
 import { serializeUserForClient } from './utils';
 
@@ -29,7 +29,10 @@ function invalidCodeError() {
  * than in the callback, so a code that is intercepted but never redeemed never
  * corresponds to a live session.
  */
-export async function handleLoginWithOAuth(args: Args, { user, session, connectionInfo }: Context) {
+export async function handleLoginWithOAuth(
+  args: Args,
+  { user, session, connectionInfo, res }: Context
+) {
   // Known only after the code is redeemed; until then a failure can't be
   // attributed to a specific provider.
   let provider: OAuthProvider | undefined;
@@ -85,19 +88,26 @@ export async function handleLoginWithOAuth(args: Args, { user, session, connecti
       throw invalidCodeError();
     }
 
-    await setSessionUser(session.authToken, userDoc._id);
+    const userSession = await startUserSession(session.authToken, userDoc._id);
+
+    // The pre-login token is gone now. A same-tab web redemption may still
+    // carry it as a cookie, which takes precedence over the body token, so
+    // replace it or the browser would keep presenting the deleted session.
+    if (res) {
+      setAuthTokenCookie(res, userSession.authToken);
+    }
 
     getAuthConfig().onAfterLogin?.({
       provider,
       user: userDoc,
-      session,
+      session: userSession,
       connectionInfo,
     });
     getAuthConfig().login?.onSuccess?.(userDoc);
 
     return {
       user: serializeUserForClient(userDoc),
-      session: { authToken: session.authToken },
+      session: { authToken: userSession.authToken },
     };
   } catch (error) {
     if (error instanceof Error && provider) {

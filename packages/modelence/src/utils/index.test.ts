@@ -97,6 +97,34 @@ describe('utils/index', () => {
       expect(htmlToText('Just plain text')).toBe('Just plain text');
     });
 
+    test('should keep the URL of an absolute link', () => {
+      const html = `
+        <p>Click the button below to sign in:</p>
+        <a href="https://app.example.com/api/_internal/auth/magic-link?token=abc"
+           style="background-color: #5509D9; color: white;">
+          Sign In
+        </a>
+      `;
+      expect(htmlToText(html)).toBe(
+        'Click the button below to sign in: Sign In (https://app.example.com/api/_internal/auth/magic-link?token=abc)'
+      );
+      expect(htmlToText("<a class='btn' href='https://example.com/reset'>Reset Password</a>")).toBe(
+        'Reset Password (https://example.com/reset)'
+      );
+    });
+
+    test('should not repeat a URL that is already the link text', () => {
+      expect(
+        htmlToText('<a href="https://example.com/verify">https://example.com/verify</a>')
+      ).toBe('https://example.com/verify');
+    });
+
+    test('should drop non-absolute link targets', () => {
+      expect(htmlToText('<a href="/settings">Settings</a>')).toBe('Settings');
+      expect(htmlToText('<a href="mailto:help@example.com">Help</a>')).toBe('Help');
+      expect(htmlToText('<a data-href="https://example.com">Link</a>')).toBe('Link');
+    });
+
     test('should handle self-closing tags', () => {
       expect(htmlToText('Line 1<br/>Line 2')).toBe('Line 1Line 2');
       expect(htmlToText('Image: <img src="test.jpg" />')).toBe('Image:');

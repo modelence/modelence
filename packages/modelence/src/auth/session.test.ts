@@ -45,6 +45,7 @@ const {
   createSession,
   obtainSession,
   setSessionUser,
+  startUserSession,
   clearSessionUser,
   sessionsCollection,
   issueOAuthExchangeCode,
@@ -181,6 +182,57 @@ describe('auth/session', () => {
         $set: { userId },
       }
     );
+  });
+
+  describe('startUserSession', () => {
+    const deleteOneMock: Mock = vi.fn();
+
+    beforeEach(() => {
+      (sessionsCollection as unknown as { deleteOne: typeof deleteOneMock }).deleteOne =
+        deleteOneMock;
+      insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+      deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+    });
+
+    test('issues a fresh token bound to the user instead of reusing the pre-login one', async () => {
+      const userId = new ObjectId();
+
+      const result = await startUserSession('pre-login-token', userId);
+
+      expect(insertOneMock).toHaveBeenCalledWith({
+        authToken: 'hashed-auth-token',
+        createdAt: expect.any(Date),
+        expiresAt: expect.any(Date),
+        userId,
+      });
+      expect(result.authToken).toBe('auth-token');
+      expect(result.authToken).not.toBe('pre-login-token');
+      expect(result.userId).toBe(userId);
+      // The pre-login session must never be bound to the user.
+      expect(updateOneMock).not.toHaveBeenCalled();
+    });
+
+    test('deletes the pre-login session so a planted token goes nowhere', async () => {
+      await startUserSession('pre-login-token', new ObjectId());
+
+      expect(mockUpdate).toHaveBeenCalledWith('pre-login-token');
+      expect(deleteOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
+    });
+
+    test('creates the new session before deleting the old one', async () => {
+      await startUserSession('pre-login-token', new ObjectId());
+
+      expect(insertOneMock.mock.invocationCallOrder[0]).toBeLessThan(
+        deleteOneMock.mock.invocationCallOrder[0]
+      );
+    });
+
+    test('skips the delete when there was no previous session', async () => {
+      await startUserSession(null, new ObjectId());
+
+      expect(insertOneMock).toHaveBeenCalled();
+      expect(deleteOneMock).not.toHaveBeenCalled();
+    });
   });
 
   test('clearSessionUser removes user reference from session', async () => {
