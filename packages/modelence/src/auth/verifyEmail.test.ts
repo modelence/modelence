@@ -131,7 +131,7 @@ describe('verifyEmail server mutation', () => {
       expect(onAfterEmailVerification).toHaveBeenCalledWith({
         provider: 'email',
         user,
-        session: originalSession,
+        session: null,
         connectionInfo: context.connectionInfo,
       });
       expect(onEmailVerificationError).not.toHaveBeenCalled();
@@ -142,6 +142,30 @@ describe('verifyEmail server mutation', () => {
       expect(context.user?.id).toBe(caller === 'authenticated' ? callerId.toString() : undefined);
     }
   );
+
+  test('reports verification errors without passing the caller session to the hook', async () => {
+    const callerSession = {
+      authToken: 'existing-caller-token',
+      userId: callerId,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    context.session = callerSession;
+
+    await expect(verifyEmail({ token: 'unknown-token' })).rejects.toThrow(
+      'Invalid or expired verification token'
+    );
+
+    expect(onEmailVerificationError).toHaveBeenCalledWith({
+      provider: 'email',
+      error: expect.objectContaining({ message: 'Invalid or expired verification token' }),
+      session: null,
+      connectionInfo: context.connectionInfo,
+    });
+    expect(context.session).toBe(callerSession);
+    expect(onAfterEmailVerification).not.toHaveBeenCalled();
+    expect(sessions.createSession).not.toHaveBeenCalled();
+    expect(sessions.setAuthTokenCookie).not.toHaveBeenCalled();
+  });
 
   test.each(['unknown', 'expired'])(
     'rejects an %s token and reports the error hook',

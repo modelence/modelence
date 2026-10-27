@@ -87,7 +87,7 @@ async function verifyEmailToken(token: string) {
   return { userDoc: updatedUserDoc, email };
 }
 
-export async function handleVerifyEmailMutation(args: Args, { session, connectionInfo }: Context) {
+export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: Context) {
   const authConfig = getAuthConfig();
 
   try {
@@ -97,7 +97,7 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
     authConfig.onAfterEmailVerification?.({
       provider: 'email',
       user: userDoc as User,
-      session,
+      session: null,
       connectionInfo,
     });
   } catch (error) {
@@ -105,7 +105,7 @@ export async function handleVerifyEmailMutation(args: Args, { session, connectio
       authConfig.onEmailVerificationError?.({
         provider: 'email',
         error,
-        session,
+        session: null,
         connectionInfo,
       });
     }
