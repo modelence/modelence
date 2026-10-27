@@ -88,6 +88,7 @@ describe('rate-limit/rules', () => {
         value: '127.0.0.1',
         windowMs: 60_000,
         windowStart: new Date('2024-01-01T00:00:00.000Z'),
+        windowCount: { $lt: 5 },
       },
       { $inc: { windowCount: 1 } },
       { returnDocument: 'after' }
@@ -109,19 +110,20 @@ describe('rate-limit/rules', () => {
     );
   });
 
-  test('consumeRateLimit throws when limit exceeded in current window', async () => {
+  test('rejects without writing when fallback read finds the current window at the limit', async () => {
     vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);
 
-    mocks.findOneAndUpdate.mockResolvedValueOnce({
+    mocks.findOneAndUpdate.mockResolvedValueOnce(null);
+    mocks.findOne.mockResolvedValueOnce({
       bucket: 'api',
       type: 'ip',
       value: '127.0.0.1',
       windowMs: 60_000,
       windowStart: new Date('2024-01-01T00:01:00.000Z'),
-      windowCount: 2,
+      windowCount: 1,
       prevWindowCount: 0,
       expiresAt: new Date('2024-01-01T00:03:00.000Z'),
     });
@@ -130,16 +132,21 @@ describe('rate-limit/rules', () => {
       consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' })
     ).rejects.toThrow('Rate limit exceeded for api');
 
-    expect(mocks.updateOne).toHaveBeenCalledWith(
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       {
         bucket: 'api',
         type: 'ip',
         value: '127.0.0.1',
         windowMs: 60_000,
         windowStart: new Date('2024-01-01T00:01:00.000Z'),
+        windowCount: { $lt: 1 },
       },
-      { $inc: { windowCount: -1 } }
+      { $inc: { windowCount: 1 } },
+      { returnDocument: 'after' }
     );
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
   });
 
   test('consumeRateLimit uses custom error message when provided', async () => {
@@ -148,13 +155,14 @@ describe('rate-limit/rules', () => {
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 1 }]);
 
-    mocks.findOneAndUpdate.mockResolvedValueOnce({
+    mocks.findOneAndUpdate.mockResolvedValueOnce(null);
+    mocks.findOne.mockResolvedValueOnce({
       bucket: 'api',
       type: 'ip',
       value: '127.0.0.1',
       windowMs: 60_000,
       windowStart: new Date('2024-01-01T00:01:00.000Z'),
-      windowCount: 2,
+      windowCount: 1,
       prevWindowCount: 0,
       expiresAt: new Date('2024-01-01T00:03:00.000Z'),
     });
@@ -258,6 +266,7 @@ describe('rate-limit/rules', () => {
         value: '127.0.0.1',
         windowMs: 60_000,
         windowStart: new Date('2024-01-01T00:01:00.000Z'),
+        windowCount: { $lt: 5 },
       },
       { $inc: { windowCount: 1 } },
       { returnDocument: 'after' }
@@ -308,6 +317,7 @@ describe('rate-limit/rules', () => {
         value: '127.0.0.1',
         windowMs: 60_000,
         windowStart: new Date('2024-01-01T00:02:00.000Z'),
+        windowCount: { $lt: 5 },
       },
       { $inc: { windowCount: 1 } },
       { returnDocument: 'after' }
@@ -341,7 +351,7 @@ describe('rate-limit/rules', () => {
     ).rejects.toThrow('Rate limit exceeded for api');
   });
 
-  test('consumeRateLimit throws when rate limit count meets or exceeds limit threshold', async () => {
+  test('allows the request when the current window count is strictly below the limit', async () => {
     vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
@@ -353,72 +363,44 @@ describe('rate-limit/rules', () => {
       value: '10.0.0.1',
       windowMs: 60_000,
       windowStart: new Date('2024-01-01T00:01:00.000Z'),
-      windowCount: 4,
+      windowCount: 3,
       prevWindowCount: 0,
       expiresAt: new Date('2024-01-01T00:03:00.000Z'),
     });
 
-    await expect(
-      consumeRateLimit({ bucket: 'login', type: 'ip', value: '10.0.0.1' })
-    ).rejects.toThrow('Rate limit exceeded for login');
+    await consumeRateLimit({ bucket: 'login', type: 'ip', value: '10.0.0.1' });
 
-    expect(mocks.updateOne).toHaveBeenCalledWith(
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       {
         bucket: 'login',
         type: 'ip',
         value: '10.0.0.1',
         windowMs: 60_000,
         windowStart: new Date('2024-01-01T00:01:00.000Z'),
+        windowCount: { $lt: 3 },
       },
-      { $inc: { windowCount: -1 } }
+      { $inc: { windowCount: 1 } },
+      { returnDocument: 'after' }
     );
+    expect(mocks.findOne).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
   });
 
-  test('sustained over-limit burst results in zero write operations for rejected requests', async () => {
-    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
-    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
-
-    initRateLimits([{ bucket: 'signup', type: 'ip', window: 60_000, limit: 2 }]);
-
-    mocks.findOne.mockResolvedValue({
-      bucket: 'signup',
-      type: 'ip',
-      value: '10.0.0.2',
-      windowMs: 60_000,
-      windowStart: new Date('2024-01-01T00:01:00.000Z'),
-      windowCount: 2,
-      prevWindowCount: 0,
-      expiresAt: new Date('2024-01-01T00:03:00.000Z'),
-    } as never);
-
-    // Simulate burst of 10 rejected requests
-    for (let i = 0; i < 10; i++) {
-      await expect(
-        consumeRateLimit({ bucket: 'signup', type: 'ip', value: '10.0.0.2' })
-      ).rejects.toThrow('Rate limit exceeded for signup');
-    }
-
-    // Verify exactly 0 upsertOne calls were issued across all rejected burst requests
-    expect(mocks.upsertOne).toHaveBeenCalledTimes(0);
-    expect(mocks.findOne).toHaveBeenCalledTimes(10);
-  });
-
-  test('sliding-window boundary case executes optimistic increment then compensating decrement when count exceeds limit', async () => {
+  test('keeps the increment-then-decrement path when the weighted count exceeds the limit', async () => {
     // At t = 10s into a 60s window (weight for prev window = 50/60 = 0.833)
     vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:10.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
 
     initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
 
-    // windowCount is 1 (< limit of 5), but prevWindowCount is 5.
-    // Weighted count = 1 + round(5 * (50/60)) = 1 + 4 = 5.
-    mocks.findOne.mockResolvedValue({
+    mocks.findOneAndUpdate.mockResolvedValueOnce({
       bucket: 'api',
       type: 'ip',
       value: '127.0.0.1',
       windowMs: 60_000,
       windowStart: new Date('2024-01-01T00:00:00.000Z'),
-      windowCount: 1,
+      windowCount: 2,
       prevWindowCount: 5,
       expiresAt: new Date('2024-01-01T00:02:00.000Z'),
     } as never);
@@ -427,23 +409,26 @@ describe('rate-limit/rules', () => {
       consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' })
     ).rejects.toThrow('Rate limit exceeded for api');
 
-    // Fast-path did not trigger because windowCount (1) < limit (5).
-    // Initial increment was issued, followed by compensating decrement.
-    expect(mocks.upsertOne).toHaveBeenNthCalledWith(
-      1,
-      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000 },
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       {
-        $inc: { windowCount: 1 },
-        $setOnInsert: {
-          windowStart: new Date('2024-01-01T00:00:00.000Z'),
-          prevWindowCount: 0,
-          expiresAt: new Date('2024-01-01T00:02:00.000Z'),
-        },
-      }
+        bucket: 'api',
+        type: 'ip',
+        value: '127.0.0.1',
+        windowMs: 60_000,
+        windowStart: new Date('2024-01-01T00:00:00.000Z'),
+        windowCount: { $lt: 5 },
+      },
+      { $inc: { windowCount: 1 } },
+      { returnDocument: 'after' }
     );
-    expect(mocks.upsertOne).toHaveBeenNthCalledWith(
-      2,
-      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000 },
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      {
+        bucket: 'api',
+        type: 'ip',
+        value: '127.0.0.1',
+        windowMs: 60_000,
+        windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      },
       { $inc: { windowCount: -1 } }
     );
   });

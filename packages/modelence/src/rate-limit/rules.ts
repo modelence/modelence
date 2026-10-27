@@ -81,7 +81,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
 
     // 1. Try atomic increment if the document is already in the current window.
     const updatedDoc = await dbRateLimits.findOneAndUpdate(
-      { ...filter, windowStart: currentWindowDate },
+      { ...filter, windowStart: currentWindowDate, windowCount: { $lt: rule.limit } },
       { $inc: { windowCount: 1 } },
       { returnDocument: 'after' }
     );
@@ -95,6 +95,14 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
     const existingRecord = await dbRateLimits.findOne(filter);
 
     if (existingRecord) {
+      if (
+        existingRecord.windowStart.getTime() === currentWindowStart &&
+        existingRecord.windowCount >= rule.limit
+      ) {
+        // Current window alone is already at the limit; reject without writing.
+        throw createRateLimitError();
+      }
+
       if (existingRecord.windowStart.getTime() >= currentWindowStart) {
         // A concurrent request already shifted windowStart to currentWindowStart or a newer window!
         // Loop back to Step 1 to perform an atomic $inc on the current window.
