@@ -387,6 +387,20 @@ describe('auth/verification', () => {
       });
     });
 
+    test('appends status to a redirect URL that already has a query string', async () => {
+      mockGetEmailConfig.mockReturnValue({
+        provider: { sendEmail: vi.fn() },
+        emailVerifiedRedirectUrl: 'https://app.example.com/welcome?source=email',
+      });
+      mockTokensFindOne.mockResolvedValue(null as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result?.redirect).toBe(
+        'https://app.example.com/welcome?source=email&status=error&message=Invalid%20or%20expired%20verification%20token'
+      );
+    });
+
     test('redirects with error when user not found', async () => {
       const authConfig = {
         onAfterEmailVerification: vi.fn(),
