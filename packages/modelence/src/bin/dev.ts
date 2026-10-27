@@ -1,8 +1,11 @@
 import { getServerPath, loadEnv } from './config';
-import path from 'path';
-import { readAppSpecFile, type AppSpec } from './appSpec';
+import { existsSync } from 'fs';
+import path, { join } from 'path';
+import { APP_SPEC_FILE_NAME, readAppSpecFile, type AppSpec } from './appSpec';
 import { isInsideDevCommand, runDevCommand } from './devScript';
 import { spawnProcessTree } from './processTree';
+
+const FRAMEWORK_CONFIG_FILE_NAME = 'modelence.config.ts';
 
 export interface DevOptions {
   takeover?: boolean;
@@ -18,7 +21,8 @@ export interface DevOptions {
   A framework app with a config keeps `"dev": "modelence dev"`, so its dev
   command lands here again: that nested run starts the framework dev server,
   whose environment the outer run already merged the variables into, and
-  never runs the dev command again, so it cannot loop.
+  never runs the dev command again, so it cannot loop. Any other app (no
+  modelence.config.ts) that does the same is told to set its dev command.
 */
 export async function dev(options: DevOptions, args: string[], cwd: string = process.cwd()) {
   let spec: AppSpec | null;
@@ -32,6 +36,18 @@ export async function dev(options: DevOptions, args: string[], cwd: string = pro
   if (spec && !isInsideDevCommand()) {
     // A framework app's server reads it from the environment.
     await runDevCommand(spec, args, cwd, options.takeover ? { MODELENCE_TAKEOVER: '1' } : {});
+    return;
+  }
+
+  // Only a framework app's dev command should start `modelence dev` again;
+  // any other app has to say how its dev server starts.
+  if (spec && !existsSync(join(cwd, FRAMEWORK_CONFIG_FILE_NAME))) {
+    console.error(
+      'The dev command runs `modelence dev` again. Set "dev" for the service in ' +
+        `${APP_SPEC_FILE_NAME} to the command that starts your dev server (e.g. ["next dev"]), ` +
+        'and start it with `npx modelence dev`.'
+    );
+    process.exit(1);
     return;
   }
 

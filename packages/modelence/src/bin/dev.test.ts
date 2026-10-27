@@ -21,9 +21,17 @@ vi.mock('./config', () => ({
 const readAppSpecFileMock = vi.fn();
 const runDevCommandMock = vi.fn();
 
-vi.mock('./appSpec', () => ({
+vi.mock('./appSpec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./appSpec')>()),
   readAppSpecFile: (...args: unknown[]) => readAppSpecFileMock(...args),
 }));
+
+const existsSyncMock = vi.fn();
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, existsSync: (...args: unknown[]) => existsSyncMock(...args) };
+});
 
 const loadLocalEnvMock = vi.fn();
 
@@ -218,6 +226,7 @@ describe('dev routing', () => {
     listenersBefore = new Map(events.map((event) => [event, listenersOf(event)]));
     spawnMock.mockReset().mockReturnValue(new FakeChild());
     readAppSpecFileMock.mockReset().mockResolvedValue({ resources: {} });
+    existsSyncMock.mockReset().mockReturnValue(true);
     runDevCommandMock.mockReset();
     loadLocalEnvMock.mockReset();
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
@@ -269,6 +278,21 @@ describe('dev routing', () => {
       DATABASE_URL: 'mongodb://merged',
       NODE_ENV: 'development',
     });
+  });
+
+  it('asks a non-framework app whose dev command is `modelence dev` to set its dev command', async () => {
+    vi.stubEnv('MODELENCE_DEV_COMMAND', '1');
+    existsSyncMock.mockReturnValue(false);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { dev } = await import('./dev');
+    await dev({}, [], '/app');
+
+    expect(existsSyncMock).toHaveBeenCalledWith(expect.stringMatching(/modelence\.config\.ts$/));
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Set "dev" for the service in modelence.config.json')
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('starts a legacy app on its own environment, without loading the connected one', async () => {
