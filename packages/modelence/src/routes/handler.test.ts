@@ -5,6 +5,7 @@ const mockAuthenticate = vi.fn();
 const mockGetMongodbUri = vi.fn();
 const mockStartTransaction = vi.fn();
 const mockCaptureError = vi.fn();
+const mockLogError = vi.fn();
 
 vi.doMock('../auth', () => ({
   authenticate: mockAuthenticate,
@@ -35,7 +36,7 @@ vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
   captureError: mockCaptureError,
-  logError: vi.fn(),
+  logError: mockLogError,
 }));
 
 const { ValidationError } = await import('../error');
@@ -215,6 +216,7 @@ describe('routes/handler', () => {
     await handler(baseReq, res, next);
 
     expect(mockCaptureError).toHaveBeenCalledWith(error);
+    expect(mockLogError).toHaveBeenCalledWith('Error in route handler:', { error, path: '/test' });
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Error: boom');
     expect(transactionEnd).toHaveBeenCalledWith('error');

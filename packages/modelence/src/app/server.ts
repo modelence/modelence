@@ -235,13 +235,14 @@ export async function startServer(
 
   if (!globalProcessListenersRegistered) {
     globalProcessListenersRegistered = true;
+    // Crash diagnostics must remain visible even when the log level is misconfigured.
     process.on('unhandledRejection', (reason, promise) => {
-      logError('Unhandled Promise Rejection:', { error: reason, promise });
+      console.error('Unhandled Promise Rejection:', { error: reason, promise });
     });
 
     // Global uncaught exceptions
     process.on('uncaughtException', (error) => {
-      logError('Uncaught Exception:', { error });
+      console.error('Uncaught Exception:', { error });
       console.trace('Full application stack:'); // Additional context
     });
   }
