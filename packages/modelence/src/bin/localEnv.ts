@@ -87,10 +87,11 @@ async function fetchRemoteEnv(endpoint: string, token: string): Promise<Record<s
 */
 async function connectionEnvForAppRoot(
   connection: Record<string, string>,
+  appConnection: Record<string, string> | null,
   existing: ProcessEnv,
   appRoot: string
 ): Promise<ProcessEnv> {
-  if (await readEnvFile(join(appRoot, MODELENCE_ENV_FILE))) {
+  if (appConnection) {
     return {};
   }
   const appNames = await readProjectEnvNames([appRoot]);
@@ -134,9 +135,11 @@ export async function loadLocalEnv(
     );
     return { ...existing };
   }
+  // The service's own, when it runs elsewhere; the same file when it runs in cwd.
+  const appConnection = await readEnvFile(join(appRoot, MODELENCE_ENV_FILE));
   const local = {
     ...existing,
-    ...(await connectionEnvForAppRoot(connection, existing, appRoot)),
+    ...(await connectionEnvForAppRoot(connection, appConnection, existing, appRoot)),
   };
 
   let remote: Record<string, unknown>;
@@ -150,10 +153,15 @@ export async function loadLocalEnv(
     return local;
   }
 
-  // The framework loads .modelence.env with dotenv too, so its names are local overrides as well.
+  /*
+    The framework loads .modelence.env with dotenv too, so its names are local
+    overrides as well: the repository root's, passed on above, and the
+    service's own, which it loads itself.
+  */
   const projectNames = new Set([
     ...(await readProjectEnvNames([cwd, appRoot])),
     ...Object.keys(connection),
+    ...Object.keys(appConnection ?? {}),
   ]);
   const merged = mergeLocalEnv(remote, local, projectNames);
   const loaded = Object.keys(merged).filter((name) => local[name] === undefined);

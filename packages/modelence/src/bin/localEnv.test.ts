@@ -133,12 +133,17 @@ describe('loadLocalEnv', () => {
     });
   });
 
-  it('leaves .modelence.env to a monorepo service that has its own', async () => {
+  it('leaves .modelence.env and its names to a monorepo service that has its own', async () => {
     await connect();
     const appRoot = join(cwd, 'apps', 'web');
     await mkdir(appRoot, { recursive: true });
-    await writeFile(join(appRoot, '.modelence.env'), 'MODELENCE_SERVICE_TOKEN=own\n');
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ env: { API_KEY: 'k' } })));
+    await writeFile(
+      join(appRoot, '.modelence.env'),
+      'MODELENCE_SERVICE_TOKEN=own\nMONGODB_URI=mongodb://localhost\n'
+    );
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ env: { API_KEY: 'k', MONGODB_URI: 'mongodb://remote' } }))
+    );
 
     expect(await loadLocalEnv(cwd, {}, appRoot)).toEqual({ API_KEY: 'k' });
   });
