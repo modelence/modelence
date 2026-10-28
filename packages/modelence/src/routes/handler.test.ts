@@ -39,7 +39,7 @@ vi.doMock('../telemetry', () => ({
   logError: mockLogError,
 }));
 
-const { ValidationError } = await import('../error');
+const { ValidationError, RateLimitError } = await import('../error');
 const { createRouteHandler } = await import('./handler');
 
 describe('routes/handler', () => {
@@ -98,14 +98,35 @@ describe('routes/handler', () => {
       data: { ok: true },
     }));
 
-    const authedReq = createRequest({ headers: { 'x-modelence-auth-token': 'token' } });
+    const authedReq = createRequest({
+      headers: { 'x-modelence-auth-token': 'token' },
+      ip: '192.0.2.1',
+    });
 
     await handler(authedReq, res, next);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('token', '192.0.2.1');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith({ ok: true });
     expect(transactionEnd).toHaveBeenCalledWith();
+  });
+
+  test('returns 429 without running the route when session creation is limited', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockRejectedValueOnce(
+      new RateLimitError('Rate limit exceeded for sessionCreation')
+    );
+    const route = vi.fn(async () => ({ status: 200 }));
+    const handler = createRouteHandler('GET', '/test', route);
+    await handler(
+      createRequest({ headers: { 'x-modelence-auth-token': 'invalid-token' }, ip: '192.0.2.1' }),
+      res,
+      next
+    );
+    expect(mockAuthenticate).toHaveBeenCalledWith('invalid-token', '192.0.2.1');
+    expect(route).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(mockCaptureError).not.toHaveBeenCalled();
   });
 
   test('redacts secrets from the telemetry transaction context', async () => {

@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { RouteHandler } from './types';
-import { ModelenceError } from '../error';
+import { ModelenceError, RateLimitError } from '../error';
 import { authenticate } from '../auth';
 import { getMongodbUri } from '../db/client';
 import type { Context } from '../methods/types';
 import { startTransaction, redactSensitive, captureError, logError } from '../telemetry';
+import { getClientIp } from '../app/clientIp';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
 export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
@@ -14,9 +15,13 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
 
     if (typeof authToken === 'string' && getMongodbUri()) {
       try {
-        const { session, user } = await authenticate(authToken);
+        const { session, user } = await authenticate(authToken, getClientIp(req));
         context = { session, user };
-      } catch {
+      } catch (error) {
+        if (error instanceof RateLimitError) {
+          res.status(error.status).send(error.message);
+          return;
+        }
         // If authentication fails, context remains null
       }
     }

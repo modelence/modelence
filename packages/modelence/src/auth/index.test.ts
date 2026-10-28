@@ -44,6 +44,16 @@ describe('auth/index', () => {
     expect(mockFindOne).not.toHaveBeenCalled();
   });
 
+  test('passes the request IP to session acquisition', async () => {
+    mockObtainSession.mockResolvedValue({
+      authToken: 'token',
+      expiresAt: new Date(),
+      userId: null,
+    });
+    await authenticate(null, '192.0.2.1');
+    expect(mockObtainSession).toHaveBeenCalledWith(null, '192.0.2.1');
+  });
+
   test('maps database user info when session has userId', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439011');
     const session = {

@@ -359,7 +359,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token', undefined);
     expect(ctx.session?.authToken).toBe('session-token');
     expect(ctx.connectionInfo).toMatchObject({
       baseUrl: 'https://localhost:3000',
@@ -416,7 +416,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('body-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('body-token', undefined);
     expect(ctx.session?.authToken).toBe('body-token');
   });
 
@@ -1677,6 +1677,31 @@ describe('app/server method endpoint', () => {
     });
   });
 
+  test('returns 429 when session creation is rate limited before running a method', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+    await startServer(createMockServer(), { combinedModules: [], channels: [] });
+    const { RateLimitError } = await import('../error');
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockRejectedValueOnce(
+      new RateLimitError('Rate limit exceeded for sessionCreation')
+    );
+    const req = createRequest({
+      params: { methodName: '_system.session.init' },
+      ip: '192.0.2.1',
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    await getRegisteredMethodHandler(mockApp)(req, res);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith(null, '192.0.2.1');
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.send).toHaveBeenCalledWith('Rate limit exceeded for sessionCreation');
+    expect(mockRunMethod).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
+  });
+
   test('handles successful method call', async () => {
     const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
@@ -1977,6 +2002,33 @@ describe('app/server set-link-cookie endpoint', () => {
       }),
     });
   });
+
+  test.each(['/api/_internal/auth/set-link-cookie', '/api/_internal/auth/issue-link-nonce'])(
+    '%s returns 429 when session creation is rate limited',
+    async (path) => {
+      const mockApp = createExpressAppMock();
+      mockExpressApp = mockApp;
+      await startServer(createMockServer(), { combinedModules: [], channels: [] });
+      const { RateLimitError } = await import('../error');
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+      mockAuthenticate.mockRejectedValueOnce(
+        new RateLimitError('Rate limit exceeded for sessionCreation')
+      );
+      const registration = mockApp.post.mock.calls.find(
+        ([registeredPath]) => registeredPath === path
+      )!;
+      const handler = registration[registration.length - 1] as (
+        req: Request,
+        res: Response
+      ) => Promise<void>;
+      const res = createResponse();
+
+      await handler(createRequest({ headers: { host: 'localhost' } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.cookie).not.toHaveBeenCalled();
+    }
+  );
 
   test('returns 401 when user is not authenticated', async () => {
     const mockApp = createExpressAppMock();
