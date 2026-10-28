@@ -69,6 +69,10 @@ startApp({
 
 You can also manually complete email verification from the client using a verification token:
 
+Manual verification confirms the email address without creating or replacing the caller's login session. It triggers the `onAfterEmailVerification` or `onEmailVerificationError` hook with `session: null` and the caller's connection information, matching the emailed-link route.
+
+The default emailed link goes to the server verification route. To use your own verification page, configure `email.verification.template` to extract the `token` from the supplied `verificationUrl` and link to your page with that token. The page should read the token from its URL and call `verifyEmail` when the user confirms.
+
 ```typescript
 import { verifyEmail } from 'modelence/client';
 
