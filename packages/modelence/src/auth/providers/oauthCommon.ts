@@ -22,6 +22,7 @@ import {
   getAllowedMobileRedirectUrls,
 } from './mobileRedirect';
 import { buildOAuthErrorRedirect } from './oauthErrorRedirect';
+import { logError } from '@/telemetry';
 
 /** Which kind of client started an OAuth flow. */
 export type OAuthPlatform = 'web' | 'mobile';
@@ -229,7 +230,7 @@ export function sendOAuthError(
       const html = authConfig.errorComponent({ error: errorMessage, statusCode });
       if (html) return response.send(html);
     } catch (err) {
-      console.error('Unhandled error in authConfig.errorComponent:', err);
+      logError('Unhandled error in authConfig.errorComponent', { error: err });
     }
   }
 
@@ -632,7 +633,7 @@ function safelyCallHook(hook?: () => void) {
   try {
     hook();
   } catch (err) {
-    console.error('Error executing OAuth hook:', err);
+    logError('Error executing OAuth hook', { error: err });
   }
 }
 
