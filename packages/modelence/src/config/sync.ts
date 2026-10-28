@@ -4,6 +4,7 @@ import { isDevRuntime } from '../app/instance';
 import { getLocalConfigs } from './local';
 import { loadConfigs, getSchema } from './server';
 import { AppConfig } from './types';
+import { logError } from '../telemetry';
 
 let isSyncing = false;
 
@@ -29,13 +30,13 @@ export function startConfigSync() {
         process.exit(1);
       }
     } catch (error) {
-      console.error('Error syncing status', error);
+      logError('Error syncing status', { error });
     }
 
     try {
       await syncConfig();
     } catch (error) {
-      console.error('Error syncing config', error);
+      logError('Error syncing config', { error });
     }
 
     isSyncing = false;

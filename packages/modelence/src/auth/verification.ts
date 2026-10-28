@@ -14,6 +14,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { createSession, setAuthTokenCookie } from './session';
+import { setQueryParams } from './utils';
 
 const USER_COLLATION = { locale: 'en', strength: 2 } as const;
 
@@ -87,6 +88,32 @@ async function verifyEmailToken(token: string) {
   return { userDoc: updatedUserDoc, email };
 }
 
+export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: Context) {
+  const authConfig = getAuthConfig();
+
+  try {
+    const token = z.string().min(1).parse(args.token);
+    const { userDoc } = await verifyEmailToken(token);
+
+    authConfig.onAfterEmailVerification?.({
+      provider: 'email',
+      user: userDoc as User,
+      session: null,
+      connectionInfo,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      authConfig.onEmailVerificationError?.({
+        provider: 'email',
+        error,
+        session: null,
+        connectionInfo,
+      });
+    }
+    throw error;
+  }
+}
+
 export async function handleVerifyEmail(params: RouteParams): Promise<RouteResponse> {
   const baseUrl = getConfig('_system.site.url') as string | undefined;
   const emailVerifiedRedirectUrl =
@@ -120,7 +147,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
       status: 301,
       // Suppress the Referer so the token-bearing verification URL never leaks.
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${emailVerifiedRedirectUrl}?status=verified`,
+      redirect: setQueryParams(emailVerifiedRedirectUrl, { status: 'verified' }),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -144,7 +171,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     return {
       status: 301,
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${emailVerifiedRedirectUrl}?status=error&message=${encodeURIComponent(message)}`,
+      redirect: setQueryParams(emailVerifiedRedirectUrl, { status: 'error', message }),
     };
   }
 }

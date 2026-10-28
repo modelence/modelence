@@ -8,6 +8,7 @@ const mockStartTransaction = vi.fn(() => ({
   end: vi.fn(),
 }));
 const mockCaptureError = vi.fn();
+const mockLogError = vi.fn();
 const mockAcquireLock: Mock = vi.fn();
 const mockGetMongodbUri = vi.fn();
 
@@ -28,6 +29,7 @@ function registerMocks() {
   vi.doMock('@/telemetry', () => ({
     startTransaction: mockStartTransaction,
     captureError: mockCaptureError,
+    logError: mockLogError,
   }));
 
   vi.doMock('../data/store', () => ({
@@ -55,6 +57,7 @@ describe('cron/jobs', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    mockLogError.mockClear();
     Object.assign(cronStoreMocks, {
       fetch: vi.fn(),
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
@@ -207,8 +210,9 @@ describe('cron/jobs', () => {
   });
 
   test('cron loop captures errors and continues schedule', async () => {
+    const error = new Error('boom');
     const handler = vi.fn(async () => {
-      throw new Error('boom');
+      throw error;
     });
     cronStoreMocks.fetch.mockResolvedValue([] as never);
     defineCronJob('hourly', {
@@ -223,6 +227,7 @@ describe('cron/jobs', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockLogError).toHaveBeenCalledWith('Error in cron job:', { error, alias: 'hourly' });
     const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
     expect(transaction.end).toHaveBeenCalledWith('error');
   });
