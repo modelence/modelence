@@ -12,8 +12,28 @@ Modelence includes built-in rate limiting on all authentication endpoints to pro
 - **Password Reset**: 10 per 15 minutes, 100 per day (per IP); 5 per hour, 10 per day (per email)
 - **Magic Link**: 10 per 15 minutes, 100 per day (per IP); 5 per hour, 10 per day (per email)
 - **One-Time Code**: 20 per 15 minutes, 100 per day (per IP); 10 per hour, 20 per day (per email)
+- **Anonymous Session Creation**: 100 per 15 minutes, 1,000 per day (per IP)
 
 These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
+
+The session-creation limit applies only when an HTTP request, WebSocket handshake, or live-query subscription needs a new anonymous session because its token is missing or unknown. Reusing an existing session does not consume this quota. When the limit is exceeded, HTTP requests receive 429, WebSocket connections are rejected, and live-query subscriptions receive a `liveQueryError` event. Server-side session creation without a client IP and authenticated session rotation retain their existing behavior.
+
+Adjust the limits for traffic behind shared IPs using `auth.rateLimits.sessionCreation`. Overrides merge by window, so changing the 15-minute limit preserves the daily limit:
+
+```typescript
+import { startApp } from 'modelence/server';
+import { time } from 'modelence';
+
+startApp({
+  auth: {
+    rateLimits: {
+      sessionCreation: [{ type: 'ip', window: time.minutes(15), limit: 200 }],
+    },
+  },
+});
+```
+
+HTTP requests and the built-in Socket.IO provider use the same `security.trustedProxies`, `MODELENCE_TRUSTED_PROXIES`, and `security.clientIpHeader` configuration to identify clients behind a proxy.
 
 ## Handling Rate Limit Errors
 

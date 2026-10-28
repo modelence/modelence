@@ -22,6 +22,9 @@ const mockUpdate = vi.fn((value: string) => {
 const mockCreateHash = vi.fn(() => ({ update: mockUpdate }));
 const mockDays = vi.fn(() => 7 * 24 * 60 * 60 * 1000);
 const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
+const mockConsumeRateLimit = vi.fn();
+
+vi.doMock('../rate-limit/rules', () => ({ consumeRateLimit: mockConsumeRateLimit }));
 
 vi.doMock('crypto', () => ({
   randomBytes: mockRandomBytes,
@@ -61,6 +64,7 @@ describe('auth/session', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConsumeRateLimit.mockReset().mockResolvedValue(undefined);
     (sessionsCollection as unknown as { insertOne: typeof insertOneMock }).insertOne =
       insertOneMock;
     (sessionsCollection as unknown as { findOne: typeof findOneMock }).findOne = findOneMock;
@@ -148,6 +152,54 @@ describe('auth/session', () => {
 
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
+  });
+
+  test.each([null, 'unknown-token'])(
+    'rate limits new sessions for token %s before inserting',
+    async (token) => {
+      findOneMock.mockResolvedValue(null);
+      await obtainSession(token, '192.0.2.1');
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'sessionCreation',
+        type: 'ip',
+        value: '192.0.2.1',
+      });
+      expect(mockConsumeRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
+        insertOneMock.mock.invocationCallOrder[0]
+      );
+    }
+  );
+
+  test('does not insert a session when the creation limit is exceeded', async () => {
+    findOneMock.mockResolvedValue(null);
+    const { RateLimitError } = await import('../error');
+    const error = new RateLimitError('Rate limit exceeded for sessionCreation');
+    mockConsumeRateLimit.mockRejectedValue(error);
+
+    await expect(obtainSession('unknown-token', '192.0.2.1')).rejects.toBe(error);
+    expect(insertOneMock).not.toHaveBeenCalled();
+  });
+
+  test.each([null, new ObjectId()])(
+    'does not meter reuse of an existing session for user %s',
+    async (userId) => {
+      findOneMock.mockResolvedValue({
+        authToken: 'hashed-auth-token',
+        expiresAt: new Date(),
+        userId,
+      });
+      await obtainSession('existing-token', '192.0.2.1');
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+      expect(insertOneMock).not.toHaveBeenCalled();
+    }
+  );
+
+  test('retains server-side session creation when no client IP is available', async () => {
+    findOneMock.mockResolvedValue(null);
+    await obtainSession(null);
+    expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    expect(insertOneMock).toHaveBeenCalledOnce();
   });
 
   test('obtainSession does not fall back to raw token lookup if input is a 64-char hex string (hash replay protection)', async () => {

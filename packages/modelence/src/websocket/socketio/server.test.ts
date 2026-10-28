@@ -4,6 +4,7 @@ import type { Server } from 'http';
 import type { Socket } from 'socket.io';
 import type { Session, User } from '@/auth/types';
 import { ServerChannel as ServerChannelClass } from '../serverChannel';
+import { setSecurityConfig } from '@/app/securityConfig';
 
 const mockCreateIndex = vi.fn();
 const mockDropIndex = vi.fn();
@@ -32,6 +33,13 @@ vi.doMock('@socket.io/mongo-adapter', () => ({
 const mockAuthenticate = vi.fn();
 vi.doMock('@/auth', () => ({
   authenticate: mockAuthenticate,
+}));
+
+const mockSubscribeLiveQuery = vi.fn();
+vi.doMock('@/live-query', () => ({
+  handleSubscribeLiveQuery: mockSubscribeLiveQuery,
+  handleUnsubscribeLiveQuery: vi.fn(),
+  handleLiveQueryDisconnect: vi.fn(),
 }));
 
 const mockGetConfig = vi.fn();
@@ -68,6 +76,7 @@ const websocketProvider = serverModule.default;
 describe('websocket/socketio/server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSecurityConfig({ trustedProxies: [] });
     Object.keys(eventHandlers).forEach((key) => delete eventHandlers[key]);
     socketMiddlewares.length = 0;
     mockGetConfig.mockReturnValue(false);
@@ -118,9 +127,13 @@ describe('websocket/socketio/server', () => {
     const middleware = socketMiddlewares[0];
     expect(middleware).toBeDefined();
     const next = vi.fn();
-    const authSocket = { handshake: { auth: { token: 'abc' } }, data: null } as unknown as Socket;
+    const authSocket = {
+      handshake: { auth: { token: 'abc' } },
+      request: { headers: {}, socket: { remoteAddress: '192.0.2.1' } },
+      data: null,
+    } as unknown as Socket;
     await middleware?.(authSocket, next);
-    expect(mockAuthenticate).toHaveBeenCalledWith('abc');
+    expect(mockAuthenticate).toHaveBeenCalledWith('abc', '192.0.2.1');
     expect(authSocket.data).toEqual({ user: { id: '1' } });
     expect(next).toHaveBeenCalled();
 
@@ -159,14 +172,63 @@ describe('websocket/socketio/server', () => {
     const next = vi.fn();
     const authSocket = {
       handshake: { auth: { token: 'invalid' } },
+      request: { headers: {}, socket: { remoteAddress: '192.0.2.1' } },
       data: null,
     } as unknown as Socket;
 
     await middleware?.(authSocket, next);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('invalid');
+    expect(mockAuthenticate).toHaveBeenCalledWith('invalid', '192.0.2.1');
     expect(authSocket.data).toBeNull();
     expect(next).toHaveBeenCalledWith(authError);
+  });
+
+  test.each([
+    {
+      peer: '10.0.0.5',
+      headers: { 'x-forwarded-for': '203.0.113.99, 198.51.100.1' },
+      expected: '198.51.100.1',
+    },
+    { peer: '192.0.2.5', headers: { 'x-forwarded-for': '203.0.113.99' }, expected: '192.0.2.5' },
+    {
+      peer: '10.0.0.5',
+      headers: { 'cf-connecting-ip': '::ffff:198.51.100.2' },
+      expected: '198.51.100.2',
+    },
+    { peer: '192.0.2.5', headers: { 'cf-connecting-ip': '198.51.100.2' }, expected: '192.0.2.5' },
+  ])(
+    'uses resolved IP $expected for handshakes and live-query subscriptions',
+    async ({ peer, headers, expected }) => {
+      setSecurityConfig({ trustedProxies: ['10.0.0.0/8'], clientIpHeader: 'cf-connecting-ip' });
+      await websocketProvider.init({ httpServer: {} as Server, channels: [] });
+      const { socket, socketEvents } = buildSocket();
+      Object.assign(socket, {
+        request: { headers, socket: { remoteAddress: peer } },
+      });
+      await socketMiddlewares[0](socket, vi.fn());
+      expect(mockAuthenticate).toHaveBeenCalledWith('token', expected);
+
+      eventHandlers.connection?.(socket);
+      const payload = { subscriptionId: 'subscription-1', method: 'test', ip: '203.0.113.42' };
+      await socketEvents.subscribeLiveQuery(payload);
+      expect(mockSubscribeLiveQuery).toHaveBeenCalledWith(socket, payload, expected);
+    }
+  );
+
+  test('rejects a handshake when anonymous session creation is rate limited', async () => {
+    const { RateLimitError } = await import('@/error');
+    const error = new RateLimitError('Rate limit exceeded for sessionCreation');
+    mockAuthenticate.mockRejectedValueOnce(error);
+    await websocketProvider.init({ httpServer: {} as Server, channels: [] });
+    const socket = {
+      handshake: { auth: {} },
+      request: { headers: {}, socket: { remoteAddress: '192.0.2.1' } },
+      data: null,
+    } as unknown as Socket;
+    const next = vi.fn();
+    await socketMiddlewares[0](socket, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(socket.data).toBeNull();
   });
 
   test('init skips mongo adapter when multiInstance is disabled', async () => {
