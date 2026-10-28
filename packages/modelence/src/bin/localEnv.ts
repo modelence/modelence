@@ -18,13 +18,15 @@ const PROJECT_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.devel
 
 /*
   Names a local process must not take from the environment: PORT and the
-  MODELENCE_* variables belong to the local setup, and the site URL /api/env
-  returns is the environment's cloud address, not where this process serves.
+  MODELENCE_* variables belong to the local setup, the site URL /api/env
+  returns is the environment's cloud address, not where this process serves,
+  and the environment's NODE_ENV (usually production) would start dev servers
+  like Next.js and Vite in production mode.
 */
+const SKIPPED_NAMES = new Set(['PORT', 'SITE_URL', 'ROOT_URL', 'NODE_ENV']);
+
 function isSkippedName(name: string): boolean {
-  return (
-    name === 'PORT' || name === 'SITE_URL' || name === 'ROOT_URL' || name.startsWith('MODELENCE_')
-  );
+  return SKIPPED_NAMES.has(name) || name.startsWith('MODELENCE_');
 }
 
 export function mergeLocalEnv(
@@ -77,6 +79,28 @@ async function fetchRemoteEnv(endpoint: string, token: string): Promise<Record<s
   return body.env && typeof body.env === 'object' ? (body.env as Record<string, unknown>) : {};
 }
 
+/*
+  The framework loads .modelence.env from where it runs, the service's root.
+  In a monorepo the file is at the repository root, so its values are passed
+  on instead, unless the service has a .modelence.env of its own. Like
+  dotenv, they replace neither the process's values nor the service's env files.
+*/
+async function connectionEnvForAppRoot(
+  connection: Record<string, string>,
+  existing: ProcessEnv,
+  appRoot: string
+): Promise<ProcessEnv> {
+  if (await readEnvFile(join(appRoot, MODELENCE_ENV_FILE))) {
+    return {};
+  }
+  const appNames = await readProjectEnvNames([appRoot]);
+  return Object.fromEntries(
+    Object.entries(connection).filter(
+      ([name]) => existing[name] === undefined && !appNames.has(name)
+    )
+  );
+}
+
 function describeFetchError(error: unknown): string {
   if (!(error instanceof Error)) {
     return String(error);
@@ -110,6 +134,10 @@ export async function loadLocalEnv(
     );
     return { ...existing };
   }
+  const local = {
+    ...existing,
+    ...(await connectionEnvForAppRoot(connection, existing, appRoot)),
+  };
 
   let remote: Record<string, unknown>;
   try {
@@ -119,7 +147,7 @@ export async function loadLocalEnv(
       `Could not load environment variables from ${endpoint} (${describeFetchError(error)}); ` +
         'starting without them.'
     );
-    return { ...existing };
+    return local;
   }
 
   // The framework loads .modelence.env with dotenv too, so its names are local overrides as well.
@@ -127,8 +155,8 @@ export async function loadLocalEnv(
     ...(await readProjectEnvNames([cwd, appRoot])),
     ...Object.keys(connection),
   ]);
-  const merged = mergeLocalEnv(remote, existing, projectNames);
-  const loaded = Object.keys(merged).filter((name) => existing[name] === undefined);
+  const merged = mergeLocalEnv(remote, local, projectNames);
+  const loaded = Object.keys(merged).filter((name) => local[name] === undefined);
   if (loaded.length > 0) {
     console.log(`Loaded ${loaded.length} environment variable(s): ${loaded.join(', ')}`);
   }

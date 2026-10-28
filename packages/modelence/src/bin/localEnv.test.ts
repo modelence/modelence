@@ -31,11 +31,12 @@ describe('mergeLocalEnv', () => {
     );
   });
 
-  it('leaves out the platform names and the cloud site URL', () => {
+  it('leaves out the platform names, NODE_ENV and the cloud site URL', () => {
     expect(
       mergeLocalEnv(
         {
           PORT: '8080',
+          NODE_ENV: 'production',
           MODELENCE_SERVICE_TOKEN: 'x',
           SITE_URL: 'https://app.cloud',
           ROOT_URL: 'https://app.cloud',
@@ -111,6 +112,33 @@ describe('loadLocalEnv', () => {
         })
       )
     );
+
+    expect(await loadLocalEnv(cwd, {}, appRoot)).toEqual({
+      MODELENCE_SERVICE_ENDPOINT: 'https://cloud.example.com/',
+      MODELENCE_SERVICE_TOKEN: 'tok',
+      API_KEY: 'k',
+    });
+  });
+
+  it("passes the repository root's .modelence.env to a monorepo service, even offline", async () => {
+    await connect();
+    const appRoot = join(cwd, 'apps', 'web');
+    await mkdir(appRoot, { recursive: true });
+    await writeFile(join(appRoot, '.env'), 'MODELENCE_SERVICE_TOKEN=local\n');
+    fetchMock.mockRejectedValue(new Error('fetch failed'));
+
+    expect(await loadLocalEnv(cwd, { A: '1' }, appRoot)).toEqual({
+      A: '1',
+      MODELENCE_SERVICE_ENDPOINT: 'https://cloud.example.com/',
+    });
+  });
+
+  it('leaves .modelence.env to a monorepo service that has its own', async () => {
+    await connect();
+    const appRoot = join(cwd, 'apps', 'web');
+    await mkdir(appRoot, { recursive: true });
+    await writeFile(join(appRoot, '.modelence.env'), 'MODELENCE_SERVICE_TOKEN=own\n');
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ env: { API_KEY: 'k' } })));
 
     expect(await loadLocalEnv(cwd, {}, appRoot)).toEqual({ API_KEY: 'k' });
   });
