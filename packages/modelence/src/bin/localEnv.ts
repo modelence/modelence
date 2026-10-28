@@ -1,0 +1,172 @@
+import fs from 'fs/promises';
+import { join } from 'path';
+import { parse as parseDotenv } from 'dotenv';
+
+export type ProcessEnv = Record<string, string | undefined>;
+
+const MODELENCE_ENV_FILE = '.modelence.env';
+const FETCH_TIMEOUT_MS = 10_000;
+
+/*
+  The files dev servers (Next.js, Vite, dotenv) read on their own. A name
+  defined there is the developer's local override, and those tools never
+  replace a variable already in process.env, so exporting the environment's
+  value would silently shadow it. They read them from the app's own root,
+  which in a monorepo is the service's directory, not the repository's.
+*/
+const PROJECT_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.local'];
+
+/*
+  Names a local process must not take from the environment: PORT and the
+  MODELENCE_* variables belong to the local setup, the site URL /api/env
+  returns is the environment's cloud address, not where this process serves,
+  and the environment's NODE_ENV (usually production) would start dev servers
+  like Next.js and Vite in production mode.
+*/
+const SKIPPED_NAMES = new Set(['PORT', 'SITE_URL', 'ROOT_URL', 'NODE_ENV']);
+
+function isSkippedName(name: string): boolean {
+  return SKIPPED_NAMES.has(name) || name.startsWith('MODELENCE_');
+}
+
+export function mergeLocalEnv(
+  remote: Record<string, unknown>,
+  existing: ProcessEnv,
+  projectNames: ReadonlySet<string>
+): ProcessEnv {
+  const added = Object.entries(remote).filter(
+    ([name, value]) =>
+      value !== null &&
+      value !== undefined &&
+      !isSkippedName(name) &&
+      existing[name] === undefined &&
+      !projectNames.has(name)
+  );
+  return {
+    ...existing,
+    ...Object.fromEntries(added.map(([name, value]) => [name, String(value)])),
+  };
+}
+
+async function readEnvFile(path: string): Promise<Record<string, string> | null> {
+  try {
+    return parseDotenv(await fs.readFile(path, 'utf-8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function readProjectEnvNames(dirs: string[]): Promise<Set<string>> {
+  const paths = [...new Set(dirs)].flatMap((dir) =>
+    PROJECT_ENV_FILES.map((file) => join(dir, file))
+  );
+  const files = await Promise.all(paths.map(readEnvFile));
+  return new Set(files.flatMap((file) => Object.keys(file ?? {})));
+}
+
+async function fetchRemoteEnv(endpoint: string, token: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${endpoint.replace(/\/+$/, '')}/api/env`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const body = (await response.json()) as { env?: unknown };
+  return body.env && typeof body.env === 'object' ? (body.env as Record<string, unknown>) : {};
+}
+
+/*
+  The framework loads .modelence.env from where it runs, the service's root.
+  In a monorepo the file is at the repository root, so its values are passed
+  on instead, unless the service has a .modelence.env of its own. Like
+  dotenv, they replace neither the process's values nor the service's env files.
+*/
+async function connectionEnvForAppRoot(
+  connection: Record<string, string>,
+  appConnection: Record<string, string> | null,
+  existing: ProcessEnv,
+  appRoot: string
+): Promise<ProcessEnv> {
+  if (appConnection) {
+    return {};
+  }
+  const appNames = await readProjectEnvNames([appRoot]);
+  return Object.fromEntries(
+    Object.entries(connection).filter(
+      ([name]) => existing[name] === undefined && !appNames.has(name)
+    )
+  );
+}
+
+function describeFetchError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  if (error.name === 'TimeoutError') {
+    return `no response within ${FETCH_TIMEOUT_MS / 1000}s`;
+  }
+  return error.message;
+}
+
+/*
+  The environment a local process starts with: its own, plus the variables
+  of the Modelence environment this project is connected to (managed
+  resources such as DATABASE_URL / REDIS_URL, and the environment's own
+  variables). Unlike the cloud entrypoint, a failure only warns: a dev server
+  that won't start helps nobody, and the app may not need those values yet.
+*/
+export async function loadLocalEnv(
+  cwd: string = process.cwd(),
+  existing: ProcessEnv = process.env,
+  // Where the dev process runs, when not in cwd (a monorepo service's root).
+  appRoot: string = cwd
+): Promise<ProcessEnv> {
+  const connection = await readEnvFile(join(cwd, MODELENCE_ENV_FILE));
+  const endpoint = connection?.MODELENCE_SERVICE_ENDPOINT;
+  const token = connection?.MODELENCE_SERVICE_TOKEN;
+  if (!endpoint || !token) {
+    console.log(
+      'Not connected to a Modelence environment (run `modelence setup`); ' +
+        'starting without its variables.'
+    );
+    return { ...existing };
+  }
+  // The service's own, when it runs elsewhere; the same file when it runs in cwd.
+  const appConnection = await readEnvFile(join(appRoot, MODELENCE_ENV_FILE));
+  const local = {
+    ...existing,
+    ...(await connectionEnvForAppRoot(connection, appConnection, existing, appRoot)),
+  };
+
+  let remote: Record<string, unknown>;
+  try {
+    remote = await fetchRemoteEnv(endpoint, token);
+  } catch (error) {
+    console.warn(
+      `Could not load environment variables from ${endpoint} (${describeFetchError(error)}); ` +
+        'starting without them.'
+    );
+    return local;
+  }
+
+  /*
+    The framework loads .modelence.env with dotenv too, so its names are local
+    overrides as well: the repository root's, passed on above, and the
+    service's own, which it loads itself.
+  */
+  const projectNames = new Set([
+    ...(await readProjectEnvNames([cwd, appRoot])),
+    ...Object.keys(connection),
+    ...Object.keys(appConnection ?? {}),
+  ]);
+  const merged = mergeLocalEnv(remote, local, projectNames);
+  const loaded = Object.keys(merged).filter((name) => local[name] === undefined);
+  if (loaded.length > 0) {
+    console.log(`Loaded ${loaded.length} environment variable(s): ${loaded.join(', ')}`);
+  }
+  return merged;
+}
