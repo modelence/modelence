@@ -6,7 +6,7 @@ import { consumeRateLimit } from '../rate-limit/rules';
 import { sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
-import { resolveUniqueHandle, isDuplicateEmailError } from './utils';
+import { resolveUniqueHandle, isDuplicateEmailError, fireAuthHook } from './utils';
 import { ValidationError } from '../error';
 
 export async function handleSignupWithPassword(
@@ -143,26 +143,30 @@ export async function handleSignupWithPassword(
       baseUrl: connectionInfo?.baseUrl,
     });
 
-    authConfig.onAfterSignup?.({
-      provider: 'email',
-      user: userDocument,
-      session,
-      connectionInfo,
-    });
+    fireAuthHook('onAfterSignup', () =>
+      authConfig.onAfterSignup?.({
+        provider: 'email',
+        user: userDocument,
+        session,
+        connectionInfo,
+      })
+    );
 
-    authConfig.signup?.onSuccess?.(userDocument);
+    fireAuthHook('signup.onSuccess', () => authConfig.signup?.onSuccess?.(userDocument));
 
     return result.insertedId;
   } catch (error) {
     if (error instanceof Error) {
-      authConfig.onSignupError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
+      fireAuthHook('onSignupError', () =>
+        authConfig.onSignupError?.({
+          provider: 'email',
+          error,
+          session,
+          connectionInfo,
+        })
+      );
 
-      authConfig.signup?.onError?.(error);
+      fireAuthHook('signup.onError', () => authConfig.signup?.onError?.(error));
     }
     throw error;
   }

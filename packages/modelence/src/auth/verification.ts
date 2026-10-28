@@ -14,7 +14,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { createSession, setAuthTokenCookie } from './session';
-import { setQueryParams } from './utils';
+import { setQueryParams, fireAuthHook } from './utils';
 
 const USER_COLLATION = { locale: 'en', strength: 2 } as const;
 
@@ -100,18 +100,20 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     const { userDoc } = await verifyEmailToken(token);
 
     const authConfig = getAuthConfig();
-    authConfig.onAfterEmailVerification?.({
-      provider: 'email',
-      user: userDoc as User,
-      session: null,
-      connectionInfo: {
-        baseUrl,
-        ip: params.req.ip || params.req.socket.remoteAddress,
-        userAgent: params.headers['user-agent'],
-        acceptLanguage: params.headers['accept-language'],
-        referrer: params.headers['referer'],
-      },
-    });
+    fireAuthHook('onAfterEmailVerification', () =>
+      authConfig.onAfterEmailVerification?.({
+        provider: 'email',
+        user: userDoc as User,
+        session: null,
+        connectionInfo: {
+          baseUrl,
+          ip: params.req.ip || params.req.socket.remoteAddress,
+          userAgent: params.headers['user-agent'],
+          acceptLanguage: params.headers['accept-language'],
+          referrer: params.headers['referer'],
+        },
+      })
+    );
 
     const { authToken } = await createSession(userDoc._id);
 
@@ -127,18 +129,20 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
-      authConfig.onEmailVerificationError?.({
-        provider: 'email',
-        error,
-        session: null,
-        connectionInfo: {
-          baseUrl,
-          ip: params.req.ip || params.req.socket.remoteAddress,
-          userAgent: params.headers['user-agent'],
-          acceptLanguage: params.headers['accept-language'],
-          referrer: params.headers['referer'],
-        },
-      });
+      fireAuthHook('onEmailVerificationError', () =>
+        authConfig.onEmailVerificationError?.({
+          provider: 'email',
+          error,
+          session: null,
+          connectionInfo: {
+            baseUrl,
+            ip: params.req.ip || params.req.socket.remoteAddress,
+            userAgent: params.headers['user-agent'],
+            acceptLanguage: params.headers['accept-language'],
+            referrer: params.headers['referer'],
+          },
+        })
+      );
       console.error('Error verifying email:', error);
     }
 

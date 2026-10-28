@@ -192,3 +192,22 @@ export async function resolveUniqueHandle(
   const baseHandle = rawBase.padEnd(MIN_HANDLE_LENGTH, '_').slice(0, MAX_HANDLE_LENGTH);
   return findAvailableHandle(baseHandle);
 }
+
+/**
+ * Invokes a notify-only auth hook (onAfterLogin, onLoginError, ...) without
+ * letting it affect the auth flow. These hooks are typed `() => void`, but a
+ * user can still pass an async function — a rejection from it, never awaited,
+ * would be an unhandled promise rejection (which can crash the process). A sync
+ * throw is contained the same way. Deliberately NOT awaited: a failing
+ * analytics hook must not fail an otherwise-successful login, and in error
+ * paths it must not mask the real error being propagated.
+ */
+export function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
+  try {
+    Promise.resolve(invoke?.()).catch((hookError: unknown) => {
+      console.error(`Error in ${name} hook:`, hookError);
+    });
+  } catch (hookError) {
+    console.error(`Error in ${name} hook:`, hookError);
+  }
+}
