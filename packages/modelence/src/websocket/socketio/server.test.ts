@@ -35,6 +35,13 @@ vi.doMock('@/auth', () => ({
   authenticate: mockAuthenticate,
 }));
 
+const mockSubscribeLiveQuery = vi.fn();
+vi.doMock('@/live-query', () => ({
+  handleSubscribeLiveQuery: mockSubscribeLiveQuery,
+  handleUnsubscribeLiveQuery: vi.fn(),
+  handleLiveQueryDisconnect: vi.fn(),
+}));
+
 const mockGetConfig = vi.fn();
 vi.doMock('@/config/server', () => ({
   getConfig: mockGetConfig,
@@ -190,17 +197,21 @@ describe('websocket/socketio/server', () => {
     },
     { peer: '192.0.2.5', headers: { 'cf-connecting-ip': '198.51.100.2' }, expected: '192.0.2.5' },
   ])(
-    'resolves handshake IP $expected through the trusted proxy configuration',
+    'uses resolved IP $expected for handshakes and live-query subscriptions',
     async ({ peer, headers, expected }) => {
       setSecurityConfig({ trustedProxies: ['10.0.0.0/8'], clientIpHeader: 'cf-connecting-ip' });
       await websocketProvider.init({ httpServer: {} as Server, channels: [] });
-      const socket = {
-        handshake: { auth: { token: 'token' } },
+      const { socket, socketEvents } = buildSocket();
+      Object.assign(socket, {
         request: { headers, socket: { remoteAddress: peer } },
-        data: null,
-      } as unknown as Socket;
+      });
       await socketMiddlewares[0](socket, vi.fn());
       expect(mockAuthenticate).toHaveBeenCalledWith('token', expected);
+
+      eventHandlers.connection?.(socket);
+      const payload = { subscriptionId: 'subscription-1', method: 'test', ip: '203.0.113.42' };
+      await socketEvents.subscribeLiveQuery(payload);
+      expect(mockSubscribeLiveQuery).toHaveBeenCalledWith(socket, payload, expected);
     }
   );
 

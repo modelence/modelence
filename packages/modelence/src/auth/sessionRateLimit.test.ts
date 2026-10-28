@@ -4,6 +4,9 @@ import { RateLimitError } from '../error';
 import { dbRateLimits } from '../rate-limit/db';
 import { initRateLimits } from '../rate-limit/rules';
 import { obtainSession, sessionsCollection } from './session';
+import { handleLiveQueryDisconnect, handleSubscribeLiveQuery } from '../live-query/handlers';
+import * as methods from '../methods';
+import type { Socket } from 'socket.io';
 
 beforeAll(() => {
   initRateLimits([{ bucket: 'sessionCreation', type: 'ip', window: 60_000, limit: 2 }]);
@@ -56,6 +59,32 @@ test('a burst stops inserting sessions at the IP quota while existing sessions s
   await expect(obtainSession(first.authToken, '192.0.2.1')).resolves.toEqual(first);
   expect(insert).toHaveBeenCalledTimes(2);
   expect(records.get('192.0.2.1')?.windowCount).toBe(2);
+
+  // An accepted WebSocket must not bypass the quota by re-authenticating
+  // subscription events with missing or unknown tokens.
+  const socket = {
+    id: 'rate-limited-socket',
+    handshake: { address: '10.0.0.5', headers: {} },
+    emit: vi.fn(),
+  } as unknown as Socket;
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  const runLiveMethod = vi
+    .spyOn(methods, 'runLiveMethod')
+    .mockRejectedValue(new Error('Unexpected call'));
+  for (const authToken of [null, 'unknown-subscription-token']) {
+    await handleSubscribeLiveQuery(
+      socket,
+      { subscriptionId: 'subscription-1', method: 'test', authToken },
+      '192.0.2.1'
+    );
+    expect(socket.emit).toHaveBeenLastCalledWith('liveQueryError', {
+      subscriptionId: 'subscription-1',
+      error: expect.stringContaining('sessionCreation'),
+    });
+    expect(insert).toHaveBeenCalledTimes(2);
+  }
+  expect(runLiveMethod).not.toHaveBeenCalled();
+  handleLiveQueryDisconnect(socket);
 
   await obtainSession(null, '192.0.2.2');
   expect(insert).toHaveBeenCalledTimes(3);

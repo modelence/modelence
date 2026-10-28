@@ -16,7 +16,7 @@ Modelence includes built-in rate limiting on all authentication endpoints to pro
 
 These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
 
-The session-creation limit applies only when an HTTP request or WebSocket handshake needs a new anonymous session because its token is missing or unknown. Reusing an existing session does not consume this quota. HTTP requests receive 429 when the limit is exceeded, and WebSocket connections are rejected. Server-side session creation without a client IP and authenticated session rotation retain their existing behavior.
+The session-creation limit applies only when an HTTP request, WebSocket handshake, or live-query subscription needs a new anonymous session because its token is missing or unknown. Reusing an existing session does not consume this quota. When the limit is exceeded, HTTP requests receive 429, WebSocket connections are rejected, and live-query subscriptions receive a `liveQueryError` event. Server-side session creation without a client IP and authenticated session rotation retain their existing behavior.
 
 Adjust the limits for traffic behind shared IPs using `auth.rateLimits.sessionCreation`. Overrides merge by window, so changing the 15-minute limit preserves the daily limit:
 
