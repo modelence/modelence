@@ -170,6 +170,18 @@ export function subscribeLiveQuery<T = unknown>(
   };
 }
 
+function reconnect() {
+  if (!socketClient) {
+    return;
+  }
+  socketClient.auth = {
+    token: getAuthToken(),
+  };
+  if (!socketClient.connected) {
+    socketClient.connect();
+  }
+}
+
 const websocketProvider: WebsocketClientProvider = {
   init,
   on,
@@ -178,6 +190,7 @@ const websocketProvider: WebsocketClientProvider = {
   emit,
   joinChannel,
   leaveChannel,
+  reconnect,
 };
 
 export default websocketProvider;

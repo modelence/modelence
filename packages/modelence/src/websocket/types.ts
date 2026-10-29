@@ -15,4 +15,5 @@ export interface WebsocketClientProvider {
   emit(props: { eventName: string; category: string; id: string }): void;
   joinChannel(props: { category: string; id: string }): void;
   leaveChannel(props: { category: string; id: string }): void;
+  reconnect?(): void;
 }
