@@ -70,13 +70,13 @@ describe('project file', () => {
     await updateProject(
       (project) => ({
         ...project,
-        deploy: { environmentId: 'env1', appAlias: 'my-app', envAlias: 'prod' },
+        hosts: { 'https://staging.example': { appId: 'app2' } },
       }),
       home
     );
     expect(await readProject(home)).toEqual({
       appId: 'app1',
-      deploy: { environmentId: 'env1', appAlias: 'my-app', envAlias: 'prod' },
+      hosts: { 'https://staging.example': { appId: 'app2' } },
     });
     expect(await readFile(join(home, '.modelence', 'project.json'), 'utf8')).toMatch(/\n$/);
   });

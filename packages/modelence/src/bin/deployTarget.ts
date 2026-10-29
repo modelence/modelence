@@ -6,17 +6,20 @@ export type CliTarget =
   | { appAlias: string; envAlias: string }
   | { appId: string; envAlias: string };
 
+/*
+  The target named on the command line, if any. The environment is never
+  taken from .modelence/project.json: the same code goes to several
+  environments, so it is named with --env or picked in the browser on every
+  deploy. Only the app can come from the file.
+*/
 export function resolveTargetFromOptions(
   options: DeployOptions,
   project: HostProject,
-  // Studios the project has a saved target for, when it has none for this one.
+  // Studios the project has an app for, when it has none for this one.
   otherHosts: string[] = []
 ): CliTarget | null {
   if (options.app && options.env) {
     return { appAlias: options.app, envAlias: options.env };
-  }
-  if (options.env && project.deploy?.appAlias) {
-    return { appAlias: project.deploy.appAlias, envAlias: options.env };
   }
   if (options.env && project.appId) {
     return { appId: project.appId, envAlias: options.env };
@@ -29,12 +32,9 @@ export function resolveTargetFromOptions(
   if (options.app || options.env) {
     throw new Error('Pass both --app and --env, or neither to pick the target in the browser.');
   }
-  if (project.deploy?.environmentId) {
-    return { environmentId: project.deploy.environmentId };
-  }
   return null;
 }
 
 export function describeOtherHosts(otherHosts: string[]): string {
-  return `the target saved in .modelence/project.json is for ${otherHosts.join(', ')}, not this Studio.`;
+  return `the app saved in .modelence/project.json is for ${otherHosts.join(', ')}, not this Studio.`;
 }

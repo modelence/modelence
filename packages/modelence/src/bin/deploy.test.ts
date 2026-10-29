@@ -354,15 +354,29 @@ describe('deploy orchestration', () => {
   });
 });
 
-async function saveTarget(appAlias: string, envAlias: string, host: string | null = options.host) {
+// The app recorded for a project, optionally with the environment earlier
+// CLIs saved next to it.
+async function saveProject(
+  appId: string,
+  host: string | null = options.host,
+  legacyEnvAlias?: string
+) {
   await mkdir(join(project, '.modelence'), { recursive: true });
-  const target = {
-    appId: `${appAlias}-id`,
-    deploy: { environmentId: `${envAlias}-id`, appAlias, envAlias },
+  const entry = {
+    appId,
+    ...(legacyEnvAlias
+      ? {
+          deploy: {
+            environmentId: `${legacyEnvAlias}-id`,
+            appAlias: 'app',
+            envAlias: legacyEnvAlias,
+          },
+        }
+      : {}),
   };
   await writeFile(
     join(project, '.modelence/project.json'),
-    JSON.stringify(host ? { hosts: { [host]: target } } : target)
+    JSON.stringify(host ? { hosts: { [host]: entry } } : entry)
   );
 }
 
@@ -400,20 +414,40 @@ describe('in CI', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it('deploys to explicit flags without the browser, even when another target is saved', async () => {
-    await saveTarget('app', 'staging');
+  it('deploys to explicit flags without the browser', async () => {
+    await saveProject('saved-app-id');
     await deploy(options);
     expect(authenticateCli).not.toHaveBeenCalled();
     const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
     expect(args?.body).toMatchObject({ appAlias: 'app', envAlias: 'prod' });
   });
 
-  it('deploys to the saved target without the browser', async () => {
-    await saveTarget('app', 'staging');
-    await deploy({ host: options.host });
-    expect(authenticateCli).not.toHaveBeenCalled();
-    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
-    expect(args?.body).toMatchObject({ environmentId: 'staging-id' });
+  // The same code goes to staging and production: only --env says which.
+  it('deploys the saved app to the environment named with --env', async () => {
+    await saveProject('app-id');
+    await deploy({ host: options.host, env: 'staging' });
+    await deploy({ host: options.host, env: 'prod' });
+    const bodies = request.mock.calls
+      .filter(([, path]) => path === '/api/upload-bundle')
+      .map(([, , args]) => args?.body);
+    expect(bodies).toEqual([
+      { appId: 'app-id', envAlias: 'staging', kind: 'source' },
+      { appId: 'app-id', envAlias: 'prod', kind: 'source' },
+    ]);
+  });
+
+  it('asks only for --env when the app is saved', async () => {
+    await saveProject('app-id');
+    await expect(deploy({ host: options.host })).rejects.toThrow(
+      /To deploy from here, pass --env\.$/
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('never deploys to an environment saved by an earlier CLI', async () => {
+    await saveProject('app-id', options.host, 'staging');
+    await expect(deploy({ host: options.host })).rejects.toThrow('pass --env');
+    expect(request).not.toHaveBeenCalled();
   });
 
   // Nobody picked anything, so nobody was asked for the variables either.
@@ -433,12 +467,13 @@ describe('in CI', () => {
 describe('deploy target', () => {
   // A project can have several targets; agents run without a TTY and still pick.
   it('picks the target in the browser on every deploy, preselecting flags', async () => {
-    await saveTarget('app', 'staging');
+    await saveProject('app-id');
     await deploy(options);
     expect(authenticateCli).toHaveBeenCalledWith(
       options.host,
       expect.objectContaining({
         pick: 'deploy',
+        appId: 'app-id',
         hint: { appAlias: 'app', envAlias: 'prod' },
         env: undefined,
       })
@@ -449,91 +484,65 @@ describe('deploy target', () => {
     expect(deployArgs?.body).not.toHaveProperty('checkEnv');
   });
 
-  it('preselects the saved target in the browser', async () => {
-    await saveTarget('app', 'staging');
+  it('preselects only the saved app, never an environment', async () => {
+    await saveProject('app-id', options.host, 'staging');
     await deploy({ host: options.host });
     expect(authenticateCli).toHaveBeenCalledWith(
       options.host,
-      expect.objectContaining({ pick: 'deploy', hint: { environmentId: 'staging-id' } })
+      expect.objectContaining({ pick: 'deploy', appId: 'app-id', hint: undefined })
     );
   });
 
-  it('records the target picked in the browser', async () => {
-    vi.mocked(authenticateCli).mockResolvedValue({
-      token: 'browser-token',
-      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
-    });
+  it('preselects the saved app with the environment named by --env', async () => {
+    await saveProject('app-id');
+    await deploy({ host: options.host, env: 'staging' });
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ hint: { appId: 'app-id', envAlias: 'staging' } })
+    );
+  });
+
+  it('records only the app picked in the browser', async () => {
     await deploy({ host: options.host });
     expect(await readSavedProject()).toEqual({
-      hosts: {
-        [options.host]: {
-          appId: 'app-id',
-          deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
-        },
-      },
+      hosts: { [options.host]: { appId: 'app-id' } },
     });
   });
 
-  it('records a Modelence Cloud target at the top level, where released CLIs read it', async () => {
-    vi.mocked(authenticateCli).mockResolvedValue({
-      token: 'browser-token',
-      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
-    });
+  it('records a Modelence Cloud app at the top level, where released CLIs read it', async () => {
     await deploy({ host: 'https://cloud.modelence.com' });
-    expect(await readSavedProject()).toEqual({
-      appId: 'app-id',
-      deploy: { environmentId: 'env-id', appAlias: 'app', envAlias: 'prod' },
-    });
+    expect(await readSavedProject()).toEqual({ appId: 'app-id' });
   });
 
-  // A deploy to a staging Studio must not change what CI deploys to on Cloud.
-  it('keeps targets for different Studios side by side', async () => {
-    await saveTarget('app', 'prod', null);
-    vi.mocked(authenticateCli).mockResolvedValue({
-      token: 'browser-token',
-      target: { appId: 'dev-app-id', appAlias: 'app', environmentId: 'dev-id', envAlias: 'dev' },
-    });
-    await deploy({ host: options.host });
-    expect(await readSavedProject()).toEqual({
-      appId: 'app-id',
-      deploy: { environmentId: 'prod-id', appAlias: 'app', envAlias: 'prod' },
-      hosts: {
-        [options.host]: {
-          appId: 'dev-app-id',
-          deploy: { environmentId: 'dev-id', appAlias: 'app', envAlias: 'dev' },
-        },
-      },
-    });
-
-    vi.mocked(authenticateCli).mockClear();
-    vi.mocked(isCI).mockReturnValue(true);
+  it('drops the environment an earlier CLI saved', async () => {
+    await saveProject('app-id', null, 'prod');
     await deploy({ host: 'https://cloud.modelence.com' });
-    await deploy({ host: options.host });
-    expect(authenticateCli).not.toHaveBeenCalled();
-    const environmentIds = request.mock.calls
-      .filter(([, path]) => path === '/api/upload-bundle')
-      .map(([, , args]) => (args?.body as { environmentId: string }).environmentId);
-    expect(environmentIds.slice(-2)).toEqual(['prod-id', 'dev-id']);
+    expect(await readSavedProject()).toEqual({ appId: 'app-id' });
   });
 
-  it('says which Studio the saved target is for when it does not apply', async () => {
-    await saveTarget('app', 'staging', 'https://other.example');
+  it('keeps apps for different Studios side by side', async () => {
+    await saveProject('cloud-app-id', null);
+    await deploy({ host: options.host });
+    expect(await readSavedProject()).toEqual({
+      appId: 'cloud-app-id',
+      hosts: { [options.host]: { appId: 'app-id' } },
+    });
+  });
+
+  it('says which Studio the saved app is for when it does not apply', async () => {
+    await saveProject('app-id', 'https://other.example');
     vi.mocked(isCI).mockReturnValue(true);
     await expect(deploy({ host: options.host })).rejects.toThrow(
       'is for https://other.example, not this Studio. Pass --host to deploy there.'
     );
     await expect(deploy({ host: options.host, env: 'prod' })).rejects.toThrow(
-      '--env needs --app here: the target saved in .modelence/project.json is for https://other.example'
+      '--env needs --app here: the app saved in .modelence/project.json is for https://other.example'
     );
   });
 
-  // Environment ids only mean something on the Studio they were picked on.
-  it('ignores a target saved for another host and picks one in the browser', async () => {
-    await saveTarget('app', 'staging', 'https://other.example');
-    vi.mocked(authenticateCli).mockResolvedValue({
-      token: 'browser-token',
-      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
-    });
+  // App ids only mean something on the Studio they were picked on.
+  it('ignores an app saved for another host and picks one in the browser', async () => {
+    await saveProject('other-app-id', 'https://other.example');
     await deploy({ host: options.host });
     expect(authenticateCli).toHaveBeenCalledWith(
       options.host,
@@ -544,31 +553,19 @@ describe('deploy target', () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining('is for https://other.example, not this Studio')
     );
-    // The other Studio's target is kept.
+    // The other Studio's app is kept.
     const saved = await readSavedProject();
-    expect(saved.hosts['https://other.example'].deploy.environmentId).toBe('staging-id');
-    expect(saved.hosts[options.host].deploy.environmentId).toBe('env-id');
+    expect(saved.hosts['https://other.example'].appId).toBe('other-app-id');
+    expect(saved.hosts[options.host].appId).toBe('app-id');
   });
 
-  it('takes a target saved without a host as one for Modelence Cloud', async () => {
-    await saveTarget('app', 'staging', null);
+  it('takes an app saved without a host as one for Modelence Cloud', async () => {
+    await saveProject('cloud-app-id', null);
     vi.mocked(isCI).mockReturnValue(true);
-    await deploy({ host: 'https://cloud.modelence.com' });
+    await deploy({ host: 'https://cloud.modelence.com', env: 'prod' });
     expect(authenticateCli).not.toHaveBeenCalled();
     const [, , args] = request.mock.calls.find(([, path]) => path === '/api/upload-bundle')!;
-    expect(args?.body).toMatchObject({ environmentId: 'staging-id' });
-
-    vi.mocked(authenticateCli).mockResolvedValue({
-      token: 'browser-token',
-      target: { appId: 'app-id', appAlias: 'app', environmentId: 'env-id', envAlias: 'prod' },
-    });
-    await saveTarget('app', 'staging', null);
-    vi.mocked(isCI).mockReturnValue(false);
-    await deploy({ host: options.host });
-    expect(authenticateCli).toHaveBeenCalledWith(
-      options.host,
-      expect.objectContaining({ pick: 'deploy', hint: undefined })
-    );
+    expect(args?.body).toMatchObject({ appId: 'cloud-app-id', envAlias: 'prod' });
   });
 });
 

@@ -4,7 +4,7 @@ import archiver from 'archiver';
 import { authenticateCli } from './auth';
 import { clearCachedToken } from './authCache';
 import { loadEnv, getProjectPath } from './config';
-import { otherTargetHosts, projectForHost, readProject } from './project';
+import { otherAppHosts, projectForHost, readProject } from './project';
 import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
@@ -17,7 +17,7 @@ import {
   resolveHost,
   resolveToken,
   rememberToken,
-  rememberTarget,
+  rememberApp,
   isUnauthorized,
   type Session,
 } from './deploySession';
@@ -36,17 +36,19 @@ import { followDeploy } from './deployStatus';
   Modelence framework app that has no modelence.config.json, so projects that
   deployed before the file existed keep deploying unchanged (deployKind.ts).
 
-  Target: picked in the browser on every deploy, since a project can have
-  several. The target named by -a/-e, or else the one recorded in
-  project.json, is only preselected there; that is how an agent that knows
-  the target passes it. The picked target is recorded for next time. The
+  Target: picked in the browser on every deploy, since the same code goes
+  to several environments (staging, production). The target named by -a/-e
+  (or -e with the app recorded in project.json) is only preselected there;
+  that is how an agent that knows the target passes it. Only the app is
+  recorded for next time, never the environment: project.json is
+  committed, and nothing environment specific belongs in the codebase. The
   picker also asks for the variables modelence.config.json requires that
   the target has no value for.
 
   CI is the one exception: the browser is never opened, the target comes
-  from the flags or project.json and the token from MODELENCE_TOKEN, and a
-  missing one fails at once instead of waiting for an approval nobody will
-  give. Agents run without a TTY too, but they go through the browser like
+  from the flags (--env, plus --app unless project.json records the app)
+  and the token from MODELENCE_TOKEN, and a missing one fails at once
+  instead of waiting for an approval nobody will give. Agents run without a TTY too, but they go through the browser like
   anyone else. Since nobody picked anything, Studio refuses a CI deploy
   while a required declared variable has no value (--skip-env-check
   deploys anyway).
@@ -72,15 +74,22 @@ export async function deploy(options: DeployOptions) {
   }
   const savedProject = await readProject(cwd);
   const project = projectForHost(savedProject, host);
-  // Targets saved for another Studio don't apply here, but say so: a picker
+  // An app saved for another Studio doesn't apply here, but say so: a picker
   // or a "pass --app and --env" out of the blue would be a puzzle.
-  const otherHosts = project.deploy ? [] : otherTargetHosts(savedProject, host);
+  const otherHosts = project.appId ? [] : otherAppHosts(savedProject, host);
   const ci = isCI();
   // In CI the deploy target; anywhere else what the picker preselects.
   const namedTarget = resolveTargetFromOptions(options, project, otherHosts);
   let token = ci ? await resolveToken(host) : null;
   if (ci && (!token || !namedTarget)) {
-    throw new Error(nonInteractiveMessage(Boolean(token), Boolean(namedTarget), otherHosts));
+    throw new Error(
+      nonInteractiveMessage(
+        Boolean(token),
+        Boolean(namedTarget),
+        Boolean(project.appId),
+        otherHosts
+      )
+    );
   }
   if (!ci && !namedTarget && otherHosts.length > 0) {
     console.log(
@@ -125,7 +134,7 @@ export async function deploy(options: DeployOptions) {
         );
       }
       target = { environmentId: auth.target.environmentId };
-      await rememberTarget(auth.target, host);
+      await rememberApp(auth.target, host);
     }
     if (!token || !target) {
       // Unreachable: CI checked both above, and the browser returns both.
@@ -177,10 +186,11 @@ export async function deploy(options: DeployOptions) {
 function nonInteractiveMessage(
   hasToken: boolean,
   hasTarget: boolean,
+  hasApp: boolean,
   otherHosts: string[]
 ): string {
   const needed = [
-    hasTarget ? null : 'pass --app and --env',
+    hasTarget ? null : `pass ${hasApp ? '--env' : '--app and --env'}`,
     hasToken ? null : 'set MODELENCE_TOKEN',
   ].filter(Boolean);
   const hostNote =

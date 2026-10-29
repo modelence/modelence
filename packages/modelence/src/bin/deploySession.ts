@@ -36,14 +36,12 @@ export async function rememberToken(host: string, token: string, expiresAt?: str
   }
 }
 
-export async function rememberTarget(target: CliAuthTarget, host: string) {
-  const { appId, environmentId, appAlias, envAlias } = target;
+// Only the app: the environment is picked again on the next deploy.
+export async function rememberApp(target: CliAuthTarget, host: string) {
   try {
-    await updateProject((project) =>
-      withHostProject(project, host, { appId, deploy: { environmentId, appAlias, envAlias } })
-    );
+    await updateProject((project) => withHostProject(project, host, { appId: target.appId }));
   } catch (error) {
-    console.warn('Could not record the deploy target in .modelence/project.json:', error);
+    console.warn('Could not record the app in .modelence/project.json:', error);
   }
 }
 
