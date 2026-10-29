@@ -252,21 +252,20 @@ describe('plan formatting', () => {
 });
 
 describe('deploy target precedence', () => {
-  const project = {
-    appId: 'app-id',
-    deploy: { environmentId: 'saved-env', appAlias: 'saved-app', envAlias: 'prod' },
-  };
-  it('uses explicit aliases before the saved target', () => {
+  const project = { appId: 'app-id' };
+  it('takes the environment only from --env, and the app from --app or the saved app', () => {
     expect(resolveTargetFromOptions({ app: 'other', env: 'staging' }, project)).toEqual({
       appAlias: 'other',
       envAlias: 'staging',
     });
     expect(resolveTargetFromOptions({ env: 'staging' }, project)).toEqual({
-      appAlias: 'saved-app',
+      appId: 'app-id',
       envAlias: 'staging',
     });
-    expect(resolveTargetFromOptions({}, project)).toEqual({ environmentId: 'saved-env' });
+    // Nothing named: picked in the browser (or refused in CI).
+    expect(resolveTargetFromOptions({}, project)).toBeNull();
     expect(resolveTargetFromOptions({}, {})).toBeNull();
     expect(() => resolveTargetFromOptions({ app: 'other' }, project)).toThrow('Pass both');
+    expect(() => resolveTargetFromOptions({ env: 'staging' }, {})).toThrow('Pass both');
   });
 });
