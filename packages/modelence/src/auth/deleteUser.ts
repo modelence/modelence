@@ -6,8 +6,13 @@ import {
   resetPasswordTokensCollection,
   magicLinkTokensCollection,
 } from './db';
+import { invalidateAllUserSessions } from './session';
 
 export async function clearTokens(userId: ObjectId) {
+  // Revoke active sessions first so disabling or deleting an account terminates
+  // any in-flight sessions and prevents old tokens from reactivating if re-enabled.
+  await invalidateAllUserSessions(userId);
+
   await emailVerificationTokensCollection.deleteMany({
     userId,
   });
@@ -39,12 +44,17 @@ export async function clearTokens(userId: ObjectId) {
 export async function disableUser(userId: ObjectId) {
   await clearTokens(userId);
 
-  await usersCollection.updateOne(userId, {
-    $set: {
-      status: 'disabled',
-      disabledAt: new Date(),
+  await usersCollection.updateOne(
+    {
+      _id: userId,
     },
-  });
+    {
+      $set: {
+        status: 'disabled',
+        disabledAt: new Date(),
+      },
+    }
+  );
 }
 
 export async function deleteUser(userId: ObjectId) {
