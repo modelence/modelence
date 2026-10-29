@@ -7,6 +7,7 @@ const mockEmailDeleteMany = vi.fn();
 const mockResetDeleteMany = vi.fn();
 const mockMagicLinkDeleteMany = vi.fn();
 const mockRandomUUID = vi.fn(() => 'uuid-123');
+const mockInvalidateAllUserSessions = vi.fn();
 
 vi.doMock('./db', () => ({
   usersCollection: {
@@ -22,6 +23,10 @@ vi.doMock('./db', () => ({
   magicLinkTokensCollection: {
     deleteMany: mockMagicLinkDeleteMany,
   },
+}));
+
+vi.doMock('./session', () => ({
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
 }));
 
 vi.doMock('crypto', () => ({
@@ -41,7 +46,7 @@ describe('auth/deleteUser', () => {
     });
   });
 
-  test('clearTokens removes verification, reset, and magic link tokens for user', async () => {
+  test('clearTokens removes sessions, verification, reset, and magic link tokens for user', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439011');
     mockUsersFindOne.mockResolvedValue({
       _id: userId,
@@ -53,6 +58,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     // Magic link tokens are keyed by email; revoke every address, lowercased.
@@ -67,6 +73,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
@@ -76,32 +83,38 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
-  test('disableUser clears tokens and disables user record', async () => {
+  test('disableUser clears tokens, invalidates sessions, and disables user record', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439012');
 
     await disableUser(userId);
 
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockMagicLinkDeleteMany).toHaveBeenCalledWith({
       email: { $in: ['user@example.com'] },
     });
-    expect(mockUsersUpdateOne).toHaveBeenCalledWith(userId, {
-      $set: {
-        status: 'disabled',
-        disabledAt: expect.any(Date),
-      },
-    });
+    expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+      { _id: userId },
+      {
+        $set: {
+          status: 'disabled',
+          disabledAt: expect.any(Date),
+        },
+      }
+    );
   });
 
-  test('deleteUser clears tokens and anonymizes user profile', async () => {
+  test('deleteUser clears tokens, invalidates sessions, and anonymizes user profile', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439013');
 
     await deleteUser(userId);
 
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     // Magic links must be revoked before the profile update wipes `emails`.
