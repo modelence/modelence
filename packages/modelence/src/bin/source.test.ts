@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hasRegistryCredentials, isExcludedPath, listSourceFiles, packSource } from './source';
+import { testGit } from './testGit';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,11 +24,7 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-const GIT_IDENTITY = ['-c', 'user.email=test@example.com', '-c', 'user.name=test'];
-
-async function git(...args: string[]) {
-  await execFileAsync('git', [...GIT_IDENTITY, ...args], { cwd: dir });
-}
+const git = testGit(() => dir);
 
 async function write(path: string, content = '') {
   await mkdir(join(dir, path, '..'), { recursive: true });
@@ -55,8 +52,8 @@ describe('isExcludedPath', () => {
 describe('listSourceFiles', () => {
   it.each([false, true])(
     'excludes credentials with git=%s while retaining portable registry config',
-    async (git) => {
-      if (git) await execFileAsync('git', ['init', '-q'], { cwd: dir });
+    async (useGit) => {
+      if (useGit) await git('init', '-q');
       await write('.env.production', 'DATABASE_URL=secret');
       await write('.npmrc', '//registry.npmjs.org/:_authToken=secret');
       await write('apps/api/.yarnrc.yml', 'npmAuthToken: "secret"');
@@ -137,11 +134,10 @@ describe('listSourceFiles', () => {
     await git('init', '-q');
     await write('package.json', '{}');
     await write('vendor/lib/index.js');
-    await execFileAsync('git', ['init', '-q'], { cwd: join(dir, 'vendor/lib') });
-    await execFileAsync('git', [...GIT_IDENTITY, 'add', '.'], { cwd: join(dir, 'vendor/lib') });
-    await execFileAsync('git', [...GIT_IDENTITY, 'commit', '-qm', 'lib'], {
-      cwd: join(dir, 'vendor/lib'),
-    });
+    const libGit = testGit(() => join(dir, 'vendor/lib'));
+    await libGit('init', '-q');
+    await libGit('add', '.');
+    await libGit('commit', '-qm', 'lib');
     await git('add', 'package.json', 'vendor/lib');
 
     const { files, skipped } = await listSourceFiles(dir);
@@ -170,13 +166,13 @@ describe('listSourceFiles', () => {
   });
 
   it('honors .gitignore inside a git repository and includes untracked files', async () => {
-    await execFileAsync('git', ['init', '-q'], { cwd: dir });
+    await git('init', '-q');
     await write('.gitignore', 'dist/\n');
     await write('package.json', '{}');
     await write('dist/bundle.js');
     await write('untracked.js');
     await write('.modelence.env', 'SECRET=1');
-    await execFileAsync('git', ['add', 'package.json', '.gitignore'], { cwd: dir });
+    await git('add', 'package.json', '.gitignore');
 
     const { files, usedGit } = await listSourceFiles(dir);
     expect(usedGit).toBe(true);
