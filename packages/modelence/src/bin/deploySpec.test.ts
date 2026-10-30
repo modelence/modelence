@@ -228,8 +228,16 @@ describe('plan formatting', () => {
           api: { type: 'service', start: { commands: ['node server.js'] } },
           'main-db': { type: 'postgres', plan: 'postgres-1gb' },
           cache: { type: 'redis' },
+          telemetry: { type: 'telemetry' },
         },
-        env: { DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' } },
+        env: {
+          DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' },
+          OTEL_EXPORTER_OTLP_ENDPOINT: {
+            type: 'resource',
+            resource: 'telemetry',
+            output: 'endpoint',
+          },
+        },
       })
     ).toEqual([
       '  image:   default (node-22-slim)',
@@ -237,7 +245,9 @@ describe('plan formatting', () => {
       '  start:   node server.js',
       '  db:      main-db (postgres, postgres-1gb)',
       '  db:      cache (redis, default plan)',
+      '  telemetry: telemetry',
       '  env:     DATABASE_URL (main-db.url)',
+      '  env:     OTEL_EXPORTER_OTLP_ENDPOINT (telemetry.endpoint)',
     ]);
   });
 

@@ -24,7 +24,7 @@ export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence 
 
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvDeclarationScope = 'build' | 'runtime';
-export type ManagedResourceType = 'postgres' | 'redis';
+export type ManagedResourceType = 'postgres' | 'redis' | 'telemetry';
 export type ResourceType = 'service' | ManagedResourceType;
 
 export interface StaticMount {
@@ -51,10 +51,11 @@ export interface ServiceResource {
   static?: StaticMount[];
 }
 
-// A database or cache the deploy creates in the environment.
+// A database, cache or telemetry ingest the deploy creates in the environment.
 export interface ManagedResource {
   type: ManagedResourceType;
   // A plan name such as "postgres-1gb"; the server picks the smallest without it.
+  // Telemetry has no plans.
   plan?: string;
 }
 
@@ -63,7 +64,7 @@ export type AppResource = ServiceResource | ManagedResource;
 // Checked by name: the CLI reads the file before Studio validates it, so a
 // missing or misspelled type must not pass as a managed resource.
 export function isManagedResource(resource: AppResource): resource is ManagedResource {
-  return resource.type === 'postgres' || resource.type === 'redis';
+  return resource.type === 'postgres' || resource.type === 'redis' || resource.type === 'telemetry';
 }
 
 export interface ValueEnvDeclaration {
@@ -89,7 +90,7 @@ export interface AppSpec {
   /*
     Everything the app is made of, by the name the project chose: services
     (type/image/root/build/start/static; one is supported today) and the
-    postgres and redis resources a deploy creates (type/plan).
+    postgres, redis and telemetry resources a deploy creates (type/plan).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -166,7 +167,9 @@ export function formatAppSpec(spec: AppSpec): string[] {
   }
 
   for (const [name, resource] of entries) {
-    if (isManagedResource(resource)) {
+    if (resource.type === 'telemetry') {
+      lines.push(`  telemetry: ${name}`);
+    } else if (isManagedResource(resource)) {
       lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
     }
   }
