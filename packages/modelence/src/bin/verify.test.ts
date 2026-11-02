@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { processGroupsBelow, verify } from './verify';
 
 /*
@@ -46,13 +46,21 @@ afterEach(async () => {
   await rm(runtimeDir, { recursive: true, force: true });
 });
 
-async function project(files: Record<string, string>, resource: object, env?: object) {
+async function project(
+  files: Record<string, string>,
+  resource: object,
+  env?: object,
+  managedResources: object = {}
+) {
   for (const [path, content] of Object.entries(files)) {
     await writeFile(join(dir, path), content);
   }
   await writeFile(
     join(dir, 'modelence.config.json'),
-    JSON.stringify({ resources: { app: { type: 'service', ...resource } }, env })
+    JSON.stringify({
+      resources: { ...managedResources, app: { type: 'service', ...resource } },
+      env,
+    })
   );
 }
 
@@ -117,6 +125,173 @@ describe('verify', () => {
     const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
     expect([env.BUILD_ONLY, env.RUNTIME_ONLY, env.BOTH]).toEqual([undefined, 'r', 'x']);
   }, 20_000);
+
+  it('accepts one service alongside managed PostgreSQL and Redis resources', async () => {
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } },
+      undefined,
+      { 'main-db': { type: 'postgres' }, cache: { type: 'redis' } }
+    );
+    expect(await run()).toBe(true);
+  }, 20_000);
+
+  it('passes declared shell values by scope, with committed values taking precedence', async () => {
+    vi.stubEnv('NPM_TOKEN', 'install-token');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'runtime-secret');
+    vi.stubEnv('BOTH', 'shared');
+    vi.stubEnv('API_URL', 'shell-url');
+    vi.stubEnv('EMPTY', 'shell-value');
+    vi.stubEnv('UNDECLARED', 'must-not-pass');
+    const record = join(runtimeDir, 'build.txt');
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      {
+        build: {
+          commands: [
+            `printf '%s' "$NPM_TOKEN|$STRIPE_SECRET_KEY|$BOTH|$API_URL|$EMPTY|$UNDECLARED" > ${record}`,
+          ],
+        },
+        start: { commands: ['node server.js'] },
+      },
+      {
+        NPM_TOKEN: { type: 'secret', scopes: ['build'] },
+        STRIPE_SECRET_KEY: { type: 'secret' },
+        BOTH: { scopes: ['build', 'runtime'] },
+        API_URL: { value: '/api', scopes: ['build', 'runtime'] },
+        EMPTY: { value: '', scopes: ['build', 'runtime'] },
+      }
+    );
+    expect(await run()).toBe(true);
+    expect(await readFile(record, 'utf8')).toBe('install-token||shared|/api||');
+    const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+    expect(env.STRIPE_SECRET_KEY).toBe('runtime-secret');
+    expect(env.BOTH).toBe('shared');
+    expect(env.API_URL).toBe('/api');
+    expect(env.EMPTY).toBe('');
+    expect(env.NPM_TOKEN).toBeUndefined();
+    expect(env.UNDECLARED).toBeUndefined();
+  }, 20_000);
+
+  it('loads connected env values despite local env files excluded from the rehearsal', async () => {
+    vi.stubEnv('NODE_ENV', undefined);
+    const appRoot = join(dir, 'web');
+    await mkdir(appRoot);
+    await writeFile(
+      join(dir, '.modelence.env'),
+      'MODELENCE_SERVICE_ENDPOINT=https://cloud.example.com\nMODELENCE_SERVICE_TOKEN=test-token\n'
+    );
+    const realFetch = globalThis.fetch;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (input === 'https://cloud.example.com/api/env') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              env: {
+                DATABASE_URL: 'postgres://remote',
+                REDIS_URL: 'redis://remote',
+                NPM_TOKEN: 'remote-install-token',
+                STRIPE_SECRET_KEY: 'remote-secret',
+                API_URL: 'remote-url',
+                NODE_ENV: 'production',
+                SITE_URL: 'https://app.cloud',
+                UNDECLARED: 'must-not-pass',
+              },
+            })
+          )
+        );
+      }
+      return realFetch(input, init);
+    });
+    const record = join(runtimeDir, 'build.txt');
+    await project(
+      {
+        '.env.local': 'NPM_TOKEN=local-token\n',
+        'web/.env': 'DATABASE_URL=postgres://local\nSTRIPE_SECRET_KEY=local-secret\n',
+        'web/server.js':
+          'if (!process.env.STRIPE_SECRET_KEY || !process.env.DATABASE_URL) process.exit(3);\n' +
+          server('Number(process.env.PORT)'),
+      },
+      {
+        root: 'web',
+        build: {
+          commands: [`printf '%s' "$NPM_TOKEN|$DATABASE_URL|$NODE_ENV|$SITE_URL" > ${record}`],
+        },
+        start: { commands: ['node server.js'] },
+      },
+      {
+        DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' },
+        REDIS_URL: { type: 'resource', resource: 'cache', output: 'url' },
+        NPM_TOKEN: { type: 'secret', scopes: ['build'] },
+        STRIPE_SECRET_KEY: { type: 'secret' },
+        API_URL: { value: '/api' },
+        NODE_ENV: { scopes: ['build', 'runtime'] },
+        SITE_URL: { scopes: ['build'] },
+      },
+      { 'main-db': { type: 'postgres' }, cache: { type: 'redis' } }
+    );
+    expect(await run()).toBe(true);
+    expect(await readFile(record, 'utf8')).toBe(
+      'remote-install-token||production|https://app.cloud'
+    );
+    const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+    expect(env.DATABASE_URL).toBe('postgres://remote');
+    expect(env.REDIS_URL).toBe('redis://remote');
+    expect(env.STRIPE_SECRET_KEY).toBe('remote-secret');
+    expect(env.API_URL).toBe('/api');
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.SITE_URL).toBe(`http://localhost:${env.PORT}`);
+    expect(env.NPM_TOKEN).toBeUndefined();
+    expect(env.UNDECLARED).toBeUndefined();
+    expect(env.MODELENCE_SERVICE_TOKEN).toBeUndefined();
+    expect(env.MODELENCE_SERVICE_ENDPOINT).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://cloud.example.com/api/env',
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } })
+    );
+  }, 20_000);
+
+  it.each(['undeclared', 'shell', 'literal'] as const)(
+    'does not find original tools through a %s PATH',
+    async (source) => {
+      const bin = join(dir, 'node_modules', '.bin');
+      await mkdir(bin, { recursive: true });
+      const tool = join(bin, 'modelence-verify-local-tool');
+      await writeFile(tool, '#!/bin/sh\nexit 0\n');
+      await chmod(tool, 0o755);
+      const customBin = join(runtimeDir, 'custom-bin');
+      await mkdir(customBin);
+      const systemPath = [customBin, dirname(process.execPath), '/usr/bin', '/bin'].join(delimiter);
+      const path = [bin, `${bin}/../.bin/`, systemPath].join(delimiter);
+      vi.stubEnv('PATH', path);
+      const record = join(runtimeDir, 'build-path.txt');
+      await project(
+        { 'server.js': server('Number(process.env.PORT)') },
+        {
+          build: {
+            commands: [
+              'if command -v modelence-verify-local-tool > /dev/null; then exit 9; fi',
+              `printf '%s' "$PATH" > ${record}`,
+            ],
+          },
+          start: { commands: ['node server.js'] },
+        },
+        source === 'undeclared'
+          ? undefined
+          : {
+              PATH: {
+                scopes: ['build', 'runtime'],
+                ...(source === 'literal' ? { value: path } : {}),
+              },
+            }
+      );
+      expect(await run()).toBe(true);
+      const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+      expect(await readFile(record, 'utf8')).toBe(systemPath);
+      expect(env.PATH).toBe(systemPath);
+    },
+    20_000
+  );
 
   it('reports a runtime that cannot be started, without signalling its own process group', async () => {
     await project(
@@ -297,7 +472,7 @@ describe('verify', () => {
     expect(await run()).toBe(true);
     const [shellOnly, buildDb, path] = (await readFile(record, 'utf8')).trim().split('|');
     expect([shellOnly, buildDb]).toEqual(['', '']);
-    expect(path).toBe(process.env.PATH);
+    expect(path).toBeTruthy();
     const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
     expect(env.SHELL_ONLY).toBeUndefined();
     expect([env.MONGODB_URI, env.MONGO_URL]).toEqual([
@@ -327,9 +502,13 @@ describe('verify', () => {
     await expect(run()).rejects.toThrow('POSIX shell');
   });
 
-  it('requires exactly one resource', async () => {
-    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: {} }));
-    await expect(run()).rejects.toThrow('exactly one resource (found 0)');
+  it.each([
+    { resources: {}, count: 0 },
+    { resources: { db: { type: 'postgres' } }, count: 0 },
+    { resources: { a: { type: 'service' }, b: { type: 'service' } }, count: 2 },
+  ])('requires exactly one service ($count found)', async ({ resources, count }) => {
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources }));
+    await expect(run()).rejects.toThrow(`exactly one service (found ${count})`);
   });
 });
 

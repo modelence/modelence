@@ -99,6 +99,65 @@ describe('loadLocalEnv', () => {
     );
   });
 
+  it('loads remote values for an isolated copy without relying on local env files', async () => {
+    await connect();
+    const appRoot = join(cwd, 'web');
+    await mkdir(appRoot);
+    await writeFile(join(cwd, '.env.local'), 'NPM_TOKEN=local-token\n');
+    await writeFile(join(appRoot, '.env'), 'DATABASE_URL=postgres://local\n');
+    await writeFile(join(appRoot, '.modelence.env'), 'MONGODB_URI=mongodb://local\n');
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          env: {
+            NPM_TOKEN: 'remote-token',
+            DATABASE_URL: 'postgres://remote',
+            MONGODB_URI: 'mongodb://remote',
+            API_KEY: 'remote-key',
+            MODELENCE_SERVICE_TOKEN: 'remote-service-token',
+            PORT: '8080',
+          },
+        })
+      )
+    );
+    expect(await loadLocalEnv(cwd, { API_KEY: 'shell-key' }, appRoot, { isolated: true })).toEqual({
+      API_KEY: 'shell-key',
+      NPM_TOKEN: 'remote-token',
+      DATABASE_URL: 'postgres://remote',
+      MONGODB_URI: 'mongodb://remote',
+    });
+  });
+
+  it.each([false, true])(
+    'keeps the dev env policy separate from isolated rehearsals (isolated: %s)',
+    async (isolated) => {
+      await connect();
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            env: {
+              NODE_ENV: 'production',
+              SITE_URL: 'https://app.cloud',
+              ROOT_URL: 'https://app.cloud',
+              PORT: '8080',
+              MODELENCE_SERVICE_TOKEN: 'remote-token',
+            },
+          })
+        )
+      );
+
+      expect(await loadLocalEnv(cwd, {}, cwd, { isolated })).toEqual(
+        isolated
+          ? {
+              NODE_ENV: 'production',
+              SITE_URL: 'https://app.cloud',
+              ROOT_URL: 'https://app.cloud',
+            }
+          : {}
+      );
+    }
+  );
+
   it("leaves out names a monorepo service defines in its own root's env files", async () => {
     await connect();
     const appRoot = join(cwd, 'apps', 'web');

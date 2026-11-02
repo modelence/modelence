@@ -2,10 +2,16 @@ import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import { existsSync, promises as fs } from 'fs';
 import { connect as netConnect, createServer } from 'net';
 import { tmpdir } from 'os';
-import { dirname, join } from 'path';
-import { APP_SPEC_FILE_NAME, type AppResource, type AppSpec } from './appSpec';
+import { delimiter, dirname, join, normalize } from 'path';
+import {
+  APP_SPEC_FILE_NAME,
+  isManagedResource,
+  type ServiceResource,
+  type AppSpec,
+} from './appSpec';
 import { resolveDeployKind } from './deployKind';
 import { prepareSpec } from './deploySpec';
+import { loadLocalEnv, type ProcessEnv } from './localEnv';
 import { listSourceFiles } from './source';
 
 /*
@@ -50,13 +56,15 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     );
   }
   const spec = await prepareSpec(cwd);
-  const resources = Object.values(spec.resources ?? {});
-  if (resources.length !== 1) {
+  const services = Object.values(spec.resources ?? {}).filter(
+    (resource): resource is ServiceResource => !isManagedResource(resource)
+  );
+  if (services.length !== 1) {
     throw new Error(
-      `${APP_SPEC_FILE_NAME} must describe exactly one resource (found ${resources.length}).`
+      `${APP_SPEC_FILE_NAME} must describe exactly one service (found ${services.length}).`
     );
   }
-  const resource = resources[0];
+  const resource = services[0];
 
   /*
     Build commands and the runtime run in process groups of their own, so a
@@ -81,6 +89,8 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
 
   let tempDir: string | undefined;
   try {
+    // SIGKILL cannot run finally, so killing verify itself can leave this
+    // copy in the OS temp directory.
     tempDir = await fs.mkdtemp(join(tmpdir(), 'modelence-verify-'));
     const workDir = join(tempDir, 'app');
     await copySource(cwd, workDir);
@@ -91,7 +101,11 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
         `"root" is "${root}", but none of the uploaded files are in it, so the cloud build would have nothing to run in.`
       );
     }
-    return await rehearse(resource, spec.env ?? {}, appRoot, timeoutSeconds, options, run);
+    if (run.interrupted) {
+      return fail('Interrupted.');
+    }
+    const env = await loadLocalEnv(cwd, process.env, join(cwd, root), { isolated: true });
+    return await rehearse(resource, spec.env ?? {}, env, appRoot, timeoutSeconds, options, run);
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
@@ -107,16 +121,17 @@ interface Run {
 }
 
 async function rehearse(
-  resource: AppResource,
+  resource: ServiceResource,
   envDeclarations: NonNullable<AppSpec['env']>,
+  env: ProcessEnv,
   appRoot: string,
   timeoutSeconds: number,
   options: VerifyOptions,
   run: Run
 ): Promise<boolean> {
-  const baseEnv = localEnv(process.env);
+  const baseEnv = localEnv(env);
 
-  const buildEnv = { ...baseEnv, ...committedValues(envDeclarations, 'build') };
+  const buildEnv = sanitizePath({ ...baseEnv, ...declaredValues(envDeclarations, 'build', env) });
   for (const command of resource.build?.commands ?? ['npm install']) {
     console.log(`\n$ ${command}`);
     // Checked right before every spawn: a signal between phases has no child
@@ -150,10 +165,10 @@ async function rehearse(
   }
   const app = spawn(command, args, {
     cwd: appRoot,
-    env: {
+    env: sanitizePath({
       ...baseEnv,
-      ...localDatabase(process.env),
-      ...committedValues(envDeclarations, 'runtime'),
+      ...localDatabase(env),
+      ...declaredValues(envDeclarations, 'runtime', env),
       PORT: String(port),
       MODELENCE_APP_PORT: String(appPort),
       // Longer than ours, so verify's own message explains a timeout.
@@ -165,7 +180,7 @@ async function rehearse(
       }),
       SITE_URL: `http://localhost:${port}`,
       ROOT_URL: `http://localhost:${port}`,
-    },
+    }),
     // No stdin, as in the cloud: a process group in the background that
     // reads the terminal would be stopped and never finish.
     stdio: ['ignore', 'inherit', 'inherit'],
@@ -221,16 +236,23 @@ async function rehearse(
   }
 }
 
-// Values committed in the file for one phase; a declaration without scopes
-// reaches the runtime only. Dashboard values are not available here.
-function committedValues(
+// Declared values for one phase: committed literals win over the shell or
+// connected environment. Managed-resource outputs reach the runtime only.
+function declaredValues(
   declarations: NonNullable<AppSpec['env']>,
-  scope: 'build' | 'runtime'
+  scope: 'build' | 'runtime',
+  env: ProcessEnv
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const [name, declaration] of Object.entries(declarations)) {
-    if (declaration?.value !== undefined && (declaration.scopes ?? ['runtime']).includes(scope)) {
-      values[name] = declaration.value;
+    if (!declaration || name === 'PORT' || name.startsWith('MODELENCE_')) {
+      continue;
+    }
+    const scopes =
+      declaration.type === 'resource' ? ['runtime'] : (declaration.scopes ?? ['runtime']);
+    const value = declaration.type === 'resource' ? env[name] : (declaration.value ?? env[name]);
+    if (value !== undefined && scopes.includes(scope)) {
+      values[name] = value;
     }
   }
   return values;
@@ -281,6 +303,21 @@ function localEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(
     PASSTHROUGH_ENV.filter((name) => env[name]).map((name) => [name, env[name]])
   );
+}
+
+function sanitizePath(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  // npm scripts and npx add the original project's tools to PATH. They must
+  // not mask missing dependencies in the isolated copy, including when PATH
+  // is declared in the spec. Clean it after all phase values are merged.
+  if (env.PATH === undefined) {
+    return env;
+  }
+  return {
+    ...env,
+    PATH: env.PATH.split(delimiter)
+      .filter((entry) => !/(^|\/)node_modules\/\.bin\/?$/.test(normalize(entry)))
+      .join(delimiter),
+  };
 }
 
 // The cloud provisions a database; a local one from the shell stands in for it.

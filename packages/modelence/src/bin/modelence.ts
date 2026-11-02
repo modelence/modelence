@@ -90,7 +90,11 @@ program
   .description(
     'Rehearse a deploy locally: build the files deploy uploads and start them through the Modelence runtime'
   )
-  .option('--timeout <seconds>', 'How long the app gets to open PORT', '120')
+  .option(
+    '--timeout <seconds>',
+    'How long the runtime and app get to answer on PORT, including the first npx download',
+    '120'
+  )
   .action(async (options) => {
     try {
       process.exit((await verify(options)) ? 0 : 1);
