@@ -102,7 +102,13 @@ export const emailVerificationTokensCollection = new Store('_modelenceEmailVerif
   schema: {
     userId: schema.objectId(),
     email: schema.string().optional(),
+    // Stored as `hashToken(rawToken)` when `hashed` is set. Older docs hold the
+    // raw token.
     token: schema.string(),
+    hashed: schema.boolean().optional(),
+    // Set when the token verifies the address. The doc is kept until it expires
+    // so a link opened again (e.g. after a mail scanner) still reports success.
+    usedAt: schema.date().optional(),
     createdAt: schema.date(),
     expiresAt: schema.date(),
   },
