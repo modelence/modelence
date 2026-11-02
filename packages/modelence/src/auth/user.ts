@@ -16,7 +16,11 @@ import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
-import { handleVerifyEmail, handleResendEmailVerification } from './verification';
+import {
+  handleVerifyEmail,
+  handleVerifyEmailMutation,
+  handleResendEmailVerification,
+} from './verification';
 import {
   handleResetPassword,
   handleResetPasswordLanding,
@@ -44,6 +48,10 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'signin', type: 'ip', window: time.days(1), limit: 500 },
     { bucket: 'verification', type: 'user', window: time.seconds(60), limit: 1 },
     { bucket: 'verification', type: 'user', window: time.days(1), limit: 10 },
+    // Per-user limits only apply to registered, unverified addresses, so they
+    // don't stop one client cycling through many addresses.
+    { bucket: 'verification', type: 'ip', window: time.minutes(15), limit: 10 },
+    { bucket: 'verification', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'passwordReset', type: 'ip', window: time.minutes(15), limit: 10 },
     { bucket: 'passwordReset', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'passwordReset', type: 'email', window: time.hours(1), limit: 5 },
@@ -168,6 +176,7 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
+    verifyEmail: handleVerifyEmailMutation,
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,

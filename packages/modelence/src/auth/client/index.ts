@@ -155,7 +155,7 @@ export async function updateProfile(options: {
  */
 export async function verifyEmail(options: { token: string }) {
   const { token } = options;
-  await callMethod<{ user: RawUserData }>('_system.user.verifyEmail', { token });
+  await callMethod<void>('_system.user.verifyEmail', { token });
 }
 
 /**

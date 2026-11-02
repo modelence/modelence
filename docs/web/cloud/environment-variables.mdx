@@ -1,0 +1,62 @@
+---
+title: 'Environment Variables'
+description: 'Variables Modelence Cloud provides to every app, and how to declare your own'
+icon: 'key'
+---
+
+An app on Modelence Cloud reads its settings and secrets from environment variables. Some are
+provided by the platform in every environment, and the rest are declared in the `env` section of
+[`modelence.config.json`](/deploy/setup#modelence-config-json-reference) and set per environment.
+
+## Provided variables
+
+| Variable | Value |
+| --- | --- |
+| `PORT` | The port the web process must listen on. |
+| `SITE_URL`, `ROOT_URL` | The environment's public URL. Both hold the same value. |
+| `MONGODB_URI`, `MONGO_URL` | The connection string of the environment's MongoDB database. Both hold the same value. |
+
+Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be declared by the app.
+
+## Declaring variables
+
+Each variable the app expects is declared by name in `env`:
+
+```json modelence.config.json
+{
+  "env": {
+    "API_BASE_PATH": { "value": "/api" },
+    "STRIPE_SECRET_KEY": { "type": "secret" },
+    "SLACK_WEBHOOK_URL": { "type": "secret", "required": false },
+    "DATABASE_URL": { "type": "resource", "resource": "main-db", "output": "url" }
+  }
+}
+```
+
+- **`text`** (the default) is a plain setting. A `value` in the file is the committed default, and a
+  value set for an environment overrides it.
+- **`secret`** is for keys, tokens and passwords. It never carries a `value` in the file, and its
+  value is write-only once set.
+- **`resource`** takes its value from a managed database or cache declared in the same file. It
+  can't be set by hand. See [Databases](/cloud/databases).
+
+A deploy asks for every required variable that has no value in the target environment, and a CI
+deploy fails without one. Mark a variable the app can run without `"required": false`.
+
+## Build and runtime
+
+A variable reaches the running app by default. Anything the build needs as well, such as a `VITE_*`
+or `NEXT_PUBLIC_*` value a bundler inlines into the frontend, also needs `"scopes": ["build",
+"runtime"]`. A value scoped to `["build"]` alone, such as a private registry token, never reaches the
+running app. A bundler puts inlined values into code that every visitor downloads, so a secret must
+never be inlined.
+
+Resource variables reach the running app only.
+
+## When changes take effect
+
+Containers read their variables when they start, so a changed value reaches the running app on the
+next restart or deploy. A build variable takes effect on the next deploy.
+
+In a [local environment](/setup), the environment's values reach the app when it starts on your
+machine, so they never need to be copied into the project.

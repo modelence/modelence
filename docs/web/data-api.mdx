@@ -23,7 +23,9 @@ An open-source API to read, write, and aggregate data in MongoDB. The applicatio
 ### 1. Create a new application
 
 ```bash
-npx create-modelence-app@latest data-api --template data-api
+npx degit modelence/examples/data-api data-api
+cd data-api
+npm install
 ```
 
 ### 2. Connect to Modelence Cloud
@@ -36,7 +38,7 @@ npx create-modelence-app@latest data-api --template data-api
 ### 3. Start the Development Server
 
 ```bash
-npm run dev
+npx modelence@latest dev
 ```
 
 Your Data API will be available at `http://localhost:3000`
@@ -52,6 +54,8 @@ To deploy your Data API to cloud:
 ```bash
 npx modelence@latest deploy --app <app-name> --env <env-name>
 ```
+
+The browser opens with that environment preselected; confirm it there to start the deploy.
 
 3. **Deploy**: Run the deployment command in your project directory. The deployment process will:
    - Build your application

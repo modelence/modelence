@@ -90,6 +90,7 @@ describe('auth/signup', () => {
     onAfterSignup: ReturnType<typeof vi.fn>;
     onSignupError: ReturnType<typeof vi.fn>;
     onBeforeSignup?: ReturnType<typeof vi.fn>;
+    validateSignup?: ReturnType<typeof vi.fn>;
     validatePassword?: ReturnType<typeof vi.fn>;
     allowDisposableEmails?: boolean;
     signup: { onSuccess: ReturnType<typeof vi.fn>; onError: ReturnType<typeof vi.fn> };
@@ -108,6 +109,7 @@ describe('auth/signup', () => {
     vi.clearAllMocks();
     authConfig.allowDisposableEmails = false;
     authConfig.onBeforeSignup = vi.fn();
+    authConfig.validateSignup = vi.fn();
     authConfig.validatePassword = vi.fn();
     mockGetAuthConfig.mockReturnValue(authConfig as never);
     mockValidateEmail.mockImplementation((v: unknown) => v);
@@ -119,7 +121,8 @@ describe('auth/signup', () => {
     );
     mockConsumeRateLimit.mockResolvedValue(undefined as never);
     mockSendVerificationEmail.mockResolvedValue(undefined as never);
-    mockFindOne.mockResolvedValue(null as never);
+    // Reset drops queued once-values a test left unconsumed.
+    mockFindOne.mockReset().mockResolvedValue(null as never);
     mockHash.mockResolvedValue('hash' as never);
     mockIsDisposableEmail.mockResolvedValue(false as never);
     mockInsertOne.mockResolvedValue({ insertedId: createObjectId('generated') } as never);
@@ -191,7 +194,6 @@ describe('auth/signup', () => {
     authConfig.validatePassword = vi.fn(() => {
       throw new Error('Password must be at least 12 characters');
     });
-    mockFindOne.mockResolvedValueOnce(null as never);
 
     await expect(
       handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
@@ -484,6 +486,91 @@ describe('auth/signup', () => {
     ).rejects.toThrow('Unable to create account');
 
     expect(authConfig.onBeforeSignup).not.toHaveBeenCalled();
+  });
+
+  describe('does not reveal whether the email is registered', () => {
+    const existingUser = {
+      _id: createObjectId('existing'),
+      handle: 'existinguser',
+      createdAt: new Date(),
+      authMethods: {},
+      status: 'active',
+      emails: [{ address: 'test@example.com', verified: true }],
+    };
+
+    test('reports a taken handle the same way for new and registered emails', async () => {
+      mockResolveUniqueHandle.mockRejectedValue(new Error('Handle already taken.') as never);
+      const props = { email: 'test@example.com', password: 'Secret123', handle: 'taken' };
+
+      mockFindOne.mockResolvedValue(null as never);
+      await expect(handleSignupWithPassword(props, baseContext)).rejects.toThrow(
+        'Handle already taken.'
+      );
+
+      mockFindOne.mockResolvedValue(existingUser as never);
+      await expect(handleSignupWithPassword(props, baseContext)).rejects.toThrow(
+        'Handle already taken.'
+      );
+      expect(mockFindOne).not.toHaveBeenCalled();
+    });
+
+    test('runs profile field validation before the duplicate-email check', async () => {
+      mockFindOne.mockResolvedValue(existingUser as never);
+      mockValidateProfileFields.mockImplementation(() => {
+        throw new Error('Invalid first name');
+      });
+
+      await expect(
+        handleSignupWithPassword(
+          { email: 'test@example.com', password: 'Secret123', firstName: '!' },
+          baseContext
+        )
+      ).rejects.toThrow('Invalid first name');
+      expect(mockFindOne).not.toHaveBeenCalled();
+    });
+
+    test('runs validateSignup before the duplicate-email check', async () => {
+      mockFindOne.mockResolvedValue(existingUser as never);
+      authConfig.validateSignup = vi.fn(() => {
+        throw new Error('Invite code required');
+      });
+
+      await expect(
+        handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+      ).rejects.toThrow('Invite code required');
+      expect(mockFindOne).not.toHaveBeenCalled();
+    });
+
+    test('runs validatePassword before the duplicate-email check', async () => {
+      mockFindOne.mockResolvedValue(existingUser as never);
+      authConfig.validatePassword = vi.fn(() => {
+        throw new Error('Password too weak');
+      });
+
+      await expect(
+        handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+      ).rejects.toThrow('Password too weak');
+      expect(mockFindOne).not.toHaveBeenCalled();
+    });
+  });
+
+  test('invokes onBeforeSignup after validateSignup', async () => {
+    mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+      _id: createObjectId('generated'),
+      handle: 'test',
+      createdAt: new Date(),
+      authMethods: {},
+      emails: [{ address: 'test@example.com', verified: false }],
+    } as never);
+
+    await handleSignupWithPassword(
+      { email: 'test@example.com', password: 'Secret123' },
+      baseContext
+    );
+
+    const validateOrder = authConfig.validateSignup!.mock.invocationCallOrder[0];
+    const beforeOrder = authConfig.onBeforeSignup!.mock.invocationCallOrder[0];
+    expect(validateOrder).toBeLessThan(beforeOrder);
   });
 
   test('skips built-in disposable check when allowDisposableEmails is true', async () => {

@@ -28,7 +28,9 @@ export async function studioRequest<T>(
     query?: Record<string, string | number>;
   } = {}
 ): Promise<T> {
-  const url = new URL(path, host);
+  // Appended rather than resolved: new URL('/api/…', host) would drop the path
+  // of a Studio served under a prefix (see normalizeHost).
+  const url = new URL(`${host}${path}`);
   for (const [key, value] of Object.entries(query ?? {})) {
     url.searchParams.set(key, String(value));
   }

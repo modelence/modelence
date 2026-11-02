@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -19,14 +19,18 @@ const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 
 const program = new Command()
-  .name('modelence')
+  // Shown in --help as the command to run; always point users at the latest CLI.
+  .name('npx modelence@latest')
   .description('Modelence CLI tool')
-  .version(packageJson.version);
+  .version(packageJson.version)
+  // Lets `dev` pass flags like `--port` through to the script untouched.
+  .enablePositionalOptions();
 
 program
   .command('setup')
   .description('Setup Modelence environment variables')
   .option('-t, --token <token>', 'Modelence setup token (omit to authorize in the browser)')
+  .option('--new', 'Connect to a new environment, created in the browser')
   .option('-h, --host <host>', 'Modelence host', 'https://cloud.modelence.com')
   .action(async (options) => {
     await setup(options);
@@ -43,19 +47,21 @@ program
 program
   .command('deploy')
   .description(
-    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser on first run)'
+    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser; in CI from --app/--env or the saved target)'
   )
-  .option('-a, --app <app>', 'Application alias')
-  .option('-e, --env <env>', 'Environment alias')
+  .option('-a, --app <app>', 'Application alias (preselected in the browser; the target in CI)')
+  .option('-e, --env <env>', 'Environment alias (preselected in the browser; the target in CI)')
   .option('-h, --host <host>', 'Modelence host')
   .option(
     '--prebuilt',
     'Build locally and upload the .modelence/build bundle (Modelence apps only)'
   )
   .option(
-    '-y, --yes',
-    'Deploy to the given --app/--env without asking, even if it is not the saved target'
+    '--skip-env-check',
+    'In CI, deploy even when variables modelence.config.json requires have no value'
   )
+  // Nothing asks for confirmation any more; still accepted so scripts keep working.
+  .addOption(new Option('-y, --yes').hideHelp())
   .action(async (options) => {
     try {
       await deploy(options);
@@ -104,14 +110,18 @@ program
 
 program
   .command('dev')
-  .description('Start development server')
+  .description(
+    "Run the project's dev command (from modelence.config.json, else the package.json dev script) with the connected environment's variables"
+  )
+  .argument('[args...]', 'Arguments passed on to the dev command')
   .option(
     '--takeover',
     'Disconnect any instance currently holding the environment and connect this one'
   )
-  .action(async (options) => {
-    await loadEnv();
-    dev(options);
+  .allowUnknownOption()
+  .passThroughOptions()
+  .action(async (args: string[], options) => {
+    await dev(options, args);
   });
 
 program

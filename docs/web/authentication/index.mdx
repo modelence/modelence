@@ -55,14 +55,15 @@ Sessions are stored in the `_modelenceSessions` collection and tracked with the 
 
 When a user signs up with email and password:
 
-1. **Validation** - Email format and password strength are validated
-2. **Duplicate Check** - System checks if email already exists
-3. **Validate Signup** (Optional) - If provided, validates signup using `validateSignup` hook
-4. **Validate Password** (Optional) - If provided, the `validatePassword` hook enforces your password policy. This hook also runs on password reset, so a policy set here can't be bypassed by resetting to a weaker password.
-5. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
-6. **User Creation** - User record is created in the `_modelenceUsers` collection
-7. **Session Linking** - The session is linked to the new user
-8. **Email Verification** (Optional) - If enabled, a verification email is sent
+1. **Validation** - Email format, password strength, and profile fields are validated
+2. **Validate Signup** (Optional) - If provided, validates signup using `validateSignup` hook
+3. **Validate Password** (Optional) - If provided, the `validatePassword` hook enforces your password policy. This hook also runs on password reset, so a policy set here can't be bypassed by resetting to a weaker password.
+4. **Handle Check** - A requested handle that is already taken is rejected
+5. **Duplicate Check** - System checks if email already exists. This runs after every validation step, so a request that fails validation gets the same error whether or not the email is registered
+6. **Password Hashing** - Password is securely hashed using bcrypt (never stored in plain text)
+7. **User Creation** - User record is created in the `_modelenceUsers` collection
+8. **Session Linking** - The session is linked to the new user
+9. **Email Verification** (Optional) - If enabled, a verification email is sent
 
 #### Login Process
 

@@ -2,7 +2,7 @@
 
 import { time } from '../time';
 import { CronJob, CronJobInputParams } from './types';
-import { startTransaction, captureError } from '@/telemetry';
+import { startTransaction, captureError, logError } from '@/telemetry';
 import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
@@ -128,7 +128,8 @@ async function tickCronJobs() {
 async function runCronJob(job: CronJob) {
   const { alias, params, handler, state } = job;
   state.isRunning = true;
-  state.startTs = Date.now();
+  const currentStartTs = Date.now();
+  state.startTs = currentStartTs;
 
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
@@ -136,24 +137,32 @@ async function runCronJob(job: CronJob) {
     await cronJobsCollection.upsertOne(
       { alias },
       {
-        $set: { lastStartDate: new Date(state.startTs) },
+        $set: { lastStartDate: new Date(currentStartTs) },
         $setOnInsert: { alias },
       }
     );
     await handler();
-    handleCronJobCompletion(state, params);
+    handleCronJobCompletion(state, params, currentStartTs);
     transaction.end('success');
   } catch (err) {
-    handleCronJobCompletion(state, params);
+    handleCronJobCompletion(state, params, currentStartTs);
     const error = err instanceof Error ? err : new Error(String(err));
     captureError(error);
     transaction.end('error');
-    console.error(`Error in cron job '${alias}':`, err);
+    logError('Error in cron job:', { error: err, alias });
   }
 }
 
-function handleCronJobCompletion(state: CronJob['state'], params: CronJob['params']) {
-  state.scheduledRunTs = state.startTs ? state.startTs + params.interval : Date.now();
+function handleCronJobCompletion(
+  state: CronJob['state'],
+  params: CronJob['params'],
+  currentStartTs: number
+) {
+  // A timed-out run may finish after a newer run has taken over.
+  if (state.startTs !== currentStartTs) {
+    return;
+  }
+  state.scheduledRunTs = currentStartTs + params.interval;
   state.startTs = undefined;
   state.isRunning = false;
 }

@@ -11,6 +11,7 @@
     "../../packages/resend",
     "../../packages/aws-ses"
   ],
+  "packageOptions": { "gitRevision": "main" },
   "out": "../web/api-reference",
   "plugin": ["typedoc-plugin-markdown", "typedoc-plugin-frontmatter", "./scripts/custom-frontmatter.mjs"],
   "excludePrivate": true,

@@ -1,0 +1,45 @@
+---
+title: 'Backups'
+description: 'Database backups and restore'
+icon: 'database'
+---
+
+Production databases on Modelence Cloud are backed up automatically on every plan. There is nothing
+to turn on or configure.
+
+## What's backed up
+
+- **Schedule:** a snapshot of the database is taken at least every six hours.
+- **Retention:** snapshots are kept on a rolling schedule. Recent snapshots are kept close together
+  and older ones are thinned out over time, and the oldest are gone within 12 months.
+- **Encryption:** snapshots are encrypted at rest, like the database itself.
+
+Restores come from these snapshots, so a database can be brought back to the time of any kept
+snapshot, not to an arbitrary moment between two of them.
+
+<Warning>
+Deleting a database resource permanently deletes its data and its backups.
+</Warning>
+
+## Restoring from a backup
+
+Restores are done by the Modelence support team. Email
+[support@modelence.com](mailto:support@modelence.com) with:
+
+- the app and environment (the app ID is enough),
+- the database, if the environment has more than one,
+- roughly what point in time you want to go back to.
+
+We find the closest snapshot, tell you its time, and confirm with you before anything changes in the
+environment. You can also ask this way for the time of the most recent snapshot.
+
+## Exporting data
+
+Each database's connection string reaches the app at runtime as an environment variable. To export a
+database, connect with that string and use the database's standard dump tool, and load a dump back
+with its matching restore tool.
+
+<Note>
+The connection string contains the database password. Keep it out of your repository and anywhere
+else it could be read.
+</Note>

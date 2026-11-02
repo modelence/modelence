@@ -7,11 +7,8 @@ const program = new Command()
   .name('create-modelence-app')
   .description('Create a new Modelence application')
   .argument('<project-name>', 'Name of the project')
-  .option('-t, --template <template-name>', 'Template to use (from examples repository)')
-  .action(async (projectName, options) => {
-    await createApp(projectName, {
-      template: options.template
-    });
+  .action(async (projectName) => {
+    await createApp(projectName);
   });
 
 program.parse(process.argv); 

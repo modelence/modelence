@@ -2,12 +2,19 @@ import { ObjectId } from 'mongodb';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockConsumeOAuthExchangeCode = vi.fn();
-const mockSetSessionUser = vi.fn();
+const FRESH_AUTH_TOKEN = 'fresh-auth-token';
+const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, userId: unknown) => ({
+  authToken: FRESH_AUTH_TOKEN,
+  userId,
+  expiresAt: new Date(),
+}));
 const mockFindOne = vi.fn();
+const mockSetAuthTokenCookie = vi.fn();
 
 vi.doMock('./session', () => ({
   consumeOAuthExchangeCode: mockConsumeOAuthExchangeCode,
-  setSessionUser: mockSetSessionUser,
+  startUserSession: mockStartUserSession,
+  setAuthTokenCookie: mockSetAuthTokenCookie,
 }));
 vi.doMock('./db', () => ({ usersCollection: { findOne: mockFindOne } }));
 vi.doMock('@/server', () => ({ consumeRateLimit: vi.fn() }));
@@ -54,13 +61,13 @@ describe('loginWithOAuth — redemption invariants', () => {
   test('R3: a rejected code never sets a session', async () => {
     mockConsumeOAuthExchangeCode.mockResolvedValue(null);
     await expect(handleLoginWithOAuth({ code: 'c', codeVerifier: 'v' }, ctx())).rejects.toThrow();
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
   });
 
   test('R4: a disabled account cannot redeem', async () => {
     mockFindOne.mockResolvedValue(null);
     await expect(handleLoginWithOAuth({ code: 'c', codeVerifier: 'v' }, ctx())).rejects.toThrow();
-    expect(mockSetSessionUser).not.toHaveBeenCalled();
+    expect(mockStartUserSession).not.toHaveBeenCalled();
   });
 
   test('R5: unknown/expired/mismatched are indistinguishable to the caller', async () => {

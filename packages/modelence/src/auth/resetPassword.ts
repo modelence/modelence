@@ -14,7 +14,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { hashToken } from './tokenHash';
-import { resolveUrl } from './utils';
+import { setQueryParams, resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
 // the `resetPassword` mutation, so it never appears on a client-rendered URL.
@@ -195,7 +195,7 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
     return {
       status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${resetPasswordUrl}?status=error&message=${encodeURIComponent(message)}`,
+      redirect: setQueryParams(resetPasswordUrl, { status: 'error', message }),
     };
   }
 }
@@ -271,6 +271,13 @@ export async function handleResetPassword(args: Args, context: Context) {
     clearCookie();
     throw new Error('Invalid or expired reset token');
   }
+
+  // Revoke the user's other outstanding reset links too, right after claiming this
+  // one so that a failure in a later step cannot leave them valid. Each request
+  // issues a new token without revoking earlier ones, so a link sent before this
+  // reset (valid for up to 1 hour) would otherwise let whoever holds it set a new
+  // password again — undoing the lockout below.
+  await resetPasswordTokensCollection.deleteMany({ userId: userDoc._id });
 
   // Update user's password
   await usersCollection.updateOne(

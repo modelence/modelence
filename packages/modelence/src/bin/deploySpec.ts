@@ -3,6 +3,7 @@ import {
   APP_SPEC_FILE_NAME,
   SETUP_DOCS_URL,
   formatAppSpec,
+  isManagedResource,
   readAppSpecFile,
   type AppSpec,
   type StaticMount,
@@ -28,7 +29,7 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
   }
   assertKnownKeys(spec);
   for (const resource of Object.values(spec.resources ?? {})) {
-    if (resource?.root !== undefined) {
+    if (resource && !isManagedResource(resource) && resource.root !== undefined) {
       await resolveAppRoot(cwd, resource.root);
     }
   }
@@ -75,13 +76,13 @@ function assertKnownKeys(spec: AppSpec): void {
     if (!isPlainObject(resource)) {
       throw new Error(`${APP_SPEC_FILE_NAME}: "resources.${name}" must be an object.`);
     }
-    for (const section of ['build', 'start'] as const) {
+    for (const section of ['build', 'start', 'dev'] as const) {
       assertCommandList(resource[section], `resources.${name}.${section}`);
     }
   }
 }
 
-function assertCommandList(list: unknown, path: string): void {
+export function assertCommandList(list: unknown, path: string): void {
   if (list === undefined) {
     return;
   }

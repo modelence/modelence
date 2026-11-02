@@ -380,6 +380,51 @@ describe('app/index', () => {
     });
   });
 
+  test('does not set a websocket provider when websockets are disabled', async () => {
+    await startApp({ websocket: { enabled: false } });
+
+    expect(mockSetWebsocketConfig).toHaveBeenCalledWith({
+      enabled: false,
+      provider: undefined,
+    });
+  });
+
+  test('ignores a custom websocket provider when websockets are disabled', async () => {
+    const customProvider: WebsocketServerProvider = {
+      init: vi.fn(async () => {}),
+      broadcast: vi.fn(),
+    };
+    await startApp({ websocket: { enabled: false, provider: customProvider } });
+
+    expect(mockSetWebsocketConfig).toHaveBeenCalledWith({
+      enabled: false,
+      provider: undefined,
+    });
+  });
+
+  test('warns when channels are defined but websockets are disabled', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await startApp({
+      websocket: { enabled: false },
+      modules: [createTestModule({ name: 'module1', channels: [new ServerChannel('chat')] })],
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('chat'));
+    warnSpy.mockRestore();
+  });
+
+  test('does not warn about channels when websockets are enabled', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await startApp({
+      modules: [createTestModule({ name: 'module1', channels: [new ServerChannel('chat')] })],
+    });
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('websocket.enabled'));
+    warnSpy.mockRestore();
+  });
+
   test('connects to database when mongodb uri is provided', async () => {
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
     const mockClient = { db: vi.fn() };

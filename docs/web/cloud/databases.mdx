@@ -1,0 +1,64 @@
+---
+title: 'Databases'
+description: 'Databases and caches available to every environment'
+icon: 'server'
+---
+
+Every environment comes with a MongoDB database, and an app can declare managed PostgreSQL databases
+and Redis caches next to its service. All of them are created in the environment's
+[region](/cloud/regions), reach the app through [environment variables](/cloud/environment-variables),
+and are [backed up](/cloud/backups) in production.
+
+## MongoDB
+
+Each environment gets its own MongoDB database with nothing to declare. Its connection string is in
+`MONGODB_URI` and `MONGO_URL`. Apps built on the Modelence framework use it without any setup.
+
+## PostgreSQL and Redis
+
+Managed databases and caches are declared in the `resources` section of
+[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and the app reads each one
+through a variable tied to one of its outputs:
+
+```json modelence.config.json
+{
+  "resources": {
+    "api": {
+      "type": "service",
+      "build": { "commands": ["npm ci"] },
+      "start": { "commands": ["node server.js"] }
+    },
+    "main-db": { "type": "postgres", "plan": "postgres-1gb" },
+    "cache": { "type": "redis" }
+  },
+  "env": {
+    "DATABASE_URL": { "type": "resource", "resource": "main-db", "output": "url" },
+    "REDIS_URL": { "type": "resource", "resource": "cache", "output": "url" }
+  }
+}
+```
+
+The `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
+`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
+separately. The [reference](/deploy/setup#modelence-config-json-reference) lists every plan and
+output.
+
+Managed resources need a paid plan.
+
+## Lifecycle
+
+A deploy creates every managed resource the file declares that the environment doesn't have yet, and
+the new version starts only once they are ready. Resources are matched by name, so the same file
+works in every environment:
+
+- A resource that already exists is kept as it is, with its data. `plan` is read only when the
+  resource is created, so changing it later has no effect.
+- A resource removed from the file is not deleted, and it is billed until it is.
+- Renaming a resource creates a new, empty one, and the old one stays until it is deleted.
+
+Deleting a managed resource permanently deletes its data and its backups.
+
+## Databases hosted elsewhere
+
+An app can also use a database hosted somewhere else, such as Supabase, Neon or PlanetScale. Keep its
+connection code and declare its URL and keys in `env` as secrets.

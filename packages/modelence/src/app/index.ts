@@ -42,6 +42,7 @@ import { AuthConfig, setAuthConfig } from './authConfig';
 import { SecurityConfig, setSecurityConfig } from './securityConfig';
 import { WebsocketConfig, setWebsocketConfig } from './websocketConfig';
 import { buildAuthRateLimits } from '../auth/user';
+import { logError } from '../telemetry';
 
 export type AppOptions = {
   modules?: Module[];
@@ -69,6 +70,7 @@ export type AppOptions = {
   /** @internal */
   defaultRoles?: Record<string, string>;
   migrations?: Array<MigrationScript>;
+  /** WebSocket settings, used by live queries and channels. See {@link WebsocketConfig}. */
   websocket?: WebsocketConfig;
   /** Enable server-side rendering of the user's React tree. */
   ssr?: boolean;
@@ -177,10 +179,18 @@ export async function startApp({
   }
   setAuthConfig(auth);
   setSecurityConfig(security);
+  const websocketsEnabled = websocket.enabled !== false;
   setWebsocketConfig({
     ...websocket,
-    provider: websocket.provider || socketioServer,
+    provider: websocketsEnabled ? websocket.provider || socketioServer : undefined,
   });
+  if (!websocketsEnabled && channels.length > 0) {
+    const channelNames = channels.map((channel) => channel.category).join(', ');
+    console.warn(
+      `Channels are defined (${channelNames}) but websocket.enabled is false, ` +
+        'so their broadcasts will not be delivered.'
+    );
+  }
 
   const mongodbUri = getMongodbUri();
   if (mongodbUri) {
@@ -197,7 +207,9 @@ export async function startApp({
     startConfigSync();
   }
 
-  startCronJobs().catch(console.error);
+  startCronJobs().catch((error) => {
+    logError('Error starting cron jobs:', { error });
+  });
 
   await startServer(server, { combinedModules, channels });
 }
@@ -284,11 +296,11 @@ async function createIndexesAndMigrationsWithLock(
   void Promise.allSettled([backgroundIndexCreationPromise, migrationPromise])
     .then(([backgroundIndexesResult, migrationResult]) => {
       if (backgroundIndexesResult.status === 'rejected') {
-        console.error('Error creating background indexes:', backgroundIndexesResult.reason);
+        logError('Error creating background indexes:', { error: backgroundIndexesResult.reason });
       }
 
       if (migrationResult.status === 'rejected') {
-        console.error('Error running migrations:', migrationResult.reason);
+        logError('Error running migrations:', { error: migrationResult.reason });
       }
     })
     .finally(async () => {

@@ -1,13 +1,18 @@
 import open from 'open';
+import type { EnvDeclaration } from './appSpec';
+import type { CliTarget } from './deployTarget';
 
 /*
   Browser device authorization: the CLI mints a code, the user approves it in
   the browser, and the CLI polls until approval binds a token to the code.
 
   Two approval modes, chosen by `pick`:
-    'environment' — `modelence setup`: the page also asks which environment to
-                    connect the local project to. The choice is stamped on the
-                    token; /api/setup derives its target from there.
+    'environment' — `modelence setup`: the page also asks which local
+                    environment to connect the project to (an existing one,
+                    or one created there in an existing or new app). The
+                    choice is stamped on the token; /api/setup derives its
+                    target from there.
+                    `createOnly` (`setup --new`) leaves out existing ones.
     'deploy'      — `modelence deploy`: the page asks where to deploy (an
                     existing or newly created app / cloud environment) and the
                     token route reports the pick back so the CLI can record it
@@ -15,10 +20,17 @@ import open from 'open';
   Without `pick` the page only authorizes the device.
 
   `purpose: 'deploy'` asks for a deploy-lifetime token (one hour) without a
-  picker — for a deploy whose target is already known from flags or
-  .modelence/project.json. `pick: 'deploy'` implies it.
+  picker — for signing in again during a deploy whose target is already
+  picked. `pick: 'deploy'` implies it.
 
   `appId` is the hint from .modelence/project.json used to preselect the app.
+  `hint` is the deploy target -a/-e or .modelence/project.json name, which
+  the deploy picker preselects.
+
+  `env` is what modelence.config.json declares. With the deploy picker, the
+  page asks for those variables' values as a separate step after the target,
+  so a new environment has them before its first build. Studio versions
+  without that step ignore the body.
 */
 
 export type CliAuthPick = 'environment' | 'deploy';
@@ -43,16 +55,30 @@ export async function authenticateCli(
     pick,
     purpose,
     pickEnvironment = false,
+    createOnly = false,
     appId,
+    hint,
+    env,
   }: {
     pick?: CliAuthPick;
     purpose?: 'deploy';
     pickEnvironment?: boolean;
+    createOnly?: boolean;
     appId?: string;
+    hint?: CliTarget;
+    env?: Record<string, EnvDeclaration>;
   } = {}
 ): Promise<CliAuthResult> {
+  // Only the picker has a variables step; nothing is sent otherwise.
+  const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
+    ...(declaredEnv
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env: declaredEnv }),
+        }
+      : {}),
   });
 
   if (!response.ok) {
@@ -65,11 +91,17 @@ export async function authenticateCli(
   if (resolvedPick) {
     url.searchParams.set('pick', resolvedPick);
   }
+  if (resolvedPick === 'environment' && createOnly) {
+    url.searchParams.set('new', '1');
+  }
   if (purpose) {
     url.searchParams.set('purpose', purpose);
   }
   if (appId) {
     url.searchParams.set('appId', appId);
+  }
+  for (const [key, value] of Object.entries(hint ?? {})) {
+    url.searchParams.set(key, value);
   }
 
   console.log(`Please visit ${url} to authenticate`);
@@ -86,10 +118,15 @@ export async function authenticateCli(
   return await waitForAuth(host, code);
 }
 
+// The code can no longer be approved: it expired, was used, or never existed.
+class DeadCodeError extends Error {}
+
 async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
-  const pollInterval = 5 * 1000; // 5 seconds
+  // Short, since the browser moves on to the deployment page right away.
+  const pollInterval = 2 * 1000;
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
   const pollExpireTs = Date.now() + pollTimeout;
+  let reportedError = false;
   while (Date.now() < pollExpireTs) {
     try {
       const result = await pollForToken(host, code);
@@ -97,7 +134,15 @@ async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
         return result;
       }
     } catch (error) {
-      console.error('Error polling for CLI token:', error);
+      if (error instanceof DeadCodeError) {
+        throw error;
+      }
+      // Network trouble or a server hiccup: keep polling, and say so once
+      // rather than on every poll.
+      if (!reportedError) {
+        reportedError = true;
+        console.error('Error polling for CLI token (retrying):', error);
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
@@ -111,7 +156,16 @@ async function pollForToken(host: string, code: string): Promise<CliAuthResult |
   });
 
   if (!response.ok) {
-    throw new Error(`CLI token polling failed: ${response.statusText}`);
+    const body = await response.text().catch(() => '');
+    // Studio answers a dead code with a 4xx, or — older versions — a 500
+    // carrying this message; polling longer cannot revive it.
+    const clientError = response.status >= 400 && response.status < 500 && response.status !== 429;
+    if (clientError || body.includes('Invalid or expired code')) {
+      throw new DeadCodeError(
+        'The sign-in code has expired or is no longer valid. Please run the command again.'
+      );
+    }
+    throw new Error(`CLI token polling failed: ${response.status} ${response.statusText}`);
   }
 
   const { token, expiresAt, target } = await response.json();

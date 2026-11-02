@@ -5,6 +5,8 @@ import type { Session } from './deploySession';
 import type { ResolvedSpec } from './deploySpec';
 import { waitForEnvironmentReady } from './deployStatus';
 import { studioRequest } from './studioApi';
+import { describeMissingEnvVars } from './missingEnv';
+import type { SourceRevision } from './revision';
 
 export type UploadKind = 'bundle' | 'source';
 
@@ -20,6 +22,8 @@ export async function runDeploy({
   kind,
   archivePath,
   spec,
+  checkEnv,
+  revision,
 }: {
   session: Session;
   target: CliTarget;
@@ -27,6 +31,10 @@ export async function runDeploy({
   archivePath: string;
   // The project's modelence.config.json; required by Studio for source uploads.
   spec?: AppSpec;
+  // Have Studio refuse the deploy before building while a required declared
+  // variable has no value (CI deploys, which skip the browser picker).
+  checkEnv: boolean;
+  revision: SourceRevision;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
   const requestUpload = () =>
@@ -78,6 +86,9 @@ export async function runDeploy({
     buildId: string | null;
     // The spec Studio resolved the file against its runtime defaults to.
     spec?: ResolvedSpec | null;
+    // Absent on Studio versions before it was reported.
+    missingEnvVars?: string[];
+    configUrl?: string;
   }>(host, '/api/deploy', {
     method: 'POST',
     token,
@@ -86,10 +97,16 @@ export async function runDeploy({
       bundleName: upload.bundleName,
       kind,
       spec,
+      ...(checkEnv ? { checkEnv } : {}),
+      ...revision,
     },
   });
 
   console.log(`Deployment started: ${result.deploymentUrl}`);
+  const missing = describeMissingEnvVars(result.missingEnvVars, result.configUrl);
+  if (missing) {
+    console.warn(`Warning: ${missing}`);
+  }
   return { environmentId: result.environmentId, buildId: result.buildId };
 }
 

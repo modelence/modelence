@@ -4,7 +4,15 @@ import { parse as parseEnv } from 'dotenv';
 import { createInterface } from 'readline';
 import { spawnSync } from 'child_process';
 import { authenticateCli } from './auth';
-import { MODELENCE_DIR, PROJECT_FILE, readProject, updateProject } from './project';
+import { normalizeHost } from './deploySession';
+import {
+  MODELENCE_DIR,
+  PROJECT_FILE,
+  projectForHost,
+  readProject,
+  updateProject,
+  withHostProject,
+} from './project';
 
 const MODELENCE_ENV_FILE = '.modelence.env';
 
@@ -76,9 +84,8 @@ function escapeEnvValue(value: string | number): string {
   on the team — the file is committed) recorded it. Used only to preselect
   the app on the approval page; anything unreadable means "no hint".
 */
-async function readProjectAppId(): Promise<string | undefined> {
-  const { appId } = await readProject();
-  return typeof appId === 'string' && appId ? appId : undefined;
+async function readProjectAppId(host: string): Promise<string | undefined> {
+  return projectForHost(await readProject(), host).appId;
 }
 
 /*
@@ -95,8 +102,8 @@ async function readProjectAppId(): Promise<string | undefined> {
   value. (The deploy target recorded by `modelence deploy` is different: it is
   shared on purpose, like a git remote.)
 */
-async function recordProjectAppId(appId: string): Promise<void> {
-  await updateProject({ appId });
+async function recordProjectAppId(appId: string, host: string): Promise<void> {
+  await updateProject((project) => withHostProject(project, host, { appId }));
 }
 
 const CLAUDE_DIR = '.claude';
@@ -225,8 +232,14 @@ async function backupEnvFile(envPath: string): Promise<void> {
   }
 }
 
-export async function setup(options: { token?: string; host: string }) {
+export async function setup(rawOptions: { token?: string; host: string; new?: boolean }) {
   try {
+    if (rawOptions.new && rawOptions.token) {
+      // A setup token is already bound to an existing environment.
+      throw new Error('--new cannot be combined with --token');
+    }
+    // Also written to .modelence.env, where the app reads it as a URL prefix.
+    const options = { ...rawOptions, host: normalizeHost(rawOptions.host) };
     const envPath = join(process.cwd(), MODELENCE_ENV_FILE);
     let existingEnv = {};
     let fileExisted = false;
@@ -255,10 +268,11 @@ export async function setup(options: { token?: string; host: string }) {
       auth = { setupToken: options.token };
     } else {
       // No token given: authorize in the browser, where the approval page
-      // also asks which environment to connect to.
+      // also asks which environment to connect to, or creates it.
       const { token: cliToken } = await authenticateCli(options.host, {
         pickEnvironment: true,
-        appId: await readProjectAppId(),
+        createOnly: options.new,
+        appId: await readProjectAppId(options.host),
       });
       auth = { cliToken };
     }
@@ -290,7 +304,7 @@ export async function setup(options: { token?: string; host: string }) {
 
     if (config.appId) {
       try {
-        await recordProjectAppId(config.appId);
+        await recordProjectAppId(config.appId, options.host);
         console.log(`Recorded the app ID in ${MODELENCE_DIR}/${PROJECT_FILE}`);
       } catch (error) {
         console.warn(`Failed to record the app ID in ${MODELENCE_DIR}/${PROJECT_FILE}:`, error);
