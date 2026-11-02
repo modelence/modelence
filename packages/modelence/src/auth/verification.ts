@@ -122,13 +122,16 @@ async function verifyEmailToken(token: string) {
       throw new Error('Email address not found for this user');
     }
 
+    // Already verified when read: a concurrent open of this link (e.g. a mail
+    // scanner) verified it after we read the token unused, or another link did
+    // earlier. Either way the address is verified, so report that rather than
+    // an error. The open that verified it fires the hooks; this one doesn't.
     if (existingEmailDoc.verified) {
-      throw new Error('Email is already verified');
+      return { userDoc, email, alreadyVerified: true };
     }
 
     // Unverified when read, yet the update matched nothing: a concurrent open
-    // of the link (e.g. a mail scanner) may have verified it in between. That
-    // open fires the hooks; this one only reports the outcome.
+    // may have verified it in between.
     const currentUserDoc = await findActiveUser(tokenDoc.userId);
     if (currentUserDoc && findEmailDoc(currentUserDoc, email)?.verified) {
       return { userDoc: currentUserDoc, email, alreadyVerified: true };

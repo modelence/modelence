@@ -267,7 +267,15 @@ describe('auth/verification', () => {
       });
     });
 
-    test('reports already-verified only when that specific address is verified', async () => {
+    test('reports verified when the address was already verified before the open', async () => {
+      // A concurrent open (e.g. a mail scanner) verified the address after this
+      // one read the token unused but before it read the user. Same outcome as
+      // a second verification email for an already-verified address.
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
       const tokenDoc = {
         _id: 'token-id',
         token: 'token',
@@ -290,8 +298,15 @@ describe('auth/verification', () => {
       expect(result).toEqual({
         status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
-        redirect: '/verified?status=error&message=Email%20is%20already%20verified',
+        redirect: '/verified?status=verified',
       });
+      // The open that verified the address fires the hook; this one must not.
+      expect(authConfig.onAfterEmailVerification).not.toHaveBeenCalled();
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(mockTokensUpdateOne).toHaveBeenCalledWith(
+        { _id: tokenDoc._id },
+        { $set: { usedAt: expect.any(Date) } }
+      );
     });
 
     test('does not claim already-verified when the address is still unverified', async () => {
