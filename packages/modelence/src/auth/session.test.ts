@@ -51,6 +51,9 @@ const {
   issueOAuthExchangeCode,
   consumeOAuthExchangeCode,
   oauthExchangeCodesCollection,
+  issueLinkNonce,
+  consumeLinkNonce,
+  linkNoncesCollection,
 } = sessionModule;
 const sessionSystemModule = sessionModule.default;
 
@@ -522,6 +525,58 @@ describe('auth/session', () => {
       // findOneAndDelete is the atomic commit point: a concurrent second
       // redemption finds nothing.
       expect(findOneAndDeleteMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('link nonces', () => {
+    const insertMock: Mock = vi.fn();
+    const findOneAndDeleteMock: Mock = vi.fn();
+
+    beforeEach(() => {
+      findOneAndDeleteMock.mockReset();
+      (linkNoncesCollection as unknown as { insertOne: typeof insertMock }).insertOne = insertMock;
+      (
+        linkNoncesCollection as unknown as { findOneAndDelete: typeof findOneAndDeleteMock }
+      ).findOneAndDelete = findOneAndDeleteMock;
+    });
+
+    test('issue stores the nonce hashed and marked, returning the raw value', async () => {
+      const nonce = await issueLinkNonce('user-id');
+
+      expect(nonce).toBe('auth-token');
+      expect(insertMock).toHaveBeenCalledWith({
+        nonce: 'hashed-auth-token',
+        hashed: true,
+        userId: 'user-id',
+        expiresAt: expect.any(Date),
+      });
+    });
+
+    test('consume looks the nonce up by its hash', async () => {
+      findOneAndDeleteMock.mockResolvedValueOnce({ userId: 'user-id' });
+
+      await expect(consumeLinkNonce('auth-token')).resolves.toBe('user-id');
+
+      expect(findOneAndDeleteMock).toHaveBeenCalledTimes(1);
+      expect(findOneAndDeleteMock).toHaveBeenCalledWith({ nonce: 'hashed-auth-token' });
+    });
+
+    test('consume still accepts a nonce issued before hashing, from unmarked docs only', async () => {
+      findOneAndDeleteMock.mockResolvedValueOnce(null).mockResolvedValueOnce({ userId: 'user-id' });
+
+      await expect(consumeLinkNonce('auth-token')).resolves.toBe('user-id');
+
+      // The marker filter keeps a hash copied from the db from matching its own doc.
+      expect(findOneAndDeleteMock).toHaveBeenLastCalledWith({
+        nonce: 'auth-token',
+        hashed: { $ne: true },
+      });
+    });
+
+    test('consume returns null for an unknown nonce', async () => {
+      findOneAndDeleteMock.mockResolvedValue(null);
+
+      await expect(consumeLinkNonce('auth-token')).resolves.toBeNull();
     });
   });
 });

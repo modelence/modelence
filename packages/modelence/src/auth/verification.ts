@@ -13,25 +13,55 @@ import { Args, Context } from '@/methods/types';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
-import { createSession, setAuthTokenCookie } from './session';
+import { hashToken } from './tokenHash';
 import { setQueryParams } from './utils';
 
 const USER_COLLATION = { locale: 'en', strength: 2 } as const;
 
-async function verifyEmailToken(token: string) {
-  const tokenDoc = await emailVerificationTokensCollection.findOne({
-    token,
-    expiresAt: { $gt: new Date() },
-  });
+const INVALID_TOKEN_MESSAGE = 'Invalid or expired verification token';
 
-  if (!tokenDoc) {
-    throw new Error('Invalid or expired verification token');
+async function findVerificationTokenDoc(rawToken: string) {
+  const expiresAt = { $gt: new Date() };
+  const tokenDoc = await emailVerificationTokensCollection.findOne({
+    token: hashToken(rawToken),
+    expiresAt,
+  });
+  if (tokenDoc) {
+    return tokenDoc;
   }
 
-  const userDoc = await usersCollection.findOne({
-    _id: tokenDoc.userId,
+  // Legacy fallback for links emailed before tokens were hashed. Raw tokens and
+  // their hashes are both 64 hex chars, so the marker filter is what stops a
+  // hash copied from the db from matching its own doc. Remove once no unmarked
+  // docs remain (tokens expire 24h after issue).
+  return emailVerificationTokensCollection.findOne({
+    token: rawToken,
+    hashed: { $ne: true },
+    expiresAt,
+  });
+}
+
+function findActiveUser(userId: ObjectId) {
+  return usersCollection.findOne({
+    _id: userId,
     status: { $nin: ['deleted', 'disabled'] },
   });
+}
+
+// Tokens always carry a lowercased address, while the stored one may keep its
+// original casing (e.g. OAuth-created accounts).
+function findEmailDoc(user: { emails?: { address: string; verified?: boolean }[] }, email: string) {
+  return user.emails?.find((e) => e.address.toLowerCase() === email);
+}
+
+async function verifyEmailToken(token: string) {
+  const tokenDoc = await findVerificationTokenDoc(token);
+
+  if (!tokenDoc) {
+    throw new Error(INVALID_TOKEN_MESSAGE);
+  }
+
+  const userDoc = await findActiveUser(tokenDoc.userId);
 
   if (!userDoc) {
     throw new Error('User not found');
@@ -41,6 +71,16 @@ async function verifyEmailToken(token: string) {
 
   if (!email) {
     throw new Error('Email not found in token');
+  }
+
+  if (tokenDoc.usedAt) {
+    // Already spent, usually by a mail scanner that opened the link before the
+    // user did. Opening it again only reports the outcome: nothing changes and
+    // no hooks fire.
+    if (findEmailDoc(userDoc, email)?.verified) {
+      return { userDoc, email, alreadyVerified: true };
+    }
+    throw new Error(INVALID_TOKEN_MESSAGE);
   }
 
   // Mark the specific email as verified atomically, returning the updated doc.
@@ -64,28 +104,43 @@ async function verifyEmailToken(token: string) {
 
   // Consume the token regardless of the update outcome: it has now been
   // presented, and leaving it spendable until its 24h expiry lets a token that
-  // always fails be replayed.
-  await emailVerificationTokensCollection.deleteOne({ _id: tokenDoc._id });
+  // always fails be replayed. Marked rather than deleted, so a repeat open of
+  // a successful link can still report success (see `usedAt` above).
+  await emailVerificationTokensCollection.updateOne(
+    { _id: tokenDoc._id },
+    { $set: { usedAt: new Date() } }
+  );
 
   if (!updatedUserDoc) {
     // Distinguish "already verified" from "not this user's address" by checking
     // the specific element, mirroring handleResendEmailVerification. The prior
     // check only matched on address, so an address that failed to verify for any
     // other reason was still reported as already verified.
-    const existingEmailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
+    const existingEmailDoc = findEmailDoc(userDoc, email);
 
     if (!existingEmailDoc) {
       throw new Error('Email address not found for this user');
     }
 
+    // Already verified when read: a concurrent open of this link (e.g. a mail
+    // scanner) verified it after we read the token unused, or another link did
+    // earlier. Either way the address is verified, so report that rather than
+    // an error. The open that verified it fires the hooks; this one doesn't.
     if (existingEmailDoc.verified) {
-      throw new Error('Email is already verified');
+      return { userDoc, email, alreadyVerified: true };
+    }
+
+    // Unverified when read, yet the update matched nothing: a concurrent open
+    // may have verified it in between.
+    const currentUserDoc = await findActiveUser(tokenDoc.userId);
+    if (currentUserDoc && findEmailDoc(currentUserDoc, email)?.verified) {
+      return { userDoc: currentUserDoc, email, alreadyVerified: true };
     }
 
     throw new Error('Unable to verify email address');
   }
 
-  return { userDoc: updatedUserDoc, email };
+  return { userDoc: updatedUserDoc, email, alreadyVerified: false };
 }
 
 export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: Context) {
@@ -93,7 +148,10 @@ export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: 
 
   try {
     const token = z.string().min(1).parse(args.token);
-    const { userDoc } = await verifyEmailToken(token);
+    const { userDoc, alreadyVerified } = await verifyEmailToken(token);
+    if (alreadyVerified) {
+      return;
+    }
 
     authConfig.onAfterEmailVerification?.({
       provider: 'email',
@@ -123,28 +181,29 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     '/';
   try {
     const token = z.string().parse(params.query.token);
-    const { userDoc } = await verifyEmailToken(token);
+    const { userDoc, alreadyVerified } = await verifyEmailToken(token);
 
     const authConfig = getAuthConfig();
-    authConfig.onAfterEmailVerification?.({
-      provider: 'email',
-      user: userDoc as User,
-      session: null,
-      connectionInfo: {
-        baseUrl,
-        ip: params.req.ip || params.req.socket.remoteAddress,
-        userAgent: params.headers['user-agent'],
-        acceptLanguage: params.headers['accept-language'],
-        referrer: params.headers['referer'],
-      },
-    });
+    if (!alreadyVerified) {
+      authConfig.onAfterEmailVerification?.({
+        provider: 'email',
+        user: userDoc as User,
+        session: null,
+        connectionInfo: {
+          baseUrl,
+          ip: params.req.ip || params.req.socket.remoteAddress,
+          userAgent: params.headers['user-agent'],
+          acceptLanguage: params.headers['accept-language'],
+          referrer: params.headers['referer'],
+        },
+      });
+    }
 
-    const { authToken } = await createSession(userDoc._id);
-
-    setAuthTokenCookie(params.res, authToken);
-
+    // No session here: this is a GET that mail scanners open before the user
+    // does, and a forwarded or logged link must not sign its holder in. The
+    // app's redirect page sends the user to sign in.
     return {
-      status: 301,
+      status: 302,
       // Suppress the Referer so the token-bearing verification URL never leaks.
       headers: { 'Referrer-Policy': 'no-referrer' },
       redirect: setQueryParams(emailVerifiedRedirectUrl, { status: 'verified' }),
@@ -169,7 +228,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     }
 
     return {
-      status: 301,
+      status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },
       redirect: setQueryParams(emailVerifiedRedirectUrl, { status: 'error', message }),
     };
@@ -194,11 +253,12 @@ export async function sendVerificationEmail({
     const verificationToken = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + time.hours(24));
 
-    // Store token in database
+    // Store only the hash: the raw token goes out in the email link alone
     await emailVerificationTokensCollection.insertOne({
       userId,
       email,
-      token: verificationToken,
+      token: hashToken(verificationToken),
+      hashed: true,
       createdAt: new Date(),
       expiresAt,
     });
