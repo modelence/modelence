@@ -231,9 +231,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 26 rules covering all auth buckets', () => {
+    test('produces exactly 28 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(26);
+      expect(rules).toHaveLength(28);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -247,6 +247,7 @@ describe('auth/user', () => {
           'oneTimeCode',
           'oauthExchange',
           'updateProfile',
+          'sessionCreation',
         ])
       );
     });
@@ -287,6 +288,21 @@ describe('auth/user', () => {
       expect(profileRules).toEqual([
         { bucket: 'updateProfile', type: 'user', window: 15 * 60 * 1000, limit: 10 },
         { bucket: 'updateProfile', type: 'user', window: 24 * 60 * 60 * 1000, limit: 200 },
+      ]);
+    });
+
+    test('limits anonymous session creation per IP and supports overrides', () => {
+      expect(buildAuthRateLimits().filter((rule) => rule.bucket === 'sessionCreation')).toEqual([
+        { bucket: 'sessionCreation', type: 'ip', window: 15 * 60 * 1000, limit: 100 },
+        { bucket: 'sessionCreation', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 1000 },
+      ]);
+      expect(
+        buildAuthRateLimits({
+          sessionCreation: [{ type: 'ip', window: 15 * 60 * 1000, limit: 10 }],
+        }).filter((rule) => rule.bucket === 'sessionCreation')
+      ).toEqual([
+        { bucket: 'sessionCreation', type: 'ip', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'sessionCreation', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 1000 },
       ]);
     });
 

@@ -25,6 +25,7 @@ import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { issueLinkNonce } from '@/auth/session';
+import { configureTrustedProxies, getClientIp } from './clientIp';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -93,6 +94,22 @@ function registerModuleRoutes(
 
 let globalProcessListenersRegistered = false;
 
+function handleAuthRequest(
+  handler: (req: Request, res: Response) => Promise<void>
+): express.RequestHandler {
+  return async (req, res, next) => {
+    try {
+      await handler(req, res);
+    } catch (error) {
+      if (error instanceof ModelenceError) {
+        res.status(error.status).send(error.message);
+      } else {
+        next(error);
+      }
+    }
+  };
+}
+
 export async function startServer(
   server: AppServer,
   {
@@ -105,18 +122,7 @@ export async function startServer(
 ) {
   const app = express();
 
-  // Express's proxy-addr implementation walks X-Forwarded-For from the socket
-  // toward the client and stops at the first untrusted hop.
-  // This is important for IP rate limits: selecting the left-most value would
-  // let a caller evade them by prepending an arbitrary address.
-  const { trustedProxies } = getSecurityConfig();
-  const envTrustedProxies = parseTrustedProxies(process.env.MODELENCE_TRUSTED_PROXIES);
-  // Keep the historical trust-all behavior when neither setting is present so
-  // upgrading does not collapse every client behind a reverse proxy into one
-  // rate-limit identity. Modelence-hosted environments set the trusted proxy
-  // ranges before rolling out this framework version.
-  const trustProxy = envTrustedProxies ?? trustedProxies;
-  app.set('trust proxy', trustProxy === undefined ? true : trustProxy);
+  configureTrustedProxies(app);
 
   app.use(cookieParser());
 
@@ -152,7 +158,7 @@ export async function startServer(
     '/api/_internal/auth/set-link-cookie',
     cors,
     ...cookieAuthGuards,
-    async (req: Request, res: Response) => {
+    handleAuthRequest(async (req: Request, res: Response) => {
       const { session } = await getCallContext(req, res);
 
       if (!session?.userId) {
@@ -169,7 +175,7 @@ export async function startServer(
       });
 
       res.json({ ok: true });
-    }
+    })
   );
 
   // React Native OAuth linking: issues a single-use nonce the app puts in the OAuth URL.
@@ -177,7 +183,7 @@ export async function startServer(
     '/api/_internal/auth/issue-link-nonce',
     cors,
     ...cookieAuthGuards,
-    async (req: Request, res: Response) => {
+    handleAuthRequest(async (req: Request, res: Response) => {
       const { session } = await getCallContext(req, res);
 
       if (!session?.userId) {
@@ -187,7 +193,7 @@ export async function startServer(
 
       const nonce = await issueLinkNonce(String(session.userId));
       res.json({ nonce });
-    }
+    })
   );
 
   app.post(
@@ -196,9 +202,8 @@ export async function startServer(
     ...cookieAuthGuards,
     async (req: Request, res: Response) => {
       const methodName = req.params.methodName as string;
-      const context = await getCallContext(req, res);
-
       try {
+        const context = await getCallContext(req, res);
         const result = sanitizeResult(await runMethod(methodName, req.body.args, context));
         res.json({
           data: result,
@@ -320,7 +325,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
 
   const hasDatabase = Boolean(getMongodbUri());
   if (hasDatabase) {
-    const { session, user, roles } = await authenticate(authToken);
+    const { session, user, roles } = await authenticate(authToken, connectionInfo.ip);
     return {
       clientInfo,
       connectionInfo,
@@ -567,70 +572,4 @@ function getRequestBaseUrl(req: Request): string {
   // through the `trust proxy` setting, so an untrusted caller cannot influence
   // the base URL used for auth callbacks and emails.
   return `${req.protocol}://${host}`;
-}
-
-/**
- * Parses the comma-separated `MODELENCE_TRUSTED_PROXIES` value into the array
- * form Express expects. Returns undefined when unset or empty so the caller can
- * fall back to the `startApp()` security config.
- */
-function parseTrustedProxies(value: string | undefined): string[] | undefined {
-  const entries = value
-    ?.split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-
-  return entries?.length ? entries : undefined;
-}
-
-/**
- * Whether the immediate peer on the socket is one of the configured trusted
- * proxies. Only the socket address is consulted: it is the one value in the
- * request a caller cannot forge.
- */
-function isPeerTrusted(req: Request): boolean {
-  const peerIp = req.socket?.remoteAddress;
-  if (!peerIp) {
-    return false;
-  }
-
-  // Express compiles the `trust proxy` setting into this predicate. It is
-  // absent when the app was never configured (older embeddings, tests), in
-  // which case we fall back to the `trust proxy` value itself.
-  const trust = req.app?.get?.('trust proxy fn');
-  if (typeof trust !== 'function') {
-    return req.app?.get?.('trust proxy') !== false;
-  }
-
-  return Boolean(trust(peerIp, 0));
-}
-
-function getClientIp(req: Request): string | undefined {
-  // Cloudflare and similar proxies expose the originating client in a
-  // single-value header. Prefer it over the X-Forwarded-For chain, which
-  // Cloudflare appends to rather than overwrites, but only when the peer is a
-  // trusted proxy - otherwise a direct caller could set it themselves.
-  const { clientIpHeader } = getSecurityConfig();
-  if (clientIpHeader && isPeerTrusted(req)) {
-    const forwardedIp = req.headers[clientIpHeader.toLowerCase()];
-    const clientIp = (Array.isArray(forwardedIp) ? forwardedIp[0] : forwardedIp)?.trim();
-    if (clientIp) {
-      return normalizeIp(clientIp);
-    }
-  }
-
-  // `req.ip` only incorporates X-Forwarded-For according to the application's
-  // `trust proxy` setting. Never parse the header directly: its left-most value
-  // is controlled by the caller unless every ingress proxy overwrites it.
-  const directIp = req.ip || req.socket?.remoteAddress;
-  if (directIp) {
-    return normalizeIp(directIp);
-  }
-
-  return undefined;
-}
-
-function normalizeIp(ip: string): string {
-  // Remove IPv6-to-IPv4 mapping prefix
-  return ip.startsWith('::ffff:') ? ip.substring(7) : ip;
 }

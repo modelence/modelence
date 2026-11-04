@@ -22,7 +22,7 @@ function getSocketSubs(socket: Socket): Map<string, ActiveSubscription> {
   return subs;
 }
 
-export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown) {
+export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown, ip?: string) {
   const parsed = z
     .object({
       subscriptionId: z.string().min(1),
@@ -72,7 +72,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
   subs.set(subscriptionId, subscription);
 
   try {
-    const { session, user, roles } = await authenticate(authToken ?? null);
+    const { session, user, roles } = await authenticate(authToken ?? null, ip);
 
     const context: Context = {
       session,
@@ -87,7 +87,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
         orientation: null,
       },
       connectionInfo: {
-        ip: socket.handshake.address,
+        ip: ip ?? socket.handshake.address,
         userAgent: socket.handshake.headers['user-agent'],
       },
       req: null,

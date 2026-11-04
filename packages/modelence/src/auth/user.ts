@@ -70,6 +70,8 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'oauthExchange', type: 'ip', window: time.days(1), limit: 300 },
     { bucket: 'updateProfile', type: 'user', window: time.minutes(15), limit: 30 },
     { bucket: 'updateProfile', type: 'user', window: time.days(1), limit: 200 },
+    { bucket: 'sessionCreation', type: 'ip', window: time.minutes(15), limit: 100 },
+    { bucket: 'sessionCreation', type: 'ip', window: time.days(1), limit: 1000 },
   ];
 }
 
@@ -86,6 +88,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'oneTimeCode',
     'oauthExchange',
     'updateProfile',
+    'sessionCreation',
   ];
 
   for (const bucket of buckets) {

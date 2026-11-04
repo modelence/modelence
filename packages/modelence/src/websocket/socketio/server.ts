@@ -13,6 +13,8 @@ import {
 } from '@/live-query';
 import type { Collection, Document } from 'mongodb';
 import { logError } from '@/telemetry';
+import express, { type Request } from 'express';
+import { configureTrustedProxies, getClientIp } from '@/app/clientIp';
 
 let socketServer: SocketServer | null = null;
 
@@ -28,6 +30,19 @@ export async function init({
 }) {
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
+  const ipResolver = express();
+  configureTrustedProxies(ipResolver);
+
+  const getSocketClientIp = (socket: Socket) => {
+    // Socket.IO upgrades do not run through Express. Use its request prototype
+    // to apply the same trusted-proxy IP resolution as HTTP requests.
+    const request = Object.assign(Object.create(express.request) as Request, {
+      app: ipResolver,
+      headers: socket.request.headers,
+      socket: socket.request.socket,
+    });
+    return getClientIp(request);
+  };
 
   console.log('Initializing Socket.IO server...');
 
@@ -82,7 +97,7 @@ export async function init({
     const token = socket.handshake.auth.token;
 
     try {
-      socket.data = await authenticate(token);
+      socket.data = await authenticate(token, getSocketClientIp(socket));
       next();
     } catch (error) {
       next(error instanceof Error ? error : new Error(String(error)));
@@ -120,7 +135,9 @@ export async function init({
       socket.emit('leftChannel', channelName);
     });
 
-    socket.on('subscribeLiveQuery', (payload) => handleSubscribeLiveQuery(socket, payload));
+    socket.on('subscribeLiveQuery', (payload) =>
+      handleSubscribeLiveQuery(socket, payload, getSocketClientIp(socket))
+    );
     socket.on('unsubscribeLiveQuery', (payload) => handleUnsubscribeLiveQuery(socket, payload));
   });
 

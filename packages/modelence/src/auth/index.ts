@@ -6,9 +6,10 @@ import { getDefaultAuthenticatedRoles, getUnauthenticatedRoles } from './role';
 import { Role, Session, UserInfo } from './types';
 
 export async function authenticate(
-  authToken: string | null
+  authToken: string | null,
+  ip?: string
 ): Promise<{ session: Session; user: UserInfo | null; roles: Role[] }> {
-  const session = await obtainSession(authToken);
+  const session = await obtainSession(authToken, ip);
 
   const userDoc = session.userId
     ? await usersCollection.findOne({
