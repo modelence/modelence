@@ -110,10 +110,14 @@ async function tickCronJobs() {
     const { alias, params, state } = job;
     if (state.isRunning) {
       // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
-      // Restarting it here would stack a new copy on top of a hung one.
-      if (!state.timedOutAt && state.startTs && state.startTs + params.timeout < now) {
-        state.timedOutAt = now;
-        const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
+      // Restarting it here would stack a new copy on top of a hung one. A handler that never
+      // settles blocks its job until the process restarts, so keep reporting it every timeout.
+      const { startTs, lastTimeoutReportTs } = state;
+      if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
+        state.lastTimeoutReportTs = now;
+        const timeoutError = new Error(
+          `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
+        );
         captureError(timeoutError);
       }
       continue;
@@ -132,7 +136,7 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   const currentStartTs = Date.now();
   state.startTs = currentStartTs;
-  state.timedOutAt = undefined;
+  state.lastTimeoutReportTs = undefined;
 
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
@@ -145,8 +149,9 @@ async function runCronJob(job: CronJob) {
       }
     );
     await handler();
+    const result = state.lastTimeoutReportTs ? 'timeout' : 'success';
     handleCronJobCompletion(state, params, currentStartTs);
-    transaction.end('success');
+    transaction.end(result);
   } catch (err) {
     handleCronJobCompletion(state, params, currentStartTs);
     const error = err instanceof Error ? err : new Error(String(err));
@@ -163,7 +168,7 @@ function handleCronJobCompletion(
 ) {
   state.scheduledRunTs = currentStartTs + params.interval;
   state.startTs = undefined;
-  state.timedOutAt = undefined;
+  state.lastTimeoutReportTs = undefined;
   state.isRunning = false;
 }
 

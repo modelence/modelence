@@ -289,17 +289,25 @@ describe('cron/jobs', () => {
   describe('timed-out jobs', () => {
     const startTs = 1_000_000;
 
+    function flushPromises() {
+      return new Promise((resolve) => setImmediate(resolve));
+    }
+
     async function tickAt(ts: number) {
       (Date.now as Mock).mockReturnValue(ts);
       await intervalCallback?.();
       // runCronJob calls the handler after awaiting the lastStartDate write.
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
+    }
+
+    function getTimeoutErrors() {
+      return mockCaptureError.mock.calls
+        .map(([error]) => error)
+        .filter((error) => error instanceof Error && error.message.includes('timed out'));
     }
 
     function countTimeoutErrors() {
-      return mockCaptureError.mock.calls.filter(
-        ([error]) => error instanceof Error && error.message.includes('timed out')
-      ).length;
+      return getTimeoutErrors().length;
     }
 
     beforeEach(() => {
@@ -333,7 +341,7 @@ describe('cron/jobs', () => {
       await handlerPromise;
     });
 
-    test('capture the timeout error once per run', async () => {
+    test('report the timeout once per timeout period while still running', async () => {
       let resolveHandler!: () => void;
       const handlerPromise = new Promise<void>((resolve) => {
         resolveHandler = resolve;
@@ -346,11 +354,16 @@ describe('cron/jobs', () => {
 
       await startCronJobs();
       await tickAt(startTs);
-      for (const offset of [6000, 7000, 13_000, 20_000]) {
+      for (const offset of [6000, 7000, 11_000]) {
         await tickAt(startTs + offset);
       }
-
       expect(countTimeoutErrors()).toBe(1);
+
+      for (const offset of [12_000, 13_000, 17_000, 18_000]) {
+        await tickAt(startTs + offset);
+      }
+      expect(countTimeoutErrors()).toBe(3);
+      expect(getTimeoutErrors().at(-1).message).toContain('still running (18000ms elapsed)');
 
       resolveHandler();
       await handlerPromise;
@@ -380,7 +393,7 @@ describe('cron/jobs', () => {
         expect(countTimeoutErrors()).toBe(1);
 
         settleFirstRun();
-        await firstRun.catch(() => {});
+        await flushPromises();
         // The next run was due at startTs + 10s, so it starts on the next tick.
         await tickAt(startTs + 20_000);
         expect(handler).toHaveBeenCalledTimes(2);
@@ -391,6 +404,34 @@ describe('cron/jobs', () => {
 
         resolveSecondRun();
         await secondRun;
+      }
+    );
+
+    test.each([
+      ['success', 'timeout'],
+      ['error', 'error'],
+    ] as const)(
+      'end a run that settles with %s after timing out as %s',
+      async (outcome, expectedResult) => {
+        let settleHandler!: () => void;
+        const handlerPromise = new Promise<void>((resolve, reject) => {
+          settleHandler = () => (outcome === 'error' ? reject(new Error('run failed')) : resolve());
+        });
+        defineCronJob('hungJob', {
+          interval: mockSeconds(10),
+          timeout: 5000,
+          handler: vi.fn(() => handlerPromise),
+        });
+
+        await startCronJobs();
+        await tickAt(startTs);
+        await tickAt(startTs + 6000);
+
+        settleHandler();
+        await flushPromises();
+
+        const transaction = mockStartTransaction.mock.results.slice(-1)[0]?.value as { end: Mock };
+        expect(transaction.end).toHaveBeenCalledWith(expectedResult);
       }
     );
   });
