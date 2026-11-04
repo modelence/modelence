@@ -23,6 +23,7 @@ import {
   isDuplicateEmailError,
 } from './utils';
 import { Session, User } from './types';
+import { logError } from '@/telemetry';
 
 // Short-lived httpOnly cookie carrying the magic link token from the landing
 // route to the `loginWithMagicLink` mutation, so it never appears on a
@@ -64,10 +65,10 @@ const MAX_CODE_ATTEMPTS = 5;
 function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
   try {
     Promise.resolve(invoke?.()).catch((hookError: unknown) => {
-      console.error(`Error in ${name} hook:`, hookError);
+      logError(`Error in ${name} hook`, { hook: name, error: hookError });
     });
   } catch (hookError) {
-    console.error(`Error in ${name} hook:`, hookError);
+    logError(`Error in ${name} hook`, { hook: name, error: hookError });
   }
 }
 
@@ -113,7 +114,7 @@ async function restoreClaimedMagicLinkToken(
   try {
     await magicLinkTokensCollection.insertOne(claimedToken);
   } catch (restoreError) {
-    console.error('Failed to restore a magic link token after a failed signup:', restoreError);
+    logError('Failed to restore a magic link token after a failed signup', { error: restoreError });
   }
 }
 
@@ -278,7 +279,7 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    console.error('Error handling magic link landing:', error);
+    logError('Error handling magic link landing', { error });
     const message = 'This sign-in link is invalid or has expired.';
     return {
       status: 302,

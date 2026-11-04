@@ -5,6 +5,7 @@ import { runLiveMethod } from '../methods';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
+import { logError } from '../telemetry';
 
 interface ActiveSubscription {
   cleanup: LiveQueryCleanup | null;
@@ -59,7 +60,10 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
       try {
         existingSub.cleanup();
       } catch (err) {
-        console.error('[LiveQuery] Error cleaning up existing subscription:', err);
+        logError('[LiveQuery] Error cleaning up existing subscription', {
+          subscriptionId,
+          error: err,
+        });
       }
     } else {
       // Subscription is still initializing - mark it for abort so it cleans up when ready
@@ -123,7 +127,11 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
           if (subscription.aborted) {
             return;
           }
-          console.error(`[LiveQuery] Error fetching data for ${method}:`, err);
+          logError(`[LiveQuery] Error fetching data for ${method}`, {
+            method,
+            subscriptionId,
+            error: err,
+          });
           socket.emit('liveQueryError', {
             subscriptionId,
             error: err instanceof Error ? err.message : String(err),
@@ -154,7 +162,10 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
         try {
           cleanup();
         } catch (err) {
-          console.error('[LiveQuery] Error cleaning up after disconnect during setup:', err);
+          logError('[LiveQuery] Error cleaning up after disconnect during setup', {
+            subscriptionId,
+            error: err,
+          });
         }
       }
       return;
@@ -166,7 +177,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     processPendingPublish();
   } catch (error) {
     subs.delete(subscriptionId);
-    console.error(`[LiveQuery] Error in ${method}:`, error);
+    logError(`[LiveQuery] Error in ${method}`, { method, subscriptionId, error });
     socket.emit('liveQueryError', {
       subscriptionId,
       error: error instanceof Error ? error.message : String(error),
@@ -195,7 +206,7 @@ export function handleUnsubscribeLiveQuery(socket: Socket, payload: unknown) {
       try {
         sub.cleanup();
       } catch (err) {
-        console.error('[LiveQuery] Error in cleanup:', err);
+        logError('[LiveQuery] Error in cleanup', { subscriptionId, error: err });
       }
     } else {
       sub.aborted = true;
@@ -213,7 +224,10 @@ export function handleLiveQueryDisconnect(socket: Socket) {
         try {
           sub.cleanup();
         } catch (err) {
-          console.error('[LiveQuery] Error in cleanup on disconnect:', err);
+          logError('[LiveQuery] Error in cleanup on disconnect', {
+            socketId: socket.id,
+            error: err,
+          });
         }
       } else {
         sub.aborted = true;
