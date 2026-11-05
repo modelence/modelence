@@ -12,6 +12,7 @@ const mockHandleLoginWithPassword = vi.fn();
 const mockHandleLogout = vi.fn();
 const mockHandleSignupWithPassword = vi.fn();
 const mockHandleVerifyEmail = vi.fn();
+const mockHandleVerifyEmailMutation = vi.fn();
 const mockHandleResendEmailVerification = vi.fn();
 const mockHandleSendResetPasswordToken = vi.fn();
 const mockHandleResetPassword = vi.fn();
@@ -60,6 +61,7 @@ vi.doMock('./signup', () => ({
 
 vi.doMock('./verification', () => ({
   handleVerifyEmail: mockHandleVerifyEmail,
+  handleVerifyEmailMutation: mockHandleVerifyEmailMutation,
   handleResendEmailVerification: mockHandleResendEmailVerification,
 }));
 
@@ -152,6 +154,7 @@ describe('auth/user', () => {
           signupWithPassword: mockHandleSignupWithPassword,
           loginWithPassword: mockHandleLoginWithPassword,
           logout: mockHandleLogout,
+          verifyEmail: mockHandleVerifyEmailMutation,
           resendEmailVerification: mockHandleResendEmailVerification,
           sendResetPasswordToken: mockHandleSendResetPasswordToken,
           resetPassword: mockHandleResetPassword,

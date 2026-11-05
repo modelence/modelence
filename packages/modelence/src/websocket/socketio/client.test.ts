@@ -5,7 +5,10 @@ import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
 import type { getLocalStorageSession } from '@/client/localStorage';
 
-type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit' | 'connect' | 'disconnect'>;
+type SocketMethods = Pick<
+  Socket,
+  'on' | 'once' | 'off' | 'emit' | 'connect' | 'disconnect' | 'connected'
+>;
 const mockSocket: Mocked<SocketMethods> & { auth?: Record<string, unknown>; connected?: boolean } =
   {
     on: vi.fn(),
@@ -17,6 +20,12 @@ const mockSocket: Mocked<SocketMethods> & { auth?: Record<string, unknown>; conn
     auth: {},
     connected: true,
   };
+
+// Fires the handler the client registered for the socket's 'connect' event.
+const fireConnect = () => {
+  const call = mockSocket.on.mock.calls.find(([event]) => event === 'connect');
+  (call?.[1] as () => void)();
+};
 
 type IoFactory = typeof ioClientFactory;
 const mockIo: MockedFunction<IoFactory> = vi.fn(() => mockSocket as unknown as Socket);
@@ -332,6 +341,45 @@ describe('websocket/socketio/client', () => {
     });
   });
 
+  describe('reconnect', () => {
+    beforeEach(() => {
+      websocketProvider.init({});
+    });
+
+    test('re-joins joined channels when the socket reconnects', () => {
+      websocketProvider.joinChannel({ category: 'chat', id: 'room-1' });
+      mockSocket.emit.mockClear();
+
+      fireConnect();
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('joinChannel', 'chat:room-1');
+    });
+
+    test('does not re-join a channel that was left', () => {
+      websocketProvider.joinChannel({ category: 'chat', id: 'room-2' });
+      websocketProvider.leaveChannel({ category: 'chat', id: 'room-2' });
+      mockSocket.emit.mockClear();
+
+      fireConnect();
+
+      expect(mockSocket.emit).not.toHaveBeenCalledWith('joinChannel', 'chat:room-2');
+    });
+
+    test('joins a channel requested before the first connect exactly once', () => {
+      mockSocket.connected = false;
+      websocketProvider.joinChannel({ category: 'chat', id: 'room-3' });
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+
+      mockSocket.connected = true;
+      fireConnect();
+
+      const joins = mockSocket.emit.mock.calls.filter(
+        ([event, name]) => event === 'joinChannel' && name === 'chat:room-3'
+      );
+      expect(joins).toHaveLength(1);
+    });
+  });
+
   describe('websocketProvider interface', () => {
     test('exports all required methods', () => {
       expect(websocketProvider.init).toBeDefined();
@@ -356,7 +404,7 @@ describe('websocket/socketio/client', () => {
     });
   });
 
-  describe('reconnect', () => {
+  describe('reconnect method', () => {
     beforeEach(() => {
       websocketProvider.init({});
     });

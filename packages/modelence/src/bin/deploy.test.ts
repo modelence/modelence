@@ -126,6 +126,16 @@ describe('deploy orchestration', () => {
     expect(args?.body).not.toHaveProperty('detected');
   });
 
+  it('sends the package.json version with the deploy', async () => {
+    await writeFile(
+      join(project, 'package.json'),
+      JSON.stringify({ name: 'app', version: '1.2.3' })
+    );
+    await deploy(options);
+    const [, , args] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
+    expect(args?.body).toMatchObject({ appVersion: '1.2.3' });
+  });
+
   it('names the files left out of the upload', async () => {
     await writeFile(join(project, '.env'), 'SECRET=1');
     await deploy(options);

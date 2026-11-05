@@ -22,6 +22,7 @@ import {
   type Session,
 } from './deploySession';
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
+import { readSourceRevision } from './revision';
 import { followDeploy } from './deployStatus';
 
 /*
@@ -93,6 +94,8 @@ export async function deploy(options: DeployOptions) {
   // A --prebuilt deploy still sends the file when there is one, for its
   // variable declarations.
   let spec: AppSpec | undefined;
+  // Before the build and archive are written into the project.
+  const revision = await readSourceRevision(cwd);
   const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
   if (kind === 'bundle') {
     spec = (await readAppSpecFile(cwd)) ?? undefined;
@@ -155,7 +158,7 @@ export async function deploy(options: DeployOptions) {
     // A deploy picked in the browser had its variables asked for there.
     const checkEnv = ci && !options.skipEnvCheck;
     const start = () =>
-      runDeploy({ session, target: deployTarget, kind, archivePath, spec, checkEnv });
+      runDeploy({ session, target: deployTarget, kind, archivePath, spec, checkEnv, revision });
     let started: StartedDeploy;
     try {
       started = await start();

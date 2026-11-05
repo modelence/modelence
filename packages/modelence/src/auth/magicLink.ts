@@ -16,6 +16,7 @@ import { setAuthTokenCookie, startUserSession } from './session';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
+  setQueryParams,
   resolveUrl,
   resolveUniqueHandle,
   serializeUserForClient,
@@ -282,7 +283,7 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
     return {
       status: 302,
       headers: { 'Referrer-Policy': 'no-referrer' },
-      redirect: `${magicLinkPageUrl}?status=error&message=${encodeURIComponent(message)}`,
+      redirect: setQueryParams(magicLinkPageUrl, { status: 'error', message }),
     };
   }
 }

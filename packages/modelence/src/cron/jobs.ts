@@ -2,7 +2,7 @@
 
 import { time } from '../time';
 import { CronJob, CronJobInputParams } from './types';
-import { startTransaction, captureError } from '@/telemetry';
+import { startTransaction, captureError, logError } from '@/telemetry';
 import { Module } from '../app/module';
 import { schema } from '../data/types';
 import { Store } from '../data/store';
@@ -149,7 +149,7 @@ async function runCronJob(job: CronJob) {
     const error = err instanceof Error ? err : new Error(String(err));
     captureError(error);
     transaction.end('error');
-    console.error(`Error in cron job '${alias}':`, err);
+    logError('Error in cron job:', { error: err, alias });
   }
 }
 

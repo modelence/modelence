@@ -7,6 +7,7 @@ import { RoleDefinition } from '../auth/types';
 import { Store } from '../data/store';
 import { AppConfig } from '../config/types';
 import { ModelSchema } from '../data/types';
+import { logError } from '../telemetry';
 
 type CloudBackendConnectOkResponse = {
   status: 'ok';
@@ -105,7 +106,7 @@ export async function connectCloudBackend({
       console.error(cloudError.message);
       process.exit(1);
     }
-    console.error('Unable to connect to Modelence Cloud:', error);
+    logError('Unable to connect to Modelence Cloud:', { error });
     throw error;
   }
 }

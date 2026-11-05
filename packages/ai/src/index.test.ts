@@ -146,6 +146,53 @@ describe('@modelence/ai generateText', () => {
     expect(transaction.end).toHaveBeenCalledTimes(1);
   });
 
+  test('counts a prompt-only request in telemetry', async () => {
+    mockStartTransaction.mockReturnValue({
+      end: vi.fn(),
+      setContext: vi.fn(),
+    });
+    mockOpenAIModelFactory.mockReturnValue({ provider: 'openai', model: 'gpt-4o' });
+    mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} } as never);
+
+    await generateText({
+      provider: 'openai',
+      model: 'gpt-4o',
+      prompt: 'Say hello',
+    } as never);
+
+    expect(mockStartTransaction).toHaveBeenCalledWith('ai', 'ai:generateText', {
+      provider: 'openai',
+      model: 'gpt-4o',
+      messageCount: 1,
+      temperature: undefined,
+    });
+  });
+
+  test('counts each prompt-array message in telemetry', async () => {
+    mockStartTransaction.mockReturnValue({
+      end: vi.fn(),
+      setContext: vi.fn(),
+    });
+    mockOpenAIModelFactory.mockReturnValue({ provider: 'openai', model: 'gpt-4o' });
+    mockGenerateText.mockResolvedValue({ text: 'ok', usage: {} } as never);
+
+    await generateText({
+      provider: 'openai',
+      model: 'gpt-4o',
+      prompt: [
+        { role: 'system', content: 'Be concise.' },
+        { role: 'user', content: 'Say hello' },
+      ],
+    } as never);
+
+    expect(mockStartTransaction).toHaveBeenCalledWith('ai', 'ai:generateText', {
+      provider: 'openai',
+      model: 'gpt-4o',
+      messageCount: 2,
+      temperature: undefined,
+    });
+  });
+
   test('captures and rethrows provider/model errors', async () => {
     const transaction = {
       end: vi.fn(),
