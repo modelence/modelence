@@ -15,8 +15,8 @@ import type { CliTarget } from './deployTarget';
                     `createOnly` (`setup --new`) leaves out existing ones.
     'deploy'      — `modelence deploy`: the page asks where to deploy (an
                     existing or newly created app / cloud environment) and the
-                    token route reports the pick back so the CLI can record it
-                    in .modelence/project.json.
+                    token route reports the pick back so the CLI deploys
+                    there (and records the app in .modelence/project.json).
   Without `pick` the page only authorizes the device.
 
   `purpose: 'deploy'` asks for a deploy-lifetime token (one hour) without a
@@ -24,8 +24,8 @@ import type { CliTarget } from './deployTarget';
   picked. `pick: 'deploy'` implies it.
 
   `appId` is the hint from .modelence/project.json used to preselect the app.
-  `hint` is the deploy target -a/-e or .modelence/project.json name, which
-  the deploy picker preselects.
+  `hint` is the deploy target -a/-e name (the app may come from
+  .modelence/project.json), which the deploy picker preselects.
 
   `env` is what modelence.config.json declares. With the deploy picker, the
   page asks for those variables' values as a separate step after the target,
