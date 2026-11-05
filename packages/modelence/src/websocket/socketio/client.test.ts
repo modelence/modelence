@@ -5,14 +5,21 @@ import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
 import type { getLocalStorageSession } from '@/client/localStorage';
 
-type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit' | 'connected'>;
-const mockSocket: Mocked<SocketMethods> = {
-  on: vi.fn(),
-  once: vi.fn(),
-  off: vi.fn(),
-  emit: vi.fn(),
-  connected: true,
-};
+type SocketMethods = Pick<
+  Socket,
+  'on' | 'once' | 'off' | 'emit' | 'connect' | 'disconnect' | 'connected'
+>;
+const mockSocket: Mocked<SocketMethods> & { auth?: Record<string, unknown>; connected?: boolean } =
+  {
+    on: vi.fn(),
+    once: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    auth: {},
+    connected: true,
+  };
 
 // Fires the handler the client registered for the socket's 'connect' event.
 const fireConnect = () => {
@@ -52,6 +59,7 @@ describe('websocket/socketio/client', () => {
     vi.clearAllMocks();
     mockGetLocalStorageSession.mockReturnValue(null);
     mockSocket.connected = true;
+    mockSocket.auth = {};
   });
 
   describe('init', () => {
@@ -381,6 +389,7 @@ describe('websocket/socketio/client', () => {
       expect(websocketProvider.emit).toBeDefined();
       expect(websocketProvider.joinChannel).toBeDefined();
       expect(websocketProvider.leaveChannel).toBeDefined();
+      expect(websocketProvider.reconnect).toBeDefined();
     });
 
     test('all methods are functions', () => {
@@ -391,6 +400,35 @@ describe('websocket/socketio/client', () => {
       expect(typeof websocketProvider.emit).toBe('function');
       expect(typeof websocketProvider.joinChannel).toBe('function');
       expect(typeof websocketProvider.leaveChannel).toBe('function');
+      expect(typeof websocketProvider.reconnect).toBe('function');
+    });
+  });
+
+  describe('reconnect method', () => {
+    beforeEach(() => {
+      websocketProvider.init({});
+    });
+
+    test('updates auth token without disconnecting when socket is connected', () => {
+      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token' });
+      mockSocket.connected = true;
+
+      websocketProvider.reconnect?.();
+
+      expect(mockSocket.auth).toEqual({ token: 'fresh-token' });
+      expect(mockSocket.disconnect).not.toHaveBeenCalled();
+      expect(mockSocket.connect).not.toHaveBeenCalled();
+    });
+
+    test('updates auth token and connects socket when disconnected', () => {
+      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token-2' });
+      mockSocket.connected = false;
+
+      websocketProvider.reconnect?.();
+
+      expect(mockSocket.auth).toEqual({ token: 'fresh-token-2' });
+      expect(mockSocket.disconnect).not.toHaveBeenCalled();
+      expect(mockSocket.connect).toHaveBeenCalledTimes(1);
     });
   });
 
