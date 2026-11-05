@@ -32,7 +32,9 @@ startApp({
 2. An email with a verification link is sent to the user's email address
 3. The link contains the token: `https://yourapp.com/api/_internal/auth/verify-email?token=...`
 4. When clicked, the token is validated and the user's email is marked as verified
-5. The user is redirected to your configured `redirectUrl`
+5. The user is redirected to your configured `redirectUrl` with `?status=verified`, or `?status=error&message=...` if the link is invalid or expired
+
+Opening the link does not sign the user in, so your `redirectUrl` page should send them to sign in. Corporate mail scanners often open links before the user does. Opening a link again after it has verified the address still redirects with `status=verified`, so the user's own click succeeds. Tokens are stored hashed and expire after 24 hours.
 
 ## Custom Verification Templates
 

@@ -141,8 +141,9 @@ export async function handleLogout(args: Args, { session, res }: Context) {
 /*
   It is important to return the same exact error both in case the email
   or password is incorrect so that the client cannot tell the difference,
-  otherwise it would allow for an enumeration attack.
+  otherwise it would allow for an enumeration attack. An AuthError, so wrong
+  credentials answer 401 rather than being reported as a 500 server error.
 */
 function incorrectCredentialsError() {
-  return new Error('Incorrect email/password combination');
+  return new AuthError('Incorrect email/password combination');
 }

@@ -13,6 +13,8 @@ import { OAuthProvider, Session } from './types';
 export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
   schema: {
     nonce: schema.string(),
+    // Set on nonces stored as `hashToken(nonce)`. Older docs hold the raw nonce.
+    hashed: schema.boolean().optional(),
     userId: schema.string(),
     expiresAt: schema.date(),
   },
@@ -25,7 +27,8 @@ export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
 export async function issueLinkNonce(userId: string): Promise<string> {
   const nonce = randomBytes(32).toString('hex');
   await linkNoncesCollection.insertOne({
-    nonce,
+    nonce: hashToken(nonce),
+    hashed: true,
     userId,
     expiresAt: new Date(Date.now() + time.minutes(10)),
   });
@@ -33,7 +36,13 @@ export async function issueLinkNonce(userId: string): Promise<string> {
 }
 
 export async function consumeLinkNonce(nonce: string): Promise<string | null> {
-  const entry = await linkNoncesCollection.findOneAndDelete({ nonce });
+  const entry =
+    (await linkNoncesCollection.findOneAndDelete({ nonce: hashToken(nonce) })) ??
+    // Legacy fallback for nonces issued before hashing. Raw nonces and their
+    // hashes are both 64 hex chars, so the marker filter is what stops a hash
+    // copied from the db from matching its own doc. Remove once no unmarked
+    // docs remain (nonces expire 10 minutes after issue).
+    (await linkNoncesCollection.findOneAndDelete({ nonce, hashed: { $ne: true } }));
   if (!entry) return null;
   return entry.userId;
 }
@@ -47,7 +56,7 @@ export async function consumeLinkNonce(nonce: string): Promise<string | null> {
  * app wins the race. Instead the callback mints one of these codes, and the app
  * exchanges it for a real session over TLS via the `loginWithOAuth` mutation.
  *
- * Stored hashed — like magic link tokens, and unlike link nonces — because the code
+ * Stored hashed — like magic link tokens and link nonces — because the code
  * travels in a URL and is a bearer credential until redeemed. The TTL is deliberately
  * much shorter than a link nonce's: the app is foregrounded by the deep link and
  * redeems immediately.
