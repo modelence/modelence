@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Request, Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
+import { ValidationError } from '@/error';
 
 const mockUsersFindOne = vi.fn();
 const mockUsersInsertOne = vi.fn();
@@ -688,6 +689,110 @@ describe('auth/providers/oauthCommon', () => {
           expect.objectContaining({ user: userDocument })
         );
         expect(authConfig.signup.onSuccess).toHaveBeenCalledWith(userDocument);
+      });
+
+      const newUserData = {
+        id: 'provider-id',
+        email: 'New.User@Example.com',
+        emailVerified: true,
+        providerName: 'google' as const,
+        firstName: 'New',
+        lastName: 'User',
+      };
+
+      test('calls onBeforeSignup with the lowercased email before creating the user', async () => {
+        const onBeforeSignup = vi.fn().mockResolvedValue(undefined);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+        mockUsersInsertOne.mockResolvedValue({ insertedId: new ObjectId() } as never);
+        mockUsersFindOne.mockResolvedValueOnce(null as never);
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, newUserData);
+
+        expect(onBeforeSignup).toHaveBeenCalledWith({
+          email: 'new.user@example.com',
+          emailVerified: true,
+          firstName: 'New',
+          lastName: 'User',
+          provider: 'google',
+          connectionInfo: { ip: '1.1.1.1' },
+        });
+        expect(onBeforeSignup.mock.invocationCallOrder[0]).toBeLessThan(
+          mockUsersInsertOne.mock.invocationCallOrder[0]
+        );
+      });
+
+      test('a rejecting onBeforeSignup creates no user or session and reports the message', async () => {
+        const rejection = new ValidationError('Signups are invite-only');
+        const onBeforeSignup = vi.fn().mockRejectedValue(rejection);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, newUserData);
+
+        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(mockCreateSession).not.toHaveBeenCalled();
+        expect(authConfig.onAfterSignup).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Signups are invite-only' });
+        expect(authConfig.onSignupError).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'google', error: rejection })
+        );
+        expect(authConfig.signup.onError).toHaveBeenCalledWith(rejection);
+      });
+
+      test('a rejecting onBeforeSignup reaches a mobile app as signup_rejected', async () => {
+        const onBeforeSignup = vi
+          .fn()
+          .mockRejectedValue(new ValidationError('Signups are invite-only'));
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+        const mobileRes = { ...res, set: vi.fn() } as unknown as Response;
+
+        await moduleExports.handleOAuthUserAuthentication(req, mobileRes, newUserData, {
+          platform: 'mobile',
+          redirectUri: 'myapp://auth',
+          codeChallenge: 'challenge',
+        });
+
+        const redirectUrl = new URL(
+          vi.mocked(mobileRes.redirect).mock.calls[0][0] as unknown as string
+        );
+        expect(redirectUrl.searchParams.get('errorCode')).toBe('signup_rejected');
+        expect(redirectUrl.searchParams.get('error')).toBe('Signups are invite-only');
+        expect(mockIssueOAuthExchangeCode).not.toHaveBeenCalled();
+      });
+
+      test('an unexpected onBeforeSignup failure blocks the signup without exposing its message', async () => {
+        const failure = new Error('connect ECONNREFUSED 10.0.0.5:27017');
+        const onBeforeSignup = vi.fn().mockRejectedValue(failure);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+
+        await expect(
+          moduleExports.handleOAuthUserAuthentication(req, res, newUserData)
+        ).rejects.toBe(failure);
+
+        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(mockCreateSession).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
+        expect(authConfig.onSignupError).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'google', error: failure })
+        );
+      });
+
+      test('does not call onBeforeSignup when the account already exists', async () => {
+        const onBeforeSignup = vi.fn();
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'active',
+          emails: [{ address: newUserData.email, verified: true }],
+        } as never);
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, newUserData);
+
+        expect(onBeforeSignup).not.toHaveBeenCalled();
       });
     });
   });
