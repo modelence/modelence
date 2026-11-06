@@ -273,13 +273,19 @@ const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescriptio
       delete existingOptions[field];
     }
   }
-  // Undeclared weights default to 1 for every text field.
+  // MongoDB stores weight 1 for every text field without a declared weight.
+  const existingWeights = existingOptions.weights;
+  const declaredWeights = isDocumentRecord(desiredOptions.weights) ? desiredOptions.weights : {};
   if (
-    desiredOptions.weights === undefined &&
-    isDocumentRecord(existingOptions.weights) &&
-    Object.values(existingOptions.weights).every((weight) => weight === 1)
+    isDocumentRecord(existingWeights) &&
+    (desiredOptions.weights === undefined || isDocumentRecord(desiredOptions.weights)) &&
+    Object.keys(declaredWeights).every((field) => field in existingWeights) &&
+    Object.entries(existingWeights).every(
+      ([field, weight]) => weight === (declaredWeights[field] ?? 1)
+    )
   ) {
     delete existingOptions.weights;
+    delete desiredOptions.weights;
   }
 
   return (

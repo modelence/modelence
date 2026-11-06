@@ -356,6 +356,29 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
+  test('createIndexes keeps a text index that declares weights for only some fields', async () => {
+    const store = createStore({
+      indexes: [{ key: { title: 'text', body: 'text' }, weights: { title: 10 } }],
+    });
+    // MongoDB stores weight 1 for the text fields without a declared weight
+    const collectionMock = createListingMock([
+      {
+        name: '_modelence_title_text_body_text',
+        key: { _fts: 'text', _ftsx: 1 },
+        weights: { body: 1, title: 10 },
+        default_language: 'english',
+        language_override: 'language',
+        textIndexVersion: 3,
+      },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
   test('createIndexes rebuilds a text index when its declared fields or weights change', async () => {
     const reported = {
       name: '_modelence_title_text',
