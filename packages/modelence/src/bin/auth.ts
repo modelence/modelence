@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'crypto';
 import open from 'open';
 import type { EnvDeclaration } from './appSpec';
 import type { CliTarget } from './deployTarget';
@@ -5,6 +6,12 @@ import type { CliTarget } from './deployTarget';
 /*
   Browser device authorization: the CLI mints a code, the user approves it in
   the browser, and the CLI polls until approval binds a token to the code.
+
+  The code is printed, so it ends up in scrollback and agent transcripts; it
+  must not be enough to collect the token. Each sign-in keeps a secret in this
+  process, sends Studio only its hash, and proves it when collecting. Studio
+  hands the token out once. A Studio that doesn't report accepting the hash
+  predates all this, and is polled by the code alone.
 
   Two approval modes, chosen by `pick`:
     'environment' — `modelence setup`: the page also asks which local
@@ -71,21 +78,19 @@ export async function authenticateCli(
 ): Promise<CliAuthResult> {
   // Only the picker has a variables step; nothing is sent otherwise.
   const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
+  const codeVerifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
-    ...(declaredEnv
-      ? {
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ env: declaredEnv }),
-        }
-      : {}),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codeChallenge, ...(declaredEnv ? { env: declaredEnv } : {}) }),
   });
 
   if (!response.ok) {
     throw new Error('Failed to create CLI authentication code');
   }
 
-  const { code, verificationUrl } = await response.json();
+  const { code, verificationUrl, codeChallengeAccepted } = await response.json();
   const url = new URL(verificationUrl);
   const resolvedPick = pick ?? (pickEnvironment ? 'environment' : undefined);
   if (resolvedPick) {
@@ -115,13 +120,17 @@ export async function authenticateCli(
     console.log('Could not open a browser automatically. Please open the URL above manually.');
   }
 
-  return await waitForAuth(host, code);
+  return await waitForAuth(host, code, codeChallengeAccepted ? codeVerifier : undefined);
 }
 
 // The code can no longer be approved: it expired, was used, or never existed.
 class DeadCodeError extends Error {}
 
-async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
+async function waitForAuth(
+  host: string,
+  code: string,
+  codeVerifier: string | undefined
+): Promise<CliAuthResult> {
   // Short, since the browser moves on to the deployment page right away.
   const pollInterval = 2 * 1000;
   const pollTimeout = 10 * 60 * 1000; // 10 minutes
@@ -129,7 +138,7 @@ async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
   let reportedError = false;
   while (Date.now() < pollExpireTs) {
     try {
-      const result = await pollForToken(host, code);
+      const result = await pollForToken(host, code, codeVerifier);
       if (result) {
         return result;
       }
@@ -150,16 +159,34 @@ async function waitForAuth(host: string, code: string): Promise<CliAuthResult> {
   throw new Error('Unable to authenticate CLI - timed out. Please try again.');
 }
 
-async function pollForToken(host: string, code: string): Promise<CliAuthResult | null> {
-  const response = await fetch(`${host}/api/cli/token?code=${code}`, {
-    method: 'GET',
+async function requestToken(host: string, code: string, codeVerifier: string | undefined) {
+  if (!codeVerifier) {
+    return await fetch(`${host}/api/cli/token?code=${code}`, { method: 'GET' });
+  }
+  // In the body, since URLs end up in proxy logs.
+  return await fetch(`${host}/api/cli/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, codeVerifier }),
   });
+}
+
+async function pollForToken(
+  host: string,
+  code: string,
+  codeVerifier: string | undefined
+): Promise<CliAuthResult | null> {
+  const response = await requestToken(host, code, codeVerifier);
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
     // Studio answers a dead code with a 4xx, or — older versions — a 500
     // carrying this message; polling longer cannot revive it.
-    const clientError = response.status >= 400 && response.status < 500 && response.status !== 429;
+    // A 404 or 405 here is an older Studio instance, reached mid-rollout, that
+    // has no POST route yet; the next poll can reach a newer one.
+    const missingRoute = Boolean(codeVerifier) && [404, 405].includes(response.status);
+    const clientError =
+      response.status >= 400 && response.status < 500 && response.status !== 429 && !missingRoute;
     if (clientError || body.includes('Invalid or expired code')) {
       throw new DeadCodeError(
         'The sign-in code has expired or is no longer valid. Please run the command again.'
