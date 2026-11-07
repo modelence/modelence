@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticateCli } from './auth';
 
@@ -5,17 +6,23 @@ vi.mock('open', () => ({ default: vi.fn() }));
 
 const host = 'https://studio.example';
 let tokenResponses: Array<() => Response>;
+let codeChallengeAccepted: boolean | undefined;
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   tokenResponses = [];
+  codeChallengeAccepted = true;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       if (url.endsWith('/api/cli/auth')) {
-        return Response.json({ code: 'c1', verificationUrl: `${host}/cli/auth/verify?code=c1` });
+        return Response.json({
+          code: 'c1',
+          verificationUrl: `${host}/cli/auth/verify?code=c1`,
+          codeChallengeAccepted,
+        });
       }
       const next = tokenResponses.shift();
       if (!next) throw new Error('fetch failed');
@@ -32,6 +39,7 @@ afterEach(() => {
 
 describe('authenticateCli polling', () => {
   it('stops at once when Studio rejects the code', async () => {
+    codeChallengeAccepted = undefined;
     tokenResponses.push(() => new Response('Error: Invalid or expired code', { status: 500 }));
     await expect(authenticateCli(host)).rejects.toThrow('The sign-in code has expired');
     tokenResponses.push(() => new Response('Not found', { status: 404 }));
@@ -56,6 +64,88 @@ describe('authenticateCli polling', () => {
   });
 });
 
+describe('authenticateCli token pickup', () => {
+  const calls = () =>
+    vi.mocked(fetch).mock.calls.map(([url, init]) => ({ url: String(url), init }));
+  const authBody = () =>
+    JSON.parse(String(calls().find(({ url }) => url.endsWith('/api/cli/auth'))?.init?.body));
+  const pollRequest = () => calls().find(({ url }) => url.includes('/api/cli/token'));
+
+  it('proves it started the sign-in, without the secret leaving the request body', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host);
+
+    const { codeChallenge } = authBody();
+    expect(codeChallenge).toMatch(/^[\w-]{43}$/);
+
+    const poll = pollRequest();
+    expect(poll?.url).toBe(`${host}/api/cli/token`);
+    expect(poll?.init?.method).toBe('POST');
+    const { code, codeVerifier } = JSON.parse(String(poll?.init?.body));
+    expect(code).toBe('c1');
+    expect(createHash('sha256').update(codeVerifier).digest('base64url')).toBe(codeChallenge);
+  });
+
+  it('never prints the secret', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host);
+    const { codeVerifier } = JSON.parse(String(pollRequest()?.init?.body));
+    const printed = JSON.stringify([
+      vi.mocked(console.log).mock.calls,
+      vi.mocked(console.error).mock.calls,
+    ]);
+    expect(printed).not.toContain(codeVerifier);
+  });
+
+  it('uses a fresh secret for each sign-in', async () => {
+    tokenResponses.push(
+      () => Response.json({ token: 'tok' }),
+      () => Response.json({ token: 'tok' })
+    );
+    await authenticateCli(host);
+    await authenticateCli(host);
+    const challenges = calls()
+      .filter(({ url }) => url.endsWith('/api/cli/auth'))
+      .map(({ init }) => JSON.parse(String(init?.body)).codeChallenge);
+    expect(new Set(challenges).size).toBe(2);
+  });
+
+  // A Studio that predates the challenge ignores it and only knows the GET route.
+  it('falls back to polling by code when Studio did not accept the challenge', async () => {
+    codeChallengeAccepted = undefined;
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host);
+    expect(pollRequest()?.url).toBe(`${host}/api/cli/token?code=c1`);
+    expect(pollRequest()?.init?.method).toBe('GET');
+  });
+
+  it('treats a token already collected as a dead code', async () => {
+    tokenResponses.push(() => new Response('Gone', { status: 410 }));
+    await expect(authenticateCli(host)).rejects.toThrow('The sign-in code has expired');
+  });
+
+  // During a rolling deploy, a poll can reach an instance without the POST route.
+  it.each([404, 405])('keeps polling through a %i on the POST route', async (status) => {
+    tokenResponses.push(
+      () => new Response('Not found', { status }),
+      () => Response.json({ token: 'tok' })
+    );
+    const result = authenticateCli(host);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await result).token).toBe('tok');
+  });
+
+  it('keeps waiting through rate limiting', async () => {
+    tokenResponses.push(
+      () => new Response('Too many requests', { status: 429 }),
+      () => Response.json({ token: 'tok' })
+    );
+    const result = authenticateCli(host);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await result).token).toBe('tok');
+  });
+});
+
 describe('authenticateCli declared variables', () => {
   const env = { DATABASE_URL: { type: 'secret' as const } };
   const authRequest = () =>
@@ -64,14 +154,14 @@ describe('authenticateCli declared variables', () => {
   it('sends what modelence.config.json declares to the deploy picker', async () => {
     tokenResponses.push(() => Response.json({ token: 'tok' }));
     await authenticateCli(host, { pick: 'deploy', purpose: 'deploy', env });
-    expect(JSON.parse(String(authRequest()?.body))).toEqual({ env });
+    expect(JSON.parse(String(authRequest()?.body))).toMatchObject({ env });
   });
 
   // No picker, no variables step to fill.
   it('sends nothing when the page only authorizes', async () => {
     tokenResponses.push(() => Response.json({ token: 'tok' }));
     await authenticateCli(host, { purpose: 'deploy', env });
-    expect(authRequest()?.body).toBeUndefined();
+    expect(JSON.parse(String(authRequest()?.body)).env).toBeUndefined();
   });
 });
 
