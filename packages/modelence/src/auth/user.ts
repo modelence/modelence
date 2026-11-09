@@ -46,6 +46,8 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'signupAttempt', type: 'ip', window: time.days(1), limit: 500 },
     { bucket: 'signin', type: 'ip', window: time.minutes(15), limit: 50 },
     { bucket: 'signin', type: 'ip', window: time.days(1), limit: 500 },
+    { bucket: 'signin', type: 'email', window: time.minutes(15), limit: 10 },
+    { bucket: 'signin', type: 'email', window: time.days(1), limit: 50 },
     { bucket: 'verification', type: 'user', window: time.seconds(60), limit: 1 },
     { bucket: 'verification', type: 'user', window: time.days(1), limit: 10 },
     // Per-user limits only apply to registered, unverified addresses, so they

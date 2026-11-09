@@ -66,8 +66,6 @@ export async function handleLoginWithPassword(
     // password is accepted just as a string, so users can still sign in if the password validation rules are changed
     const password = z.string().parse(args.password);
 
-    // TODO: add rate limiting by email (and perhaps IP address overall)
-
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
@@ -80,6 +78,13 @@ export async function handleLoginWithPassword(
     const isValidPassword = await bcrypt.compare(password, hashToCompare);
 
     if (!passwordHash || !isValidPassword) {
+      // Only failed attempts count against the email limit, so someone cannot
+      // lock a user out of password sign-in by targeting their email.
+      await consumeRateLimit({
+        bucket: 'signin',
+        type: 'email',
+        value: email,
+      });
       throw incorrectCredentialsError();
     }
 

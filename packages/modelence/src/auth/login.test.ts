@@ -70,7 +70,7 @@ vi.doMock('bcrypt', () => ({
 }));
 
 const { handleLoginWithPassword, handleLogout } = await import('./login');
-const { AuthError } = await import('../error');
+const { AuthError, RateLimitError } = await import('../error');
 
 describe('auth/login', () => {
   const baseContext = {
@@ -342,6 +342,11 @@ describe('auth/login', () => {
     expect((wrongPassword as InstanceType<typeof AuthError>).code).toBe(
       (unknownEmail as InstanceType<typeof AuthError>).code
     );
+    // Both paths consume the same email bucket, so neither reveals whether the
+    // address is registered.
+    expect(
+      mockConsumeRateLimit.mock.calls.filter(([options]) => options.type === 'email')
+    ).toHaveLength(2);
   });
 
   test('throws incorrect credentials error when password comparison fails', async () => {
@@ -364,6 +369,65 @@ describe('auth/login', () => {
     expect(mockStartUserSession).not.toHaveBeenCalled();
     expect(authConfig.onLoginError).toHaveBeenCalled();
     expect(authConfig.login.onError).toHaveBeenCalled();
+  });
+
+  test('throttles failed sign-in attempts per email across different IPs', async () => {
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439031'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockResolvedValue(false as never);
+
+    let emailAttempts = 0;
+    mockConsumeRateLimit.mockImplementation((options: { type: string }) => {
+      if (options.type === 'email') {
+        emailAttempts += 1;
+        if (emailAttempts > 2) {
+          return Promise.reject(new RateLimitError('Rate limit exceeded for signin'));
+        }
+      }
+      return Promise.resolve();
+    });
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await expect(
+        handleLoginWithPassword({ email: 'user@example.com', password: 'wrong' }, {
+          ...baseContext,
+          connectionInfo: { ip: `198.51.100.${attempt + 1}` },
+        } as never)
+      ).rejects.toThrow('Incorrect email/password combination');
+    }
+
+    const error = await handleLoginWithPassword({ email: 'user@example.com', password: 'wrong' }, {
+      ...baseContext,
+      connectionInfo: { ip: '198.51.100.3' },
+    } as never).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).toMatchObject({ status: 429 });
+    expect(emailAttempts).toBe(3);
+  });
+
+  test('does not count successful logins against the email limit', async () => {
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439032'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockResolvedValue(true as never);
+
+    await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    );
+
+    const emailLimitCalls = mockConsumeRateLimit.mock.calls.filter(
+      ([options]) => options.type === 'email'
+    );
+    expect(emailLimitCalls).toHaveLength(0);
   });
 
   test('handleLogout clears session user when session exists', async () => {
