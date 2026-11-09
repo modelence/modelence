@@ -157,9 +157,9 @@ export type BeforeSignupProps = {
  */
 export type AuthOption = {
   /** Callback executed when authentication succeeds */
-  onSuccess?: (user: User) => void;
+  onSuccess?: (user: User) => void | Promise<void>;
   /** Callback executed when authentication fails */
-  onError?: (error: Error) => void;
+  onError?: (error: Error) => void | Promise<void>;
 };
 
 /**
@@ -256,13 +256,13 @@ export type AuthConfig = {
    * has been linked to the user. Receives `{ provider, user, session, connectionInfo }`.
    * Use for analytics, audit logging, or post-login side effects.
    */
-  onAfterLogin?: (props: AuthSuccessProps) => void;
+  onAfterLogin?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when a login attempt fails. Receives `{ provider, error, session, connectionInfo }`.
    * Use for failure analytics or alerting — does NOT change the response sent to the client.
    */
-  onLoginError?: (props: AuthErrorProps) => void;
+  onLoginError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Hook fired after validation and the built-in disposable-email check, but
@@ -287,39 +287,39 @@ export type AuthConfig = {
    * session is linked. Receives `{ provider, user, session, connectionInfo }`.
    * Common uses: send welcome email, create default workspace, track activation.
    */
-  onAfterSignup?: (props: AuthSuccessProps) => void;
+  onAfterSignup?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when a signup attempt fails (validation, duplicate email, etc.).
    * Receives `{ provider, error, session, connectionInfo }`.
    * Use for failure analytics — does NOT change the response sent to the client.
    */
-  onSignupError?: (props: AuthErrorProps) => void;
+  onSignupError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Fires after a user's email is successfully verified (via the verification
    * link or implicitly via password reset). Receives `{ provider, user, session, connectionInfo }`.
    */
-  onAfterEmailVerification?: (props: AuthSuccessProps) => void;
+  onAfterEmailVerification?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when email verification fails (invalid or expired token).
    * Receives `{ provider, error, session, connectionInfo }`.
    */
-  onEmailVerificationError?: (props: AuthErrorProps) => void;
+  onEmailVerificationError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Fires after an OAuth provider is linked to an existing account
    * (either automatically when `oauthAccountLinking: 'auto'` or via an
    * explicit link flow). Receives `{ provider, user, session, connectionInfo }`.
    */
-  onAfterOAuthLink?: (props: AuthSuccessProps) => void;
+  onAfterOAuthLink?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when OAuth account linking fails. Receives
    * `{ provider, error, session, connectionInfo }`.
    */
-  onOAuthLinkError?: (props: AuthErrorProps) => void;
+  onOAuthLinkError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Custom handle generator. If provided, overrides the default behavior

@@ -21,6 +21,7 @@ import {
   resolveUniqueHandle,
   serializeUserForClient,
   isDuplicateEmailError,
+  fireAuthHook,
 } from './utils';
 import { Session, User } from './types';
 
@@ -51,25 +52,6 @@ const ONE_TIME_CODE_LENGTH = 6;
 // A 6-digit code is guessable in a way a 32-byte token is not, so each doc
 // tolerates only a few wrong guesses before it can no longer be used.
 const MAX_CODE_ATTEMPTS = 5;
-
-/**
- * Invokes a notify-only auth hook (onAfterLogin, onLoginError, ...) without
- * letting it affect the auth flow. These hooks are typed `() => void`, but a
- * user can still pass an async function — a rejection from it, never awaited,
- * would be an unhandled promise rejection (which can crash the process). A sync
- * throw is contained the same way. Deliberately NOT awaited: a failing
- * analytics hook must not fail an otherwise-successful login, and in error
- * paths it must not mask the real error being propagated.
- */
-function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
-  try {
-    Promise.resolve(invoke?.()).catch((hookError: unknown) => {
-      console.error(`Error in ${name} hook:`, hookError);
-    });
-  } catch (hookError) {
-    console.error(`Error in ${name} hook:`, hookError);
-  }
-}
 
 function isMagicLinkEnabled(): boolean {
   return Boolean(getAuthConfig().magicLink?.enabled);

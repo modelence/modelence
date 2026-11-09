@@ -32,7 +32,10 @@ vi.doMock('../session', () => ({
 vi.doMock('@/app/authConfig', () => ({ getAuthConfig: mockGetAuthConfig }));
 vi.doMock('@/app/server', () => ({ getCallContext: mockGetCallContext }));
 vi.doMock('@/config/server', () => ({ getConfig: mockGetConfig }));
-vi.doMock('../utils', () => ({ resolveUniqueHandle: vi.fn(async () => 'demo') }));
+vi.doMock('../utils', async () => ({
+  fireAuthHook: (await vi.importActual<typeof import('../utils')>('../utils')).fireAuthHook,
+  resolveUniqueHandle: vi.fn(async () => 'demo'),
+}));
 
 const oauth = await import('./oauthCommon');
 
