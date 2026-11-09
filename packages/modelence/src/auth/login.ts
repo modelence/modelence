@@ -13,7 +13,7 @@ import {
   startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
-import { checkRateLimit, consumeRateLimit } from '@/server';
+import { checkRateLimit, consumeRateLimit, releaseRateLimits } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -74,6 +74,14 @@ export async function handleLoginWithPassword(
       type: 'email',
       value: email,
     });
+    // The check above is only a snapshot, so concurrent guesses could all pass
+    // it. Reserve a slot atomically before bcrypt; it is released on success,
+    // so only failed attempts count against the email limit.
+    const emailReservations = await consumeRateLimit({
+      bucket: 'signin',
+      type: 'email',
+      value: email,
+    });
 
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
@@ -87,14 +95,18 @@ export async function handleLoginWithPassword(
     const isValidPassword = await bcrypt.compare(password, hashToCompare);
 
     if (!passwordHash || !isValidPassword) {
-      // Only failed attempts count against the email limit; the pre-check above
-      // blocks further attempts once the limit is reached.
-      await consumeRateLimit({
-        bucket: 'signin',
-        type: 'email',
-        value: email,
-      });
+      // Keep the reservation counted: only failed attempts count against the
+      // email limit.
       throw incorrectCredentialsError();
+    }
+
+    // The password is correct, so release the reserved attempt. A failed
+    // release must not block a valid login; the worst case is one extra attempt
+    // counted against the email.
+    try {
+      await releaseRateLimits(emailReservations);
+    } catch (error) {
+      console.error('Failed to release email rate limit reservation', error);
     }
 
     // Only check email verification if the user exists and the password is correct,

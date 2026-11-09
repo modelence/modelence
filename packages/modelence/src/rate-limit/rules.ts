@@ -78,6 +78,8 @@ export async function checkRateLimit(options: {
 /**
  * This function will check all rate limit rules on the specified bucket and type,
  * throw an error if any of them are exceeded and increase the count of the rate limit record.
+ * It returns the reservations so a successful operation can release them with
+ * `releaseRateLimits`.
  *
  * @category Rate Limits
  *
@@ -90,23 +92,86 @@ export async function checkRateLimit(options: {
  * @param options.value - The value for the rate limit.
  * @param options.message - Optional custom error message when the rate limit is exceeded.
  */
+export type RateLimitReservation = {
+  bucket: string;
+  type: RateLimitType;
+  value: string;
+  windowMs: number;
+  windowStart: Date;
+};
+
 export async function consumeRateLimit(options: {
   bucket: string;
   type: RateLimitType;
   value: string;
   message?: string;
-}) {
+}): Promise<RateLimitReservation[]> {
   const { bucket, type, value, message } = options;
   const rules = allRules.filter((rule) => rule.bucket === bucket && rule.type === type);
   const createError = message ? () => new RateLimitError(message) : undefined;
 
+  const reservations: RateLimitReservation[] = [];
   for (const rule of rules) {
-    await checkRateLimitRule(rule, value, createError);
+    const windowStart = await checkRateLimitRule(rule, value, createError);
+    reservations.push({
+      bucket: rule.bucket,
+      type: rule.type,
+      value,
+      windowMs: rule.window,
+      windowStart,
+    });
+  }
+  return reservations;
+}
+
+/**
+ * Releases reservations returned by `consumeRateLimit`, so an operation that
+ * succeeds does not count against the limit. It returns the reservation to the
+ * window it was taken from, including when that window has rolled over while
+ * the operation was in flight.
+ *
+ * @category Rate Limits
+ *
+ * @example
+ * ```ts
+ * const reservations = await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+ * await releaseRateLimits(reservations);
+ * ```
+ */
+export async function releaseRateLimits(reservations: RateLimitReservation[]) {
+  for (const reservation of reservations) {
+    const { bucket, type, value, windowMs, windowStart } = reservation;
+
+    const released = await dbRateLimits.updateOne(
+      { bucket, type, value, windowMs, windowStart },
+      { $inc: { windowCount: -1 } }
+    );
+
+    if (released.modifiedCount > 0) {
+      continue;
+    }
+
+    // The record shifted into the next window while the operation was in
+    // flight; the reservation was moved into that window's prevWindowCount.
+    await dbRateLimits.updateOne(
+      {
+        bucket,
+        type,
+        value,
+        windowMs,
+        windowStart: new Date(windowStart.getTime() + windowMs),
+      },
+      { $inc: { prevWindowCount: -1 } }
+    );
   }
 }
 
 // Two-bucket sliding window approximation to track rate limits.
-async function checkRateLimitRule(rule: RateLimitRule, value: string, createError?: () => Error) {
+async function checkRateLimitRule(
+  rule: RateLimitRule,
+  value: string,
+  createError?: () => Error
+): Promise<Date> {
   const createRateLimitError = () => {
     return createError
       ? createError()
@@ -151,7 +216,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
 
     if (updatedDoc) {
       await acceptOrReject(updatedDoc);
-      return;
+      return currentWindowDate;
     }
 
     // 2. Read existing record to handle window transition.
@@ -192,7 +257,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
 
       if (shiftedDoc) {
         await acceptOrReject(shiftedDoc);
-        return;
+        return currentWindowDate;
       }
 
       // If another call shifted the window concurrently, retry loop to hit step 1
@@ -219,7 +284,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
         continue;
       }
       await acceptOrReject(upsertedDoc);
-      return;
+      return currentWindowDate;
     }
   }
 

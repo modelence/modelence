@@ -5,6 +5,7 @@ type SetupResult = {
   initRateLimits: typeof import('./rules').initRateLimits;
   consumeRateLimit: typeof import('./rules').consumeRateLimit;
   checkRateLimit: typeof import('./rules').checkRateLimit;
+  releaseRateLimits: typeof import('./rules').releaseRateLimits;
   mocks: {
     findOne: Mock;
     findOneAndUpdate: Mock;
@@ -36,6 +37,7 @@ async function loadModule(): Promise<SetupResult> {
     initRateLimits: mod.initRateLimits,
     consumeRateLimit: mod.consumeRateLimit,
     checkRateLimit: mod.checkRateLimit,
+    releaseRateLimits: mod.releaseRateLimits,
     mocks: {
       findOne: mockFindOne,
       findOneAndUpdate: mockFindOneAndUpdate,
@@ -218,7 +220,17 @@ describe('rate-limit/rules', () => {
       isNew: true,
     });
 
-    await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+    const reservations = await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+
+    expect(reservations).toEqual([
+      {
+        bucket: 'api',
+        type: 'ip',
+        value: '127.0.0.1',
+        windowMs: 60_000,
+        windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      },
+    ]);
 
     expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       {
@@ -460,6 +472,45 @@ describe('rate-limit/rules', () => {
       },
       { $inc: { windowCount: 1 } },
       { returnDocument: 'after' }
+    );
+  });
+
+  test('releaseRateLimits decrements the reserved window', async () => {
+    const { releaseRateLimits, mocks } = await loadModule();
+    const windowStart = new Date('2024-01-01T00:00:00.000Z');
+    mocks.updateOne.mockResolvedValueOnce({ modifiedCount: 1 });
+
+    await releaseRateLimits([
+      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000, windowStart },
+    ]);
+
+    expect(mocks.updateOne).toHaveBeenCalledTimes(1);
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000, windowStart },
+      { $inc: { windowCount: -1 } }
+    );
+  });
+
+  test('releaseRateLimits releases into the next window after a rollover', async () => {
+    const { releaseRateLimits, mocks } = await loadModule();
+    const windowStart = new Date('2024-01-01T00:00:00.000Z');
+    mocks.updateOne.mockResolvedValueOnce({ modifiedCount: 0 });
+    mocks.updateOne.mockResolvedValueOnce({ modifiedCount: 1 });
+
+    await releaseRateLimits([
+      { bucket: 'api', type: 'ip', value: '127.0.0.1', windowMs: 60_000, windowStart },
+    ]);
+
+    expect(mocks.updateOne).toHaveBeenNthCalledWith(
+      2,
+      {
+        bucket: 'api',
+        type: 'ip',
+        value: '127.0.0.1',
+        windowMs: 60_000,
+        windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      },
+      { $inc: { prevWindowCount: -1 } }
     );
   });
 

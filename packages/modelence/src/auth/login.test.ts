@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 
 const mockConsumeRateLimit = vi.fn();
 const mockCheckRateLimit = vi.fn();
+const mockReleaseRateLimits = vi.fn();
 const mockFindOne = vi.fn();
 const FRESH_AUTH_TOKEN = 'fresh-auth-token';
 const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, userId: unknown) => ({
@@ -24,6 +25,7 @@ const mockHashSync = vi.fn(() => '$2b$10$dummyDummyDummyDummyDummyDummyDummyDumm
 vi.doMock('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
   checkRateLimit: mockCheckRateLimit,
+  releaseRateLimits: mockReleaseRateLimits,
 }));
 
 vi.doMock('./db', () => ({
@@ -100,8 +102,9 @@ describe('auth/login', () => {
     mockGetConfig.mockImplementation((key: string) =>
       key === '_system.user.auth.email.verification' ? true : undefined
     );
-    mockConsumeRateLimit.mockResolvedValue(undefined as never);
+    mockConsumeRateLimit.mockResolvedValue([] as never);
     mockCheckRateLimit.mockResolvedValue(undefined as never);
+    mockReleaseRateLimits.mockResolvedValue(undefined as never);
     mockSendVerificationEmail.mockResolvedValue(undefined as never);
     mockCompare.mockResolvedValue(true as never);
 
@@ -136,6 +139,19 @@ describe('auth/login', () => {
       type: 'ip',
       value: '203.0.113.1',
     });
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+    });
+    const emailReservationIndex = mockConsumeRateLimit.mock.calls.findIndex(
+      ([options]) => options.type === 'email'
+    );
+    // The reservation is taken before bcrypt, closing the check-then-act race.
+    expect(mockConsumeRateLimit.mock.invocationCallOrder[emailReservationIndex]).toBeLessThan(
+      mockCompare.mock.invocationCallOrder[0]
+    );
+    expect(mockReleaseRateLimits).toHaveBeenCalledTimes(1);
     expect(mockCompare).toHaveBeenCalledWith('Secret123', 'hashed');
     expect(mockStartUserSession).toHaveBeenCalledWith('token-1', userId);
     expect(authConfig.onAfterLogin).toHaveBeenCalledWith({
@@ -176,6 +192,11 @@ describe('auth/login', () => {
       type: 'email',
       value: 'unknown@example.com',
     });
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+      bucket: 'signin',
+      type: 'email',
+      value: 'unknown@example.com',
+    });
   });
 
   test('runs bcrypt against a dummy hash for accounts without a password', async () => {
@@ -195,6 +216,11 @@ describe('auth/login', () => {
     ).rejects.toThrow('Incorrect email/password combination');
 
     expect(mockCompare).toHaveBeenCalledWith('Secret123', expect.stringMatching(/^\$2b\$10\$/));
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+    });
   });
 
   test('throws unverified error when email is unverified and provider configured', async () => {
@@ -218,12 +244,18 @@ describe('auth/login', () => {
     );
     expect((error as { code?: string }).code).toBe('EMAIL_NOT_VERIFIED');
 
-    expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockConsumeRateLimit).toHaveBeenCalledTimes(2);
     expect(mockConsumeRateLimit).toHaveBeenCalledWith({
       bucket: 'signin',
       type: 'ip',
       value: '203.0.113.1',
     });
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+    });
+    expect(mockReleaseRateLimits).toHaveBeenCalledTimes(1);
     expect(mockSendVerificationEmail).not.toHaveBeenCalled();
     expect(authConfig.onLoginError).toHaveBeenCalledWith({
       provider: 'email',
@@ -358,6 +390,7 @@ describe('auth/login', () => {
     expect(
       mockCheckRateLimit.mock.calls.filter(([options]) => options.type === 'email')
     ).toHaveLength(2);
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
   });
 
   test('throws incorrect credentials error when password comparison fails', async () => {
@@ -403,7 +436,7 @@ describe('auth/login', () => {
       if (options.type === 'email') {
         emailFailures += 1;
       }
-      return Promise.resolve();
+      return Promise.resolve([]);
     });
 
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -431,6 +464,7 @@ describe('auth/login', () => {
     expect(
       mockCheckRateLimit.mock.calls.filter(([options]) => options.type === 'email')
     ).toHaveLength(11);
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
   });
 
   test('rejects a correct password with a 429 once the email limit is reached', async () => {
@@ -458,6 +492,38 @@ describe('auth/login', () => {
     // The password is never compared once the email budget is exhausted.
     expect(mockCompare).not.toHaveBeenCalled();
     expect(mockStartUserSession).not.toHaveBeenCalled();
+    expect(
+      mockConsumeRateLimit.mock.calls.filter(([options]) => options.type === 'email')
+    ).toHaveLength(0);
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
+  });
+
+  test('rejects before bcrypt when a concurrent request fills the email limit', async () => {
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439034'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockResolvedValue(true as never);
+    mockConsumeRateLimit.mockImplementation((options: { type: string }) => {
+      if (options.type === 'email') {
+        return Promise.reject(new RateLimitError('Rate limit exceeded for signin'));
+      }
+      return Promise.resolve([]);
+    });
+
+    const error = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    ).catch((e: unknown) => e);
+
+    // The check passed, but a concurrent request filled the bucket before this
+    // one could reserve its slot.
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).toMatchObject({ status: 429 });
+    expect(mockCompare).not.toHaveBeenCalled();
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
   });
 
   test('does not count successful logins against the email limit', async () => {
@@ -468,16 +534,28 @@ describe('auth/login', () => {
       emails: [{ address: 'user@example.com', verified: true }],
     } as never);
     mockCompare.mockResolvedValue(true as never);
+    const reservation = {
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 15 * 60 * 1000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+    };
+    mockConsumeRateLimit.mockImplementation((options: { type: string }) =>
+      options.type === 'email' ? Promise.resolve([reservation]) : Promise.resolve([])
+    );
 
     await handleLoginWithPassword(
       { email: 'user@example.com', password: 'Secret123' },
       baseContext as never
     );
 
-    const emailLimitCalls = mockConsumeRateLimit.mock.calls.filter(
-      ([options]) => options.type === 'email'
-    );
-    expect(emailLimitCalls).toHaveLength(0);
+    // The successful attempt reserved a slot and released it, so the email
+    // bucket still has no net consumption.
+    expect(
+      mockConsumeRateLimit.mock.calls.filter(([options]) => options.type === 'email')
+    ).toHaveLength(1);
+    expect(mockReleaseRateLimits).toHaveBeenCalledWith([reservation]);
     expect(mockCheckRateLimit).toHaveBeenCalledWith({
       bucket: 'signin',
       type: 'email',
@@ -514,5 +592,6 @@ describe('auth/login', () => {
     expect((error as { code?: string }).code).toBe('ALREADY_AUTHENTICATED');
     expect(mockConsumeRateLimit).not.toHaveBeenCalled();
     expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
   });
 });
