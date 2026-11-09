@@ -411,26 +411,62 @@ describe('verify', () => {
     await chmod(join(dir, 'secret.txt'), 0o600);
   });
 
-  it('kills what ignores the stop request after an interrupt', async () => {
-    const pidFile = join(runtimeDir, 'app.pid');
-    await project(
-      {
-        'server.js':
-          `process.on('SIGTERM', () => {});\n` +
-          `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));\n` +
-          server('0'),
-      },
-      { build: { commands: [] }, start: { commands: ['node server.js'] } }
-    );
-    setTimeout(() => process.emit('SIGTERM'), 1000);
-    const started = Date.now();
-    expect(await run('60')).toBe(false);
-    // The grace period, not the 60s start timeout.
-    expect(Date.now() - started).toBeLessThan(12_000);
-    expect(output()).toContain('Interrupted.');
-    const pid = Number(await readFile(pidFile, 'utf8'));
-    expect(() => process.kill(pid, 0)).toThrow();
-  }, 20_000);
+  it.each(['interrupt', 'success'])(
+    'kills an app that outlives its shell after %s',
+    async (outcome) => {
+      const interrupted = outcome === 'interrupt';
+      const readyFile = join(runtimeDir, 'app.json');
+      await project(
+        {
+          'server.js': `
+process.on('SIGTERM', () => {});
+const server = require('http').createServer((q, s) => s.end('ok'));
+server.listen(${interrupted ? '0' : 'Number(process.env.PORT)'}, () => {
+  require('fs').writeFileSync(${JSON.stringify(readyFile)}, JSON.stringify({
+    pid: process.pid, port: server.address().port,
+  }));
+});`,
+        },
+        {
+          build: { commands: [] },
+          // Keep the shell alive on macOS too, so it can exit before Node.
+          start: { commands: ['node server.js; exit $?'] },
+        }
+      );
+      const verification = run('10');
+      let pid: number | undefined;
+      try {
+        const app = await vi.waitFor(
+          async () =>
+            JSON.parse(await readFile(readyFile, 'utf8')) as { pid: number; port: number },
+          { timeout: 5_000 }
+        );
+        pid = app.pid;
+        if (interrupted) {
+          process.emit('SIGTERM');
+        }
+        expect(await verification).toBe(!interrupted);
+        if (interrupted) {
+          expect(output()).toContain('Interrupted.');
+        }
+        // A killed orphan may briefly remain as a zombie on Linux. Check
+        // that the app has actually released its listening port.
+        await vi.waitFor(async () => {
+          await expect(fetch(`http://127.0.0.1:${app.port}/`)).rejects.toThrow();
+        });
+      } finally {
+        if (pid !== undefined) {
+          try {
+            process.kill(pid, 'SIGKILL');
+          } catch {
+            // Already gone.
+          }
+        }
+        await verification;
+      }
+    },
+    20_000
+  );
 
   it('gives build commands no stdin, as in the cloud', async () => {
     await project(

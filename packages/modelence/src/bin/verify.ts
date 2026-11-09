@@ -71,18 +71,12 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     stop reaches everything they start; Ctrl+C or a SIGTERM from an agent is
     forwarded to them, and the temporary copy is still removed.
   */
-  const run: Run = { children: new Set(), interrupted: false };
+  const run: Run = { stopChildren: new Set(), interrupted: false };
   const onSignal = () => {
     run.interrupted = true;
-    for (const child of run.children) {
-      signalGroup(child, 'SIGTERM');
+    for (const stopChild of run.stopChildren) {
+      void stopChild();
     }
-    // Whatever ignores the stop request is killed, so a cancel always ends.
-    setTimeout(() => {
-      for (const child of run.children) {
-        killTree(child);
-      }
-    }, STOP_GRACE_MS).unref();
   };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
@@ -116,7 +110,7 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
 }
 
 interface Run {
-  children: Set<ChildProcess>;
+  stopChildren: Set<() => Promise<void>>;
   interrupted: boolean;
 }
 
@@ -186,7 +180,6 @@ async function rehearse(
     stdio: ['ignore', 'inherit', 'inherit'],
     detached: true,
   });
-  run.children.add(app);
   let spawnError: Error | null = null;
   const exited = new Promise<void>((resolve) => {
     app.once('exit', () => resolve());
@@ -195,6 +188,7 @@ async function rehearse(
       resolve();
     });
   });
+  const stopApp = trackStop(run, app, exited);
 
   try {
     let hasExited = false;
@@ -231,8 +225,8 @@ async function rehearse(
     );
     return true;
   } finally {
-    await stop(app, exited);
-    run.children.delete(app);
+    await stopApp();
+    run.stopChildren.delete(stopApp);
   }
 }
 
@@ -326,69 +320,78 @@ function localDatabase(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return uri ? { MONGODB_URI: uri, MONGO_URL: uri } : {};
 }
 
-function runToCompletion(
+async function runToCompletion(
   command: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
   run: Run
 ): Promise<number | NodeJS.Signals> {
-  // The exit code, or the signal that killed the command.
-  return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], {
-      cwd,
-      env,
-      stdio: ['ignore', 'inherit', 'inherit'],
-      detached: true,
-    });
-    run.children.add(child);
-    const done = (result: number | NodeJS.Signals) => {
-      run.children.delete(child);
-      resolve(result);
-    };
-    child.once('exit', (code, signal) => done(code ?? signal ?? 1));
-    child.once('error', () => done(127));
+  const child = spawn('sh', ['-c', command], {
+    cwd,
+    env,
+    stdio: ['ignore', 'inherit', 'inherit'],
+    detached: true,
   });
+  const exited = new Promise<number | NodeJS.Signals>((resolve) => {
+    child.once('exit', (code, signal) => resolve(code ?? signal ?? 1));
+    child.once('error', () => resolve(127));
+  });
+  const stopChild = trackStop(run, child, exited);
+  try {
+    return await exited;
+  } finally {
+    if (run.interrupted) {
+      await stopChild();
+    }
+    run.stopChildren.delete(stopChild);
+  }
 }
 
-async function stop(child: ChildProcess, exited: Promise<void>): Promise<void> {
+function trackStop(run: Run, child: ChildProcess, exited: Promise<unknown>) {
+  // The interrupt handler and finally must share the same group snapshot.
+  let stopping: Promise<void> | undefined;
+  const stopChild = () => (stopping ??= stop(child, exited));
+  run.stopChildren.add(stopChild);
+  return stopChild;
+}
+
+async function stop(child: ChildProcess, exited: Promise<unknown>): Promise<void> {
   if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
-  signalGroup(child, 'SIGTERM');
-  const timer = setTimeout(() => killTree(child), STOP_GRACE_MS);
-  await exited;
-  clearTimeout(timer);
-}
-
-function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  // Without a pid the spawn failed; -0 would be this process's own group.
-  if (!child.pid) {
-    return;
-  }
-  try {
-    process.kill(-child.pid, signal);
-  } catch {
-    // Already gone.
-  }
-}
-
-/*
-  SIGKILLs the process groups of `child` and of everything below it. The
-  runtime starts the app in a group of its own, and a SIGKILL to the
-  runtime is neither caught nor forwarded, so the app's group is found in
-  the process table while the runtime is still its parent and is killed
-  with it. This process's own group is never signalled.
-*/
-function killTree(child: ChildProcess): void {
-  if (!child.pid) {
-    return;
-  }
-  for (const group of processGroupsBelow(child.pid)) {
-    try {
-      process.kill(-group, 'SIGKILL');
-    } catch {
-      // Already gone.
+  // Capture detached groups before SIGTERM can orphan them. The runtime
+  // may exit with the shell while the app is still draining or ignoring TERM.
+  const groups = new Set(processGroupsBelow(child.pid));
+  signalGroup(child.pid, 'SIGTERM');
+  const timer = setTimeout(() => {
+    for (const group of groups) {
+      signalGroup(group, 'SIGKILL');
     }
+    groups.clear();
+  }, STOP_GRACE_MS);
+  try {
+    await exited;
+    while (groups.size > 0) {
+      for (const group of groups) {
+        if (!signalGroup(group, 0)) {
+          groups.delete(group);
+        }
+      }
+      if (groups.size > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function signalGroup(group: number, signal: NodeJS.Signals | 0): boolean {
+  try {
+    process.kill(-group, signal);
+    return true;
+  } catch {
+    return false;
   }
 }
 
