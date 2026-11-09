@@ -168,7 +168,7 @@ describe('auth/signup', () => {
     expect(mockInsertOne).toHaveBeenCalledWith(expect.objectContaining({ handle: 'test' }));
   });
 
-  test('a failing onAfterSignup hook does not fail the signup', async () => {
+  test('a failing signup hook does not fail the signup', async () => {
     const insertedId = createObjectId('user-1');
     mockInsertOne.mockResolvedValue({ insertedId } as never);
     mockFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
@@ -178,9 +178,10 @@ describe('auth/signup', () => {
       authMethods: {},
       emails: [{ address: 'test@example.com', verified: false }],
     } as never);
-    authConfig.onAfterSignup.mockImplementation(() => {
+    authConfig.onAfterSignup.mockImplementationOnce(() => {
       throw new Error('analytics down');
     });
+    authConfig.signup.onSuccess.mockRejectedValueOnce(new Error('async analytics down'));
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
@@ -188,12 +189,18 @@ describe('auth/signup', () => {
         { email: 'test@example.com', password: 'Secret123' },
         baseContext
       );
+      await new Promise((resolve) => setImmediate(resolve));
 
       // The account exists, so the caller must not be told the signup failed.
       expect(result).toBe(insertedId);
       expect(authConfig.onSignupError).not.toHaveBeenCalled();
+      expect(authConfig.signup.onError).not.toHaveBeenCalled();
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Error in onAfterSignup hook:',
+        expect.any(Error)
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error in signup.onSuccess hook:',
         expect.any(Error)
       );
     } finally {

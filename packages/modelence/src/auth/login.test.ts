@@ -165,10 +165,10 @@ describe('auth/login', () => {
       authMethods: { password: { hash: 'hashed' } },
       emails: [{ address: 'user@example.com', verified: true }],
     } as never);
-    authConfig.onAfterLogin.mockImplementation(() => {
+    authConfig.onAfterLogin.mockImplementationOnce(() => {
       throw new Error('analytics down');
     });
-    authConfig.login.onSuccess.mockRejectedValue(new Error('async analytics down'));
+    authConfig.login.onSuccess.mockRejectedValueOnce(new Error('async analytics down'));
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
