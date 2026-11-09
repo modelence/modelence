@@ -7,13 +7,13 @@ title: CronJobInputParams
 
 > **CronJobInputParams** = `object`
 
-Defined in: [packages/modelence/src/cron/types.ts:18](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L18)
+Defined in: [packages/modelence/src/cron/types.ts:19](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L19)
 
 ## Properties
 
-| Property | Type | Defined in |
-| ------ | ------ | ------ |
-| <a id="description"></a> `description?` | `string` | [packages/modelence/src/cron/types.ts:19](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L19) |
-| <a id="handler"></a> `handler` | `CronJobHandler` | [packages/modelence/src/cron/types.ts:22](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L22) |
-| <a id="interval"></a> `interval` | `number` | [packages/modelence/src/cron/types.ts:20](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L20) |
-| <a id="timeout"></a> `timeout?` | `number` | [packages/modelence/src/cron/types.ts:21](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L21) |
+| Property | Type | Description | Defined in |
+| ------ | ------ | ------ | ------ |
+| <a id="description"></a> `description?` | `string` | - | [packages/modelence/src/cron/types.ts:20](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L20) |
+| <a id="handler"></a> `handler` | `CronJobHandler` | - | [packages/modelence/src/cron/types.ts:31](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L31) |
+| <a id="interval"></a> `interval` | `number` | - | [packages/modelence/src/cron/types.ts:21](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L21) |
+| <a id="timeout"></a> `timeout?` | `number` | How long a run may take, in milliseconds, before an error is reported. The error repeats every `timeout` until the run finishes. This only reports: nothing aborts the handler, and the job won't run again until it settles. A handler that never settles blocks its job until the process restarts, so give any network or database calls in it their own timeouts. | [packages/modelence/src/cron/types.ts:30](https://github.com/modelence/modelence/blob/main/packages/modelence/src/cron/types.ts#L30) |
