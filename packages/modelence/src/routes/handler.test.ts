@@ -102,7 +102,7 @@ describe('routes/handler', () => {
 
     await handler(authedReq, res, next);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('token', { persistNewSession: false });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith({ ok: true });
     expect(transactionEnd).toHaveBeenCalledWith();

@@ -359,7 +359,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token', { persistNewSession: false });
     expect(ctx.session?.authToken).toBe('session-token');
     expect(ctx.connectionInfo).toMatchObject({
       baseUrl: 'https://localhost:3000',
@@ -416,7 +416,7 @@ describe('app/server getCallContext', () => {
 
     const ctx = await getCallContext(req, {} as Response);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('body-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('body-token', { persistNewSession: false });
     expect(ctx.session?.authToken).toBe('body-token');
   });
 

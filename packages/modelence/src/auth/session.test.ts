@@ -47,6 +47,7 @@ const {
   setSessionUser,
   startUserSession,
   clearSessionUser,
+  isSessionSaved,
   sessionsCollection,
   issueOAuthExchangeCode,
   consumeOAuthExchangeCode,
@@ -171,6 +172,46 @@ describe('auth/session', () => {
     // Should result in a newly created session instead
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
+  });
+
+  describe('obtainSession with persistNewSession: false', () => {
+    test('returns an unsaved anonymous session when the token is missing', async () => {
+      const result = await obtainSession(null, { persistNewSession: false });
+
+      expect(insertOneMock).not.toHaveBeenCalled();
+      expect(result.authToken).toBe('auth-token');
+      expect(result.userId).toBeNull();
+      expect(result.expiresAt).toBeInstanceOf(Date);
+      expect(isSessionSaved(result)).toBe(false);
+    });
+
+    test('returns an unsaved anonymous session when the token is unknown', async () => {
+      findOneMock.mockResolvedValue(null as never);
+
+      const result = await obtainSession('unknown-token', { persistNewSession: false });
+
+      expect(insertOneMock).not.toHaveBeenCalled();
+      expect(result.userId).toBeNull();
+      expect(isSessionSaved(result)).toBe(false);
+    });
+
+    test('still returns the existing session when the token is found', async () => {
+      const existing = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+      findOneMock.mockResolvedValue(existing as never);
+
+      const result = await obtainSession('token', { persistNewSession: false });
+
+      expect(result.userId).toBe(existing.userId);
+      expect(isSessionSaved(result)).toBe(true);
+    });
+  });
+
+  test('sessions created by default are saved', async () => {
+    insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+
+    const result = await obtainSession(null);
+
+    expect(isSessionSaved(result)).toBe(true);
   });
 
   test('setSessionUser stores user id for session', async () => {
@@ -307,6 +348,50 @@ describe('auth/session', () => {
       expect(res.cookie as Mock).not.toHaveBeenCalled();
     });
 
+    test('saves an unsaved session before returning its token to the client', async () => {
+      insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+      const unsaved = await obtainSession(null, { persistNewSession: false });
+
+      const result = (await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session: unsaved,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res: makeRes(),
+        }
+      )) as { session: { authToken: string } };
+
+      expect(insertOneMock).toHaveBeenCalledTimes(1);
+      expect(insertOneMock).toHaveBeenCalledWith(
+        expect.objectContaining({ authToken: 'hashed-auth-token', userId: null })
+      );
+      expect(isSessionSaved(result.session as never)).toBe(true);
+    });
+
+    test('does not insert anything for a session that is already saved', async () => {
+      const session = { authToken: 'token', expiresAt: new Date(), userId: null };
+
+      const result = (await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res: makeRes(),
+        }
+      )) as { session: unknown };
+
+      expect(insertOneMock).not.toHaveBeenCalled();
+      expect(result.session).toBe(session);
+    });
+
     test('does not throw when res is null (in-process invocations)', async () => {
       const session = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
 
@@ -351,6 +436,24 @@ describe('auth/session', () => {
           },
         }
       );
+    });
+
+    test('does not touch the database for an unsaved session', async () => {
+      const unsaved = await obtainSession(null, { persistNewSession: false });
+
+      await sessionSystemModule.mutations.heartbeat.call(
+        sessionSystemModule,
+        {},
+        {
+          session: unsaved,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+        }
+      );
+
+      expect(updateOneMock).not.toHaveBeenCalled();
     });
 
     test('does nothing when session is null', async () => {

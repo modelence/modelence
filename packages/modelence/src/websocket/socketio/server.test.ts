@@ -120,7 +120,7 @@ describe('websocket/socketio/server', () => {
     const next = vi.fn();
     const authSocket = { handshake: { auth: { token: 'abc' } }, data: null } as unknown as Socket;
     await middleware?.(authSocket, next);
-    expect(mockAuthenticate).toHaveBeenCalledWith('abc');
+    expect(mockAuthenticate).toHaveBeenCalledWith('abc', { persistNewSession: false });
     expect(authSocket.data).toEqual({ user: { id: '1' } });
     expect(next).toHaveBeenCalled();
 
@@ -164,7 +164,7 @@ describe('websocket/socketio/server', () => {
 
     await middleware?.(authSocket, next);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('invalid');
+    expect(mockAuthenticate).toHaveBeenCalledWith('invalid', { persistNewSession: false });
     expect(authSocket.data).toBeNull();
     expect(next).toHaveBeenCalledWith(authError);
   });

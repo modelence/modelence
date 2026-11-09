@@ -44,6 +44,22 @@ describe('auth/index', () => {
     expect(mockFindOne).not.toHaveBeenCalled();
   });
 
+  test('saves new sessions by default', async () => {
+    mockObtainSession.mockResolvedValue({ authToken: 't', expiresAt: new Date(), userId: null });
+
+    await authenticate(null);
+
+    expect(mockObtainSession).toHaveBeenCalledWith(null, { persistNewSession: true });
+  });
+
+  test('passes persistNewSession: false through to obtainSession', async () => {
+    mockObtainSession.mockResolvedValue({ authToken: 't', expiresAt: new Date(), userId: null });
+
+    await authenticate('unknown', { persistNewSession: false });
+
+    expect(mockObtainSession).toHaveBeenCalledWith('unknown', { persistNewSession: false });
+  });
+
   test('maps database user info when session has userId', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439011');
     const session = {
