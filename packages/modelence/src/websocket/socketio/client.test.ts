@@ -70,10 +70,19 @@ describe('websocket/socketio/client', () => {
 
       expect(mockIo).toHaveBeenCalledWith('/', {
         transports: ['websocket'],
-        auth: {
-          token: 'test-token',
-        },
+        auth: expect.any(Function),
       });
+    });
+
+    test('passes current auth token via auth callback during handshake', () => {
+      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token' });
+
+      websocketProvider.init({ channels: [] });
+
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: 'fresh-token' });
     });
 
     test('initializes with undefined token when no session exists', () => {
@@ -81,12 +90,10 @@ describe('websocket/socketio/client', () => {
 
       websocketProvider.init({ channels: [] });
 
-      expect(mockIo).toHaveBeenCalledWith('/', {
-        transports: ['websocket'],
-        auth: {
-          token: undefined,
-        },
-      });
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: undefined });
     });
 
     test('initializes channels when provided', () => {
@@ -409,25 +416,21 @@ describe('websocket/socketio/client', () => {
       websocketProvider.init({});
     });
 
-    test('updates auth token without disconnecting when socket is connected', () => {
-      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token' });
+    test('disconnects and connects socket when socket is connected', () => {
       mockSocket.connected = true;
 
       websocketProvider.reconnect?.();
 
-      expect(mockSocket.auth).toEqual({ token: 'fresh-token' });
-      expect(mockSocket.disconnect).not.toHaveBeenCalled();
-      expect(mockSocket.connect).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledTimes(1);
+      expect(mockSocket.connect).toHaveBeenCalledTimes(1);
     });
 
-    test('updates auth token and connects socket when disconnected', () => {
-      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token-2' });
+    test('disconnects and connects socket when socket is disconnected', () => {
       mockSocket.connected = false;
 
       websocketProvider.reconnect?.();
 
-      expect(mockSocket.auth).toEqual({ token: 'fresh-token-2' });
-      expect(mockSocket.disconnect).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledTimes(1);
       expect(mockSocket.connect).toHaveBeenCalledTimes(1);
     });
   });
@@ -467,10 +470,13 @@ describe('websocket/socketio/client', () => {
 
       expect(mockIo).toHaveBeenCalledWith('/', {
         transports: ['websocket'],
-        auth: {
-          token: 'authenticated-token',
-        },
+        auth: expect.any(Function),
       });
+
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: 'authenticated-token' });
     });
 
     test('handles multiple channels initialization', () => {

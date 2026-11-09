@@ -43,8 +43,10 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
   const baseUrl = getClientConfig()?.baseUrl ?? '/';
   socketClient = io(baseUrl, {
     transports: ['websocket'],
-    auth: {
-      token: getAuthToken(),
+    auth: (cb) => {
+      cb({
+        token: getAuthToken(),
+      });
     },
   });
 
@@ -186,12 +188,8 @@ function reconnect() {
   if (!socketClient) {
     return;
   }
-  socketClient.auth = {
-    token: getAuthToken(),
-  };
-  if (!socketClient.connected) {
-    socketClient.connect();
-  }
+  socketClient.disconnect();
+  socketClient.connect();
 }
 
 const websocketProvider: WebsocketClientProvider = {
