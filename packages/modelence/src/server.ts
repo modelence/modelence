@@ -44,7 +44,7 @@ export { CronJobInputParams } from './cron/types';
 
 // Rate limits
 export type { RateLimitRule, RateLimitType } from './rate-limit/types';
-export { consumeRateLimit } from './rate-limit/rules';
+export { checkRateLimit, consumeRateLimit } from './rate-limit/rules';
 
 // Config
 export { getConfig } from './config/server';

@@ -4,6 +4,7 @@ import type { Mock } from 'vitest';
 type SetupResult = {
   initRateLimits: typeof import('./rules').initRateLimits;
   consumeRateLimit: typeof import('./rules').consumeRateLimit;
+  checkRateLimit: typeof import('./rules').checkRateLimit;
   mocks: {
     findOne: Mock;
     findOneAndUpdate: Mock;
@@ -34,6 +35,7 @@ async function loadModule(): Promise<SetupResult> {
   return {
     initRateLimits: mod.initRateLimits,
     consumeRateLimit: mod.consumeRateLimit,
+    checkRateLimit: mod.checkRateLimit,
     mocks: {
       findOne: mockFindOne,
       findOneAndUpdate: mockFindOneAndUpdate,
@@ -56,6 +58,143 @@ describe('rate-limit/rules', () => {
     expect(() => initRateLimits([{ bucket: 'api', type: 'ip', window: 1000, limit: 10 }])).toThrow(
       'Duplicate call to initRateLimits - already initialized'
     );
+  });
+
+  test('checkRateLimit throws at the limit without incrementing the count', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:30.000Z'));
+    const { initRateLimits, checkRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 5,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+    });
+
+    await expect(checkRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' })).rejects.toThrow(
+      'Rate limit exceeded for api'
+    );
+
+    expect(mocks.findOne).toHaveBeenCalledWith({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+    });
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  });
+
+  test('checkRateLimit counts the previous window with its remaining weight', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:30.000Z'));
+    const { initRateLimits, checkRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      // The record has not been shifted into the current window yet; half of the
+      // previous window's events still count.
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 10,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+    });
+
+    await expect(checkRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' })).rejects.toThrow(
+      'Rate limit exceeded for api'
+    );
+
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  });
+
+  test('checkRateLimit allows requests below the limit and for missing records', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:00:30.000Z'));
+    const { initRateLimits, checkRateLimit, mocks } = await loadModule();
+
+    initRateLimits([{ bucket: 'api', type: 'ip', window: 60_000, limit: 5 }]);
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'api',
+      type: 'ip',
+      value: '127.0.0.1',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 3,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:02:00.000Z'),
+    });
+    mocks.findOne.mockResolvedValueOnce(null);
+
+    await checkRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+    await checkRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.2' });
+
+    expect(mocks.findOne).toHaveBeenCalledTimes(2);
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  });
+
+  test('checkRateLimit throws when any matching rule is at its limit', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T12:00:30.000Z'));
+    const { initRateLimits, checkRateLimit, mocks } = await loadModule();
+
+    initRateLimits([
+      { bucket: 'signin', type: 'email', window: 15 * 60_000, limit: 10 },
+      { bucket: 'signin', type: 'email', window: 24 * 60 * 60_000, limit: 50 },
+    ]);
+
+    // The 15-minute bucket is below its limit...
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 15 * 60_000,
+      windowStart: new Date('2024-01-01T12:00:00.000Z'),
+      windowCount: 1,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T12:30:00.000Z'),
+    });
+    // ...but the daily bucket is already full.
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 24 * 60 * 60_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 50,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-03T00:00:00.000Z'),
+    });
+
+    await expect(
+      checkRateLimit({ bucket: 'signin', type: 'email', value: 'user@example.com' })
+    ).rejects.toThrow('Rate limit exceeded for signin');
+
+    expect(mocks.findOne).toHaveBeenNthCalledWith(1, {
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 15 * 60_000,
+    });
+    expect(mocks.findOne).toHaveBeenNthCalledWith(2, {
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 24 * 60 * 60_000,
+    });
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(mocks.findOneAndUpsert).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
   });
 
   test('consumeRateLimit inserts new record atomically when entry does not exist', async () => {

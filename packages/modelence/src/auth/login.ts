@@ -13,7 +13,7 @@ import {
   startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
-import { consumeRateLimit } from '@/server';
+import { checkRateLimit, consumeRateLimit } from '@/server';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -66,6 +66,15 @@ export async function handleLoginWithPassword(
     // password is accepted just as a string, so users can still sign in if the password validation rules are changed
     const password = z.string().parse(args.password);
 
+    // Block before comparing passwords so an exhausted email budget cannot be
+    // bypassed by a correct password. Known and unknown emails hit the same
+    // check, so the response does not reveal whether the account exists.
+    await checkRateLimit({
+      bucket: 'signin',
+      type: 'email',
+      value: email,
+    });
+
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
@@ -78,8 +87,8 @@ export async function handleLoginWithPassword(
     const isValidPassword = await bcrypt.compare(password, hashToCompare);
 
     if (!passwordHash || !isValidPassword) {
-      // Only failed attempts count against the email limit, so someone cannot
-      // lock a user out of password sign-in by targeting their email.
+      // Only failed attempts count against the email limit; the pre-check above
+      // blocks further attempts once the limit is reached.
       await consumeRateLimit({
         bucket: 'signin',
         type: 'email',
