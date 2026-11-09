@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from 'child_process';
-import { existsSync, promises as fs } from 'fs';
+import { existsSync, promises as fs, readFileSync } from 'fs';
 import { connect as netConnect, createServer } from 'net';
 import { tmpdir } from 'os';
 import { delimiter, dirname, join, normalize } from 'path';
@@ -11,6 +11,7 @@ import {
 } from './appSpec';
 import { resolveDeployKind } from './deployKind';
 import { prepareSpec } from './deploySpec';
+import { quoteShellArg } from './devScript';
 import { loadLocalEnv, type ProcessEnv } from './localEnv';
 import { listSourceFiles } from './source';
 
@@ -99,7 +100,16 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
       return fail('Interrupted.');
     }
     const env = await loadLocalEnv(cwd, process.env, join(cwd, root), { isolated: true });
-    return await rehearse(resource, spec.env ?? {}, env, appRoot, timeoutSeconds, options, run);
+    return await rehearse(
+      resource,
+      spec.env ?? {},
+      env,
+      appRoot,
+      join(tempDir, 'app.pgid'),
+      timeoutSeconds,
+      options,
+      run
+    );
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
@@ -119,6 +129,7 @@ async function rehearse(
   envDeclarations: NonNullable<AppSpec['env']>,
   env: ProcessEnv,
   appRoot: string,
+  appGroupFile: string,
   timeoutSeconds: number,
   options: VerifyOptions,
   run: Run
@@ -152,6 +163,12 @@ async function rehearse(
     appPort = await freePort();
   }
   const start = resource.start?.commands ?? [];
+  // The runtime puts this shell in its own group. Record its PGID before
+  // running any commands so we can still find the group if the shell exits.
+  const startCommand =
+    start.length > 0
+      ? `printf '%s\\n' "$$" > ${quoteShellArg(appGroupFile)}\n${start.join(' && ')}`
+      : null;
   const [command, ...args] = options.runtimeCommand ?? RUNTIME_COMMAND;
   console.log(`\nStarting through @modelence/runtime on PORT=${port}`);
   if (run.interrupted) {
@@ -169,7 +186,7 @@ async function rehearse(
       MODELENCE_APP_START_TIMEOUT: String(timeoutSeconds + 30),
       // Studio runs the start commands in order as one shell line.
       MODELENCE_WEB: JSON.stringify({
-        start: start.length > 0 ? start.join(' && ') : null,
+        start: startCommand,
         static: resource.static ?? [],
       }),
       SITE_URL: `http://localhost:${port}`,
@@ -188,8 +205,9 @@ async function rehearse(
       resolve();
     });
   });
-  const stopApp = trackStop(run, app, exited);
+  const stopApp = trackStop(run, app, exited, startCommand ? appGroupFile : undefined);
 
+  let status: number | null;
   try {
     let hasExited = false;
     const opened = await Promise.race([
@@ -215,19 +233,22 @@ async function rehearse(
       );
     }
 
-    const status = await getStatus(port);
-    if (status === null || status >= 500) {
-      return fail(`GET / answered ${status ?? 'nothing'}. Check the output above.`);
-    }
-    console.log(`GET / -> ${status}`);
-    console.log(
-      `\n✓ ${APP_SPEC_FILE_NAME} verified: the app builds and answers on PORT through the Modelence runtime.`
-    );
-    return true;
+    status = await getStatus(port);
   } finally {
     await stopApp();
     run.stopChildren.delete(stopApp);
   }
+  if (run.interrupted) {
+    return fail('Interrupted.');
+  }
+  if (status === null || status >= 500) {
+    return fail(`GET / answered ${status ?? 'nothing'}. Check the output above.`);
+  }
+  console.log(`GET / -> ${status}`);
+  console.log(
+    `\n✓ ${APP_SPEC_FILE_NAME} verified: the app builds and answers on PORT through the Modelence runtime.`
+  );
+  return true;
 }
 
 // Declared values for one phase: committed literals win over the shell or
@@ -340,28 +361,39 @@ async function runToCompletion(
   try {
     return await exited;
   } finally {
-    if (run.interrupted) {
-      await stopChild();
-    }
+    await stopChild();
     run.stopChildren.delete(stopChild);
   }
 }
 
-function trackStop(run: Run, child: ChildProcess, exited: Promise<unknown>) {
+function trackStop(run: Run, child: ChildProcess, exited: Promise<unknown>, appGroupFile?: string) {
   // The interrupt handler and finally must share the same group snapshot.
   let stopping: Promise<void> | undefined;
-  const stopChild = () => (stopping ??= stop(child, exited));
+  const stopChild = () => (stopping ??= stop(child, exited, appGroupFile));
   run.stopChildren.add(stopChild);
   return stopChild;
 }
 
-async function stop(child: ChildProcess, exited: Promise<unknown>): Promise<void> {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) {
+async function stop(
+  child: ChildProcess,
+  exited: Promise<unknown>,
+  appGroupFile?: string
+): Promise<void> {
+  if (!child.pid || (!appGroupFile && !signalGroup(child.pid, 0))) {
     return;
   }
   // Capture detached groups before SIGTERM can orphan them. The runtime
   // may exit with the shell while the app is still draining or ignoring TERM.
-  const groups = new Set(processGroupsBelow(child.pid));
+  const table = readProcessTable();
+  const groups = new Set(processGroupsBelow(child.pid, table));
+  if (appGroupFile) {
+    const appGroup = readAppGroup(appGroupFile);
+    const ownGroup = table.find((row) => row.pid === process.pid)?.pgid;
+    if (appGroup !== undefined && appGroup !== ownGroup && !groups.has(appGroup)) {
+      groups.add(appGroup);
+      signalGroup(appGroup, 'SIGTERM');
+    }
+  }
   signalGroup(child.pid, 'SIGTERM');
   const timer = setTimeout(() => {
     for (const group of groups) {
@@ -383,6 +415,16 @@ async function stop(child: ChildProcess, exited: Promise<unknown>): Promise<void
     }
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function readAppGroup(file: string): number | undefined {
+  try {
+    const group = Number(readFileSync(file, 'utf8'));
+    return Number.isSafeInteger(group) && group > 1 && group <= 0x7fffffff ? group : undefined;
+  } catch {
+    // The runtime can exit before it launches the start shell.
+    return undefined;
   }
 }
 

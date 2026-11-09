@@ -96,7 +96,7 @@ describe('verify', () => {
     expect(await run()).toBe(true);
     const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
     expect(JSON.parse(env.MODELENCE_WEB)).toEqual({
-      start: 'test -f server.js && node server.js',
+      start: expect.stringMatching(/\ntest -f server\.js && node server\.js$/),
       static: [],
     });
     expect(env.PORT).not.toBe('3000');
@@ -323,6 +323,20 @@ describe('verify', () => {
     expect(() => process.kill(pid, 0)).toThrow();
   }, 20_000);
 
+  it('reports an interruption while the HTTP probe is waiting', async () => {
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async () => {
+      process.emit('SIGTERM');
+      return new Response('ok');
+    });
+    expect(await run()).toBe(false);
+    expect(output()).toContain('Interrupted.');
+    expect(output()).not.toContain('modelence.config.json verified');
+  }, 20_000);
+
   it('starts nothing new once interrupted between phases', async () => {
     const marker = join(runtimeDir, 'built');
     await project(
@@ -410,6 +424,43 @@ describe('verify', () => {
     expect(process.listenerCount('SIGTERM')).toBe(listeners);
     await chmod(join(dir, 'secret.txt'), 0o600);
   });
+
+  it.each(['build', 'start'])(
+    'cleans up a background server after the %s shell exits',
+    async (phase) => {
+      const readyFile = join(runtimeDir, 'background.json');
+      const background = `node background.js & while [ ! -s "${readyFile}" ]; do sleep 0.02; done`;
+      await project(
+        {
+          'background.js': `
+const server = require('http').createServer((q, s) => s.end('ok'));
+server.listen(0, () => {
+  require('fs').writeFileSync(${JSON.stringify(readyFile)}, JSON.stringify({
+    pid: process.pid, port: server.address().port,
+  }));
+});`,
+          'server.js': server('Number(process.env.PORT)'),
+        },
+        {
+          build: { commands: phase === 'build' ? [background] : [] },
+          start: { commands: phase === 'start' ? [`${background}; exit 9`] : ['node server.js'] },
+        }
+      );
+      const passed = await run();
+      const { pid, port } = JSON.parse(await readFile(readyFile, 'utf8'));
+      try {
+        expect(passed).toBe(phase === 'build');
+        await expect(fetch(`http://127.0.0.1:${port}/`)).rejects.toThrow();
+      } finally {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
+      }
+    },
+    20_000
+  );
 
   it.each(['interrupt', 'success'])(
     'kills an app that outlives its shell after %s',
