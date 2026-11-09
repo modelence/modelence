@@ -5,6 +5,7 @@ import { ObjectId, RouteParams, RouteResponse } from '@/server';
 import { getEmailConfig } from '@/app/emailConfig';
 import { randomBytes } from 'crypto';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { htmlToText } from '@/utils';
 import { emailVerificationTemplate } from './templates/emailVerficationTemplate';
 import { getAuthConfig } from '@/app/authConfig';
@@ -224,7 +225,8 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
           referrer: params.headers['referer'],
         },
       });
-      console.error('Error verifying email:', error);
+      logError('Error verifying email:', { error });
+      captureError(error);
     }
 
     return {

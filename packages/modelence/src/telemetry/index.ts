@@ -99,11 +99,18 @@ export function startTransaction(
   };
 }
 
-export function captureError(error: Error) {
+/**
+ * Sends an error to APM when telemetry is enabled, or prints it otherwise.
+ *
+ * With telemetry enabled nothing is printed, so call sites that must also show
+ * up in stdout/stderr (the Logs page) should pair this with {@link logError}.
+ */
+export function captureError(error: unknown): void {
+  const cause = error instanceof Error ? error : new Error(String(error));
   if (!isTelemetryEnabled()) {
-    console.error(error);
+    console.error(cause);
     return;
   }
 
-  getApm().captureError(error);
+  getApm().captureError(cause);
 }

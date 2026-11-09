@@ -1,4 +1,5 @@
 import { getConfig } from '@/server';
+import { captureError, logError } from '@/telemetry';
 import {
   Router,
   type Request,
@@ -185,7 +186,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
       await handleOAuthUserAuthentication(req, res, userData, outcome);
     }
   } catch (error) {
-    console.error('GitHub OAuth error:', error);
+    logError('GitHub OAuth error:', { error });
+    captureError(error);
     if (mode === 'link') {
       clearOAuthLinkCookie(res);
     }

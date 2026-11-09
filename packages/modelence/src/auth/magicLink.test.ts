@@ -39,6 +39,14 @@ const mockSetAuthTokenCookie = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 const mockSerializeUserForClient = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('./session', () => ({
   startUserSession: mockStartUserSession,
   setAuthTokenCookie: mockSetAuthTokenCookie,
@@ -566,6 +574,11 @@ describe('auth/magicLink', () => {
       expect(result?.redirect).toContain('status=error');
       expect(result?.redirect).toContain(friendlyParam);
       expect(result?.redirect).not.toContain('bad-token');
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Error handling magic link landing:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     });
 
     test('redirects with the friendly error when the token is expired', async () => {
@@ -849,15 +862,14 @@ describe('auth/magicLink', () => {
 
           expect(onAfterEmailVerification).toHaveBeenCalled();
           expect(onAfterLogin).toHaveBeenCalled();
-          // Both failures are logged, not swallowed silently.
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterEmailVerification hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterLogin hook:',
-            expect.any(Error)
-          );
+          // Both failures are printed and sent to APM, not swallowed silently.
+          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
+            error: expect.objectContaining({ message: 'async hook boom' }),
+          });
+          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', {
+            error: expect.objectContaining({ message: 'sync hook boom' }),
+          });
+          expect(mockCaptureError).toHaveBeenCalledTimes(2);
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -1413,7 +1425,12 @@ describe('auth/magicLink', () => {
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
-        expect(consoleError).toHaveBeenCalled();
+        const restoreError = expect.objectContaining({ message: 'db down' });
+        expect(mockLogError).toHaveBeenCalledWith(
+          'Failed to restore a magic link token after a failed signup:',
+          { error: restoreError }
+        );
+        expect(mockCaptureError).toHaveBeenCalledWith(restoreError);
 
         consoleError.mockRestore();
       });

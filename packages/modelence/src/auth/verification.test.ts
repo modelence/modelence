@@ -19,6 +19,14 @@ const mockGetAuthConfig = vi.fn();
 const mockValidateEmail = vi.fn<(value: string) => string>();
 const mockConsumeRateLimit = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -531,6 +539,11 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
       });
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     });
 
     test('appends status to a redirect URL that already has a query string', async () => {

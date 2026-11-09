@@ -13,6 +13,14 @@ const mockGetConfig = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 const mockIssueOAuthExchangeCode = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('../db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -1149,6 +1157,13 @@ describe('auth/providers/oauthCommon', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Server error' });
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Unhandled error in authConfig.errorComponent:', {
+        error: expect.objectContaining({ message: 'render failed' }),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'render failed' })
+      );
     });
 
     describe('oauthErrorRedirectUrl', () => {
@@ -1247,7 +1262,11 @@ describe('auth/providers/oauthCommon', () => {
         expect(webRes.redirect).not.toHaveBeenCalled();
         expect(webRes.status).toHaveBeenCalledWith(400);
         expect(webRes.json).toHaveBeenCalledWith({ error: 'Auth failed' });
-        expect(consoleError).toHaveBeenCalled();
+        expect(mockLogError).toHaveBeenCalledWith(
+          expect.stringContaining('Could not build the OAuth error redirect'),
+          { error: expect.any(Error) }
+        );
+        expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
 
         consoleError.mockRestore();
         // clearAllMocks leaves a spy's implementation in place, so this one
