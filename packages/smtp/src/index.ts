@@ -23,6 +23,8 @@ export type EmailPayload = {
   attachments?: EmailAttachment[];
 } & ({ html: string } | { text: string });
 
+const IMPLICIT_TLS_PORT = 465;
+
 let smtpClient: nodemailer.Transporter | null = null;
 
 function initializeAmazonSESClient() {
@@ -37,10 +39,15 @@ function initializeAmazonSESClient() {
   if (!host || !port) {
     throw new Error('SMTP host and port must be configured. Please set MODELENCE_EMAIL_SMTP_HOST, MODELENCE_EMAIL_SMTP_PORT, MODELENCE_EMAIL_SMTP_USER, MODELENCE_EMAIL_SMTP_PASS in your environment variables or configure them from cloud.modelence.com');
   }
+  const implicitTls = port === IMPLICIT_TLS_PORT;
   smtpClient = nodemailer.createTransport({
     host,
     port,
-    secure: true,
+    // Implicit TLS only on 465. Other ports (587, 25, 2525) start in plaintext
+    // and must upgrade with STARTTLS before credentials are sent; if the
+    // server doesn't offer STARTTLS, sending fails instead of falling back.
+    secure: implicitTls,
+    requireTLS: !implicitTls,
     auth: {
       user,
       pass,
