@@ -384,14 +384,15 @@ describe('auth/login', () => {
     mockConsumeRateLimit.mockImplementation((options: { type: string }) => {
       if (options.type === 'email') {
         emailAttempts += 1;
-        if (emailAttempts > 2) {
+        // Mirror the default 10-attempts-per-15-minutes rule.
+        if (emailAttempts > 10) {
           return Promise.reject(new RateLimitError('Rate limit exceeded for signin'));
         }
       }
       return Promise.resolve();
     });
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       await expect(
         handleLoginWithPassword({ email: 'user@example.com', password: 'wrong' }, {
           ...baseContext,
@@ -402,12 +403,17 @@ describe('auth/login', () => {
 
     const error = await handleLoginWithPassword({ email: 'user@example.com', password: 'wrong' }, {
       ...baseContext,
-      connectionInfo: { ip: '198.51.100.3' },
+      connectionInfo: { ip: '198.51.100.11' },
     } as never).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(RateLimitError);
     expect(error).toMatchObject({ status: 429 });
-    expect(emailAttempts).toBe(3);
+    expect(emailAttempts).toBe(11);
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+    });
   });
 
   test('does not count successful logins against the email limit', async () => {
