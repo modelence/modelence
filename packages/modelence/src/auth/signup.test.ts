@@ -444,6 +444,7 @@ describe('auth/signup', () => {
 
     expect(authConfig.onBeforeSignup).toHaveBeenCalledWith({
       email: 'test@example.com',
+      emailVerified: false,
       firstName: 'Test',
       lastName: 'User',
       handle: 'desired',

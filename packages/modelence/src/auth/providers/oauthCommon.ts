@@ -459,6 +459,22 @@ async function handleExistingEmailLogin(
   return;
 }
 
+/** Reports a failed OAuth signup to both the `onSignupError` and `signup.onError` hooks. */
+function reportSignupError(
+  error: unknown,
+  provider: OAuthProvider,
+  session: Session | null,
+  connectionInfo: ConnectionInfo
+): void {
+  if (!(error instanceof Error)) {
+    return;
+  }
+
+  const authConfig = getAuthConfig();
+  authConfig.onSignupError?.({ provider, error, session, connectionInfo });
+  authConfig.signup?.onError?.(error);
+}
+
 /**
  * Runs the app's `onBeforeSignup` veto before anything is written. A veto is an
  * expected outcome rather than a failed flow, so it is answered here with the
@@ -491,18 +507,12 @@ async function passesBeforeSignup(
     });
     return true;
   } catch (error) {
-    if (error instanceof Error) {
-      authConfig.onSignupError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-      authConfig.signup?.onError?.(error);
-    }
+    reportSignupError(error, userData.providerName, session, connectionInfo);
 
     if (error instanceof ModelenceError) {
-      sendOAuthError(res, 403, error.message, outcome, 'signup_rejected');
+      // Same status a method call would answer with, so a hook behaves the
+      // same on every signup path.
+      sendOAuthError(res, error.status, error.message, outcome, 'signup_rejected');
       return false;
     }
     throw error;
@@ -579,16 +589,7 @@ async function handleNewUserSignup(
       authConfig.signup?.onSuccess?.(userDocument);
     }
   } catch (error) {
-    if (error instanceof Error) {
-      authConfig.onSignupError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-
-      authConfig.signup?.onError?.(error);
-    }
+    reportSignupError(error, userData.providerName, session, connectionInfo);
     throw error;
   }
 }
@@ -641,17 +642,7 @@ export async function handleOAuthUserAuthentication(
       { collation: { locale: 'en', strength: 2 } }
     );
   } catch (error) {
-    if (error instanceof Error) {
-      const authConfig = getAuthConfig();
-      authConfig.onSignupError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-
-      authConfig.signup?.onError?.(error);
-    }
+    reportSignupError(error, userData.providerName, session, connectionInfo);
     throw error;
   }
 

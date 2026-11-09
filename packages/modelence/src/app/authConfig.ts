@@ -127,19 +127,23 @@ export type ValidatePasswordProps = {
  * but before the user document is inserted. Throwing aborts the signup —
  * the thrown error is re-thrown to the caller and `onSignupError` fires.
  * On an OAuth signup, throw a `ModelenceError` such as `ValidationError` to
- * show the user the message, delivered as an OAuth error with the
- * `signup_rejected` code. Any other error still blocks the signup but is
+ * show the user the message, delivered as an OAuth error with the error's own
+ * `status` and the `signup_rejected` code. Any other error still blocks the signup but is
  * reported as a generic failure, since its message may expose internals.
  */
 export type BeforeSignupProps = {
   /** Lowercased, validated email address. */
   email: string;
   /**
-   * Whether the OAuth provider vouches for `email`. Set on OAuth signups only;
-   * an email signup proves ownership afterwards, through the verification link.
-   * Check this before trusting an OAuth email for an allowlist decision.
+   * Whether ownership of `email` is already proven at this point:
+   * - `'magicLink'`: `true`, since clicking the link proves the address.
+   * - `'email'` (password signup): `false`; ownership is proven afterwards,
+   *   through the verification link.
+   * - OAuth providers: whether the provider vouches for the address.
+   *
+   * Check this before trusting `email` for an allowlist decision.
    */
-  emailVerified?: boolean;
+  emailVerified: boolean;
   firstName?: string;
   lastName?: string;
   handle?: string;

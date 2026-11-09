@@ -106,7 +106,11 @@ validatePassword: async ({ password, context }) => {
 
 Called after `validateSignup`, `validatePassword`, the built-in disposable-email check and the duplicate-email check, but before the user document is inserted. Use this to plug in a custom domain-policy check (e.g. a tenant-specific email-domain verification service) without disabling the built-in disposable-email check. Throw an error to reject the signup — the thrown error is re-thrown to the caller and `onSignupError` fires.
 
-Invoked for every provider, OAuth included, so it can gate who may sign up. Only signups reach this hook: an existing account signing in does not. On an OAuth signup, throw a `ModelenceError` such as `ValidationError` to show the user your message, delivered like any other OAuth error with the `signup_rejected` error code; any other error still blocks the signup but is reported as a generic failure, since its message may expose internals. `emailVerified` says whether the provider vouches for the address. Check it before trusting an OAuth email for an allowlist decision. The built-in disposable-email check still skips OAuth signups, so check `provider` to keep a disposable-domain policy to email signups.
+Invoked for every provider, OAuth included, so it can gate who may sign up. Only signups reach this hook: an existing account signing in does not. On an OAuth signup, throw a `ModelenceError` such as `ValidationError` to show the user your message, delivered like any other OAuth error with the error's own `status` and the `signup_rejected` error code; any other error still blocks the signup but is reported as a generic failure, since its message may expose internals. `emailVerified` says whether ownership of the address is already proven: `true` for magic link, `false` for password signup (proven later through the verification link), and the provider's own value for OAuth. Check it before trusting an email for an allowlist decision. The built-in disposable-email check still skips OAuth signups, so check `provider` to keep a disposable-domain policy to email signups.
+
+<Warning>
+Earlier versions ran this hook for `'email'` and `'magicLink'` signups only. Existing hooks now also run on OAuth signups (Google, GitHub, etc.), so a hook written with password signups in mind can start blocking OAuth signups. Check `provider` if a policy should apply to email signups only.
+</Warning>
 
 ```typescript
 import { startApp } from 'modelence/server';
@@ -144,11 +148,12 @@ startApp({
 
 | Property         | Type                       |
 | ---------------- | -------------------------- |
-| `email`          | `string`                   |
-| `firstName`      | `string \| undefined`      |
-| `lastName`       | `string \| undefined`      |
-| `handle`         | `string \| undefined`      |
-| `provider`       | `'email' \| 'magicLink'`   |
+| `email`          | `string`                      |
+| `emailVerified`  | `boolean`                     |
+| `firstName`      | `string \| undefined`         |
+| `lastName`       | `string \| undefined`         |
+| `handle`         | `string \| undefined`         |
+| `provider`       | `AuthProvider` (`'email' \| 'magicLink' \| 'google' \| 'github' \| ...`) |
 | `connectionInfo` | `ConnectionInfo \| undefined` |
 
 **Returns:** `void | Promise<void>`

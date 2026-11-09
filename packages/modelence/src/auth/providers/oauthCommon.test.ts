@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Request, Response } from 'express';
 import { MongoServerError, ObjectId } from 'mongodb';
-import { ValidationError } from '@/error';
+import { ModelenceError, ValidationError } from '@/error';
 
 const mockUsersFindOne = vi.fn();
 const mockUsersInsertOne = vi.fn();
@@ -733,12 +733,28 @@ describe('auth/providers/oauthCommon', () => {
         expect(mockUsersInsertOne).not.toHaveBeenCalled();
         expect(mockCreateSession).not.toHaveBeenCalled();
         expect(authConfig.onAfterSignup).not.toHaveBeenCalled();
-        expect(res.status).toHaveBeenCalledWith(403);
+        // The error's own status, as a method call would answer with.
+        expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ error: 'Signups are invite-only' });
         expect(authConfig.onSignupError).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'google', error: rejection })
         );
         expect(authConfig.signup.onError).toHaveBeenCalledWith(rejection);
+      });
+
+      test('a rejecting onBeforeSignup answers with the status of the thrown error', async () => {
+        class ForbiddenError extends ModelenceError {
+          status = 403;
+        }
+        const onBeforeSignup = vi.fn().mockRejectedValue(new ForbiddenError('Domain not allowed'));
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, onBeforeSignup });
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce(null as never);
+
+        await moduleExports.handleOAuthUserAuthentication(req, res, newUserData);
+
+        expect(mockUsersInsertOne).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Domain not allowed' });
       });
 
       test('a rejecting onBeforeSignup reaches a mobile app as signup_rejected', async () => {
