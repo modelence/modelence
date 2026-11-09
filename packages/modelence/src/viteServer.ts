@@ -374,24 +374,31 @@ async function loadUserViteConfig() {
 function safelyMergeConfig(baseConfig: UserConfig, userConfig: UserConfig) {
   const mergedConfig = mergeConfig(baseConfig, userConfig);
 
-  // Deduplicate plugins by name, keeping user plugins over framework plugins
+  // Deduplicate plugins by name, keeping user plugins over framework plugins.
+  // mergeConfig appends the user's plugins after the framework's, so the last
+  // plugin with a given name is the user's: walk from the end and keep that one.
   if (mergedConfig.plugins && Array.isArray(mergedConfig.plugins)) {
     const seenPlugins = new Set<string>();
     mergedConfig.plugins = mergedConfig.plugins
       .flat()
+      .reverse()
       .filter((plugin: PluginOption) => {
         if (!plugin || typeof plugin !== 'object' || Array.isArray(plugin)) {
           return true;
         }
+        // Nameless entries, including async plugins (a Promise<Plugin>), can't be
+        // deduplicated by name, so keep them rather than dropping them.
         const pluginName = (plugin as Plugin).name;
-        if (!pluginName || seenPlugins.has(pluginName)) {
+        if (!pluginName) {
+          return true;
+        }
+        if (seenPlugins.has(pluginName)) {
           return false;
         }
         seenPlugins.add(pluginName);
         return true;
       })
-      .reverse(); // Reverse to prioritize user plugins over framework plugins
-    mergedConfig.plugins.reverse(); // Reverse back to maintain original order
+      .reverse(); // Back to the original order
   }
 
   return mergedConfig;

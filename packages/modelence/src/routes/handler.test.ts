@@ -5,6 +5,7 @@ const mockAuthenticate = vi.fn();
 const mockGetMongodbUri = vi.fn();
 const mockStartTransaction = vi.fn();
 const mockCaptureError = vi.fn();
+const mockLogError = vi.fn();
 
 vi.doMock('../auth', () => ({
   authenticate: mockAuthenticate,
@@ -35,6 +36,7 @@ vi.doMock('../telemetry', () => ({
   startTransaction: mockStartTransaction,
   redactSensitive,
   captureError: mockCaptureError,
+  logError: mockLogError,
 }));
 
 const { ValidationError } = await import('../error');
@@ -145,8 +147,27 @@ describe('routes/handler', () => {
     const redirectOrder = (res.redirect as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     expect(res.setHeader).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
     expect(setHeaderOrder).toBeLessThan(redirectOrder);
-    expect(res.redirect).toHaveBeenCalledWith('/destination');
+    expect(res.redirect).toHaveBeenCalledWith(302, '/destination');
     expect(res.send).not.toHaveBeenCalled();
+  });
+
+  test.each([301, 303, 307, 308])('keeps a %i status on redirects', async (status) => {
+    const handler = createRouteHandler('GET', '/old', async () => ({
+      status,
+      redirect: '/new',
+    }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.redirect).toHaveBeenCalledWith(status, '/new');
+  });
+
+  test('redirects with 302 when no redirect status is given', async () => {
+    const handler = createRouteHandler('GET', '/old', async () => ({ redirect: '/new' }));
+
+    await handler(baseReq, res, next);
+
+    expect(res.redirect).toHaveBeenCalledWith(302, '/new');
   });
 
   test('applies custom headers on a non-redirect response', async () => {
@@ -214,6 +235,7 @@ describe('routes/handler', () => {
     await handler(baseReq, res, next);
 
     expect(mockCaptureError).toHaveBeenCalledWith(error);
+    expect(mockLogError).toHaveBeenCalledWith('Error in route handler:', { error, path: '/test' });
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Error: boom');
     expect(transactionEnd).toHaveBeenCalledWith('error');

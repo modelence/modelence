@@ -4,7 +4,7 @@ import { ModelenceError } from '../error';
 import { authenticate } from '../auth';
 import { getMongodbUri } from '../db/client';
 import type { Context } from '../methods/types';
-import { startTransaction, redactSensitive, captureError } from '../telemetry';
+import { startTransaction, redactSensitive, captureError, logError } from '../telemetry';
 
 // TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
 export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
@@ -67,7 +67,13 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
         }
 
         if (response.redirect) {
-          res.redirect(response.redirect);
+          // res.redirect(url) always sends 302 and overwrites the res.status() above,
+          // so pass the code explicitly to keep 301/303/307/308.
+          const redirectStatus =
+            response.status && response.status >= 300 && response.status < 400
+              ? response.status
+              : 302;
+          res.redirect(redirectStatus, response.redirect);
         } else {
           res.send(response.data);
         }
@@ -79,8 +85,7 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
       if (error instanceof ModelenceError) {
         res.status(error.status).send(error.message);
       } else {
-        console.error(`Error in route handler: ${req.path}`);
-        console.error(error);
+        logError('Error in route handler:', { error, path: req.path });
         res.status(500).send(String(error));
       }
     }

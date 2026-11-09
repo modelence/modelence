@@ -56,6 +56,7 @@ const mockCreateRouteHandler =
 const mockGoogleAuthRouter = vi.fn();
 const mockGithubAuthRouter = vi.fn();
 const mockLogInfo = vi.fn();
+const mockLogError = vi.fn();
 const mockGetSecurityConfig = vi.fn();
 const mockGetWebsocketConfig = vi.fn();
 const mockExpressJson = vi.fn();
@@ -106,6 +107,7 @@ vi.doMock('@/auth/providers/github', () => ({
 
 vi.doMock('@/telemetry', () => ({
   logInfo: mockLogInfo,
+  logError: mockLogError,
 }));
 
 vi.doMock('./securityConfig', () => ({
@@ -703,6 +705,50 @@ describe('app/server startServer', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  test('prints process errors even when the log level is unrecognized', async () => {
+    const processOnSpy = vi.spyOn(process, 'on');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleTraceSpy = vi.spyOn(console, 'trace').mockImplementation(() => {});
+    let rejectionListener: ((...args: unknown[]) => void) | undefined;
+    let exceptionListener: ((...args: unknown[]) => void) | undefined;
+
+    try {
+      await startServer(createMockServer(), { combinedModules: [], channels: [] });
+      rejectionListener = processOnSpy.mock.calls.find(
+        ([event]) => event === 'unhandledRejection'
+      )?.[1];
+      exceptionListener = processOnSpy.mock.calls.find(
+        ([event]) => event === 'uncaughtException'
+      )?.[1];
+      expect(rejectionListener).toBeDefined();
+      expect(exceptionListener).toBeDefined();
+
+      const error = new Error('process failure');
+      const promise = Promise.resolve();
+      for (const level of ['warn', 'none', 'ERROR']) {
+        process.env.MODELENCE_LOG_LEVEL = level;
+        consoleErrorSpy.mockClear();
+        consoleTraceSpy.mockClear();
+
+        // Call the registered handlers directly without emitting real process errors.
+        rejectionListener!(error, promise);
+        exceptionListener!(error, 'uncaughtException');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Unhandled Promise Rejection:', {
+          error,
+          promise,
+        });
+        expect(consoleErrorSpy).toHaveBeenCalledWith('Uncaught Exception:', { error });
+        expect(consoleTraceSpy).toHaveBeenCalledWith('Full application stack:');
+      }
+      expect(mockLogError).not.toHaveBeenCalled();
+    } finally {
+      processOnSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+      consoleTraceSpy.mockRestore();
+    }
   });
 
   test('sets default security headers (self-only framing)', async () => {
@@ -1852,7 +1898,8 @@ describe('app/server method endpoint', () => {
     const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
 
-    mockRunMethod.mockRejectedValue(new Error('Something went wrong'));
+    const error = new Error('Something went wrong');
+    mockRunMethod.mockRejectedValue(error);
 
     const mockServer = createMockServer();
 
@@ -1876,6 +1923,10 @@ describe('app/server method endpoint', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.send).toHaveBeenCalledWith('Something went wrong');
+    expect(mockLogError).toHaveBeenCalledWith('Error calling method:', {
+      error,
+      methodName: 'testMethod',
+    });
   });
 
   test('handles non-Error thrown values', async () => {

@@ -16,7 +16,11 @@ import { handleLoginWithPassword, handleLogout } from './login';
 import { getOwnProfile, handleUpdateProfile } from './profile';
 import { handleUnlinkOAuthProvider } from './unlinkOAuthProvider';
 import { handleSignupWithPassword } from './signup';
-import { handleVerifyEmail, handleResendEmailVerification } from './verification';
+import {
+  handleVerifyEmail,
+  handleVerifyEmailMutation,
+  handleResendEmailVerification,
+} from './verification';
 import {
   handleResetPassword,
   handleResetPasswordLanding,
@@ -172,6 +176,7 @@ export default new Module('_system.user', {
     signupWithPassword: handleSignupWithPassword,
     loginWithPassword: handleLoginWithPassword,
     logout: handleLogout,
+    verifyEmail: handleVerifyEmailMutation,
     resendEmailVerification: handleResendEmailVerification,
     sendResetPasswordToken: handleSendResetPasswordToken,
     resetPassword: handleResetPassword,
