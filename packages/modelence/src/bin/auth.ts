@@ -87,7 +87,11 @@ export async function authenticateCli(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to create CLI authentication code');
+    // e.g. a 429, whose message says that waiting helps.
+    const reason =
+      studioError(await response.text().catch(() => '')) ??
+      `${response.status} ${response.statusText}`;
+    throw new Error(`Failed to create CLI authentication code: ${reason}`);
   }
 
   const { code, verificationUrl, codeChallengeAccepted } = await response.json();
@@ -187,12 +191,19 @@ async function pollForToken(
     const missingRoute = Boolean(codeVerifier) && [404, 405].includes(response.status);
     const clientError =
       response.status >= 400 && response.status < 500 && response.status !== 429 && !missingRoute;
+    // Studio's reason, when it gives one, tells e.g. a verifier mismatch (403)
+    // apart from an expired code.
+    const reason = studioError(body);
     if (clientError || body.includes('Invalid or expired code')) {
       throw new DeadCodeError(
-        'The sign-in code has expired or is no longer valid. Please run the command again.'
+        `${withPeriod(reason ?? 'The sign-in code has expired or is no longer valid')} ` +
+          'Please run the command again.'
       );
     }
-    throw new Error(`CLI token polling failed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `CLI token polling failed: ${response.status} ${response.statusText}` +
+        (reason ? ` (${reason})` : '')
+    );
   }
 
   const { token, expiresAt, target } = await response.json();
@@ -200,4 +211,19 @@ async function pollForToken(
     return null;
   }
   return { token, expiresAt, target };
+}
+
+// Studio's `{ error }` message from a failed response body. Anything else
+// (HTML from a proxy, plain text) is not shown as-is.
+function studioError(body: string): string | undefined {
+  try {
+    const { error } = JSON.parse(body);
+    return typeof error === 'string' && error.trim() ? error.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function withPeriod(message: string): string {
+  return /[.!?]$/.test(message) ? message : `${message}.`;
 }

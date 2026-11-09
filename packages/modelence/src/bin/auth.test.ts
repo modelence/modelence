@@ -119,6 +119,18 @@ describe('authenticateCli token pickup', () => {
     expect(pollRequest()?.init?.method).toBe('GET');
   });
 
+  it('says why Studio refused the token, when it gives a reason', async () => {
+    tokenResponses.push(() =>
+      Response.json(
+        { error: 'Only the terminal that started this sign-in can collect its token' },
+        { status: 403 }
+      )
+    );
+    await expect(authenticateCli(host)).rejects.toThrow(
+      'Only the terminal that started this sign-in can collect its token. Please run the command again.'
+    );
+  });
+
   it('treats a token already collected as a dead code', async () => {
     tokenResponses.push(() => new Response('Gone', { status: 410 }));
     await expect(authenticateCli(host)).rejects.toThrow('The sign-in code has expired');
@@ -143,6 +155,27 @@ describe('authenticateCli token pickup', () => {
     const result = authenticateCli(host);
     await vi.advanceTimersByTimeAsync(2000);
     expect((await result).token).toBe('tok');
+  });
+});
+
+describe('authenticateCli code creation', () => {
+  const failAuth = (response: Response) =>
+    vi.mocked(fetch).mockImplementationOnce(async () => response);
+
+  it("shows Studio's reason when it cannot create a code", async () => {
+    failAuth(
+      Response.json({ error: 'Too many requests. Try again in a few minutes.' }, { status: 429 })
+    );
+    await expect(authenticateCli(host)).rejects.toThrow(
+      'Failed to create CLI authentication code: Too many requests. Try again in a few minutes.'
+    );
+  });
+
+  it('falls back to the status when the body is not a Studio error', async () => {
+    failAuth(new Response('<html>Bad gateway</html>', { status: 502, statusText: 'Bad Gateway' }));
+    await expect(authenticateCli(host)).rejects.toThrow(
+      'Failed to create CLI authentication code: 502 Bad Gateway'
+    );
   });
 });
 
