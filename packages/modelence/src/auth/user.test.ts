@@ -261,6 +261,22 @@ describe('auth/user', () => {
       ]);
     });
 
+    test('allows the per-email sign-in limits to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        signin: [{ type: 'email', window: 15 * 60 * 1000, limit: 3 }],
+      });
+
+      const email15m = rules.find(
+        (r) => r.bucket === 'signin' && r.type === 'email' && r.window === 15 * 60 * 1000
+      );
+      const emailDay = rules.find(
+        (r) => r.bucket === 'signin' && r.type === 'email' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(email15m?.limit).toBe(3);
+      // The un-overridden daily cap is preserved.
+      expect(emailDay?.limit).toBe(50);
+    });
+
     test('limits verification resends per IP as well as per user by default', () => {
       const rules = buildAuthRateLimits();
 
