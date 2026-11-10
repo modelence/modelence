@@ -13,73 +13,8 @@ export function initRateLimits(rateLimits: RateLimitRule[]) {
 }
 
 /**
- * This function checks all rate limit rules on the specified bucket and type and
- * throws an error if any of them are at or over their limit. Unlike
- * `consumeRateLimit`, it does not increase the count of any rate limit record.
- *
- * @category Rate Limits
- *
- * @example
- * ```ts
- * await checkRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
- * ```
- * @param options.bucket - The bucket for the rate limit.
- * @param options.type - The type of the rate limit.
- * @param options.value - The value for the rate limit.
- * @param options.message - Optional custom error message when the rate limit is exceeded.
- */
-export async function checkRateLimit(options: {
-  bucket: string;
-  type: RateLimitType;
-  value: string;
-  message?: string;
-}) {
-  const { bucket, type, value, message } = options;
-  const rules = allRules.filter((rule) => rule.bucket === bucket && rule.type === type);
-
-  for (const rule of rules) {
-    const record = await dbRateLimits.findOne({
-      bucket: rule.bucket,
-      type: rule.type,
-      value,
-      windowMs: rule.window,
-    });
-
-    if (!record) {
-      continue;
-    }
-
-    const now = Date.now();
-    const currentWindowStart = Math.floor(now / rule.window) * rule.window;
-    const recordWindowStart = record.windowStart.getTime();
-    const prevWeight = 1 - (now - currentWindowStart) / rule.window;
-
-    let count = 0;
-    if (recordWindowStart === currentWindowStart) {
-      count = record.windowCount + record.prevWindowCount * prevWeight;
-    } else if (recordWindowStart === currentWindowStart - rule.window) {
-      // A request only shifts the record into the current window; until then the
-      // latest count still lives in the previous window.
-      count = record.windowCount * prevWeight;
-    } else if (recordWindowStart > currentWindowStart) {
-      // Concurrent callers can shift the record into a newer window; count it
-      // conservatively instead of letting the request through.
-      count = record.windowCount;
-    }
-
-    if (Math.round(count) >= rule.limit) {
-      throw message
-        ? new RateLimitError(message)
-        : new RateLimitError(`Rate limit exceeded for ${rule.bucket}`);
-    }
-  }
-}
-
-/**
  * This function will check all rate limit rules on the specified bucket and type,
  * throw an error if any of them are exceeded and increase the count of the rate limit record.
- * It returns the reservations so a successful operation can release them with
- * `releaseRateLimits`.
  *
  * @category Rate Limits
  *
@@ -92,6 +27,15 @@ export async function checkRateLimit(options: {
  * @param options.value - The value for the rate limit.
  * @param options.message - Optional custom error message when the rate limit is exceeded.
  */
+export async function consumeRateLimit(options: {
+  bucket: string;
+  type: RateLimitType;
+  value: string;
+  message?: string;
+}): Promise<void> {
+  await reserveRateLimit(options);
+}
+
 export type RateLimitReservation = {
   bucket: string;
   type: RateLimitType;
@@ -100,7 +44,13 @@ export type RateLimitReservation = {
   windowStart: Date;
 };
 
-export async function consumeRateLimit(options: {
+/**
+ * Internal counterpart of `consumeRateLimit`. It increments the matching rules
+ * like `consumeRateLimit` does, but returns the reservations so the caller can
+ * release them with `releaseRateLimits` when the operation succeeds. It is not
+ * part of the public API.
+ */
+export async function reserveRateLimit(options: {
   bucket: string;
   type: RateLimitType;
   value: string;
@@ -136,16 +86,14 @@ export async function consumeRateLimit(options: {
 }
 
 /**
- * Releases reservations returned by `consumeRateLimit`, so an operation that
+ * Releases reservations returned by `reserveRateLimit`, so an operation that
  * succeeds does not count against the limit. It returns the reservation to the
  * window it was taken from, including when that window has rolled over while
  * the operation was in flight.
  *
- * @category Rate Limits
- *
  * @example
  * ```ts
- * const reservations = await consumeRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+ * const reservations = await reserveRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
  * await releaseRateLimits(reservations);
  * ```
  */

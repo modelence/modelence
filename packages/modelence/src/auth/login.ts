@@ -13,7 +13,8 @@ import {
   startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
-import { checkRateLimit, consumeRateLimit, releaseRateLimits } from '@/server';
+import { consumeRateLimit } from '@/server';
+import { releaseRateLimits, reserveRateLimit } from '@/rate-limit/rules';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -66,14 +67,6 @@ export async function handleLoginWithPassword(
     // password is accepted just as a string, so users can still sign in if the password validation rules are changed
     const password = z.string().parse(args.password);
 
-    // Block before comparing passwords so an exhausted email budget cannot be
-    // bypassed by a correct password. Known and unknown emails hit the same
-    // check, so the response does not reveal whether the account exists.
-    await checkRateLimit({
-      bucket: 'signin',
-      type: 'email',
-      value: email,
-    });
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
@@ -81,10 +74,12 @@ export async function handleLoginWithPassword(
 
     const passwordHash = userDoc?.authMethods?.password?.hash;
 
-    // The check above is only a snapshot, so concurrent guesses could all pass
-    // it. Reserve a slot atomically before bcrypt; it is released on success,
-    // so only failed attempts count against the email limit.
-    const emailReservations = await consumeRateLimit({
+    // Reserve a slot atomically before bcrypt, so concurrent guesses cannot all
+    // pass and a full bucket blocks even a correct password. Known and unknown
+    // emails reserve the same way, so the response does not reveal whether the
+    // account exists. The slot is released on success, so only failed attempts
+    // count against the email limit.
+    const emailReservations = await reserveRateLimit({
       bucket: 'signin',
       type: 'email',
       value: email,

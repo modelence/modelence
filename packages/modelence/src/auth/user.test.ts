@@ -231,9 +231,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 28 rules covering all auth buckets', () => {
+    test('produces exactly 27 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(28);
+      expect(rules).toHaveLength(27);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -257,24 +257,30 @@ describe('auth/user', () => {
       const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
       expect(signinEmailRules).toEqual([
         { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 10 },
-        { bucket: 'signin', type: 'email', window: 24 * 60 * 60 * 1000, limit: 50 },
       ]);
     });
 
-    test('allows the per-email sign-in limits to be overridden', () => {
+    test('allows the per-email sign-in limit to be overridden', () => {
       const rules = buildAuthRateLimits({
         signin: [{ type: 'email', window: 15 * 60 * 1000, limit: 3 }],
       });
 
-      const email15m = rules.find(
-        (r) => r.bucket === 'signin' && r.type === 'email' && r.window === 15 * 60 * 1000
-      );
-      const emailDay = rules.find(
-        (r) => r.bucket === 'signin' && r.type === 'email' && r.window === 24 * 60 * 60 * 1000
-      );
-      expect(email15m?.limit).toBe(3);
-      // The un-overridden daily cap is preserved.
-      expect(emailDay?.limit).toBe(50);
+      const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
+      expect(signinEmailRules).toEqual([
+        { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 3 },
+      ]);
+    });
+
+    test('allows adding a daily per-email sign-in rule', () => {
+      const rules = buildAuthRateLimits({
+        signin: [{ type: 'email', window: 24 * 60 * 60 * 1000, limit: 50 }],
+      });
+
+      const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
+      expect(signinEmailRules).toEqual([
+        { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'signin', type: 'email', window: 24 * 60 * 60 * 1000, limit: 50 },
+      ]);
     });
 
     test('limits verification resends per IP as well as per user by default', () => {
@@ -371,7 +377,7 @@ describe('auth/user', () => {
       });
 
       const signinRules = rules.filter((r) => r.bucket === 'signin');
-      expect(signinRules).toHaveLength(4);
+      expect(signinRules).toHaveLength(3);
       const signin15m = signinRules.find((r) => r.type === 'ip' && r.window === 15 * 60 * 1000);
       expect(signin15m?.limit).toBe(50);
     });
