@@ -74,19 +74,21 @@ describe('@modelence/smtp', () => {
     vi.restoreAllMocks();
   });
 
-  test('uses implicit TLS on port 465', async () => {
+  // 2465 is Amazon SES's alternate implicit-TLS port.
+  test.each([465, 2465])('uses implicit TLS on port %i', async (port) => {
     const createTransport = await mockCreateTransport();
-    setSmtpConfig('smtp.example.com', 465);
+    setSmtpConfig('smtp.example.com', port);
 
     const { sendEmail } = await import('./index');
     await sendEmail(payload);
 
     expect(createTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 465, secure: true, requireTLS: false })
+      expect.objectContaining({ port, secure: true, requireTLS: false })
     );
   });
 
-  test.each([587, 25, 2525])('requires STARTTLS on port %i', async (port) => {
+  // 2587 is Amazon SES's alternate STARTTLS port.
+  test.each([587, 25, 2525, 2587])('requires STARTTLS on port %i', async (port) => {
     const createTransport = await mockCreateTransport();
     setSmtpConfig('smtp.example.com', port);
 
