@@ -143,6 +143,8 @@ describe('verify', () => {
     vi.stubEnv('API_URL', 'shell-url');
     vi.stubEnv('EMPTY', 'shell-value');
     vi.stubEnv('UNDECLARED', 'must-not-pass');
+    vi.stubEnv('MONGODB_URI', undefined);
+    vi.stubEnv('MONGO_URL', undefined);
     const record = join(runtimeDir, 'build.txt');
     await project(
       { 'server.js': server('Number(process.env.PORT)') },
@@ -160,10 +162,21 @@ describe('verify', () => {
         BOTH: { scopes: ['build', 'runtime'] },
         API_URL: { value: '/api', scopes: ['build', 'runtime'] },
         EMPTY: { value: '', scopes: ['build', 'runtime'] },
+        MISSING: { type: 'secret' },
       }
     );
     expect(await run()).toBe(true);
     expect(await readFile(record, 'utf8')).toBe('install-token||shared|/api||');
+    // Each phase lists the declared names it gets and where they come from, never the values.
+    expect(output()).toContain(
+      'The build gets API_URL (committed), BOTH (shell), EMPTY (committed), NPM_TOKEN (shell).'
+    );
+    expect(output()).toContain(
+      'The runtime gets API_URL (committed), BOTH (shell), EMPTY (committed), STRIPE_SECRET_KEY (shell).'
+    );
+    expect(output()).toContain('Declared for the runtime but not set anywhere: MISSING.');
+    expect(output()).not.toContain('Declared for the build but not set anywhere');
+    expect(output()).not.toMatch(/install-token|runtime-secret|must-not-pass/);
     const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
     expect(env.STRIPE_SECRET_KEY).toBe('runtime-secret');
     expect(env.BOTH).toBe('shared');
@@ -179,8 +192,11 @@ describe('verify', () => {
     await mkdir(appRoot);
     await writeFile(
       join(dir, '.modelence.env'),
-      'MODELENCE_SERVICE_ENDPOINT=https://cloud.example.com\nMODELENCE_SERVICE_TOKEN=test-token\n'
+      'MODELENCE_SERVICE_ENDPOINT=https://cloud.example.com\nMODELENCE_SERVICE_TOKEN=test-token\n' +
+        'MODELENCE_ENVIRONMENT_ID=env-123\n'
     );
+    vi.stubEnv('MONGODB_URI', undefined);
+    vi.stubEnv('MONGO_URL', undefined);
     const realFetch = globalThis.fetch;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       if (input === 'https://cloud.example.com/api/env') {
@@ -238,6 +254,22 @@ describe('verify', () => {
     expect(env.DATABASE_URL).toBe('postgres://remote');
     expect(env.REDIS_URL).toBe('redis://remote');
     expect(env.STRIPE_SECRET_KEY).toBe('remote-secret');
+    // Which environment the values, and so the databases, come from; not the
+    // full fetched list, which would read as what the app got.
+    expect(output()).toContain(
+      'come from the connected Modelence environment env-123 (https://cloud.example.com)'
+    );
+    expect(output()).not.toContain('Loaded');
+    expect(output()).toContain(
+      'The build gets NODE_ENV (connected environment), NPM_TOKEN (connected environment), ' +
+        'SITE_URL (connected environment).'
+    );
+    expect(output()).toContain(
+      'The runtime gets API_URL (committed), DATABASE_URL (connected environment), ' +
+        'NODE_ENV (connected environment), REDIS_URL (connected environment), ' +
+        'STRIPE_SECRET_KEY (connected environment).'
+    );
+    expect(output()).not.toMatch(/remote-secret|remote-install-token|postgres:\/\/remote/);
     expect(env.API_URL).toBe('/api');
     expect(env.NODE_ENV).toBe('production');
     expect(env.SITE_URL).toBe(`http://localhost:${env.PORT}`);
@@ -249,6 +281,40 @@ describe('verify', () => {
       'https://cloud.example.com/api/env',
       expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } })
     );
+  }, 20_000);
+
+  it("prefers the shell's database under either name over the connected environment's", async () => {
+    await writeFile(
+      join(dir, '.modelence.env'),
+      'MODELENCE_SERVICE_ENDPOINT=https://cloud.example.com\nMODELENCE_SERVICE_TOKEN=test-token\n'
+    );
+    vi.stubEnv('MONGODB_URI', undefined);
+    vi.stubEnv('MONGO_URL', 'mongodb://shell');
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
+      input === 'https://cloud.example.com/api/env'
+        ? Promise.resolve(
+            new Response(JSON.stringify({ env: { MONGODB_URI: 'mongodb://remote' } }))
+          )
+        : realFetch(input, init)
+    );
+    await project(
+      { 'server.js': server('Number(process.env.PORT)') },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } },
+      // Declared or not, the site URL is this run's address.
+      { SITE_URL: { value: 'https://app.example.com' }, ROOT_URL: { type: 'secret' } }
+    );
+    expect(await run()).toBe(true);
+    const env = JSON.parse(await readFile(join(runtimeDir, 'env.json'), 'utf8'));
+    expect([env.MONGODB_URI, env.MONGO_URL]).toEqual(['mongodb://shell', 'mongodb://shell']);
+    expect([env.SITE_URL, env.ROOT_URL]).toEqual([
+      `http://localhost:${env.PORT}`,
+      `http://localhost:${env.PORT}`,
+    ]);
+    expect(output()).toContain(
+      'The runtime gets MONGODB_URI (shell), MONGO_URL (shell), ROOT_URL (this run), SITE_URL (this run).'
+    );
+    expect(output()).not.toContain('Declared for the runtime but not set anywhere');
   }, 20_000);
 
   it.each(['undeclared', 'shell', 'literal'] as const)(
@@ -315,11 +381,15 @@ describe('verify', () => {
       },
       { build: { commands: [] }, start: { commands: ['node server.js'] } }
     );
-    setTimeout(() => process.emit('SIGTERM'), 1500);
-    expect(await run('10')).toBe(false);
+    const verification = run('10');
+    // Interrupt once the app is up, however long a slow machine takes.
+    const pid = await vi.waitFor(async () => Number(await readFile(pidFile, 'utf8')), {
+      timeout: 5_000,
+    });
+    process.emit('SIGTERM');
+    expect(await verification).toBe(false);
     expect(output()).toContain('Interrupted.');
-    const pid = Number(await readFile(pidFile, 'utf8'));
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // verify waits until the app's group is gone, so nothing is left to poll for.
     expect(() => process.kill(pid, 0)).toThrow();
   }, 20_000);
 
@@ -518,6 +588,53 @@ server.listen(${interrupted ? '0' : 'Number(process.env.PORT)'}, () => {
     },
     20_000
   );
+
+  it('kills what the interrupt found below the runtime, even after the runtime exits', async () => {
+    const readyFile = join(runtimeDir, 'worker.json');
+    await project(
+      {
+        // The app dies of SIGTERM at once, so the runtime exits too; its
+        // worker, in a group of its own, is reparented and ignores SIGTERM.
+        'server.js': `
+require('child_process').spawn(process.execPath, ['worker.js'], { detached: true, stdio: 'ignore' });
+require('http').createServer((q, s) => s.end('ok')).listen(0);`,
+        'worker.js': `
+process.on('SIGTERM', () => {});
+const server = require('http').createServer((q, s) => s.end('ok'));
+server.listen(0, () => {
+  require('fs').writeFileSync(${JSON.stringify(readyFile)}, JSON.stringify({
+    pid: process.pid, port: server.address().port,
+  }));
+});`,
+      },
+      { build: { commands: [] }, start: { commands: ['node server.js'] } }
+    );
+    const verification = run('10');
+    let pid: number | undefined;
+    try {
+      const worker = await vi.waitFor(
+        async () => JSON.parse(await readFile(readyFile, 'utf8')) as { pid: number; port: number },
+        { timeout: 5_000 }
+      );
+      pid = worker.pid;
+      process.emit('SIGTERM');
+      expect(await verification).toBe(false);
+      // Only the interrupt's snapshot still links the worker to the runtime,
+      // so verify must wait for that stop rather than take a new one.
+      await vi.waitFor(async () => {
+        await expect(fetch(`http://127.0.0.1:${worker.port}/`)).rejects.toThrow();
+      });
+    } finally {
+      if (pid !== undefined) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
+      }
+      await verification;
+    }
+  }, 20_000);
 
   it('gives build commands no stdin, as in the cloud', async () => {
     await project(

@@ -8,6 +8,7 @@ import {
   isManagedResource,
   type ServiceResource,
   type AppSpec,
+  type EnvDeclaration,
 } from './appSpec';
 import { resolveDeployKind } from './deployKind';
 import { prepareSpec } from './deploySpec';
@@ -135,8 +136,13 @@ async function rehearse(
   run: Run
 ): Promise<boolean> {
   const baseEnv = localEnv(env);
+  // `env` is this shell plus the connected environment's values; the shell
+  // alone tells which of the two a value came from.
+  const shell = process.env;
 
-  const buildEnv = sanitizePath({ ...baseEnv, ...declaredValues(envDeclarations, 'build', env) });
+  const buildValues = declaredValues(envDeclarations, 'build', env, shell);
+  logPhaseEnv('build', envDeclarations, buildValues);
+  const buildEnv = sanitizePath({ ...baseEnv, ...valuesOf(buildValues) });
   for (const command of resource.build?.commands ?? ['npm install']) {
     console.log(`\n$ ${command}`);
     // Checked right before every spawn: a signal between phases has no child
@@ -170,7 +176,20 @@ async function rehearse(
       ? `printf '%s\\n' "$$" > ${quoteShellArg(appGroupFile)}\n${start.join(' && ')}`
       : null;
   const [command, ...args] = options.runtimeCommand ?? RUNTIME_COMMAND;
+  const siteUrl = `http://localhost:${port}`;
+  const runtimeValues: Record<string, SourcedValue> = {
+    ...localDatabase(env, shell),
+    ...declaredValues(envDeclarations, 'runtime', env, shell),
+  };
+  // Replaced below by this run's address, whatever the spec or env says.
+  const declaredForRuntime = new Set(declaredFor(envDeclarations, 'runtime').map(([name]) => name));
+  for (const name of SITE_URL_NAMES) {
+    if (declaredForRuntime.has(name)) {
+      runtimeValues[name] = { value: siteUrl, source: 'this run' };
+    }
+  }
   console.log(`\nStarting through @modelence/runtime on PORT=${port}`);
+  logPhaseEnv('runtime', envDeclarations, runtimeValues);
   if (run.interrupted) {
     return fail('Interrupted.');
   }
@@ -178,8 +197,7 @@ async function rehearse(
     cwd: appRoot,
     env: sanitizePath({
       ...baseEnv,
-      ...localDatabase(env),
-      ...declaredValues(envDeclarations, 'runtime', env),
+      ...valuesOf(runtimeValues),
       PORT: String(port),
       MODELENCE_APP_PORT: String(appPort),
       // Longer than ours, so verify's own message explains a timeout.
@@ -189,8 +207,8 @@ async function rehearse(
         start: startCommand,
         static: resource.static ?? [],
       }),
-      SITE_URL: `http://localhost:${port}`,
-      ROOT_URL: `http://localhost:${port}`,
+      SITE_URL: siteUrl,
+      ROOT_URL: siteUrl,
     }),
     // No stdin, as in the cloud: a process group in the background that
     // reads the terminal would be stopped and never finish.
@@ -251,26 +269,92 @@ async function rehearse(
   return true;
 }
 
+interface SourcedValue {
+  value: string;
+  source: 'committed' | 'shell' | 'connected environment' | 'this run';
+}
+
+// Verify points these at the local run, whatever the spec or env says.
+const SITE_URL_NAMES = ['SITE_URL', 'ROOT_URL'];
+
+function valuesOf(values: Record<string, SourcedValue>): Record<string, string> {
+  return Object.fromEntries(Object.entries(values).map(([name, { value }]) => [name, value]));
+}
+
+// A value from `env` the shell does not have came from the connected environment.
+function fromEnv(name: string, env: ProcessEnv, shell: ProcessEnv): SourcedValue | undefined {
+  const value = env[name];
+  if (value === undefined) {
+    return undefined;
+  }
+  return { value, source: shell[name] !== undefined ? 'shell' : 'connected environment' };
+}
+
 // Declared values for one phase: committed literals win over the shell or
 // connected environment. Managed-resource outputs reach the runtime only.
 function declaredValues(
   declarations: NonNullable<AppSpec['env']>,
   scope: 'build' | 'runtime',
-  env: ProcessEnv
-): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [name, declaration] of Object.entries(declarations)) {
-    if (!declaration || name === 'PORT' || name.startsWith('MODELENCE_')) {
-      continue;
-    }
-    const scopes =
-      declaration.type === 'resource' ? ['runtime'] : (declaration.scopes ?? ['runtime']);
-    const value = declaration.type === 'resource' ? env[name] : (declaration.value ?? env[name]);
-    if (value !== undefined && scopes.includes(scope)) {
+  env: ProcessEnv,
+  shell: ProcessEnv
+): Record<string, SourcedValue> {
+  const values: Record<string, SourcedValue> = {};
+  for (const [name, declaration] of declaredFor(declarations, scope)) {
+    const committed = committedValue(declaration);
+    const value =
+      committed !== undefined
+        ? { value: committed, source: 'committed' as const }
+        : fromEnv(name, env, shell);
+    if (value !== undefined) {
       values[name] = value;
     }
   }
   return values;
+}
+
+function declaredFor(
+  declarations: NonNullable<AppSpec['env']>,
+  scope: 'build' | 'runtime'
+): [string, EnvDeclaration][] {
+  return Object.entries(declarations).filter((entry): entry is [string, EnvDeclaration] => {
+    const [name, declaration] = entry;
+    if (!declaration || name === 'PORT' || name.startsWith('MODELENCE_')) {
+      return false;
+    }
+    const scopes =
+      declaration.type === 'resource' ? ['runtime'] : (declaration.scopes ?? ['runtime']);
+    return scopes.includes(scope);
+  });
+}
+
+function committedValue(declaration: EnvDeclaration | undefined): string | undefined {
+  return declaration && declaration.type !== 'resource' ? declaration.value : undefined;
+}
+
+/*
+  Lists what one phase gets, and from where, since `loadLocalEnv` fetches
+  more than the declared names that are passed on. Values are never printed.
+*/
+function logPhaseEnv(
+  scope: 'build' | 'runtime',
+  declarations: NonNullable<AppSpec['env']>,
+  values: Record<string, SourcedValue>
+): void {
+  const described = Object.keys(values)
+    .sort()
+    .map((name) => `${name} (${values[name].source})`);
+  console.log(
+    described.length > 0
+      ? `The ${scope} gets ${described.join(', ')}.`
+      : `The ${scope} gets no declared variables.`
+  );
+  const missing = declaredFor(declarations, scope)
+    .map(([name]) => name)
+    .filter((name) => !(name in values))
+    .sort();
+  if (missing.length > 0) {
+    console.log(`Declared for the ${scope} but not set anywhere: ${missing.join(', ')}.`);
+  }
 }
 
 // Copies the upload's file list into `dir`.
@@ -335,10 +419,22 @@ function sanitizePath(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   };
 }
 
-// The cloud provisions a database; a local one from the shell stands in for it.
-function localDatabase(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const uri = env.MONGODB_URI ?? env.MONGO_URL;
-  return uri ? { MONGODB_URI: uri, MONGO_URL: uri } : {};
+/*
+  The cloud provisions the app's MongoDB. Here the shell's MONGODB_URI (or
+  MONGO_URL) stands in for it or, when the project is connected, the
+  connected environment's. That one is the environment's real database, not
+  a local one, like the resource outputs (DATABASE_URL, REDIS_URL) in
+  `declaredValues`: a start command that runs migrations runs them against
+  it, as `modelence run` would. The shell is checked first under both names,
+  so a local MONGO_URL is not replaced by the environment's MONGODB_URI.
+*/
+function localDatabase(env: ProcessEnv, shell: ProcessEnv): Record<string, SourcedValue> {
+  const uri =
+    fromEnv('MONGODB_URI', shell, shell) ??
+    fromEnv('MONGO_URL', shell, shell) ??
+    fromEnv('MONGODB_URI', env, shell) ??
+    fromEnv('MONGO_URL', env, shell);
+  return uri?.value ? { MONGODB_URI: uri, MONGO_URL: uri } : {};
 }
 
 async function runToCompletion(

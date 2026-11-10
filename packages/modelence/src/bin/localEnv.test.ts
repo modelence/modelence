@@ -126,6 +126,12 @@ describe('loadLocalEnv', () => {
       DATABASE_URL: 'postgres://remote',
       MONGODB_URI: 'mongodb://remote',
     });
+    // The rehearsal lists what each phase gets itself; here only the source.
+    const lines = vi.mocked(console.log).mock.calls.map(([line]) => String(line));
+    expect(lines.some((line) => line.startsWith('Loaded'))).toBe(false);
+    expect(lines).toContainEqual(
+      expect.stringContaining('connected Modelence environment at https://cloud.example.com/')
+    );
   });
 
   it.each([false, true])(

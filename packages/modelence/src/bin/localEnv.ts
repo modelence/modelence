@@ -176,6 +176,22 @@ export async function loadLocalEnv(
         ]
   );
   const merged = mergeLocalEnv(remote, local, projectNames, options);
+  if (options.isolated) {
+    /*
+      A rehearsal passes on only the declared names, which it lists itself, so
+      the full list would read as what the app got. Which environment matters
+      more: its resource URLs are real databases, not local ones.
+    */
+    const environment = connection.MODELENCE_ENVIRONMENT_ID
+      ? `environment ${connection.MODELENCE_ENVIRONMENT_ID} (${endpoint})`
+      : `environment at ${endpoint}`;
+    console.log(
+      `Variables that are neither committed nor set in the shell come from the connected Modelence ${environment}. ` +
+        "Its resource URLs point to that environment's databases, so commands that use them, " +
+        'such as migrations, run against those databases.'
+    );
+    return merged;
+  }
   const loaded = Object.keys(merged).filter((name) => local[name] === undefined);
   if (loaded.length > 0) {
     console.log(`Loaded ${loaded.length} environment variable(s): ${loaded.join(', ')}`);
