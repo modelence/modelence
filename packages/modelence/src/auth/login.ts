@@ -74,6 +74,13 @@ export async function handleLoginWithPassword(
       type: 'email',
       value: email,
     });
+    const userDoc = await usersCollection.findOne(
+      { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
+      { collation: { locale: 'en', strength: 2 } }
+    );
+
+    const passwordHash = userDoc?.authMethods?.password?.hash;
+
     // The check above is only a snapshot, so concurrent guesses could all pass
     // it. Reserve a slot atomically before bcrypt; it is released on success,
     // so only failed attempts count against the email limit.
@@ -83,16 +90,20 @@ export async function handleLoginWithPassword(
       value: email,
     });
 
-    const userDoc = await usersCollection.findOne(
-      { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
-      { collation: { locale: 'en', strength: 2 } }
-    );
-
-    const passwordHash = userDoc?.authMethods?.password?.hash;
-
     // Always run bcrypt.compare to mitigate timing attacks that could reveal if an email exists.
     const hashToCompare = passwordHash || DUMMY_PASSWORD_HASH;
-    const isValidPassword = await bcrypt.compare(password, hashToCompare);
+    let isValidPassword: boolean;
+    try {
+      isValidPassword = await bcrypt.compare(password, hashToCompare);
+    } catch (error) {
+      // The password was never compared, so this attempt should not count.
+      try {
+        await releaseRateLimits(emailReservations);
+      } catch (releaseError) {
+        console.error('Failed to release email rate limit reservation', releaseError);
+      }
+      throw error;
+    }
 
     if (!passwordHash || !isValidPassword) {
       // Keep the reservation counted: only failed attempts count against the

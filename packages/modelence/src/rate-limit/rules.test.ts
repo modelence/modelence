@@ -514,6 +514,57 @@ describe('rate-limit/rules', () => {
     );
   });
 
+  test('consumeRateLimit rolls back earlier rules when a later rule rejects', async () => {
+    vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
+    const { initRateLimits, consumeRateLimit, mocks } = await loadModule();
+
+    initRateLimits([
+      { bucket: 'signin', type: 'email', window: 60_000, limit: 5 },
+      { bucket: 'signin', type: 'email', window: 120_000, limit: 5 },
+    ]);
+
+    // The 1-minute rule reserves a slot...
+    mocks.findOneAndUpdate.mockResolvedValueOnce({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 60_000,
+      windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      windowCount: 1,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:03:00.000Z'),
+    });
+    // ...then the 2-minute rule is already at its limit and rejects.
+    mocks.findOneAndUpdate.mockResolvedValueOnce(null);
+    mocks.findOne.mockResolvedValueOnce({
+      bucket: 'signin',
+      type: 'email',
+      value: 'user@example.com',
+      windowMs: 120_000,
+      windowStart: new Date('2024-01-01T00:00:00.000Z'),
+      windowCount: 5,
+      prevWindowCount: 0,
+      expiresAt: new Date('2024-01-01T00:04:00.000Z'),
+    });
+    mocks.updateOne.mockResolvedValueOnce({ modifiedCount: 1 });
+
+    await expect(
+      consumeRateLimit({ bucket: 'signin', type: 'email', value: 'user@example.com' })
+    ).rejects.toThrow('Rate limit exceeded for signin');
+
+    // The successful 1-minute reservation is returned before the error escapes.
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      {
+        bucket: 'signin',
+        type: 'email',
+        value: 'user@example.com',
+        windowMs: 60_000,
+        windowStart: new Date('2024-01-01T00:01:00.000Z'),
+      },
+      { $inc: { windowCount: -1 } }
+    );
+  });
+
   test('consumeRateLimit fails closed when retry attempts are exhausted', async () => {
     vi.useFakeTimers().setSystemTime(new Date('2024-01-01T00:01:00.000Z'));
     const { initRateLimits, consumeRateLimit, mocks } = await loadModule();

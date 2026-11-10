@@ -526,6 +526,42 @@ describe('auth/login', () => {
     expect(mockReleaseRateLimits).not.toHaveBeenCalled();
   });
 
+  test('releases the email reservation when bcrypt throws', async () => {
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439035'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockRejectedValue(new Error('bcrypt exploded'));
+
+    await expect(
+      handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      )
+    ).rejects.toThrow('bcrypt exploded');
+
+    // The password was never checked, so the attempt should not stay counted.
+    expect(mockReleaseRateLimits).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not reserve an email slot when the user lookup fails', async () => {
+    mockFindOne.mockRejectedValue(new Error('db down'));
+
+    await expect(
+      handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      )
+    ).rejects.toThrow('db down');
+
+    expect(
+      mockConsumeRateLimit.mock.calls.filter(([options]) => options.type === 'email')
+    ).toHaveLength(0);
+    expect(mockReleaseRateLimits).not.toHaveBeenCalled();
+  });
+
   test('does not count successful logins against the email limit', async () => {
     mockFindOne.mockResolvedValue({
       _id: new ObjectId('507f1f77bcf86cd799439032'),

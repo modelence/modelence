@@ -111,15 +111,26 @@ export async function consumeRateLimit(options: {
   const createError = message ? () => new RateLimitError(message) : undefined;
 
   const reservations: RateLimitReservation[] = [];
-  for (const rule of rules) {
-    const windowStart = await checkRateLimitRule(rule, value, createError);
-    reservations.push({
-      bucket: rule.bucket,
-      type: rule.type,
-      value,
-      windowMs: rule.window,
-      windowStart,
-    });
+  try {
+    for (const rule of rules) {
+      const windowStart = await checkRateLimitRule(rule, value, createError);
+      reservations.push({
+        bucket: rule.bucket,
+        type: rule.type,
+        value,
+        windowMs: rule.window,
+        windowStart,
+      });
+    }
+  } catch (error) {
+    // A later rule rejecting must not leave the earlier rules' increments
+    // behind; otherwise the caller never receives them and cannot release them.
+    try {
+      await releaseRateLimits(reservations);
+    } catch (releaseError) {
+      console.error('Failed to roll back rate limit reservations', releaseError);
+    }
+    throw error;
   }
   return reservations;
 }
