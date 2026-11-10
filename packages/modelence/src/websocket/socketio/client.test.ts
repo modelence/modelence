@@ -5,14 +5,21 @@ import type ioClientFactory from 'socket.io-client';
 import type { ClientChannel } from '../clientChannel';
 import type { getLocalStorageSession } from '@/client/localStorage';
 
-type SocketMethods = Pick<Socket, 'on' | 'once' | 'off' | 'emit' | 'connected'>;
-const mockSocket: Mocked<SocketMethods> = {
-  on: vi.fn(),
-  once: vi.fn(),
-  off: vi.fn(),
-  emit: vi.fn(),
-  connected: true,
-};
+type SocketMethods = Pick<
+  Socket,
+  'on' | 'once' | 'off' | 'emit' | 'connect' | 'disconnect' | 'connected'
+>;
+const mockSocket: Mocked<SocketMethods> & { auth?: Record<string, unknown>; connected?: boolean } =
+  {
+    on: vi.fn(),
+    once: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    auth: {},
+    connected: true,
+  };
 
 // Fires the handler the client registered for the socket's 'connect' event.
 const fireConnect = () => {
@@ -52,6 +59,7 @@ describe('websocket/socketio/client', () => {
     vi.clearAllMocks();
     mockGetLocalStorageSession.mockReturnValue(null);
     mockSocket.connected = true;
+    mockSocket.auth = {};
   });
 
   describe('init', () => {
@@ -62,10 +70,19 @@ describe('websocket/socketio/client', () => {
 
       expect(mockIo).toHaveBeenCalledWith('/', {
         transports: ['websocket'],
-        auth: {
-          token: 'test-token',
-        },
+        auth: expect.any(Function),
       });
+    });
+
+    test('passes current auth token via auth callback during handshake', () => {
+      mockGetLocalStorageSession.mockReturnValue({ authToken: 'fresh-token' });
+
+      websocketProvider.init({ channels: [] });
+
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: 'fresh-token' });
     });
 
     test('initializes with undefined token when no session exists', () => {
@@ -73,12 +90,10 @@ describe('websocket/socketio/client', () => {
 
       websocketProvider.init({ channels: [] });
 
-      expect(mockIo).toHaveBeenCalledWith('/', {
-        transports: ['websocket'],
-        auth: {
-          token: undefined,
-        },
-      });
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: undefined });
     });
 
     test('initializes channels when provided', () => {
@@ -381,6 +396,7 @@ describe('websocket/socketio/client', () => {
       expect(websocketProvider.emit).toBeDefined();
       expect(websocketProvider.joinChannel).toBeDefined();
       expect(websocketProvider.leaveChannel).toBeDefined();
+      expect(websocketProvider.reconnect).toBeDefined();
     });
 
     test('all methods are functions', () => {
@@ -391,6 +407,31 @@ describe('websocket/socketio/client', () => {
       expect(typeof websocketProvider.emit).toBe('function');
       expect(typeof websocketProvider.joinChannel).toBe('function');
       expect(typeof websocketProvider.leaveChannel).toBe('function');
+      expect(typeof websocketProvider.reconnect).toBe('function');
+    });
+  });
+
+  describe('reconnect method', () => {
+    beforeEach(() => {
+      websocketProvider.init({});
+    });
+
+    test('disconnects and connects socket when socket is connected', () => {
+      mockSocket.connected = true;
+
+      websocketProvider.reconnect?.();
+
+      expect(mockSocket.disconnect).toHaveBeenCalledTimes(1);
+      expect(mockSocket.connect).toHaveBeenCalledTimes(1);
+    });
+
+    test('disconnects and connects socket when socket is disconnected', () => {
+      mockSocket.connected = false;
+
+      websocketProvider.reconnect?.();
+
+      expect(mockSocket.disconnect).toHaveBeenCalledTimes(1);
+      expect(mockSocket.connect).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -429,10 +470,13 @@ describe('websocket/socketio/client', () => {
 
       expect(mockIo).toHaveBeenCalledWith('/', {
         transports: ['websocket'],
-        auth: {
-          token: 'authenticated-token',
-        },
+        auth: expect.any(Function),
       });
+
+      const options = mockIo.mock.calls[0]?.[1];
+      const cb = vi.fn();
+      (options?.auth as (cb: (data: unknown) => void) => void)(cb);
+      expect(cb).toHaveBeenCalledWith({ token: 'authenticated-token' });
     });
 
     test('handles multiple channels initialization', () => {

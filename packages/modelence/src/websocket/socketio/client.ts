@@ -43,8 +43,10 @@ function init(props: { channels?: ClientChannel<unknown>[] }) {
   const baseUrl = getClientConfig()?.baseUrl ?? '/';
   socketClient = io(baseUrl, {
     transports: ['websocket'],
-    auth: {
-      token: getAuthToken(),
+    auth: (cb) => {
+      cb({
+        token: getAuthToken(),
+      });
     },
   });
 
@@ -182,6 +184,14 @@ export function subscribeLiveQuery<T = unknown>(
   };
 }
 
+function reconnect() {
+  if (!socketClient) {
+    return;
+  }
+  socketClient.disconnect();
+  socketClient.connect();
+}
+
 const websocketProvider: WebsocketClientProvider = {
   init,
   on,
@@ -190,6 +200,7 @@ const websocketProvider: WebsocketClientProvider = {
   emit,
   joinChannel,
   leaveChannel,
+  reconnect,
 };
 
 export default websocketProvider;
