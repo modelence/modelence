@@ -7,6 +7,7 @@ import { usersCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { getAuthConfig } from '@/app/authConfig';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { htmlToText } from '@/utils';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/server';
@@ -63,12 +64,14 @@ const MAX_CODE_ATTEMPTS = 5;
  * paths it must not mask the real error being propagated.
  */
 function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
+  const reportHookError = (error: unknown) => {
+    logError('Error in auth hook', { hook: name, error });
+    captureError(error);
+  };
   try {
-    Promise.resolve(invoke?.()).catch((hookError: unknown) => {
-      logError('Error in auth hook', { hook: name, error: hookError });
-    });
+    Promise.resolve(invoke?.()).catch(reportHookError);
   } catch (hookError) {
-    logError('Error in auth hook', { hook: name, error: hookError });
+    reportHookError(hookError);
   }
 }
 
@@ -114,7 +117,10 @@ async function restoreClaimedMagicLinkToken(
   try {
     await magicLinkTokensCollection.insertOne(claimedToken);
   } catch (restoreError) {
-    logError('Failed to restore a magic link token after a failed signup', { error: restoreError });
+    logError('Failed to restore a magic link token after a failed signup:', {
+      error: restoreError,
+    });
+    captureError(restoreError);
   }
 }
 
@@ -279,7 +285,8 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    logError('Error handling magic link landing', { error });
+    logError('Error handling magic link landing:', { error });
+    captureError(error);
     const message = 'This sign-in link is invalid or has expired.';
     return {
       status: 302,

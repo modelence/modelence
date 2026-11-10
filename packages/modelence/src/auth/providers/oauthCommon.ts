@@ -14,6 +14,7 @@ import { ModelenceError } from '@/error';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
@@ -214,6 +215,7 @@ export function sendOAuthError(
         siteUrl,
         error: err,
       });
+      captureError(err);
     }
 
     if (redirectUrl) {
@@ -231,7 +233,8 @@ export function sendOAuthError(
       const html = authConfig.errorComponent({ error: errorMessage, statusCode });
       if (html) return response.send(html);
     } catch (err) {
-      logError('Unhandled error in authConfig.errorComponent', { error: err });
+      logError('Unhandled error in authConfig.errorComponent:', { error: err });
+      captureError(err);
     }
   }
 
@@ -679,7 +682,8 @@ function safelyCallHook(hook?: () => void) {
   try {
     hook();
   } catch (err) {
-    logError('Error executing OAuth hook', { error: err });
+    logError('Error executing OAuth hook:', { error: err });
+    captureError(err);
   }
 }
 
