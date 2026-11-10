@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { ObjectId } from 'mongodb';
 
-const mockRandomBytes = vi.fn(() => ({
+const mockRandomBytes = vi.fn((): { toString: () => string } => ({
   toString: () => 'auth-token',
 }));
 
@@ -370,6 +370,38 @@ describe('auth/session', () => {
         expect.objectContaining({ authToken: 'hashed-auth-token', userId: null })
       );
       expect(isSessionSaved(result.session as never)).toBe(true);
+    });
+
+    test('saves the unsaved session under its own token so SSR and the client share it', async () => {
+      insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+      // Distinct tokens per call, so minting a second session would be visible.
+      let tokenCounter = 0;
+      mockRandomBytes.mockImplementation(() => ({ toString: () => `token-${++tokenCounter}` }));
+      try {
+        const unsaved = await obtainSession(null, { persistNewSession: false });
+
+        const result = (await sessionSystemModule.mutations.init.call(
+          sessionSystemModule,
+          {},
+          {
+            session: unsaved,
+            user: null,
+            roles: [],
+            clientInfo: {} as never,
+            connectionInfo: {} as never,
+            res: makeRes(),
+          }
+        )) as { session: { authToken: string; expiresAt: Date } };
+
+        expect(result.session.authToken).toBe(unsaved.authToken);
+        expect(insertOneMock).toHaveBeenCalledWith(
+          expect.objectContaining({ expiresAt: unsaved.expiresAt })
+        );
+        // The caller's context session (used by in-process SSR queries) is now saved too.
+        expect(isSessionSaved(unsaved)).toBe(true);
+      } finally {
+        mockRandomBytes.mockImplementation(() => ({ toString: () => 'auth-token' }));
+      }
     });
 
     test('does not insert anything for a session that is already saved', async () => {

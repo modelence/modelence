@@ -219,6 +219,26 @@ function createUnsavedSession(): Session {
 }
 
 /**
+ * Writes an unsaved anonymous session to the database under its existing
+ * token. The token must stay the same: during SSR the request's call context
+ * keeps using this session object while the client hydrates with the token
+ * returned by `init`, so both have to refer to the same record.
+ *
+ * Safe against session fixation because unsaved sessions only ever carry
+ * server-generated tokens (an unknown client token is never reused).
+ */
+async function saveUnsavedSession(session: Session): Promise<Session> {
+  await sessionsCollection.insertOne({
+    authToken: hashToken(session.authToken),
+    createdAt: new Date(),
+    expiresAt: session.expiresAt,
+    userId: null,
+  });
+  unsavedSessions.delete(session);
+  return session;
+}
+
+/**
  * Starts an authenticated session for a sign-in and retires the pre-login one.
  *
  * Every sign-in must use this rather than binding the user to the token the
@@ -328,9 +348,11 @@ export default new Module('_system.session', {
     init: async function (args, { session: contextSession, user, res }) {
       // Requests with a missing or unknown token carry an unsaved session (see
       // obtainSession). This is where a new token reaches the client, over
-      // HTTP or through SSR, so save the session now.
+      // HTTP or through SSR, so save the session now, keeping its token.
       const session =
-        contextSession && !isSessionSaved(contextSession) ? await createSession() : contextSession;
+        contextSession && !isSessionSaved(contextSession)
+          ? await saveUnsavedSession(contextSession)
+          : contextSession;
 
       // Only refresh the cookie for logged-in sessions. Writing one for a
       // freshly-minted anonymous session creates a Set-Cookie that the
