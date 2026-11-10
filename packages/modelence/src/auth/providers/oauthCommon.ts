@@ -24,7 +24,6 @@ import {
   getAllowedMobileRedirectUrls,
 } from './mobileRedirect';
 import { buildOAuthErrorRedirect } from './oauthErrorRedirect';
-import { logError } from '@/telemetry';
 
 /** Which kind of client started an OAuth flow. */
 export type OAuthPlatform = 'web' | 'mobile';

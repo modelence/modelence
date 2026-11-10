@@ -24,7 +24,6 @@ import {
   isDuplicateEmailError,
 } from './utils';
 import { Session, User } from './types';
-import { logError } from '@/telemetry';
 
 // Short-lived httpOnly cookie carrying the magic link token from the landing
 // route to the `loginWithMagicLink` mutation, so it never appears on a
