@@ -546,6 +546,25 @@ describe('auth/verification', () => {
       expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     });
 
+    test('prints and captures a thrown non-Error value', async () => {
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockRejectedValue('db down' as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      // The hook's contract is an Error, so a non-Error value skips it.
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(result?.redirect).toBe(
+        '/verified?status=error&message=An%20unexpected%20error%20occurred'
+      );
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', { error: 'db down' });
+      expect(mockCaptureError).toHaveBeenCalledWith('db down');
+    });
+
     test('appends status to a redirect URL that already has a query string', async () => {
       mockGetEmailConfig.mockReturnValue({
         provider: { sendEmail: vi.fn() },

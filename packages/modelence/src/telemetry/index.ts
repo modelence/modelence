@@ -100,13 +100,26 @@ export function startTransaction(
 }
 
 /**
+ * Turns a thrown non-Error value into a message. `String()` itself throws for
+ * values such as `Object.create(null)`, and this runs inside catch blocks, where
+ * a second throw would hide the original error.
+ */
+function describeThrownValue(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return 'Unknown error';
+  }
+}
+
+/**
  * Sends an error to APM when telemetry is enabled, or prints it otherwise.
  *
  * With telemetry enabled nothing is printed, so call sites that must also show
  * up in stdout/stderr (the Logs page) should pair this with {@link logError}.
  */
 export function captureError(error: unknown): void {
-  const cause = error instanceof Error ? error : new Error(String(error));
+  const cause = error instanceof Error ? error : new Error(describeThrownValue(error));
   if (!isTelemetryEnabled()) {
     console.error(cause);
     return;

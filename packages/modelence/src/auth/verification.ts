@@ -225,9 +225,9 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
           referrer: params.headers['referer'],
         },
       });
-      logError('Error verifying email:', { error });
-      captureError(error);
     }
+    logError('Error verifying email:', { error });
+    captureError(error);
 
     return {
       status: 302,
