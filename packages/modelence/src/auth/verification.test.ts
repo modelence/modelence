@@ -19,6 +19,14 @@ const mockGetAuthConfig = vi.fn();
 const mockValidateEmail = vi.fn<(value: string) => string>();
 const mockConsumeRateLimit = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -531,6 +539,30 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
       });
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    });
+
+    test('prints and captures a thrown non-Error value', async () => {
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockRejectedValue('db down' as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      // The hook's contract is an Error, so a non-Error value skips it.
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(result?.redirect).toBe(
+        '/verified?status=error&message=An%20unexpected%20error%20occurred'
+      );
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', { error: 'db down' });
+      expect(mockCaptureError).toHaveBeenCalledWith('db down');
     });
 
     test('appends status to a redirect URL that already has a query string', async () => {

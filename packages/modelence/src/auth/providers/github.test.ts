@@ -13,6 +13,14 @@ const RouterMock = vi.fn(() => ({
   },
 }));
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('express', () => ({
   Router: RouterMock,
 }));
@@ -303,6 +311,9 @@ describe('auth/providers/github', () => {
     expect(mockSendOAuthError).toHaveBeenCalledWith(res, 500, 'Authentication failed', {
       platform: 'web',
     });
+    // Printed for the Logs page and sent to APM.
+    expect(mockLogError).toHaveBeenCalledWith('GitHub OAuth error:', { error: expect.any(Error) });
+    expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     consoleError.mockRestore();
   });
 });
