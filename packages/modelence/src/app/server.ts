@@ -325,7 +325,7 @@ export async function getCallContext(req: Request, res: Response | null = null) 
 
   const hasDatabase = Boolean(getMongodbUri());
   if (hasDatabase) {
-    const { session, user, roles } = await authenticate(authToken, connectionInfo.ip);
+    const { session, user, roles } = await authenticate(authToken);
     return {
       clientInfo,
       connectionInfo,

@@ -72,7 +72,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
   subs.set(subscriptionId, subscription);
 
   try {
-    const { session, user, roles } = await authenticate(authToken ?? null, ip);
+    const { session, user, roles } = await authenticate(authToken ?? null);
 
     const context: Context = {
       session,

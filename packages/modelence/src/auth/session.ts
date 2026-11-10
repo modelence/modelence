@@ -9,7 +9,6 @@ import { schema } from '../data/types';
 import { time } from '../time';
 import { hashToken } from './tokenHash';
 import { OAuthProvider, Session } from './types';
-import { consumeRateLimit } from '../rate-limit/rules';
 
 export const linkNoncesCollection = new Store('_modelenceLinkNonces', {
   schema: {
@@ -147,7 +146,7 @@ export const sessionsCollection = new Store('_modelenceSessions', {
   ],
 });
 
-export async function obtainSession(authToken: string | null, ip?: string): Promise<Session> {
+export async function obtainSession(authToken: string | null): Promise<Session> {
   if (authToken) {
     const hashedToken = hashToken(authToken);
     let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
@@ -175,11 +174,6 @@ export async function obtainSession(authToken: string | null, ip?: string): Prom
     }
   }
 
-  // Only new anonymous sessions count. Reusing a session must not spend quota
-  // on every method call or WebSocket reconnect.
-  if (ip) {
-    await consumeRateLimit({ bucket: 'sessionCreation', type: 'ip', value: ip });
-  }
   return await createSession();
 }
 
@@ -233,7 +227,7 @@ export async function invalidateAllUserSessions(userId: ObjectId) {
 }
 
 export async function createSession(userId: ObjectId | null = null): Promise<Session> {
-  // Network requests acquire anonymous sessions through the limiter in obtainSession.
+  // TODO: add rate-limiting and captcha handling
 
   const authToken = randomBytes(32).toString('base64url');
   const now = Date.now();
