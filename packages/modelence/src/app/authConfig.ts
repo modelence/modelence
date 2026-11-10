@@ -165,6 +165,15 @@ export type AuthOption = {
 /**
  * Authentication configuration for the application
  *
+ * The notify-only hooks (`onAfterLogin`, `onLoginError`, `onAfterSignup`,
+ * `onSignupError`, `onAfterEmailVerification`, `onEmailVerificationError`,
+ * `onAfterOAuthLink`, `onOAuthLinkError` and the deprecated `login`/`signup`
+ * callbacks) may be async, but they are not awaited: don't rely on one
+ * finishing before the client gets its response. A hook that throws or rejects
+ * is logged as `Error in <hook> hook:` and does not change the response.
+ * `onBeforeSignup` is the exception: it is awaited, and throwing from it aborts
+ * the signup.
+ *
  * @example
  * ```typescript
  * import { startApp } from 'modelence/server';

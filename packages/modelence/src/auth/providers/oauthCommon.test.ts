@@ -222,6 +222,45 @@ describe('auth/providers/oauthCommon', () => {
         }
       });
 
+      test('a failing login error hook does not replace the real OAuth login error', async () => {
+        const existingUser = { _id: new ObjectId(), handle: 'demo', status: 'active' };
+        mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
+        const updateError = new Error('updateOne failed');
+        mockUsersUpdateOne.mockRejectedValueOnce(updateError as never);
+        authConfig.login.onError.mockImplementationOnce(() => {
+          throw new Error('analytics down');
+        });
+        authConfig.onLoginError.mockRejectedValueOnce(new Error('async analytics down'));
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+          await expect(
+            moduleExports.handleOAuthUserAuthentication(req, res, {
+              id: 'provider-id',
+              email: 'user@example.com',
+              emailVerified: true,
+              providerName: 'google',
+              firstName: 'New',
+            })
+          ).rejects.toThrow('updateOne failed');
+          await new Promise((resolve) => setImmediate(resolve));
+
+          expect(authConfig.onLoginError).toHaveBeenCalledWith(
+            expect.objectContaining({ error: updateError })
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in login.onError hook:',
+            expect.any(Error)
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in onLoginError hook:',
+            expect.any(Error)
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
+      });
+
       test('backfills all missing profile fields for existing user', async () => {
         const existingUser = { _id: new ObjectId(), handle: 'demo', status: 'active' };
         mockUsersFindOne.mockResolvedValueOnce(existingUser as never);
@@ -518,6 +557,50 @@ describe('auth/providers/oauthCommon', () => {
         expect(authConfig.login.onSuccess).toHaveBeenCalledWith(updatedUser);
       });
 
+      test('a failing login hook does not fail an auto-link login', async () => {
+        const existingUser = {
+          _id: new ObjectId(),
+          handle: 'user@example.com',
+          status: 'active',
+          emails: [{ address: 'user@example.com', verified: true }],
+        };
+        mockUsersFindOne
+          .mockResolvedValueOnce(null as never)
+          .mockResolvedValueOnce(existingUser as never);
+        mockUsersUpdateOne.mockResolvedValue({ matchedCount: 1 } as never);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, oauthAccountLinking: 'auto' });
+        authConfig.onAfterLogin.mockImplementationOnce(() => {
+          throw new Error('analytics down');
+        });
+        authConfig.login.onSuccess.mockRejectedValueOnce(new Error('async analytics down'));
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+          await moduleExports.handleOAuthUserAuthentication(req, res, {
+            id: 'google-id',
+            email: 'user@example.com',
+            emailVerified: true,
+            providerName: 'google',
+          });
+          await new Promise((resolve) => setImmediate(resolve));
+
+          expect(res.redirect).toHaveBeenCalledWith('/');
+          expect(res.status).not.toHaveBeenCalled();
+          expect(authConfig.onLoginError).not.toHaveBeenCalled();
+          expect(authConfig.login.onError).not.toHaveBeenCalled();
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in onAfterLogin hook:',
+            expect.any(Error)
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in login.onSuccess hook:',
+            expect.any(Error)
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
+      });
+
       test('backfills missing profile fields for existing user auto-linking', async () => {
         const existingUser = {
           _id: new ObjectId(),
@@ -731,6 +814,52 @@ describe('auth/providers/oauthCommon', () => {
         // Should NOT trigger signup error callbacks
         expect(authConfig.signup.onError).not.toHaveBeenCalled();
         expect(authConfig.onSignupError).not.toHaveBeenCalled();
+      });
+
+      test('a failing login error hook does not replace the real auto-link error', async () => {
+        const existingUser = {
+          _id: new ObjectId(),
+          handle: 'user@example.com',
+          status: 'active',
+          emails: [{ address: 'user@example.com', verified: true }],
+        };
+        mockUsersFindOne
+          .mockResolvedValueOnce(null as never)
+          .mockResolvedValueOnce(existingUser as never);
+        const updateError = new Error('updateOne failed');
+        mockUsersUpdateOne.mockRejectedValueOnce(updateError as never);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, oauthAccountLinking: 'auto' });
+        authConfig.login.onError.mockImplementationOnce(() => {
+          throw new Error('analytics down');
+        });
+        authConfig.onLoginError.mockRejectedValueOnce(new Error('async analytics down'));
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+          await expect(
+            moduleExports.handleOAuthUserAuthentication(req, res, {
+              id: 'google-id',
+              email: 'user@example.com',
+              emailVerified: true,
+              providerName: 'google',
+            })
+          ).rejects.toThrow('updateOne failed');
+          await new Promise((resolve) => setImmediate(resolve));
+
+          expect(authConfig.onLoginError).toHaveBeenCalledWith(
+            expect.objectContaining({ error: updateError })
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in login.onError hook:',
+            expect.any(Error)
+          );
+          expect(consoleErrorSpy).toHaveBeenCalledWith(
+            'Error in onLoginError hook:',
+            expect.any(Error)
+          );
+        } finally {
+          consoleErrorSpy.mockRestore();
+        }
       });
     });
 
