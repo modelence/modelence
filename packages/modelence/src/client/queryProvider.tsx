@@ -29,6 +29,38 @@ function readDehydratedState(): DehydratedState | undefined {
   }
 }
 
+function createQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000,
+      },
+    },
+  });
+}
+
+let browserQueryClient: QueryClient | null = null;
+
+/*
+  In the browser, every mount gets the same client. In development StrictMode runs
+  the useState initializer twice. With a new client per call, React would render
+  the first client while the second one stayed connected, so live-query updates
+  went to a client nothing reads. On the server, each render gets its own client
+  so data is never shared between requests.
+*/
+function getDefaultQueryClient(): QueryClient {
+  if (typeof window === 'undefined') {
+    return createQueryClient();
+  }
+  browserQueryClient ??= createQueryClient();
+  return browserQueryClient;
+}
+
+/** @internal Resets the shared browser client between tests. */
+export function _resetBrowserQueryClient() {
+  browserQueryClient = null;
+}
+
 interface ModelenceQueryProviderProps {
   children: ReactNode;
   client?: QueryClient;
@@ -41,15 +73,7 @@ export function ModelenceQueryProvider({
   dehydratedState,
 }: ModelenceQueryProviderProps) {
   const [internalClient] = useState(() => {
-    const qc =
-      client ??
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60 * 1000,
-          },
-        },
-      });
+    const qc = client ?? getDefaultQueryClient();
     if (typeof window !== 'undefined') {
       connectModelenceQueryClient(qc);
     }
