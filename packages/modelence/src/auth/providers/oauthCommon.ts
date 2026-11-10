@@ -209,12 +209,11 @@ export function sendOAuthError(
     } catch (err) {
       // A relative `oauthErrorRedirectUrl` against an unusable base throws here.
       // Report the original failure below rather than turning it into a 500.
-      console.error(
-        `[modelence] Could not build the OAuth error redirect from ` +
-          `${JSON.stringify(authConfig.oauthErrorRedirectUrl)} and site URL ` +
-          `${JSON.stringify(siteUrl)}. Falling back to the default error response.`,
-        err
-      );
+      logError('[modelence] Could not build the OAuth error redirect', {
+        oauthErrorRedirectUrl: authConfig.oauthErrorRedirectUrl,
+        siteUrl,
+        error: err,
+      });
     }
 
     if (redirectUrl) {
@@ -921,10 +920,10 @@ export function resolveMobileRedirectRequest(
     // The full value goes to the log, not the response: `errorMessage` reaches
     // `authConfig.errorComponent`, whose HTML is sent unescaped, so echoing
     // caller-controlled text back would hand app authors an XSS foot-gun.
-    console.error(
-      `[modelence] Rejected mobile OAuth redirectUri: ${JSON.stringify(redirectUri)}. ` +
-        `Allowed: ${JSON.stringify(getAllowedMobileRedirectUrls())}`
-    );
+    logError('[modelence] Rejected mobile OAuth redirectUri', {
+      redirectUri,
+      allowed: getAllowedMobileRedirectUrls(),
+    });
 
     sendOAuthError(
       res,

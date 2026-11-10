@@ -38,6 +38,11 @@ const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, use
 const mockSetAuthTokenCookie = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 const mockSerializeUserForClient = vi.fn();
+const mockLogError = vi.fn();
+
+vi.doMock('@/telemetry', () => ({
+  logError: mockLogError,
+}));
 
 vi.doMock('./session', () => ({
   startUserSession: mockStartUserSession,
@@ -825,8 +830,6 @@ describe('auth/magicLink', () => {
           onAfterEmailVerification,
           onAfterLogin,
         });
-        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
@@ -836,31 +839,27 @@ describe('auth/magicLink', () => {
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
-        try {
-          // The login itself must succeed despite both hooks failing.
-          const result = await handleLoginWithMagicLink({}, context);
-          expect(result.session).toBeDefined();
-          expect(clearCookie).toHaveBeenCalled();
+        // The login itself must succeed despite both hooks failing.
+        const result = await handleLoginWithMagicLink({}, context);
+        expect(result.session).toBeDefined();
+        expect(clearCookie).toHaveBeenCalled();
 
-          // Drain the microtask queue so the rejected hook promise settles
-          // through fireAuthHook's .catch — vitest would fail the run on a
-          // genuinely unhandled rejection.
-          await new Promise((resolve) => setImmediate(resolve));
+        // Drain the microtask queue so the rejected hook promise settles
+        // through fireAuthHook's .catch — vitest would fail the run on a
+        // genuinely unhandled rejection.
+        await new Promise((resolve) => setImmediate(resolve));
 
-          expect(onAfterEmailVerification).toHaveBeenCalled();
-          expect(onAfterLogin).toHaveBeenCalled();
-          // Both failures are logged, not swallowed silently.
-          expect(consoleErrorSpy).toHaveBeenCalledWith('Error in onAfterEmailVerification hook', {
-            hook: 'onAfterEmailVerification',
-            error: expect.any(Error),
-          });
-          expect(consoleErrorSpy).toHaveBeenCalledWith('Error in onAfterLogin hook', {
-            hook: 'onAfterLogin',
-            error: expect.any(Error),
-          });
-        } finally {
-          consoleErrorSpy.mockRestore();
-        }
+        expect(onAfterEmailVerification).toHaveBeenCalled();
+        expect(onAfterLogin).toHaveBeenCalled();
+        // Both failures are logged, not swallowed silently.
+        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
+          hook: 'onAfterEmailVerification',
+          error: expect.any(Error),
+        });
+        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
+          hook: 'onAfterLogin',
+          error: expect.any(Error),
+        });
       });
 
       test('does not fire onAfterEmailVerification when the email was already verified', async () => {
@@ -1400,7 +1399,6 @@ describe('auth/magicLink', () => {
       });
 
       test('a failing token restore does not mask the original upsert error', async () => {
-        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
@@ -1413,9 +1411,10 @@ describe('auth/magicLink', () => {
         const { context } = createLoginContext({ cookieToken: 'raw-token' });
 
         await expect(handleLoginWithMagicLink({}, context)).rejects.toThrow('disk full');
-        expect(consoleError).toHaveBeenCalled();
-
-        consoleError.mockRestore();
+        expect(mockLogError).toHaveBeenCalledWith(
+          'Failed to restore a magic link token after a failed signup',
+          { error: expect.any(Error) }
+        );
       });
     });
   });

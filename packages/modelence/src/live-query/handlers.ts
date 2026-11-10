@@ -5,7 +5,7 @@ import { runLiveMethod } from '../methods';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
-import { logError } from '../telemetry';
+import { logError } from '@/telemetry';
 
 interface ActiveSubscription {
   cleanup: LiveQueryCleanup | null;
@@ -127,7 +127,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
           if (subscription.aborted) {
             return;
           }
-          logError(`[LiveQuery] Error fetching data for ${method}`, {
+          logError('[LiveQuery] Error fetching data', {
             method,
             subscriptionId,
             error: err,
@@ -177,7 +177,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown)
     processPendingPublish();
   } catch (error) {
     subs.delete(subscriptionId);
-    logError(`[LiveQuery] Error in ${method}`, { method, subscriptionId, error });
+    logError('[LiveQuery] Error in method', { method, subscriptionId, error });
     socket.emit('liveQueryError', {
       subscriptionId,
       error: error instanceof Error ? error.message : String(error),
@@ -219,13 +219,14 @@ export function handleLiveQueryDisconnect(socket: Socket) {
   const subs = socketSubscriptions.get(socket.id);
   if (subs) {
     // Clean up all subscriptions for this socket
-    for (const sub of subs.values()) {
+    for (const [subscriptionId, sub] of subs.entries()) {
       if (sub.cleanup) {
         try {
           sub.cleanup();
         } catch (err) {
           logError('[LiveQuery] Error in cleanup on disconnect', {
             socketId: socket.id,
+            subscriptionId,
             error: err,
           });
         }
