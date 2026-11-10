@@ -1677,6 +1677,27 @@ describe('app/server method endpoint', () => {
     });
   });
 
+  test('returns 401 when authentication fails before the method runs', async () => {
+    const mockApp = createExpressAppMock();
+    mockExpressApp = mockApp;
+    await startServer(createMockServer(), { combinedModules: [], channels: [] });
+    const { AuthError } = await import('../error');
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockRejectedValueOnce(new AuthError('Session expired'));
+    const req = createRequest({
+      params: { methodName: '_system.session.init' },
+      headers: { host: 'localhost' },
+    });
+    const res = createResponse();
+
+    await getRegisteredMethodHandler(mockApp)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith('Session expired');
+    expect(mockRunMethod).not.toHaveBeenCalled();
+    expect(mockLogError).not.toHaveBeenCalled();
+  });
+
   test('handles successful method call', async () => {
     const mockApp = createExpressAppMock();
     mockExpressApp = mockApp;
@@ -1977,6 +1998,38 @@ describe('app/server set-link-cookie endpoint', () => {
       }),
     });
   });
+
+  test.each(['/api/_internal/auth/set-link-cookie', '/api/_internal/auth/issue-link-nonce'])(
+    '%s handles errors raised while acquiring the session',
+    async (path) => {
+      const mockApp = createExpressAppMock();
+      mockExpressApp = mockApp;
+      await startServer(createMockServer(), { combinedModules: [], channels: [] });
+      const { AuthError } = await import('../error');
+      mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+      const registration = mockApp.post.mock.calls.find(
+        ([registeredPath]) => registeredPath === path
+      )!;
+      const handler = registration[registration.length - 1] as RequestHandler;
+      const req = createRequest({ headers: { host: 'localhost' } });
+      const res = createResponse();
+      const next = vi.fn();
+
+      mockAuthenticate.mockRejectedValueOnce(new AuthError('Session expired'));
+      await handler(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.send).toHaveBeenCalledWith('Session expired');
+      expect(res.cookie).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+
+      const unexpectedError = new Error('Database unavailable');
+      const errorResponse = createResponse();
+      mockAuthenticate.mockRejectedValueOnce(unexpectedError);
+      await handler(req, errorResponse, next);
+      expect(next).toHaveBeenCalledWith(unexpectedError);
+      expect(errorResponse.status).not.toHaveBeenCalled();
+    }
+  );
 
   test('returns 401 when user is not authenticated', async () => {
     const mockApp = createExpressAppMock();
