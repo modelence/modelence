@@ -8,6 +8,7 @@ const mockFindOneAndUpdate = vi.fn();
 const mockTokensFindOne = vi.fn();
 const mockTokensInsertOne = vi.fn();
 const mockTokensDeleteOne = vi.fn();
+const mockTokensUpdateOne = vi.fn();
 const mockGetEmailConfig = vi.fn();
 const mockRandomBytes = vi.fn();
 const mockTimeHours = vi.fn();
@@ -28,7 +29,12 @@ vi.doMock('./db', () => ({
     findOne: mockTokensFindOne,
     insertOne: mockTokensInsertOne,
     deleteOne: mockTokensDeleteOne,
+    updateOne: mockTokensUpdateOne,
   },
+}));
+
+vi.doMock('./tokenHash', () => ({
+  hashToken: (raw: string) => `hashed:${raw}`,
 }));
 
 vi.doMock('@/app/emailConfig', () => ({
@@ -95,6 +101,8 @@ const { handleVerifyEmail, sendVerificationEmail, handleResendEmailVerification 
 describe('auth/verification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTokensFindOne.mockReset();
+    mockUsersFindOne.mockReset();
     mockValidateEmail.mockImplementation((value) => value);
     mockGetEmailConfig.mockReturnValue({
       provider: { sendEmail: vi.fn() },
@@ -146,7 +154,7 @@ describe('auth/verification', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    test('verifies email and deletes token when valid', async () => {
+    test('verifies email and marks the token used, without signing the user in', async () => {
       const tokenDoc = {
         _id: 'token-id',
         token: 'token',
@@ -166,11 +174,11 @@ describe('auth/verification', () => {
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
       mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
       mockFindOneAndUpdate.mockResolvedValue(userDoc as never);
-      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
       const result = await handleVerifyEmail(baseParams as never);
 
+      expect(mockTokensFindOne).toHaveBeenCalledTimes(1);
       expect(mockTokensFindOne).toHaveBeenCalledWith({
-        token: 'token',
+        token: 'hashed:token',
         expiresAt: { $gt: expect.any(Date) },
       });
       expect(mockUsersFindOne).toHaveBeenCalledWith({
@@ -186,7 +194,11 @@ describe('auth/verification', () => {
         { $set: { 'emails.$.verified': true } },
         { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
       );
-      expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
+      expect(mockTokensUpdateOne).toHaveBeenCalledWith(
+        { _id: tokenDoc._id },
+        { $set: { usedAt: expect.any(Date) } }
+      );
+      expect(mockTokensDeleteOne).not.toHaveBeenCalled();
       expect(authConfig.onAfterEmailVerification).toHaveBeenCalledWith({
         provider: 'email',
         user: userDoc,
@@ -199,15 +211,12 @@ describe('auth/verification', () => {
           referrer: 'https://example.com/signup',
         },
       });
-      expect(mockCreateSession).toHaveBeenCalledWith('user123');
-      expect(mockCookie).toHaveBeenCalledWith('authToken', 'session-token-123', {
-        httpOnly: true,
-        secure: false,
-        sameSite: 'strict',
-        path: '/',
-      });
+      // Opening the link must not sign anyone in: mail scanners open links
+      // before the user does, and a forwarded link would hand out a session.
+      expect(mockCreateSession).not.toHaveBeenCalled();
+      expect(mockCookie).not.toHaveBeenCalled();
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=verified',
       });
@@ -239,7 +248,6 @@ describe('auth/verification', () => {
           { address: 'b@example.com', verified: true },
         ],
       } as never);
-      mockCreateSession.mockResolvedValue({ authToken: 'session-token-123' } as never);
 
       const result = await handleVerifyEmail(baseParams as never);
 
@@ -253,13 +261,21 @@ describe('auth/verification', () => {
         { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
       );
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=verified',
       });
     });
 
-    test('reports already-verified only when that specific address is verified', async () => {
+    test('reports verified when the address was already verified before the open', async () => {
+      // A concurrent open (e.g. a mail scanner) verified the address after this
+      // one read the token unused but before it read the user. Same outcome as
+      // a second verification email for an already-verified address.
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
       const tokenDoc = {
         _id: 'token-id',
         token: 'token',
@@ -280,10 +296,17 @@ describe('auth/verification', () => {
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
-        redirect: '/verified?status=error&message=Email%20is%20already%20verified',
+        redirect: '/verified?status=verified',
       });
+      // The open that verified the address fires the hook; this one must not.
+      expect(authConfig.onAfterEmailVerification).not.toHaveBeenCalled();
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(mockTokensUpdateOne).toHaveBeenCalledWith(
+        { _id: tokenDoc._id },
+        { $set: { usedAt: expect.any(Date) } }
+      );
     });
 
     test('does not claim already-verified when the address is still unverified', async () => {
@@ -297,7 +320,7 @@ describe('auth/verification', () => {
         expiresAt: new Date(Date.now() + 1000),
       };
       mockTokensFindOne.mockResolvedValue(tokenDoc as never);
-      mockUsersFindOne.mockResolvedValueOnce({
+      mockUsersFindOne.mockResolvedValue({
         _id: 'user123',
         emails: [{ address: 'b@example.com', verified: false }],
       } as never);
@@ -306,10 +329,45 @@ describe('auth/verification', () => {
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Unable%20to%20verify%20email%20address',
       });
+    });
+
+    test('reports verified when a concurrent open verified the address first', async () => {
+      // A mail scanner and the user open the link at once: both read the token
+      // unused, but only one update can match. The other must not show an error.
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue({
+        _id: 'token-id',
+        token: 'hashed:token',
+        hashed: true,
+        userId: 'user123',
+        email: 'b@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      } as never);
+      mockUsersFindOne
+        .mockResolvedValueOnce({
+          _id: 'user123',
+          emails: [{ address: 'b@example.com', verified: false }],
+        } as never)
+        .mockResolvedValueOnce({
+          _id: 'user123',
+          emails: [{ address: 'b@example.com', verified: true }],
+        } as never);
+      mockFindOneAndUpdate.mockResolvedValue(null as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result?.redirect).toBe('/verified?status=verified');
+      // The open that verified the address fires the hook; this one must not.
+      expect(authConfig.onAfterEmailVerification).not.toHaveBeenCalled();
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
     });
 
     test('reports a missing address when the user does not hold it', async () => {
@@ -330,7 +388,7 @@ describe('auth/verification', () => {
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect:
           '/verified?status=error&message=Email%20address%20not%20found%20for%20this%20user',
@@ -355,7 +413,95 @@ describe('auth/verification', () => {
 
       await handleVerifyEmail(baseParams as never);
 
-      expect(mockTokensDeleteOne).toHaveBeenCalledWith({ _id: tokenDoc._id });
+      expect(mockTokensUpdateOne).toHaveBeenCalledWith(
+        { _id: tokenDoc._id },
+        { $set: { usedAt: expect.any(Date) } }
+      );
+    });
+
+    test('still accepts a link sent before tokens were hashed', async () => {
+      const legacyTokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'user@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      mockTokensFindOne.mockResolvedValueOnce(null).mockResolvedValueOnce(legacyTokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValue({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      } as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      // Raw tokens and their hashes are both 64 hex chars, so the fallback is
+      // limited to unmarked docs: a hash copied from the db must not match.
+      expect(mockTokensFindOne).toHaveBeenLastCalledWith({
+        token: 'token',
+        hashed: { $ne: true },
+        expiresAt: { $gt: expect.any(Date) },
+      });
+      expect(result?.redirect).toBe('/verified?status=verified');
+    });
+
+    test('reports verified when a used link is opened again', async () => {
+      // A mail scanner opened the link first; the user's own click must not error.
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue({
+        _id: 'token-id',
+        token: 'hashed:token',
+        hashed: true,
+        userId: 'user123',
+        email: 'user@example.com',
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 1000),
+      } as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'User@Example.com', verified: true }],
+      } as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result).toEqual({
+        status: 302,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: '/verified?status=verified',
+      });
+      expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+      expect(mockTokensUpdateOne).not.toHaveBeenCalled();
+      expect(authConfig.onAfterEmailVerification).not.toHaveBeenCalled();
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    test('rejects a used link when its address is no longer verified', async () => {
+      mockTokensFindOne.mockResolvedValue({
+        _id: 'token-id',
+        token: 'hashed:token',
+        hashed: true,
+        userId: 'user123',
+        email: 'user@example.com',
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 1000),
+      } as never);
+      mockUsersFindOne.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: false }],
+      } as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(result?.redirect).toBe(
+        '/verified?status=error&message=Invalid%20or%20expired%20verification%20token'
+      );
+      expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
     });
 
     test('redirects with error when token is invalid', async () => {
@@ -381,7 +527,7 @@ describe('auth/verification', () => {
         },
       });
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
       });
@@ -432,7 +578,7 @@ describe('auth/verification', () => {
         },
       });
       expect(result).toEqual({
-        status: 301,
+        status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=User%20not%20found',
       });
@@ -459,11 +605,17 @@ describe('auth/verification', () => {
         expect.objectContaining({
           userId: 'user123',
           email: 'user@example.com',
-          token: 'token123',
+          token: 'hashed:token123',
+          hashed: true,
           expiresAt: expect.any(Date),
         })
       );
-      expect(mockTemplate).toHaveBeenCalled();
+      // The raw token goes only into the emailed link.
+      expect(mockTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verificationUrl: 'https://example.com/api/_internal/auth/verify-email?token=token123',
+        })
+      );
       expect(provider.sendEmail).toHaveBeenCalledWith({
         to: 'user@example.com',
         from: 'support@example.com',
@@ -655,7 +807,8 @@ describe('auth/verification', () => {
         expect.objectContaining({
           userId,
           email: 'user@example.com',
-          token: 'token123',
+          token: 'hashed:token123',
+          hashed: true,
           expiresAt: expect.any(Date),
         })
       );

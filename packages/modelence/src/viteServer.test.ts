@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import type { ViteDevServer, UserConfig, Plugin } from 'vite';
+import type { ViteDevServer, UserConfig, Plugin, PluginOption } from 'vite';
 import type { Request, Response } from 'express';
 import type { ExpressMiddleware } from './types';
 
@@ -325,24 +325,51 @@ describe('safelyMergeConfig', () => {
     expect(mockMergeConfig).not.toHaveBeenCalled();
   });
 
-  test('deduplicates plugins by name', () => {
-    const plugin1: Plugin = { name: 'test-plugin', apply: 'build' };
-    const plugin2: Plugin = { name: 'test-plugin', apply: 'serve' };
-    const plugin3: Plugin = { name: 'other-plugin', apply: 'build' };
+  // Runs the real config path (ViteServer.init in dev mode) and returns the
+  // plugins handed to Vite's createServer.
+  async function initDevServerPlugins(userPlugins: PluginOption[]) {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      vi.resetModules();
+      mockReactPlugin.mockReturnValue({ name: 'vite:react', marker: 'framework' });
+      mockExistsSync.mockReturnValue(false);
+      mockLoadConfigFromFile.mockResolvedValue(createLoadConfigResult({ plugins: userPlugins }));
+      // Vite's mergeConfig concatenates arrays: base plugins first, then the user's.
+      mockMergeConfig.mockImplementation((base: UserConfig, user: UserConfig) => ({
+        ...base,
+        ...user,
+        plugins: [...(base.plugins ?? []), ...(user.plugins ?? [])],
+      }));
+      mockCreateServer.mockResolvedValue({ middlewares: [] } as unknown as ViteDevServer);
 
-    const _baseConfig = { plugins: [plugin1, plugin3] };
-    const _userConfig = { plugins: [plugin2] };
+      const { viteServer } = await import('./viteServer');
+      await viteServer.init({ httpServer: {} as import('http').Server });
 
-    mockMergeConfig.mockImplementation((base: UserConfig, user: UserConfig) => {
-      const merged = { ...base, ...user };
-      if (base.plugins || user.plugins) {
-        merged.plugins = [...(base.plugins || []), ...(user.plugins || [])];
-      }
-      return merged;
-    });
+      return (mockCreateServer.mock.calls[0][0].plugins ?? []) as PluginOption[];
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  }
 
-    // Test through configuration loading
-    expect(true).toBe(true);
+  test("keeps the user's plugin over a framework plugin with the same name", async () => {
+    const userReact = { name: 'vite:react', marker: 'user' } as Plugin;
+
+    const plugins = await initDevServerPlugins([userReact]);
+
+    const react = plugins.filter((p) => (p as Plugin | null)?.name === 'vite:react');
+    expect(react).toEqual([userReact]);
+    expect(plugins.some((p) => (p as Plugin | null)?.name === 'modelence-asset-handler')).toBe(
+      true
+    );
+  });
+
+  test('keeps async plugins, which have no name to deduplicate by', async () => {
+    const asyncPlugin = Promise.resolve({ name: 'async-plugin' } as Plugin);
+
+    const plugins = await initDevServerPlugins([asyncPlugin]);
+
+    expect(plugins).toContain(asyncPlugin);
   });
 });
 

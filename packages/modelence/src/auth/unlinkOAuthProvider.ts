@@ -1,18 +1,20 @@
 import { usersCollection } from './db';
 import { Args, Context } from '@/methods/types';
 import { OAuthProvider, SUPPORTED_OAUTH_PROVIDERS } from './types';
+import { AuthError, ValidationError } from '../error';
 
 export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Context) {
   if (!user) {
-    throw new Error('You must be signed in to unlink a provider.');
+    throw new AuthError('You must be signed in to unlink a provider.', 'UNAUTHENTICATED');
   }
 
   if (
     typeof provider !== 'string' ||
     !SUPPORTED_OAUTH_PROVIDERS.includes(provider as OAuthProvider)
   ) {
-    throw new Error(
-      `Invalid provider. Supported providers are: ${SUPPORTED_OAUTH_PROVIDERS.join(', ')}.`
+    throw new ValidationError(
+      `Invalid provider. Supported providers are: ${SUPPORTED_OAUTH_PROVIDERS.join(', ')}.`,
+      'INVALID_PROVIDER'
     );
   }
 
@@ -23,13 +25,14 @@ export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Co
   const providerKey = provider as keyof typeof methods;
 
   if (!methods[providerKey]) {
-    throw new Error(`${provider} is not linked to your account.`);
+    throw new ValidationError(`${provider} is not linked to your account.`, 'PROVIDER_NOT_LINKED');
   }
 
   const activeMethodsCount = Object.values(methods).filter(Boolean).length;
   if (activeMethodsCount <= 1) {
-    throw new Error(
-      'Cannot unlink your only authentication method. Please add another method first.'
+    throw new ValidationError(
+      'Cannot unlink your only authentication method. Please add another method first.',
+      'CANNOT_UNLINK_ONLY_METHOD'
     );
   }
 
@@ -50,8 +53,9 @@ export async function handleUnlinkOAuthProvider({ provider }: Args, { user }: Co
   );
 
   if (result.matchedCount === 0) {
-    throw new Error(
-      'Cannot unlink your only authentication method. Please add another method first.'
+    throw new ValidationError(
+      'Cannot unlink your only authentication method. Please add another method first.',
+      'CANNOT_UNLINK_ONLY_METHOD'
     );
   }
 }

@@ -228,8 +228,16 @@ describe('plan formatting', () => {
           api: { type: 'service', start: { commands: ['node server.js'] } },
           'main-db': { type: 'postgres', plan: 'postgres-1gb' },
           cache: { type: 'redis' },
+          telemetry: { type: 'telemetry' },
         },
-        env: { DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' } },
+        env: {
+          DATABASE_URL: { type: 'resource', resource: 'main-db', output: 'url' },
+          OTEL_EXPORTER_OTLP_ENDPOINT: {
+            type: 'resource',
+            resource: 'telemetry',
+            output: 'endpoint',
+          },
+        },
       })
     ).toEqual([
       '  image:   default (node-22-slim)',
@@ -237,7 +245,9 @@ describe('plan formatting', () => {
       '  start:   node server.js',
       '  db:      main-db (postgres, postgres-1gb)',
       '  db:      cache (redis, default plan)',
+      '  telemetry: telemetry',
       '  env:     DATABASE_URL (main-db.url)',
+      '  env:     OTEL_EXPORTER_OTLP_ENDPOINT (telemetry.endpoint)',
     ]);
   });
 
@@ -252,21 +262,20 @@ describe('plan formatting', () => {
 });
 
 describe('deploy target precedence', () => {
-  const project = {
-    appId: 'app-id',
-    deploy: { environmentId: 'saved-env', appAlias: 'saved-app', envAlias: 'prod' },
-  };
-  it('uses explicit aliases before the saved target', () => {
+  const project = { appId: 'app-id' };
+  it('takes the environment only from --env, and the app from --app or the saved app', () => {
     expect(resolveTargetFromOptions({ app: 'other', env: 'staging' }, project)).toEqual({
       appAlias: 'other',
       envAlias: 'staging',
     });
     expect(resolveTargetFromOptions({ env: 'staging' }, project)).toEqual({
-      appAlias: 'saved-app',
+      appId: 'app-id',
       envAlias: 'staging',
     });
-    expect(resolveTargetFromOptions({}, project)).toEqual({ environmentId: 'saved-env' });
+    // Nothing named: picked in the browser (or refused in CI).
+    expect(resolveTargetFromOptions({}, project)).toBeNull();
     expect(resolveTargetFromOptions({}, {})).toBeNull();
     expect(() => resolveTargetFromOptions({ app: 'other' }, project)).toThrow('Pass both');
+    expect(() => resolveTargetFromOptions({ env: 'staging' }, {})).toThrow('Pass both');
   });
 });

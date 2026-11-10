@@ -6,6 +6,7 @@ import type { ResolvedSpec } from './deploySpec';
 import { waitForEnvironmentReady } from './deployStatus';
 import { studioRequest } from './studioApi';
 import { describeMissingEnvVars } from './missingEnv';
+import type { SourceRevision } from './revision';
 
 export type UploadKind = 'bundle' | 'source';
 
@@ -22,6 +23,7 @@ export async function runDeploy({
   archivePath,
   spec,
   checkEnv,
+  revision,
 }: {
   session: Session;
   target: CliTarget;
@@ -32,6 +34,7 @@ export async function runDeploy({
   // Have Studio refuse the deploy before building while a required declared
   // variable has no value (CI deploys, which skip the browser picker).
   checkEnv: boolean;
+  revision: SourceRevision;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
   const requestUpload = () =>
@@ -95,6 +98,7 @@ export async function runDeploy({
       kind,
       spec,
       ...(checkEnv ? { checkEnv } : {}),
+      ...revision,
     },
   });
 

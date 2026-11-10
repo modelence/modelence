@@ -306,6 +306,105 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
+  const createListingMock = (existingIndexes: unknown[]) => ({
+    listIndexes: vi.fn().mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ name: '_id_', key: { _id: 1 } }, ...existingIndexes] as never),
+    }),
+    createIndexes: vi.fn().mockResolvedValue(undefined as never),
+    dropIndex: vi.fn().mockResolvedValue(undefined as never),
+  });
+
+  test('createIndexes keeps a text index that MongoDB reports with _fts keys and default options', async () => {
+    const store = createStore({
+      indexes: [{ key: { tenantId: 1, title: 'text', body: 'text' } }],
+    });
+    // listIndexes reports text fields under _fts/_ftsx and fills in weights and language defaults
+    const collectionMock = createListingMock([
+      {
+        name: '_modelence_tenantId_1_title_text_body_text',
+        key: { tenantId: 1, _fts: 'text', _ftsx: 1 },
+        weights: { body: 1, title: 1 },
+        default_language: 'english',
+        language_override: 'language',
+        textIndexVersion: 3,
+      },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes keeps a 2dsphere index that MongoDB reports with its index version', async () => {
+    const store = createStore({ indexes: [{ key: { location: '2dsphere' } }] });
+    const collectionMock = createListingMock([
+      {
+        name: '_modelence_location_2dsphere',
+        key: { location: '2dsphere' },
+        '2dsphereIndexVersion': 3,
+      },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes keeps a text index that declares weights for only some fields', async () => {
+    const store = createStore({
+      indexes: [{ key: { title: 'text', body: 'text' }, weights: { title: 10 } }],
+    });
+    // MongoDB stores weight 1 for the text fields without a declared weight
+    const collectionMock = createListingMock([
+      {
+        name: '_modelence_title_text_body_text',
+        key: { _fts: 'text', _ftsx: 1 },
+        weights: { body: 1, title: 10 },
+        default_language: 'english',
+        language_override: 'language',
+        textIndexVersion: 3,
+      },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes rebuilds a text index when its declared fields or weights change', async () => {
+    const reported = {
+      name: '_modelence_title_text',
+      key: { _fts: 'text', _ftsx: 1 },
+      weights: { title: 1 },
+      default_language: 'english',
+      language_override: 'language',
+      textIndexVersion: 3,
+    };
+
+    const changedIndexes: IndexDescription[] = [
+      { key: { title: 'text', body: 'text' }, name: '_modelence_title_text' },
+      { key: { title: 'text' }, weights: { title: 5 } },
+    ];
+    for (const index of changedIndexes) {
+      const store = createStore({ indexes: [index] });
+      const collectionMock = createListingMock([reported]);
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.createIndexes();
+
+      expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_title_text');
+      expect(collectionMock.createIndexes).toHaveBeenCalled();
+    }
+  });
+
   test('createIndexes rebuilds a collation index when a declared collation field changes', async () => {
     const store = createStore({
       indexes: [{ key: { handle: 1 }, unique: true, collation: { locale: 'en', strength: 2 } }],

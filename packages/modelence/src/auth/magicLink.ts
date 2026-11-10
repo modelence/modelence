@@ -352,7 +352,12 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
         );
         if (!existing) {
           isSignupAttempt = true;
-          await authConfig.onBeforeSignup?.({ email, provider: 'magicLink', connectionInfo });
+          await authConfig.onBeforeSignup?.({
+            email,
+            emailVerified: true,
+            provider: 'magicLink',
+            connectionInfo,
+          });
 
           const ip = connectionInfo?.ip;
           if (ip) {

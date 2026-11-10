@@ -7,6 +7,7 @@ import { _createSystemMutation, runMethod } from '../methods';
 import type { Context } from '../methods/types';
 import { emailVerificationTokensCollection, usersCollection } from './db';
 import * as sessions from './session';
+import { hashToken } from './tokenHash';
 import type { User } from './types';
 import userModule from './user';
 import { verifyEmail } from './client';
@@ -46,7 +47,8 @@ describe('verifyEmail server mutation', () => {
       _id: new ObjectId(),
       userId,
       email: 'user@example.com',
-      token,
+      token: hashToken(token),
+      hashed: true,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
     } as VerificationToken;
@@ -73,13 +75,18 @@ describe('verifyEmail server mutation', () => {
     });
     vi.spyOn(emailVerificationTokensCollection, 'findOne').mockImplementation(async (filter) => {
       if (!tokenDoc || tokenDoc.token !== filter.token) return null;
+      const excludesHashed = (filter.hashed as { $ne?: boolean } | undefined)?.$ne === true;
+      if (excludesHashed && tokenDoc.hashed === true) return null;
       const expiresAfter = (filter.expiresAt as { $gt?: Date } | undefined)?.$gt;
       return expiresAfter && tokenDoc.expiresAt <= expiresAfter ? null : tokenDoc;
     });
-    vi.spyOn(emailVerificationTokensCollection, 'deleteOne').mockImplementation(async () => {
-      tokenDoc = null;
-      return { acknowledged: true, deletedCount: 1 };
-    });
+    vi.spyOn(emailVerificationTokensCollection, 'updateOne').mockImplementation(
+      async (_filter, update) => {
+        const usedAt = (update as { $set?: { usedAt?: Date } }).$set?.usedAt;
+        if (tokenDoc && usedAt) tokenDoc = { ...tokenDoc, usedAt } as VerificationToken;
+        return { acknowledged: true, matchedCount: 1, modifiedCount: 1 } as never;
+      }
+    );
     vi.spyOn(usersCollection, 'findOne').mockImplementation(async () =>
       user.status === 'disabled' || user.status === 'deleted' ? null : user
     );
@@ -126,8 +133,11 @@ describe('verifyEmail server mutation', () => {
       await expect(verifyEmail({ token })).resolves.toBeUndefined();
 
       expect(user.emails?.[0].verified).toBe(true);
-      expect(emailVerificationTokensCollection.deleteOne).toHaveBeenCalledWith({ _id: tokenId });
-      expect(tokenDoc).toBeNull();
+      expect(emailVerificationTokensCollection.updateOne).toHaveBeenCalledWith(
+        { _id: tokenId },
+        { $set: { usedAt: expect.any(Date) } }
+      );
+      expect(tokenDoc?.usedAt).toBeInstanceOf(Date);
       expect(onAfterEmailVerification).toHaveBeenCalledWith({
         provider: 'email',
         user,
@@ -198,14 +208,30 @@ describe('verifyEmail server mutation', () => {
     }
   );
 
-  test('rejects a token after it has already verified the address', async () => {
+  test('accepts a token again after it verified the address, without re-verifying', async () => {
+    // A mail scanner may spend the link before the user opens it.
     await runMethod(methodName, { token }, context);
-    await expect(runMethod(methodName, { token }, context)).rejects.toThrow(
-      'Invalid or expired verification token'
-    );
+    await expect(runMethod(methodName, { token }, context)).resolves.toBeUndefined();
     expect(usersCollection.findOneAndUpdate).toHaveBeenCalledOnce();
     expect(onAfterEmailVerification).toHaveBeenCalledOnce();
-    expect(onEmailVerificationError).toHaveBeenCalledOnce();
+    expect(onEmailVerificationError).not.toHaveBeenCalled();
+  });
+
+  test('stores nothing that works as a token: the stored hash is rejected', async () => {
+    await expect(runMethod(methodName, { token: hashToken(token) }, context)).rejects.toThrow(
+      'Invalid or expired verification token'
+    );
+    expect(user.emails?.[0].verified).toBe(false);
+    expect(usersCollection.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test('verifies a link sent before tokens were hashed', async () => {
+    tokenDoc = { ...tokenDoc!, token, hashed: undefined } as VerificationToken;
+
+    await expect(runMethod(methodName, { token }, context)).resolves.toBeUndefined();
+
+    expect(user.emails?.[0].verified).toBe(true);
+    expect(onAfterEmailVerification).toHaveBeenCalledOnce();
   });
 
   test.each(['disabled', 'deleted'] as const)(
