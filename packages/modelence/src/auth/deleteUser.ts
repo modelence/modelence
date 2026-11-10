@@ -9,10 +9,6 @@ import {
 import { invalidateAllUserSessions } from './session';
 
 export async function clearTokens(userId: ObjectId) {
-  // Revoke active sessions first so disabling or deleting an account terminates
-  // any in-flight sessions and prevents old tokens from reactivating if re-enabled.
-  await invalidateAllUserSessions(userId);
-
   await emailVerificationTokensCollection.deleteMany({
     userId,
   });
@@ -55,6 +51,10 @@ export async function disableUser(userId: ObjectId) {
       },
     }
   );
+
+  // Invalidate sessions after updating the user's status so that no new session
+  // can be created during cleanup and survive account re-enablement.
+  await invalidateAllUserSessions(userId);
 }
 
 export async function deleteUser(userId: ObjectId) {
@@ -74,4 +74,7 @@ export async function deleteUser(userId: ObjectId) {
       },
     }
   );
+
+  // Invalidate sessions after updating status so no orphaned sessions remain.
+  await invalidateAllUserSessions(userId);
 }

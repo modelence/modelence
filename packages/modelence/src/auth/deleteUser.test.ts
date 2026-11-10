@@ -46,7 +46,7 @@ describe('auth/deleteUser', () => {
     });
   });
 
-  test('clearTokens removes sessions, verification, reset, and magic link tokens for user', async () => {
+  test('clearTokens removes verification, reset, and magic link tokens for user', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439011');
     mockUsersFindOne.mockResolvedValue({
       _id: userId,
@@ -58,7 +58,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
-    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     // Magic link tokens are keyed by email; revoke every address, lowercased.
@@ -73,7 +73,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
-    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
-    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,6 @@ describe('auth/deleteUser', () => {
 
     await disableUser(userId);
 
-    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockMagicLinkDeleteMany).toHaveBeenCalledWith({
@@ -107,6 +106,11 @@ describe('auth/deleteUser', () => {
         },
       }
     );
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    // Invalidate sessions strictly after updating the database status
+    expect(mockInvalidateAllUserSessions.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockUsersUpdateOne.mock.invocationCallOrder[0]
+    );
   });
 
   test('deleteUser clears tokens, invalidates sessions, and anonymizes user profile', async () => {
@@ -114,7 +118,6 @@ describe('auth/deleteUser', () => {
 
     await deleteUser(userId);
 
-    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     // Magic links must be revoked before the profile update wipes `emails`.
@@ -138,6 +141,11 @@ describe('auth/deleteUser', () => {
           emails: [],
         },
       }
+    );
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    // Invalidate sessions strictly after updating the database status
+    expect(mockInvalidateAllUserSessions.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockUsersUpdateOne.mock.invocationCallOrder[0]
     );
   });
 });
