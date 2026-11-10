@@ -11,6 +11,8 @@ import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
+let checkingDueJobs = false;
+const CRON_LOCK_CACHE_DURATION = time.seconds(10);
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -63,42 +65,45 @@ export async function startCronJobs() {
     throw new Error('Cron jobs already started');
   }
 
-  const aliasList = Object.keys(cronJobs);
-  if (aliasList.length > 0) {
+  const jobs = Object.values(cronJobs);
+  if (jobs.length > 0) {
     if (!getMongodbUri()) {
       console.log('MongoDB URI is not configured. Skipping cron jobs.');
       return;
     }
 
-    const aliasSelector = { alias: { $in: aliasList } };
-
-    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-    const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : now;
-    });
-
-    Object.values(cronJobs).forEach((job) => {
-      if (!job.state.scheduledRunTs) {
-        job.state.scheduledRunTs = now;
-      }
-    });
-
+    await refreshCronJobSchedules(jobs);
     cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
+}
+
+async function refreshCronJobSchedules(jobs: CronJob[]) {
+  const records = await cronJobsCollection.fetch({
+    alias: { $in: jobs.map(({ alias }) => alias) },
+  });
+  const lastStartDates = new Map(records.map(({ alias, lastStartDate }) => [alias, lastStartDate]));
+  const now = Date.now();
+
+  for (const { alias, params, state } of jobs) {
+    const lastStartDate = lastStartDates.get(alias);
+    if (lastStartDate) {
+      const nextRunTs = lastStartDate.getTime() + params.interval;
+      state.scheduledRunTs = Math.max(state.scheduledRunTs ?? nextRunTs, nextRunTs);
+    } else {
+      state.scheduledRunTs ??= now;
+    }
+  }
+}
+
+function isDue({ state }: CronJob, now: number) {
+  return !state.isRunning && state.scheduledRunTs !== undefined && state.scheduledRunTs <= now;
 }
 
 async function tickCronJobs() {
   const now = Date.now();
 
   const ownsLock = await acquireLock('cron', {
-    successfulLockCacheDuration: time.seconds(10),
+    successfulLockCacheDuration: CRON_LOCK_CACHE_DURATION,
     failedLockCacheDuration: time.seconds(30),
   });
 
@@ -106,6 +111,7 @@ async function tickCronJobs() {
     return;
   }
 
+  const dueJobs: CronJob[] = [];
   for (const job of Object.values(cronJobs)) {
     const { alias, params, state } = job;
     if (state.isRunning) {
@@ -123,11 +129,35 @@ async function tickCronJobs() {
       continue;
     }
 
-    // TODO: limit the number of jobs running concurrently
-
-    if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      void runCronJob(job);
+    if (isDue(job, now)) {
+      dueJobs.push(job);
     }
+  }
+
+  if (!dueJobs.length || checkingDueJobs) {
+    return;
+  }
+
+  checkingDueJobs = true;
+  try {
+    // Another lock owner may have run these jobs since we last read their schedules.
+    await refreshCronJobSchedules(dueJobs);
+    const dispatchTs = Date.now();
+    if (dispatchTs - now >= CRON_LOCK_CACHE_DURATION) {
+      return; // Check again on the next tick if the read outlasted the lock cache.
+    }
+
+    // TODO: limit the number of jobs running concurrently
+    for (const job of dueJobs) {
+      if (isDue(job, dispatchTs)) {
+        void runCronJob(job);
+      }
+    }
+  } catch (error) {
+    captureError(error instanceof Error ? error : new Error(String(error)));
+    logError('Error refreshing cron job schedules:', { error });
+  } finally {
+    checkingDueJobs = false;
   }
 }
 
