@@ -1,4 +1,4 @@
-import { AuthErrorProps, AuthSuccessProps, OAuthErrorInfo, User } from '@/auth/types';
+import { AuthErrorProps, AuthProvider, AuthSuccessProps, OAuthErrorInfo, User } from '@/auth/types';
 import { ConnectionInfo, UpdateProfileProps, SignupProps } from '@/methods/types';
 import type { RateLimitType } from '@/rate-limit/types';
 
@@ -126,15 +126,29 @@ export type ValidatePasswordProps = {
  * The hook fires after validation and the built-in disposable-email check,
  * but before the user document is inserted. Throwing aborts the signup —
  * the thrown error is re-thrown to the caller and `onSignupError` fires.
+ * On an OAuth signup, throw a `ModelenceError` such as `ValidationError` to
+ * show the user the message, delivered as an OAuth error with the error's own
+ * `status` and the `signup_rejected` code. Any other error still blocks the signup but is
+ * reported as a generic failure, since its message may expose internals.
  */
 export type BeforeSignupProps = {
   /** Lowercased, validated email address. */
   email: string;
+  /**
+   * Whether ownership of `email` is already proven at this point:
+   * - `'magicLink'`: `true`, since clicking the link proves the address.
+   * - `'email'` (password signup): `false`; ownership is proven afterwards,
+   *   through the verification link.
+   * - OAuth providers: whether the provider vouches for the address.
+   *
+   * Check this before trusting `email` for an allowlist decision.
+   */
+  emailVerified: boolean;
   firstName?: string;
   lastName?: string;
   handle?: string;
-  /** Provider that initiated the signup: `'email'` or `'magicLink'`. */
-  provider: 'email' | 'magicLink';
+  /** Provider that initiated the signup. */
+  provider: AuthProvider;
   connectionInfo?: ConnectionInfo;
 };
 
@@ -259,9 +273,12 @@ export type AuthConfig = {
    * email-domain verification service) without having to disable the built-in
    * disposable-email check.
    *
-   * Invoked for `'email'` and `'magicLink'` provider signups. OAuth signups
-   * are not gated because OAuth providers (Google, GitHub, etc.) do not issue
-   * disposable accounts.
+   * Invoked for every provider, OAuth included, so it can gate who may sign up.
+   * The built-in disposable-email check still skips OAuth signups: check
+   * `provider` to keep a disposable-domain policy to email signups, since OAuth
+   * providers (Google, GitHub, etc.) do not issue disposable accounts.
+   *
+   * Only signups reach this hook. An existing account signing in does not.
    */
   onBeforeSignup?: (props: BeforeSignupProps) => void | Promise<void>;
 

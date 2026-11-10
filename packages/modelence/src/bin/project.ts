@@ -7,32 +7,28 @@ export const PROJECT_FILE = 'project.json';
 /*
   .modelence/project.json — CLI-managed project state that is meant to be
   committed (unlike .modelence.env, which holds per-developer credentials).
-  It records which app the project belongs to and, once a deploy target has
-  been picked in the browser, which environment `modelence deploy` ships to.
-  Everything in it is a hint, never a credential: access is re-checked on
-  every request with the user's token.
+  It records which app the project belongs to and nothing environment
+  specific: the same code is deployed to several environments (staging,
+  production), so the environment is picked in the browser or named with
+  --env on every deploy. It is a hint, never a credential: access is
+  re-checked on every request with the user's token.
+
+  Earlier CLIs also saved the last deploy target under `deploy`. It is
+  ignored when read and dropped the next time the file is written.
 */
 
 export const DEFAULT_HOST = 'https://cloud.modelence.com';
 
-export interface DeployTarget {
-  environmentId: string;
-  appAlias: string;
-  envAlias: string;
-}
-
-// What the file records for one Studio. Ids and aliases only exist on the
-// Studio they were picked on.
+// What the file records for one Studio. Ids only exist on the Studio they
+// were picked on.
 export interface HostProject {
   appId?: string;
-  deploy?: DeployTarget;
 }
 
 /*
-  Modelence Cloud keeps the top-level appId and deploy, the shape released
-  CLIs read, so they keep deploying to Cloud. Every other Studio (staging, a
-  personal one) gets its own entry under `hosts`, keyed by its normalized
-  host, so deploying there never changes what a teammate or CI deploys to.
+  Modelence Cloud keeps the top-level appId, the shape released CLIs read.
+  Every other Studio (staging, a personal one) gets its own entry under
+  `hosts`, keyed by its normalized host.
 */
 export interface ProjectFile extends HostProject {
   hosts?: Record<string, HostProject>;
@@ -68,11 +64,8 @@ function asHostProject(value: unknown): HostProject {
   if (!value || typeof value !== 'object') {
     return {};
   }
-  const { appId, deploy } = value as HostProject;
-  return {
-    ...(typeof appId === 'string' && appId ? { appId } : {}),
-    ...(deploy && typeof deploy.environmentId === 'string' ? { deploy } : {}),
-  };
+  const { appId } = value as HostProject;
+  return typeof appId === 'string' && appId ? { appId } : {};
 }
 
 export function projectForHost(project: ProjectFile, host: string): HostProject {
@@ -82,29 +75,38 @@ export function projectForHost(project: ProjectFile, host: string): HostProject 
   return asHostProject(project.hosts?.[host]);
 }
 
-// Other Studios this project has a deploy target for, to explain why none
-// applies to the host in use.
-export function otherTargetHosts(project: ProjectFile, host: string): string[] {
+// Other Studios this project has an app for, to explain why none applies to
+// the host in use.
+export function otherAppHosts(project: ProjectFile, host: string): string[] {
   const hosts = Object.keys(project.hosts ?? {}).filter(
-    (key) => asHostProject(project.hosts?.[key]).deploy
+    (key) => asHostProject(project.hosts?.[key]).appId
   );
-  if (asHostProject(project).deploy) {
+  if (asHostProject(project).appId) {
     hosts.unshift(DEFAULT_HOST);
   }
   return [...new Set(hosts)].filter((key) => key !== host);
 }
 
-// The file with `patch` recorded for `host`.
+// The file with `patch` recorded for `host`, and that host's legacy deploy
+// target dropped.
 export function withHostProject(
   project: ProjectFile,
   host: string,
   patch: HostProject
 ): ProjectFile {
   if (host === DEFAULT_HOST) {
-    return { ...project, ...patch };
+    return { ...withoutDeploy(project), ...patch };
   }
   return {
     ...project,
-    hosts: { ...project.hosts, [host]: { ...project.hosts?.[host], ...patch } },
+    hosts: {
+      ...project.hosts,
+      [host]: { ...withoutDeploy(project.hosts?.[host] ?? {}), ...patch },
+    },
   };
+}
+
+function withoutDeploy<T extends object>(entry: T): T {
+  const { deploy: _legacy, ...rest } = entry as T & { deploy?: unknown };
+  return rest as T;
 }

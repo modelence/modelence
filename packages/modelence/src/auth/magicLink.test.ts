@@ -984,7 +984,7 @@ describe('auth/magicLink', () => {
         const result = await handleLoginWithMagicLink({}, context);
 
         expect(onBeforeSignup).toHaveBeenCalledWith(
-          expect.objectContaining({ email, provider: 'magicLink' })
+          expect.objectContaining({ email, emailVerified: true, provider: 'magicLink' })
         );
         // Successful-signup rate limit bucket is consumed.
         expect(mockConsumeRateLimit).toHaveBeenCalledWith({

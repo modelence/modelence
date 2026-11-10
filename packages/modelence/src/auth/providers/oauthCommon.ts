@@ -10,6 +10,7 @@ import {
 } from '@/auth/session';
 import { getAuthConfig } from '@/app/authConfig';
 import { getCallContext } from '@/app/server';
+import { ModelenceError } from '@/error';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
@@ -155,6 +156,7 @@ export type OAuthErrorCode =
   | 'email_required'
   | 'link_failed'
   | 'not_signed_in'
+  | 'signup_rejected'
   | 'oauth_failed';
 
 /*
@@ -458,6 +460,66 @@ async function handleExistingEmailLogin(
   return;
 }
 
+/** Reports a failed OAuth signup to both the `onSignupError` and `signup.onError` hooks. */
+function reportSignupError(
+  error: unknown,
+  provider: OAuthProvider,
+  session: Session | null,
+  connectionInfo: ConnectionInfo
+): void {
+  if (!(error instanceof Error)) {
+    return;
+  }
+
+  const authConfig = getAuthConfig();
+  authConfig.onSignupError?.({ provider, error, session, connectionInfo });
+  authConfig.signup?.onError?.(error);
+}
+
+/**
+ * Runs the app's `onBeforeSignup` veto before anything is written. A veto is an
+ * expected outcome rather than a failed flow, so it is answered here with the
+ * hook's own message: left to propagate, the provider callback would report it
+ * as a generic 500.
+ *
+ * Only a `ModelenceError` counts as a veto. Anything else is the hook failing,
+ * say a database error, whose message is not for the user, so it propagates:
+ * the signup is still blocked, the callback logs it and answers generically.
+ *
+ * Returns `false` when the signup was rejected and the response has been sent.
+ */
+async function passesBeforeSignup(
+  res: Response,
+  userData: OAuthUserData,
+  session: Session | null,
+  connectionInfo: ConnectionInfo,
+  outcome: OAuthOutcome
+): Promise<boolean> {
+  const authConfig = getAuthConfig();
+
+  try {
+    await authConfig.onBeforeSignup?.({
+      email: userData.email.toLowerCase(),
+      emailVerified: userData.emailVerified,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      provider: userData.providerName,
+      connectionInfo,
+    });
+    return true;
+  } catch (error) {
+    reportSignupError(error, userData.providerName, session, connectionInfo);
+
+    if (error instanceof ModelenceError) {
+      // Same status a method call would answer with, so a hook behaves the
+      // same on every signup path.
+      sendOAuthError(res, error.status, error.message, outcome, 'signup_rejected');
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function handleNewUserSignup(
   res: Response,
   userData: OAuthUserData,
@@ -466,6 +528,10 @@ async function handleNewUserSignup(
   outcome: OAuthOutcome
 ) {
   const authConfig = getAuthConfig();
+
+  if (!(await passesBeforeSignup(res, userData, session, connectionInfo, outcome))) {
+    return;
+  }
 
   try {
     let handle: string;
@@ -524,16 +590,7 @@ async function handleNewUserSignup(
       authConfig.signup?.onSuccess?.(userDocument);
     }
   } catch (error) {
-    if (error instanceof Error) {
-      authConfig.onSignupError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-
-      authConfig.signup?.onError?.(error);
-    }
+    reportSignupError(error, userData.providerName, session, connectionInfo);
     throw error;
   }
 }
@@ -586,17 +643,7 @@ export async function handleOAuthUserAuthentication(
       { collation: { locale: 'en', strength: 2 } }
     );
   } catch (error) {
-    if (error instanceof Error) {
-      const authConfig = getAuthConfig();
-      authConfig.onSignupError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
-
-      authConfig.signup?.onError?.(error);
-    }
+    reportSignupError(error, userData.providerName, session, connectionInfo);
     throw error;
   }
 

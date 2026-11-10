@@ -99,8 +99,8 @@ async function readProjectAppId(host: string): Promise<string | undefined> {
   Only the app goes here: which ENVIRONMENT a working copy connects to is
   per-developer state, already recorded by .modelence.env, and committing it
   would make teammates connected to different environments fight over the
-  value. (The deploy target recorded by `modelence deploy` is different: it is
-  shared on purpose, like a git remote.)
+  value. `modelence deploy` likewise records only the app: its environment is
+  picked on every deploy.
 */
 async function recordProjectAppId(appId: string, host: string): Promise<void> {
   await updateProject((project) => withHostProject(project, host, { appId }));

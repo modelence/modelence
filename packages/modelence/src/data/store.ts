@@ -214,13 +214,79 @@ const isSameCollation = (existing: unknown, desired: unknown): boolean => {
   );
 };
 
+/**
+ * MongoDB reports a text index as `{ _fts: 'text', _ftsx: 1 }` with its fields in `weights`, not
+ * as declared (`{ title: 'text' }`). Rebuild the declared form, or the index never matches and is
+ * rebuilt on every startup.
+ */
+const toDeclaredIndexKey = (existing: ExistingIndex, desiredKey: unknown): unknown => {
+  const { key, weights } = existing;
+  if (!isDocumentRecord(key) || key._fts !== 'text' || !isDocumentRecord(weights)) {
+    return key;
+  }
+
+  // Text fields can be declared in any order, so follow the declared order when the fields match.
+  const textFields = Object.keys(weights);
+  const declaredTextFields = isDocumentRecord(desiredKey)
+    ? Object.keys(desiredKey).filter((field) => desiredKey[field] === 'text')
+    : [];
+  const orderedTextFields =
+    declaredTextFields.length === textFields.length &&
+    declaredTextFields.every((field) => textFields.includes(field))
+      ? declaredTextFields
+      : textFields;
+
+  const declaredKey: Document = {};
+  for (const [field, direction] of Object.entries(key)) {
+    if (field === '_fts') {
+      for (const textField of orderedTextFields) {
+        declaredKey[textField] = 'text';
+      }
+    } else if (field !== '_ftsx') {
+      declaredKey[field] = direction;
+    }
+  }
+  return declaredKey;
+};
+
+/**
+ * Options MongoDB fills in when it builds text and 2dsphere indexes. They are compared only when
+ * the code declares them, like the collation fields above.
+ */
+const SERVER_DEFAULTED_INDEX_OPTION_FIELDS = [
+  'default_language',
+  'language_override',
+  'textIndexVersion',
+  '2dsphereIndexVersion',
+] as const;
+
 const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
-  if (!isSameIndexKey(existing.key, desired.key)) {
+  if (!isSameIndexKey(toDeclaredIndexKey(existing, desired.key), desired.key)) {
     return false;
   }
 
   const { collation: existingCollation, ...existingOptions } = getComparableIndexOptions(existing);
   const { collation: desiredCollation, ...desiredOptions } = getComparableIndexOptions(desired);
+
+  for (const field of SERVER_DEFAULTED_INDEX_OPTION_FIELDS) {
+    if (desiredOptions[field] === undefined) {
+      delete existingOptions[field];
+    }
+  }
+  // MongoDB stores weight 1 for every text field without a declared weight.
+  const existingWeights = existingOptions.weights;
+  const declaredWeights = isDocumentRecord(desiredOptions.weights) ? desiredOptions.weights : {};
+  if (
+    isDocumentRecord(existingWeights) &&
+    (desiredOptions.weights === undefined || isDocumentRecord(desiredOptions.weights)) &&
+    Object.keys(declaredWeights).every((field) => field in existingWeights) &&
+    Object.entries(existingWeights).every(
+      ([field, weight]) => weight === (declaredWeights[field] ?? 1)
+    )
+  ) {
+    delete existingOptions.weights;
+    delete desiredOptions.weights;
+  }
 
   return (
     isSameCollation(existingCollation, desiredCollation) &&

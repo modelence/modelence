@@ -79,6 +79,7 @@ export async function handleSignupWithPassword(
 
     await authConfig.onBeforeSignup?.({
       email,
+      emailVerified: false,
       firstName,
       lastName,
       handle,
