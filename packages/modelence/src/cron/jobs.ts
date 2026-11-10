@@ -11,6 +11,7 @@ import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
+let isLockOwner = false;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -58,10 +59,40 @@ export function defineCronJob(
   };
 }
 
+async function refreshCronSchedule() {
+  const aliasList = Object.keys(cronJobs);
+  if (aliasList.length === 0) {
+    return;
+  }
+
+  const aliasSelector = { alias: { $in: aliasList } };
+  const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+  const now = Date.now();
+  const recordsByAlias = new Map(cronJobRecords.map((record) => [record.alias, record]));
+
+  for (const job of Object.values(cronJobs)) {
+    if (job.state.isRunning) {
+      continue;
+    }
+    const record = recordsByAlias.get(job.alias);
+    if (record?.lastStartDate) {
+      const lastStartTs =
+        record.lastStartDate instanceof Date
+          ? record.lastStartDate.getTime()
+          : new Date(record.lastStartDate).getTime();
+      job.state.scheduledRunTs = lastStartTs + job.params.interval;
+    } else if (!job.state.scheduledRunTs) {
+      job.state.scheduledRunTs = now;
+    }
+  }
+}
+
 export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
   }
+
+  isLockOwner = false;
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
@@ -70,25 +101,7 @@ export async function startCronJobs() {
       return;
     }
 
-    const aliasSelector = { alias: { $in: aliasList } };
-
-    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-    const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : now;
-    });
-
-    Object.values(cronJobs).forEach((job) => {
-      if (!job.state.scheduledRunTs) {
-        job.state.scheduledRunTs = now;
-      }
-    });
+    await refreshCronSchedule();
 
     cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
@@ -103,7 +116,20 @@ async function tickCronJobs() {
   });
 
   if (!ownsLock) {
+    isLockOwner = false;
     return;
+  }
+
+  if (!isLockOwner) {
+    try {
+      await refreshCronSchedule();
+      isLockOwner = true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      captureError(error);
+      logError('Error refreshing cron schedule on lock takeover:', { error: err });
+      return;
+    }
   }
 
   for (const job of Object.values(cronJobs)) {
