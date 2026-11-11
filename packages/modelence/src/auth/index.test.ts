@@ -67,7 +67,7 @@ describe('auth/index', () => {
     expect(mockFindOne).toHaveBeenCalled();
     expect(result.user?.id).toBe(String(userDoc._id));
     expect(result.user?.handle).toBe('demo');
-    expect(result.roles).toEqual(['authenticated']);
+    expect(result.roles).toEqual(['admin', 'authenticated']);
 
     expect(result.user?.hasRole('admin')).toBe(true);
     expect(() => result.user?.requireRole('missing')).toThrow(

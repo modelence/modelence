@@ -33,7 +33,9 @@ export async function authenticate(
       }
     : null;
 
-  const roles = user ? getDefaultAuthenticatedRoles() : getUnauthenticatedRoles();
+  const roles = user
+    ? Array.from(new Set([...user.roles, ...getDefaultAuthenticatedRoles()]))
+    : getUnauthenticatedRoles();
 
   return {
     user,
