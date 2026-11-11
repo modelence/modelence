@@ -108,6 +108,41 @@ describe('routes/handler', () => {
     expect(transactionEnd).toHaveBeenCalledWith();
   });
 
+  test('authenticates custom routes via cookie token', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      data: { ok: true },
+    }));
+
+    await handler(
+      createRequest({ cookies: { authToken: 'cookie-token' } } as Partial<Request>),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token');
+  });
+
+  test('prefers x-modelence-auth-token over cookie token', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      data: { ok: true },
+    }));
+
+    await handler(
+      createRequest({
+        headers: { 'x-modelence-auth-token': 'header-token' },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('header-token');
+  });
+
   test('redacts secrets from the telemetry transaction context', async () => {
     const handler = createRouteHandler('GET', '/landing', async () => ({ status: 200 }));
     const req = createRequest({
