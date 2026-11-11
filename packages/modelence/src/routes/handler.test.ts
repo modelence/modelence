@@ -108,6 +108,48 @@ describe('routes/handler', () => {
     expect(transactionEnd).toHaveBeenCalledWith();
   });
 
+  test.each([
+    { source: 'cookie', request: { cookies: { authToken: 'cookie-token' } } },
+    { source: 'bearer', request: { headers: { authorization: 'Bearer bearer-token' } } },
+  ])('authenticates custom routes via $source token', async ({ request }) => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      data: { ok: true },
+    }));
+
+    await handler(createRequest(request as Partial<Request>), res, next);
+
+    const expectedToken =
+      request.cookies?.authToken ??
+      (request.headers?.authorization?.startsWith('Bearer ')
+        ? request.headers.authorization.slice(7).trim()
+        : undefined);
+    expect(mockAuthenticate).toHaveBeenCalledWith(expectedToken);
+  });
+
+  test('prefers x-modelence-auth-token over cookie and bearer tokens', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      data: { ok: true },
+    }));
+
+    await handler(
+      createRequest({
+        headers: {
+          'x-modelence-auth-token': 'header-token',
+          authorization: 'Bearer bearer-token',
+        },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('header-token');
+  });
+
   test('redacts secrets from the telemetry transaction context', async () => {
     const handler = createRouteHandler('GET', '/landing', async () => ({ status: 200 }));
     const req = createRequest({

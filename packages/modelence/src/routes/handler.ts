@@ -6,10 +6,31 @@ import { getMongodbUri } from '../db/client';
 import type { Context } from '../methods/types';
 import { startTransaction, redactSensitive, captureError, logError } from '../telemetry';
 
-// TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
+function resolveRouteAuthToken(req: Request): string | null {
+  const headerToken = req.headers['x-modelence-auth-token'];
+  if (typeof headerToken === 'string' && headerToken.length > 0) {
+    return headerToken;
+  }
+
+  const cookieToken = req.cookies?.authToken;
+  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+    return cookieToken;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader.slice(7).trim();
+    if (bearerToken.length > 0) {
+      return bearerToken;
+    }
+  }
+
+  return null;
+}
+
 export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const authToken = req.headers['x-modelence-auth-token'];
+    const authToken = resolveRouteAuthToken(req);
     let context: Pick<Context, 'session' | 'user'> = { session: null, user: null };
 
     if (typeof authToken === 'string' && getMongodbUri()) {
