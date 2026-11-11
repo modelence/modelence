@@ -12,6 +12,8 @@ import { getMongodbUri } from '@/db/client';
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 let isLockOwner = false;
+let isTicking = false;
+const CRON_LOCK_CACHE_DURATION = time.seconds(10);
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -93,6 +95,7 @@ export async function startCronJobs() {
   }
 
   isLockOwner = false;
+  isTicking = false;
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
@@ -108,52 +111,66 @@ export async function startCronJobs() {
 }
 
 async function tickCronJobs() {
-  const now = Date.now();
-
-  const ownsLock = await acquireLock('cron', {
-    successfulLockCacheDuration: time.seconds(10),
-    failedLockCacheDuration: time.seconds(30),
-  });
-
-  if (!ownsLock) {
-    isLockOwner = false;
+  if (isTicking) {
     return;
   }
+  isTicking = true;
 
-  if (!isLockOwner) {
-    try {
-      await refreshCronSchedule();
-      isLockOwner = true;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      captureError(error);
-      logError('Error refreshing cron schedule on lock takeover:', { error: err });
+  try {
+    const now = Date.now();
+
+    const ownsLock = await acquireLock('cron', {
+      successfulLockCacheDuration: CRON_LOCK_CACHE_DURATION,
+      failedLockCacheDuration: time.seconds(30),
+    });
+
+    if (!ownsLock) {
+      isLockOwner = false;
       return;
     }
-  }
 
-  for (const job of Object.values(cronJobs)) {
-    const { alias, params, state } = job;
-    if (state.isRunning) {
-      // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
-      // Restarting it here would stack a new copy on top of a hung one. A handler that never
-      // settles blocks its job until the process restarts, so keep reporting it every timeout.
-      const { startTs, lastTimeoutReportTs } = state;
-      if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
-        state.lastTimeoutReportTs = now;
-        const timeoutError = new Error(
-          `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
-        );
-        captureError(timeoutError);
+    if (!isLockOwner) {
+      try {
+        await refreshCronSchedule();
+        if (Date.now() - now >= CRON_LOCK_CACHE_DURATION) {
+          // If the database refresh took longer than the lock cache duration,
+          // the lock may no longer be held. Wait for next tick to verify lock ownership.
+          return;
+        }
+        isLockOwner = true;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        captureError(error);
+        logError('Error refreshing cron schedule on lock takeover:', { error: err });
+        return;
       }
-      continue;
     }
 
-    // TODO: limit the number of jobs running concurrently
+    for (const job of Object.values(cronJobs)) {
+      const { alias, params, state } = job;
+      if (state.isRunning) {
+        // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
+        // Restarting it here would stack a new copy on top of a hung one. A handler that never
+        // settles blocks its job until the process restarts, so keep reporting it every timeout.
+        const { startTs, lastTimeoutReportTs } = state;
+        if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
+          state.lastTimeoutReportTs = now;
+          const timeoutError = new Error(
+            `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
+          );
+          captureError(timeoutError);
+        }
+        continue;
+      }
 
-    if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      void runCronJob(job);
+      // TODO: limit the number of jobs running concurrently
+
+      if (state.scheduledRunTs && state.scheduledRunTs <= now) {
+        void runCronJob(job);
+      }
     }
+  } finally {
+    isTicking = false;
   }
 }
 

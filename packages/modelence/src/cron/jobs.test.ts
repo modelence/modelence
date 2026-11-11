@@ -642,5 +642,91 @@ describe('cron/jobs', () => {
 
       (Date.now as Mock).mockRestore();
     });
+
+    test('prevents overlapping ticks while schedule refresh is in-flight on lock takeover', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('overlapJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // On tick 1, refreshCronSchedule returns a pending promise
+      let finishRefresh!: (records: unknown[]) => void;
+      cronStoreMocks.fetch.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }) as never
+      );
+
+      const tick1Promise = intervalCallback?.();
+
+      // Tick 2 fires while Tick 1's refresh is still in-flight
+      await intervalCallback?.();
+
+      // Tick 2 should not have called fetch again due to re-entrancy guard
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Complete Tick 1's refresh
+      finishRefresh([]);
+      await tick1Promise;
+      await Promise.resolve();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('defers job dispatch if refresh on lock takeover outlasts the lock cache duration', async () => {
+      const startTs = 1_000_000;
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('slowRefreshJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Refresh on takeover takes longer than 10s (CRON_LOCK_CACHE_DURATION)
+      let finishSlowRefresh!: (records: unknown[]) => void;
+      cronStoreMocks.fetch.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSlowRefresh = resolve;
+        }) as never
+      );
+
+      const tick1Promise = intervalCallback?.();
+
+      // Advance clock past 10 seconds while refresh is running
+      clock.mockReturnValue(startTs + 10_000);
+      finishSlowRefresh([]);
+      await tick1Promise;
+      await Promise.resolve();
+
+      // Job handler should NOT have been dispatched because lock may have expired
+      expect(handler).not.toHaveBeenCalled();
+
+      // Next tick re-evaluates and runs
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+      await intervalCallback?.();
+      await Promise.resolve();
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      clock.mockRestore();
+    });
   });
 });
