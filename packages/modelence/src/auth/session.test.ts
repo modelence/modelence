@@ -351,6 +351,10 @@ describe('auth/session', () => {
       );
 
       expect(res.cookie as Mock).not.toHaveBeenCalled();
+      expect(res.clearCookie as Mock).toHaveBeenCalledWith(
+        'authToken',
+        expect.objectContaining({ httpOnly: true, path: '/' })
+      );
     });
 
     test('does not throw when res is null (in-process invocations)', async () => {

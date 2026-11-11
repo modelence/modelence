@@ -291,12 +291,14 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
 }
 
 export function clearAuthTokenCookie(res: Response) {
-  res.clearCookie('authToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  if (typeof res?.clearCookie === 'function') {
+    res.clearCookie('authToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+  }
 }
 
 export default new Module('_system.session', {
@@ -308,8 +310,14 @@ export default new Module('_system.session', {
       // browser then attaches to the client's reconciliation request,
       // shadowing the localStorage token sent in the body — see
       // getCallContext's `cookie || body.authToken` precedence.
+      //
+      // Clear any stale authToken cookie for anonymous sessions so
+      // subsequent requests (such as periodic heartbeats) do not keep
+      // sending a dead cookie and churning sessions.
       if (res && session?.userId) {
         setAuthTokenCookie(res, session.authToken);
+      } else if (res) {
+        clearAuthTokenCookie(res);
       }
 
       return {
