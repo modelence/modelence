@@ -13,7 +13,6 @@ const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 let isLockOwner = false;
 let isTicking = false;
-const CRON_LOCK_CACHE_DURATION = time.seconds(10);
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -120,7 +119,7 @@ async function tickCronJobs() {
     const now = Date.now();
 
     const ownsLock = await acquireLock('cron', {
-      successfulLockCacheDuration: CRON_LOCK_CACHE_DURATION,
+      successfulLockCacheDuration: time.seconds(10),
       failedLockCacheDuration: time.seconds(30),
     });
 
@@ -132,11 +131,6 @@ async function tickCronJobs() {
     if (!isLockOwner) {
       try {
         await refreshCronSchedule();
-        if (Date.now() - now >= CRON_LOCK_CACHE_DURATION) {
-          // If the database refresh took longer than the lock cache duration,
-          // the lock may no longer be held. Wait for next tick to verify lock ownership.
-          return;
-        }
         isLockOwner = true;
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
