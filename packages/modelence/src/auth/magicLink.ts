@@ -64,7 +64,7 @@ const MAX_CODE_ATTEMPTS = 5;
  */
 function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
   const reportHookError = (error: unknown) => {
-    logError(`Error in ${name} hook:`, { error });
+    logError('Error in auth hook', { hook: name, error });
     captureError(error);
   };
   try {

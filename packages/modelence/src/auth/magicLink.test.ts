@@ -838,8 +838,6 @@ describe('auth/magicLink', () => {
           onAfterEmailVerification,
           onAfterLogin,
         });
-        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
         mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
@@ -849,30 +847,28 @@ describe('auth/magicLink', () => {
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
-        try {
-          // The login itself must succeed despite both hooks failing.
-          const result = await handleLoginWithMagicLink({}, context);
-          expect(result.session).toBeDefined();
-          expect(clearCookie).toHaveBeenCalled();
+        // The login itself must succeed despite both hooks failing.
+        const result = await handleLoginWithMagicLink({}, context);
+        expect(result.session).toBeDefined();
+        expect(clearCookie).toHaveBeenCalled();
 
-          // Drain the microtask queue so the rejected hook promise settles
-          // through fireAuthHook's .catch — vitest would fail the run on a
-          // genuinely unhandled rejection.
-          await new Promise((resolve) => setImmediate(resolve));
+        // Drain the microtask queue so the rejected hook promise settles
+        // through fireAuthHook's .catch — vitest would fail the run on a
+        // genuinely unhandled rejection.
+        await new Promise((resolve) => setImmediate(resolve));
 
-          expect(onAfterEmailVerification).toHaveBeenCalled();
-          expect(onAfterLogin).toHaveBeenCalled();
-          // Both failures are printed and sent to APM, not swallowed silently.
-          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
-            error: expect.objectContaining({ message: 'async hook boom' }),
-          });
-          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', {
-            error: expect.objectContaining({ message: 'sync hook boom' }),
-          });
-          expect(mockCaptureError).toHaveBeenCalledTimes(2);
-        } finally {
-          consoleErrorSpy.mockRestore();
-        }
+        expect(onAfterEmailVerification).toHaveBeenCalled();
+        expect(onAfterLogin).toHaveBeenCalled();
+        // Both failures are printed and sent to APM, not swallowed silently.
+        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
+          hook: 'onAfterEmailVerification',
+          error: expect.objectContaining({ message: 'async hook boom' }),
+        });
+        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
+          hook: 'onAfterLogin',
+          error: expect.objectContaining({ message: 'sync hook boom' }),
+        });
+        expect(mockCaptureError).toHaveBeenCalledTimes(2);
       });
 
       test('does not fire onAfterEmailVerification when the email was already verified', async () => {
@@ -1412,7 +1408,6 @@ describe('auth/magicLink', () => {
       });
 
       test('a failing token restore does not mask the original upsert error', async () => {
-        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
         mockGetAuthConfig.mockReturnValue({ magicLink: { enabled: true, allowSignup: true } });
         const tokenDoc = createMockToken({ email });
         mockTokensFindOne.mockResolvedValue(tokenDoc);
@@ -1431,8 +1426,6 @@ describe('auth/magicLink', () => {
           { error: restoreError }
         );
         expect(mockCaptureError).toHaveBeenCalledWith(restoreError);
-
-        consoleError.mockRestore();
       });
     });
   });

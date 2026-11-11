@@ -1255,7 +1255,6 @@ describe('auth/providers/oauthCommon', () => {
         mockGetConfig.mockReturnValue(undefined);
         vi.spyOn(localConfig, 'getLocalSiteUrl').mockReturnValue('');
         mockGetAuthConfig.mockReturnValue({ oauthErrorRedirectUrl: '/login' });
-        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         moduleExports.sendOAuthError(webRes, 400, 'Auth failed');
 
@@ -1263,12 +1262,15 @@ describe('auth/providers/oauthCommon', () => {
         expect(webRes.status).toHaveBeenCalledWith(400);
         expect(webRes.json).toHaveBeenCalledWith({ error: 'Auth failed' });
         expect(mockLogError).toHaveBeenCalledWith(
-          expect.stringContaining('Could not build the OAuth error redirect'),
-          { error: expect.any(Error) }
+          '[modelence] Could not build the OAuth error redirect',
+          expect.objectContaining({
+            oauthErrorRedirectUrl: '/login',
+            siteUrl: '',
+            error: expect.any(Error),
+          })
         );
         expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
 
-        consoleError.mockRestore();
         // clearAllMocks leaves a spy's implementation in place, so this one
         // would otherwise blank the site URL for every later test.
         vi.restoreAllMocks();

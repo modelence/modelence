@@ -41,6 +41,11 @@ vi.doMock('@/app/server', () => ({ getCallContext: mockGetCallContext }));
 vi.doMock('@/config/server', () => ({ getConfig: mockGetConfig }));
 vi.doMock('../utils', () => ({ resolveUniqueHandle: mockResolveUniqueHandle }));
 
+const mockLogError = vi.fn();
+vi.doMock('@/telemetry', () => ({
+  logError: mockLogError,
+}));
+
 const oauth = await import('./oauthCommon');
 
 function makeRes() {
@@ -376,6 +381,10 @@ describe('auth/providers/oauthCommon — mobile', () => {
 
       expect(result).toEqual({ ok: false });
       expect(res.status).toHaveBeenCalledWith(400);
+      expect(mockLogError).toHaveBeenCalledWith('[modelence] Rejected mobile OAuth redirectUri', {
+        redirectUri: 'evil://auth',
+        allowed: [ALLOWED_DEEP_LINK],
+      });
     });
 
     /**
