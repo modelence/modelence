@@ -11,6 +11,8 @@ import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
+let isLockOwner = false;
+let isTicking = false;
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -58,10 +60,41 @@ export function defineCronJob(
   };
 }
 
+async function refreshCronSchedule() {
+  const aliasList = Object.keys(cronJobs);
+  if (aliasList.length === 0) {
+    return;
+  }
+
+  const aliasSelector = { alias: { $in: aliasList } };
+  const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
+  const now = Date.now();
+  const recordsByAlias = new Map(cronJobRecords.map((record) => [record.alias, record]));
+
+  for (const job of Object.values(cronJobs)) {
+    if (job.state.isRunning) {
+      continue;
+    }
+    const record = recordsByAlias.get(job.alias);
+    if (record?.lastStartDate) {
+      const lastStartTs =
+        record.lastStartDate instanceof Date
+          ? record.lastStartDate.getTime()
+          : new Date(record.lastStartDate).getTime();
+      job.state.scheduledRunTs = lastStartTs + job.params.interval;
+    } else if (!job.state.scheduledRunTs) {
+      job.state.scheduledRunTs = now;
+    }
+  }
+}
+
 export async function startCronJobs() {
   if (cronJobsInterval) {
     throw new Error('Cron jobs already started');
   }
+
+  isLockOwner = false;
+  isTicking = false;
 
   const aliasList = Object.keys(cronJobs);
   if (aliasList.length > 0) {
@@ -70,64 +103,68 @@ export async function startCronJobs() {
       return;
     }
 
-    const aliasSelector = { alias: { $in: aliasList } };
-
-    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-    const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : now;
-    });
-
-    Object.values(cronJobs).forEach((job) => {
-      if (!job.state.scheduledRunTs) {
-        job.state.scheduledRunTs = now;
-      }
-    });
+    await refreshCronSchedule();
 
     cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
 }
 
 async function tickCronJobs() {
-  const now = Date.now();
-
-  const ownsLock = await acquireLock('cron', {
-    successfulLockCacheDuration: time.seconds(10),
-    failedLockCacheDuration: time.seconds(30),
-  });
-
-  if (!ownsLock) {
+  if (isTicking) {
     return;
   }
+  isTicking = true;
 
-  for (const job of Object.values(cronJobs)) {
-    const { alias, params, state } = job;
-    if (state.isRunning) {
-      // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
-      // Restarting it here would stack a new copy on top of a hung one. A handler that never
-      // settles blocks its job until the process restarts, so keep reporting it every timeout.
-      const { startTs, lastTimeoutReportTs } = state;
-      if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
-        state.lastTimeoutReportTs = now;
-        const timeoutError = new Error(
-          `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
-        );
-        captureError(timeoutError);
+  try {
+    const now = Date.now();
+
+    const ownsLock = await acquireLock('cron', {
+      successfulLockCacheDuration: time.seconds(10),
+      failedLockCacheDuration: time.seconds(30),
+    });
+
+    if (!ownsLock) {
+      isLockOwner = false;
+      return;
+    }
+
+    if (!isLockOwner) {
+      try {
+        await refreshCronSchedule();
+        isLockOwner = true;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        captureError(error);
+        logError('Error refreshing cron schedule on lock takeover:', { error: err });
+        return;
       }
-      continue;
     }
 
-    // TODO: limit the number of jobs running concurrently
+    for (const job of Object.values(cronJobs)) {
+      const { alias, params, state } = job;
+      if (state.isRunning) {
+        // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
+        // Restarting it here would stack a new copy on top of a hung one. A handler that never
+        // settles blocks its job until the process restarts, so keep reporting it every timeout.
+        const { startTs, lastTimeoutReportTs } = state;
+        if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
+          state.lastTimeoutReportTs = now;
+          const timeoutError = new Error(
+            `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
+          );
+          captureError(timeoutError);
+        }
+        continue;
+      }
 
-    if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      void runCronJob(job);
+      // TODO: limit the number of jobs running concurrently
+
+      if (state.scheduledRunTs && state.scheduledRunTs <= now) {
+        void runCronJob(job);
+      }
     }
+  } finally {
+    isTicking = false;
   }
 }
 

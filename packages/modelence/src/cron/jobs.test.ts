@@ -3,6 +3,7 @@ import type { Mock, MockInstance } from 'vitest';
 
 const mockSeconds = vi.fn((value: number) => value * 1000);
 const mockMinutes = vi.fn((value: number) => value * 60 * 1000);
+const mockHours = vi.fn((value: number) => value * 60 * 60 * 1000);
 const mockDays = vi.fn((value: number) => value * 24 * 60 * 60 * 1000);
 const mockStartTransaction = vi.fn(() => ({
   end: vi.fn(),
@@ -22,6 +23,7 @@ function registerMocks() {
     time: {
       seconds: mockSeconds,
       minutes: mockMinutes,
+      hours: mockHours,
       days: mockDays,
     },
   }));
@@ -439,5 +441,292 @@ describe('cron/jobs', () => {
         expect(transaction.end).toHaveBeenCalledWith(expectedResult);
       }
     );
+  });
+
+  describe('lock acquisition and standby takeover', () => {
+    test('refreshes schedule on lock takeover and skips jobs run recently by previous owner', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      // At startup, instance is standby (does not acquire lock)
+      mockAcquireLock.mockResolvedValue(false);
+      // Last run was 23 hours ago (job was due at startTs + 1 hour)
+      const initialLastRun = new Date(startTs - mockHours(23));
+      cronStoreMocks.fetch.mockResolvedValueOnce([
+        { alias: 'dailyJob', lastStartDate: initialLastRun },
+      ] as never);
+
+      defineCronJob('dailyJob', {
+        interval: mockDays(1),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Advance time by 2 hours. In between, the active instance ran the job
+      // at startTs + 1 hour and recorded its start date in the DB.
+      const takeoverTs = startTs + mockHours(2);
+      (Date.now as Mock).mockReturnValue(takeoverTs);
+      const activeInstanceRunDate = new Date(startTs + mockHours(1));
+      cronStoreMocks.fetch.mockResolvedValueOnce([
+        { alias: 'dailyJob', lastStartDate: activeInstanceRunDate },
+      ] as never);
+
+      // Now this instance acquires the lock (takes over)
+      mockAcquireLock.mockResolvedValue(true);
+      await intervalCallback?.();
+      await Promise.resolve();
+
+      // DB should be queried again on takeover to refresh the schedule
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+      // Handler must NOT have been called because the job ran only 1 hour ago
+      // and interval is 24 hours (next run is due at startTs + 25 hours)
+      expect(handler).not.toHaveBeenCalled();
+      expect(cronStoreMocks.upsertOne).not.toHaveBeenCalled();
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('refreshes schedule on lock takeover and runs overdue jobs', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      // At startup, instance is standby
+      mockAcquireLock.mockResolvedValue(false);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('hourlyJob', {
+        interval: mockHours(1),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Advance time by 3 hours. Previous owner ran it at startTs + 1 hour.
+      // Next run was due at startTs + 2 hours, so at startTs + 3 hours it is overdue!
+      const takeoverTs = startTs + mockHours(3);
+      (Date.now as Mock).mockReturnValue(takeoverTs);
+      const previousOwnerRunDate = new Date(startTs + mockHours(1));
+      cronStoreMocks.fetch.mockResolvedValueOnce([
+        { alias: 'hourlyJob', lastStartDate: previousOwnerRunDate },
+      ] as never);
+
+      mockAcquireLock.mockResolvedValue(true);
+      await intervalCallback?.();
+      await Promise.resolve();
+
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
+        { alias: 'hourlyJob' },
+        {
+          $set: { lastStartDate: expect.any(Date) },
+          $setOnInsert: { alias: 'hourlyJob' },
+        }
+      );
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('does not re-query DB on subsequent ticks while retaining the lock', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValue([
+        { alias: 'tenSecondJob', lastStartDate: new Date(startTs) },
+      ] as never);
+
+      defineCronJob('tenSecondJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Tick 1: acquires lock, refreshes schedule
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Tick 2: still owns lock, should NOT refresh schedule from DB
+      (Date.now as Mock).mockReturnValue(startTs + 1000);
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Tick 3: still owns lock, should NOT refresh schedule from DB
+      (Date.now as Mock).mockReturnValue(startTs + 2000);
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('re-queries DB if lock was lost and re-acquired', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValue([
+        { alias: 'tenSecondJob', lastStartDate: new Date(startTs) },
+      ] as never);
+
+      defineCronJob('tenSecondJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Tick 1: owns lock, initial refresh
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Tick 2: lock is lost
+      mockAcquireLock.mockResolvedValue(false);
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Tick 3: lock is re-acquired, should refresh again
+      mockAcquireLock.mockResolvedValue(true);
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(3);
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('handles schedule refresh failure gracefully on lock takeover', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(false);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('failingJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Takeover fails when fetching from DB
+      mockAcquireLock.mockResolvedValue(true);
+      const dbError = new Error('DB connection failed');
+      cronStoreMocks.fetch.mockRejectedValueOnce(dbError as never);
+
+      await intervalCallback?.();
+
+      expect(mockCaptureError).toHaveBeenCalledWith(dbError);
+      expect(mockLogError).toHaveBeenCalledWith(
+        'Error refreshing cron schedule on lock takeover:',
+        { error: dbError }
+      );
+      // Handler was not run because refresh failed
+      expect(handler).not.toHaveBeenCalled();
+
+      // On next tick, DB recovers and refresh succeeds
+      cronStoreMocks.fetch.mockResolvedValueOnce([
+        { alias: 'failingJob', lastStartDate: new Date(startTs) },
+      ] as never);
+      await intervalCallback?.();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(3);
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('prevents overlapping ticks while schedule refresh is in-flight on lock takeover', async () => {
+      const startTs = 1_000_000;
+      vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('overlapJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // On tick 1, refreshCronSchedule returns a pending promise
+      let finishRefresh!: (records: unknown[]) => void;
+      cronStoreMocks.fetch.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }) as never
+      );
+
+      const tick1Promise = intervalCallback?.();
+
+      // Tick 2 fires while Tick 1's refresh is still in-flight
+      await intervalCallback?.();
+
+      // Tick 2 should not have called fetch again due to re-entrancy guard
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Complete Tick 1's refresh
+      finishRefresh([]);
+      await tick1Promise;
+      await Promise.resolve();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      (Date.now as Mock).mockRestore();
+    });
+
+    test('handles slow schedule refresh on lock takeover without stalling or re-triggering takeover', async () => {
+      const startTs = 1_000_000;
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      const handler = vi.fn(async () => {});
+
+      mockAcquireLock.mockResolvedValue(true);
+      cronStoreMocks.fetch.mockResolvedValueOnce([] as never);
+
+      defineCronJob('slowRefreshJob', {
+        interval: mockSeconds(10),
+        handler,
+      });
+
+      await startCronJobs();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+      // Refresh on takeover is slow
+      let finishSlowRefresh!: (records: unknown[]) => void;
+      cronStoreMocks.fetch.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSlowRefresh = resolve;
+        }) as never
+      );
+
+      const tick1Promise = intervalCallback?.();
+
+      // Advance clock while refresh is in-flight
+      clock.mockReturnValue(startTs + 15_000);
+      finishSlowRefresh([]);
+      await tick1Promise;
+      await Promise.resolve();
+
+      // Due job runs upon completing refresh
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      // Subsequent tick retains lock ownership and does not re-trigger schedule refresh
+      await intervalCallback?.();
+      await Promise.resolve();
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+
+      clock.mockRestore();
+    });
   });
 });
