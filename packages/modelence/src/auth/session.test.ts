@@ -61,6 +61,7 @@ describe('auth/session', () => {
   const insertOneMock: Mock = vi.fn();
   const findOneMock: Mock = vi.fn();
   const updateOneMock: Mock = vi.fn();
+  const deleteOneMock: Mock = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +70,8 @@ describe('auth/session', () => {
     (sessionsCollection as unknown as { findOne: typeof findOneMock }).findOne = findOneMock;
     (sessionsCollection as unknown as { updateOne: typeof updateOneMock }).updateOne =
       updateOneMock;
+    (sessionsCollection as unknown as { deleteOne: typeof deleteOneMock }).deleteOne =
+      deleteOneMock;
   });
 
   test('createSession inserts session with generated token and returns metadata', async () => {
@@ -95,7 +98,7 @@ describe('auth/session', () => {
   test('obtainSession returns existing session when auth token found', async () => {
     const existing = {
       authToken: 'token',
-      expiresAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
       userId: new ObjectId(),
     };
     findOneMock.mockResolvedValue(existing as never);
@@ -116,7 +119,7 @@ describe('auth/session', () => {
     const legacy = {
       _id: new ObjectId(),
       authToken: 'legacy-raw-token',
-      expiresAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
       userId: new ObjectId(),
     };
     // First call (hashed) returns null; second call (raw) returns legacy
@@ -141,6 +144,49 @@ describe('auth/session', () => {
       expiresAt: legacy.expiresAt,
       userId: legacy.userId,
     });
+  });
+
+  test('obtainSession rejects expired sessions, deletes them from database, and creates a new session', async () => {
+    const expired = {
+      _id: new ObjectId(),
+      authToken: 'token',
+      expiresAt: new Date(Date.now() - 1000),
+      userId: new ObjectId(),
+    };
+    findOneMock.mockResolvedValue(expired as never);
+    deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+    insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+
+    const result = await obtainSession('token');
+
+    expect(findOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
+    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expired._id });
+    expect(insertOneMock).toHaveBeenCalled();
+    expect(result.authToken).toBe('auth-token');
+    expect(result.userId).toBeNull();
+  });
+
+  test('obtainSession rejects expired legacy sessions, deletes them, and creates a new session', async () => {
+    const expiredLegacy = {
+      _id: new ObjectId(),
+      authToken: 'legacy-raw-token',
+      expiresAt: new Date(Date.now() - 1000),
+      userId: new ObjectId(),
+    };
+    findOneMock.mockResolvedValueOnce(null as never);
+    findOneMock.mockResolvedValueOnce(expiredLegacy as never);
+    deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+    insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+    const updateOneMockLocal = vi.fn().mockResolvedValue({ acknowledged: true } as never);
+    (sessionsCollection as unknown as { updateOne: typeof updateOneMockLocal }).updateOne =
+      updateOneMockLocal;
+
+    const result = await obtainSession('legacy-raw-token');
+
+    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expiredLegacy._id });
+    expect(insertOneMock).toHaveBeenCalled();
+    expect(result.authToken).toBe('auth-token');
+    expect(result.userId).toBeNull();
   });
 
   test('obtainSession creates new session when token missing', async () => {
@@ -305,6 +351,7 @@ describe('auth/session', () => {
       );
 
       expect(res.cookie as Mock).not.toHaveBeenCalled();
+      expect(res.clearCookie as Mock).not.toHaveBeenCalled();
     });
 
     test('does not throw when res is null (in-process invocations)', async () => {

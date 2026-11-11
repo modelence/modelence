@@ -175,11 +175,20 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
     }
 
     if (existingSession) {
-      return {
-        authToken,
-        expiresAt: new Date(existingSession.expiresAt),
-        userId: existingSession.userId ?? null,
-      };
+      const expiresAt =
+        existingSession.expiresAt instanceof Date
+          ? existingSession.expiresAt
+          : new Date(existingSession.expiresAt);
+
+      if (expiresAt.getTime() <= Date.now()) {
+        await sessionsCollection.deleteOne({ _id: existingSession._id as ObjectId });
+      } else {
+        return {
+          authToken,
+          expiresAt,
+          userId: existingSession.userId ?? null,
+        };
+      }
     }
   }
 
@@ -282,12 +291,14 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
 }
 
 export function clearAuthTokenCookie(res: Response) {
-  res.clearCookie('authToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  if (typeof res?.clearCookie === 'function') {
+    res.clearCookie('authToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+  }
 }
 
 export default new Module('_system.session', {
