@@ -394,6 +394,27 @@ describe('app/server getCallContext', () => {
     );
   });
 
+  test('does NOT clear authToken cookie when request has no authToken cookie', async () => {
+    const clearCookie = vi.fn();
+    const res = { clearCookie } as unknown as Response;
+    const req = createRequest({
+      cookies: {},
+      body: {},
+      headers: { host: 'localhost:3000' },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'new-anon-token', expiresAt: new Date(), userId: null },
+      user: null,
+      roles: ['guest'],
+    } as never);
+
+    await getCallContext(req, res);
+
+    expect(clearCookie).not.toHaveBeenCalled();
+  });
+
   test('does not trust X-Forwarded-For when the request IP is direct', async () => {
     const req = createRequest({
       body: {
