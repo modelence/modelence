@@ -156,6 +156,7 @@
                       "api-reference/modelence/server/functions/getFileUrl",
                       "api-reference/modelence/server/functions/getUploadUrl",
                       "api-reference/modelence/server/functions/invalidateAllUserSessions",
+                      "api-reference/modelence/server/functions/isSessionSaved",
                       "api-reference/modelence/server/functions/obtainSession",
                       "api-reference/modelence/server/functions/sendEmail",
                       "api-reference/modelence/server/functions/setAuthTokenCookie",
