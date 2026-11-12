@@ -30,6 +30,7 @@ export {
   createSession,
   clearSessionUser,
   obtainSession,
+  isSessionSaved,
   setSessionUser,
   invalidateAllUserSessions,
   setAuthTokenCookie,
