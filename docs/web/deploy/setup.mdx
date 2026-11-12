@@ -76,8 +76,8 @@ A service entry of `resources` takes:
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
 | `dockerfile` | string | none | Build the service from this Dockerfile instead of `image` and `build`. The path is relative to `root`, and `root` is the build context. `image`, `build` and `static` can't be set with it. The image runs as the Dockerfile leaves it (`ENTRYPOINT`, `CMD`, `USER`, `WORKDIR`); `start`, when set, replaces `ENTRYPOINT` and `CMD`. See [Projects with a Dockerfile](#projects-with-a-dockerfile). |
 | `port` | number | `3000` | Dockerfile services only. The port the app listens on, for an image that has one built in (`EXPOSE 8000`, `--port 8000`). The container gets it as `PORT`, and traffic and the health check go to it. A Node.js service always listens on `PORT`. |
-| `healthCheck` | object | `{ "type": "tcp" }` | How the platform tells that a container is healthy. It is checked every 5 seconds; 10 failures in a row replace the container, and a deploy whose containers never get healthy rolls back. `{ "type": "tcp" }`: something accepts connections on the port. `{ "type": "http", "path": "/health" }`: a `GET` of `path` answers with a 2xx status. A redirect counts as a failure. The request carries the environment's hostname as `Host` and `X-Forwarded-Proto: https`, like real traffic. `{ "type": "none" }`: healthy once it runs, for a process that serves no traffic (a queue worker, a bot holding a gateway connection). `tcp` and `http` also take `gracePeriod`: seconds after start during which failing checks don't count, from 0 to 300, default 60. Raise it for an app that loads a model or warms a cache before it listens. |
-| `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"`: the new containers start, and the old ones stop once the new ones are healthy. There is no gap, but both versions run for a while. `"recreate"`: the old containers stop before the new ones start, at the cost of a short gap. Use it for a process that must never run twice, such as a bot that allows one connection. |
+| `healthCheck` | object | `{ "type": "tcp" }` | How the platform tells that a container is healthy. It is checked every 5 seconds; 10 failures in a row replace the container, and a deploy whose containers never get healthy rolls back. `{ "type": "tcp" }`: something accepts connections on the port. `{ "type": "http", "path": "/health" }`: a `GET` of `path` answers with a 2xx status. A redirect counts as a failure. The request carries the environment's hostname as `Host` and `X-Forwarded-Proto: https`, like real traffic. `{ "type": "none" }`: healthy once it runs, for a process that serves no traffic (a queue worker, a bot holding a gateway connection). Don't use it for a web service: it would get traffic before it listens, and return errors during each deploy. `tcp` and `http` also take `gracePeriod`: seconds after start during which failing checks don't count, from 0 to 300, default 60. Raise it for an app that loads a model or warms a cache before it listens. |
+| `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"`: the new containers start, and the old ones stop once the new ones are healthy. There is no gap, but both versions run for a while. `"recreate"`: the old containers stop before the new ones start, at the cost of a short gap. A deploy then never adds containers, but with a container count above 1 the copies still run side by side. For a process that must never run twice, such as a bot that allows one connection, use `"recreate"` and keep the container count at 1. |
 | `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL` to finish its work, from 2 to 120. It stops receiving new traffic when `SIGTERM` is sent. |
 
 A managed resource entry of `resources` takes:
@@ -277,6 +277,8 @@ tells the platform, and `/health` answers once the app is ready:
 
 ```dockerfile Dockerfile
 FROM public.ecr.aws/docker/library/python:3.13-slim
+# Send logs as they are written, not when the buffer fills
+ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /srv
@@ -290,7 +292,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 **Python worker** - a queue consumer that serves no traffic, so it has no health check. `start`
 replaces the image's `ENTRYPOINT` and `CMD`. Only one copy may run at a time, so a deploy stops the
-old container first and gives it 90 seconds to finish the jobs it holds:
+old container first and gives it 90 seconds to finish the jobs it holds. The container count must
+stay at 1, because `"recreate"` doesn't stop several containers from running side by side:
 
 ```json modelence.config.json
 {
@@ -436,6 +439,8 @@ step.
    it answers real traffic. If the app needs more than a minute before it listens, for example to
    load a model, raise `gracePeriod` (up to 300 seconds). A process that serves no traffic, such as a
    queue worker or a bot that holds a gateway connection, sets `{ "type": "none" }` and needs no port.
+   A web service must not use it: with no check, a container counts as ready as soon as it runs, so
+   it gets traffic before it listens and returns errors during each deploy.
 
 5. **Pass build-time values.** A build-scoped `env` entry with a `value` in the file reaches the
    build as a build argument: declare it with `ARG NAME` in the stage that uses it. Values set in the
@@ -453,9 +458,14 @@ step.
 
 6. **Set how the service is replaced and stopped.** On `SIGTERM` the app should finish its work in
    progress and exit, within `stopTimeout` (30 seconds by default). The signal reaches the app even
-   when a shell or a launcher script starts it. Set `"rollout": "recreate"` when two copies must
-   never run at once. A bot that allows one connection is an example, and so is a worker that holds
-   state in memory.
+   when a shell or a launcher script starts it. When two copies must never run at once, set
+   `"rollout": "recreate"` and keep the container count at 1. `"recreate"` only keeps a deploy from
+   adding containers: with a count above 1, the copies still run side by side. A bot that allows one
+   connection is an example, and so is a worker that holds state in memory.
+
+   For a Python app, set `ENV PYTHONUNBUFFERED=1` in the Dockerfile. Python buffers its output when
+   it is not writing to a terminal, so without it logs arrive late, and the last lines before a crash
+   can be lost.
 
 7. **Write `modelence.config.json`** with one service entry that sets `dockerfile` (relative to
    `root`), and `start`, `port` and `healthCheck` as decided above, as in the
