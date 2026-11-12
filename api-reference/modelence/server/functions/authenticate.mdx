@@ -5,7 +5,7 @@ title: authenticate
 
 [API Reference](/api-reference/modelence/server/functions/../../../index) / [modelence](/api-reference/modelence/server/functions/../../index) / [server](/api-reference/modelence/server/functions/../index) / authenticate
 
-> **authenticate**(`authToken`): `Promise`\<\{ `roles`: `string`[]; `session`: `Session`; `user`: `null` \| [`UserInfo`](/api-reference/modelence/server/functions/../type-aliases/UserInfo); \}\>
+> **authenticate**(`authToken`, `__namedParameters`): `Promise`\<\{ `roles`: `string`[]; `session`: `Session`; `user`: `null` \| [`UserInfo`](/api-reference/modelence/server/functions/../type-aliases/UserInfo); \}\>
 
 Defined in: [packages/modelence/src/auth/index.ts:8](https://github.com/modelence/modelence/blob/main/packages/modelence/src/auth/index.ts#L8)
 
@@ -14,6 +14,7 @@ Defined in: [packages/modelence/src/auth/index.ts:8](https://github.com/modelenc
 | Parameter | Type |
 | ------ | ------ |
 | `authToken` | `null` \| `string` |
+| `__namedParameters` | `ObtainSessionOptions` |
 
 ## Returns
 
