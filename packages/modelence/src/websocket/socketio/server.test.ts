@@ -231,7 +231,10 @@ describe('websocket/socketio/server', () => {
           authToken: 'subscription-token',
           ip: '203.0.113.42',
         });
-        expect(mockAuthenticate.mock.calls).toEqual([['token'], ['subscription-token']]);
+        expect(mockAuthenticate.mock.calls).toEqual([
+          ['token', { persistNewSession: false }],
+          ['subscription-token', { persistNewSession: false }],
+        ]);
         expect(mockRunLiveMethod).toHaveBeenCalledWith(
           'test',
           {},
