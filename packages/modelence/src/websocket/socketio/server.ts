@@ -13,6 +13,7 @@ import {
 } from '@/live-query';
 import type { Collection, Document } from 'mongodb';
 import { logError } from '@/telemetry';
+import { createClientIpResolver } from '@/app/clientIp';
 
 let socketServer: SocketServer | null = null;
 
@@ -28,6 +29,7 @@ export async function init({
 }) {
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
+  const resolveClientIp = createClientIpResolver();
 
   console.log('Initializing Socket.IO server...');
 
@@ -91,6 +93,9 @@ export async function init({
   });
 
   socketServer.on('connection', (socket: Socket) => {
+    // Every subscription uses the IP from the upgrade request.
+    const clientIp = resolveClientIp(socket.request);
+
     socket.on('disconnect', () => {
       handleLiveQueryDisconnect(socket);
     });
@@ -121,7 +126,9 @@ export async function init({
       socket.emit('leftChannel', channelName);
     });
 
-    socket.on('subscribeLiveQuery', (payload) => handleSubscribeLiveQuery(socket, payload));
+    socket.on('subscribeLiveQuery', (payload) =>
+      handleSubscribeLiveQuery(socket, payload, clientIp)
+    );
     socket.on('unsubscribeLiveQuery', (payload) => handleUnsubscribeLiveQuery(socket, payload));
   });
 

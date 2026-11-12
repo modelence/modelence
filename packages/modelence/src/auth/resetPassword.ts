@@ -8,6 +8,7 @@ import { usersCollection, resetPasswordTokensCollection, magicLinkTokensCollecti
 import { getEmailConfig } from '@/app/emailConfig';
 import { getAuthConfig } from '@/app/authConfig';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { htmlToText } from '@/utils';
 import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
@@ -190,7 +191,8 @@ export async function handleResetPasswordLanding(params: RouteParams): Promise<R
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    console.error('Error handling password reset landing:', error);
+    logError('Error handling password reset landing:', { error });
+    captureError(error);
     const message = 'This password reset link is invalid or has expired.';
     return {
       status: 302,
