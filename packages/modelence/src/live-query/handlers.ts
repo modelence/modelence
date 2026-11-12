@@ -72,7 +72,10 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
   subs.set(subscriptionId, subscription);
 
   try {
-    const { session, user, roles } = await authenticate(authToken ?? null);
+    // Subscriptions never return a session token, so do not save a new one.
+    const { session, user, roles } = await authenticate(authToken ?? null, {
+      persistNewSession: false,
+    });
 
     const context: Context = {
       session,

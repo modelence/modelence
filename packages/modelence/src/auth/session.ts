@@ -155,7 +155,29 @@ export const sessionsCollection = new Store('_modelenceSessions', {
   ],
 });
 
-export async function obtainSession(authToken: string | null): Promise<Session> {
+export type ObtainSessionOptions = {
+  /**
+   * Whether to save a new anonymous session when the token is missing or
+   * unknown. Pass `false` when the caller never returns the new token to the
+   * client: a saved session would then be a record nobody can use. The
+   * session is saved later if it reaches `_system.session.init`.
+   */
+  persistNewSession?: boolean;
+};
+
+// Anonymous sessions that were handed out without being written to the
+// database. Tracked by object identity so the public Session type stays as is.
+const unsavedSessions = new WeakSet<Session>();
+
+/** Whether the session has a record in the sessions collection. */
+export function isSessionSaved(session: Session): boolean {
+  return !unsavedSessions.has(session);
+}
+
+export async function obtainSession(
+  authToken: string | null,
+  { persistNewSession = true }: ObtainSessionOptions = {}
+): Promise<Session> {
   if (authToken) {
     const hashedToken = hashToken(authToken);
     let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
@@ -183,7 +205,37 @@ export async function obtainSession(authToken: string | null): Promise<Session> 
     }
   }
 
-  return await createSession();
+  return persistNewSession ? await createSession() : createUnsavedSession();
+}
+
+function createUnsavedSession(): Session {
+  const session: Session = {
+    authToken: randomBytes(32).toString('base64url'),
+    expiresAt: new Date(Date.now() + time.days(7)),
+    userId: null,
+  };
+  unsavedSessions.add(session);
+  return session;
+}
+
+/**
+ * Writes an unsaved anonymous session to the database under its existing
+ * token. The token must stay the same: during SSR the request's call context
+ * keeps using this session object while the client hydrates with the token
+ * returned by `init`, so both have to refer to the same record.
+ *
+ * Safe against session fixation because unsaved sessions only ever carry
+ * server-generated tokens (an unknown client token is never reused).
+ */
+async function saveUnsavedSession(session: Session): Promise<Session> {
+  await sessionsCollection.insertOne({
+    authToken: hashToken(session.authToken),
+    createdAt: new Date(),
+    expiresAt: session.expiresAt,
+    userId: null,
+  });
+  unsavedSessions.delete(session);
+  return session;
 }
 
 /**
@@ -293,7 +345,15 @@ export function clearAuthTokenCookie(res: Response) {
 export default new Module('_system.session', {
   stores: [sessionsCollection, linkNoncesCollection, oauthExchangeCodesCollection],
   mutations: {
-    init: async function (args, { session, user, res }) {
+    init: async function (args, { session: contextSession, user, res }) {
+      // Requests with a missing or unknown token carry an unsaved session (see
+      // obtainSession). This is where a new token reaches the client, over
+      // HTTP or through SSR, so save the session now, keeping its token.
+      const session =
+        contextSession && !isSessionSaved(contextSession)
+          ? await saveUnsavedSession(contextSession)
+          : contextSession;
+
       // Only refresh the cookie for logged-in sessions. Writing one for a
       // freshly-minted anonymous session creates a Set-Cookie that the
       // browser then attaches to the client's reconciliation request,
@@ -314,8 +374,9 @@ export default new Module('_system.session', {
       };
     },
     heartbeat: async function (args, { session }) {
-      // Session might not exist if there is no database/authentication setup
-      if (session) {
+      // Session might not exist if there is no database/authentication setup.
+      // An unsaved session has no record to extend.
+      if (session && isSessionSaved(session)) {
         await processSessionHeartbeat(session);
       }
     },

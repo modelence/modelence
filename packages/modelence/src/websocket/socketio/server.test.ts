@@ -140,7 +140,7 @@ describe('websocket/socketio/server', () => {
       data: null,
     } as unknown as Socket;
     await middleware?.(authSocket, next);
-    expect(mockAuthenticate).toHaveBeenCalledWith('abc');
+    expect(mockAuthenticate).toHaveBeenCalledWith('abc', { persistNewSession: false });
     expect(authSocket.data).toEqual({ user: { id: '1' } });
     expect(next).toHaveBeenCalled();
 
@@ -185,7 +185,7 @@ describe('websocket/socketio/server', () => {
 
     await middleware?.(authSocket, next);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('invalid');
+    expect(mockAuthenticate).toHaveBeenCalledWith('invalid', { persistNewSession: false });
     expect(authSocket.data).toBeNull();
     expect(next).toHaveBeenCalledWith(authError);
   });
@@ -231,7 +231,10 @@ describe('websocket/socketio/server', () => {
           authToken: 'subscription-token',
           ip: '203.0.113.42',
         });
-        expect(mockAuthenticate.mock.calls).toEqual([['token'], ['subscription-token']]);
+        expect(mockAuthenticate.mock.calls).toEqual([
+          ['token', { persistNewSession: false }],
+          ['subscription-token', { persistNewSession: false }],
+        ]);
         expect(mockRunLiveMethod).toHaveBeenCalledWith(
           'test',
           {},
