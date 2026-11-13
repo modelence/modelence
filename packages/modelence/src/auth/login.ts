@@ -14,6 +14,7 @@ import {
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
 import { consumeRateLimit } from '@/server';
+import { releaseRateLimits, reserveRateLimit } from '@/rate-limit/rules';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -66,8 +67,6 @@ export async function handleLoginWithPassword(
     // password is accepted just as a string, so users can still sign in if the password validation rules are changed
     const password = z.string().parse(args.password);
 
-    // TODO: add rate limiting by email (and perhaps IP address overall)
-
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
@@ -75,12 +74,45 @@ export async function handleLoginWithPassword(
 
     const passwordHash = userDoc?.authMethods?.password?.hash;
 
+    // Reserve a slot atomically before bcrypt, so concurrent guesses cannot all
+    // pass and a full bucket blocks even a correct password. Known and unknown
+    // emails reserve the same way, so the response does not reveal whether the
+    // account exists. The slot is released on success, so only failed attempts
+    // count against the email limit.
+    const emailReservations = await reserveRateLimit({
+      bucket: 'signin',
+      type: 'email',
+      value: email,
+    });
+
     // Always run bcrypt.compare to mitigate timing attacks that could reveal if an email exists.
     const hashToCompare = passwordHash || DUMMY_PASSWORD_HASH;
-    const isValidPassword = await bcrypt.compare(password, hashToCompare);
+    let isValidPassword: boolean;
+    try {
+      isValidPassword = await bcrypt.compare(password, hashToCompare);
+    } catch (error) {
+      // The password was never compared, so this attempt should not count.
+      try {
+        await releaseRateLimits(emailReservations);
+      } catch (releaseError) {
+        console.error('Failed to release email rate limit reservation', releaseError);
+      }
+      throw error;
+    }
 
     if (!passwordHash || !isValidPassword) {
+      // Keep the reservation counted: only failed attempts count against the
+      // email limit.
       throw incorrectCredentialsError();
+    }
+
+    // The password is correct, so release the reserved attempt. A failed
+    // release must not block a valid login; the worst case is one extra attempt
+    // counted against the email.
+    try {
+      await releaseRateLimits(emailReservations);
+    } catch (error) {
+      console.error('Failed to release email rate limit reservation', error);
     }
 
     // Only check email verification if the user exists and the password is correct,

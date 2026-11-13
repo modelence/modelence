@@ -231,9 +231,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 26 rules covering all auth buckets', () => {
+    test('produces exactly 27 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(26);
+      expect(rules).toHaveLength(27);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -249,6 +249,38 @@ describe('auth/user', () => {
           'updateProfile',
         ])
       );
+    });
+
+    test('limits failed sign-in attempts per email by default', () => {
+      const rules = buildAuthRateLimits();
+
+      const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
+      expect(signinEmailRules).toEqual([
+        { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 10 },
+      ]);
+    });
+
+    test('allows the per-email sign-in limit to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        signin: [{ type: 'email', window: 15 * 60 * 1000, limit: 3 }],
+      });
+
+      const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
+      expect(signinEmailRules).toEqual([
+        { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 3 },
+      ]);
+    });
+
+    test('allows adding a daily per-email sign-in rule', () => {
+      const rules = buildAuthRateLimits({
+        signin: [{ type: 'email', window: 24 * 60 * 60 * 1000, limit: 50 }],
+      });
+
+      const signinEmailRules = rules.filter((r) => r.bucket === 'signin' && r.type === 'email');
+      expect(signinEmailRules).toEqual([
+        { bucket: 'signin', type: 'email', window: 15 * 60 * 1000, limit: 10 },
+        { bucket: 'signin', type: 'email', window: 24 * 60 * 60 * 1000, limit: 50 },
+      ]);
     });
 
     test('limits verification resends per IP as well as per user by default', () => {
@@ -345,8 +377,8 @@ describe('auth/user', () => {
       });
 
       const signinRules = rules.filter((r) => r.bucket === 'signin');
-      expect(signinRules).toHaveLength(2);
-      const signin15m = signinRules.find((r) => r.window === 15 * 60 * 1000);
+      expect(signinRules).toHaveLength(3);
+      const signin15m = signinRules.find((r) => r.type === 'ip' && r.window === 15 * 60 * 1000);
       expect(signin15m?.limit).toBe(50);
     });
 
@@ -368,9 +400,11 @@ describe('auth/user', () => {
       );
       expect(signupDay?.limit).toBe(10);
 
-      const signin15m = rules.find((r) => r.bucket === 'signin' && r.window === 15 * 60 * 1000);
+      const signin15m = rules.find(
+        (r) => r.bucket === 'signin' && r.type === 'ip' && r.window === 15 * 60 * 1000
+      );
       const signinDay = rules.find(
-        (r) => r.bucket === 'signin' && r.window === 24 * 60 * 60 * 1000
+        (r) => r.bucket === 'signin' && r.type === 'ip' && r.window === 24 * 60 * 60 * 1000
       );
       expect(signin15m?.limit).toBe(5);
       expect(signinDay?.limit).toBe(20);

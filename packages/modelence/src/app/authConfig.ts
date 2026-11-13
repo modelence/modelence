@@ -75,7 +75,11 @@ export type AuthRateLimitsConfig = {
   signup?: AuthRateLimitOverride[];
   /** Per-IP limits for signup attempts (checked before duplicate detection). */
   signupAttempt?: AuthRateLimitOverride[];
-  /** Per-IP limits for login attempts. */
+  /**
+   * Per-IP and per-email limits for login attempts. The email bucket only counts
+   * failed attempts, and blocks every attempt (even with the correct password)
+   * once it is full.
+   */
   signin?: AuthRateLimitOverride[];
   /** Per-user and per-IP limits for email verification resend requests. */
   verification?: AuthRateLimitOverride[];
