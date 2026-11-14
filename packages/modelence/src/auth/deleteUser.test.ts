@@ -7,6 +7,7 @@ const mockEmailDeleteMany = vi.fn();
 const mockResetDeleteMany = vi.fn();
 const mockMagicLinkDeleteMany = vi.fn();
 const mockRandomUUID = vi.fn(() => 'uuid-123');
+const mockInvalidateAllUserSessions = vi.fn();
 
 vi.doMock('./db', () => ({
   usersCollection: {
@@ -22,6 +23,10 @@ vi.doMock('./db', () => ({
   magicLinkTokensCollection: {
     deleteMany: mockMagicLinkDeleteMany,
   },
+}));
+
+vi.doMock('./session', () => ({
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
 }));
 
 vi.doMock('crypto', () => ({
@@ -53,6 +58,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockEmailDeleteMany).toHaveBeenCalledWith({ userId });
     expect(mockResetDeleteMany).toHaveBeenCalledWith({ userId });
     // Magic link tokens are keyed by email; revoke every address, lowercased.
@@ -67,6 +73,7 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
@@ -76,10 +83,11 @@ describe('auth/deleteUser', () => {
 
     await clearTokens(userId);
 
+    expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
     expect(mockMagicLinkDeleteMany).not.toHaveBeenCalled();
   });
 
-  test('disableUser clears tokens and disables user record', async () => {
+  test('disableUser clears tokens, invalidates sessions, and disables user record', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439012');
 
     await disableUser(userId);
@@ -89,15 +97,23 @@ describe('auth/deleteUser', () => {
     expect(mockMagicLinkDeleteMany).toHaveBeenCalledWith({
       email: { $in: ['user@example.com'] },
     });
-    expect(mockUsersUpdateOne).toHaveBeenCalledWith(userId, {
-      $set: {
-        status: 'disabled',
-        disabledAt: expect.any(Date),
-      },
-    });
+    expect(mockUsersUpdateOne).toHaveBeenCalledWith(
+      { _id: userId },
+      {
+        $set: {
+          status: 'disabled',
+          disabledAt: expect.any(Date),
+        },
+      }
+    );
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    // Invalidate sessions strictly after updating the database status
+    expect(mockInvalidateAllUserSessions.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockUsersUpdateOne.mock.invocationCallOrder[0]
+    );
   });
 
-  test('deleteUser clears tokens and anonymizes user profile', async () => {
+  test('deleteUser clears tokens, invalidates sessions, and anonymizes user profile', async () => {
     const userId = new ObjectId('507f1f77bcf86cd799439013');
 
     await deleteUser(userId);
@@ -125,6 +141,11 @@ describe('auth/deleteUser', () => {
           emails: [],
         },
       }
+    );
+    expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+    // Invalidate sessions strictly after updating the database status
+    expect(mockInvalidateAllUserSessions.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mockUsersUpdateOne.mock.invocationCallOrder[0]
     );
   });
 });

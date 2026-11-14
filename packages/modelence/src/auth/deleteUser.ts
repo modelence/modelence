@@ -6,6 +6,7 @@ import {
   resetPasswordTokensCollection,
   magicLinkTokensCollection,
 } from './db';
+import { invalidateAllUserSessions } from './session';
 
 export async function clearTokens(userId: ObjectId) {
   await emailVerificationTokensCollection.deleteMany({
@@ -39,12 +40,21 @@ export async function clearTokens(userId: ObjectId) {
 export async function disableUser(userId: ObjectId) {
   await clearTokens(userId);
 
-  await usersCollection.updateOne(userId, {
-    $set: {
-      status: 'disabled',
-      disabledAt: new Date(),
+  await usersCollection.updateOne(
+    {
+      _id: userId,
     },
-  });
+    {
+      $set: {
+        status: 'disabled',
+        disabledAt: new Date(),
+      },
+    }
+  );
+
+  // Invalidate sessions after updating the user's status so that no new session
+  // can be created during cleanup and survive account re-enablement.
+  await invalidateAllUserSessions(userId);
 }
 
 export async function deleteUser(userId: ObjectId) {
@@ -64,4 +74,7 @@ export async function deleteUser(userId: ObjectId) {
       },
     }
   );
+
+  // Invalidate sessions after updating status so no orphaned sessions remain.
+  await invalidateAllUserSessions(userId);
 }
