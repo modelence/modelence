@@ -15,7 +15,7 @@ Modelence includes built-in rate limiting on all authentication endpoints to pro
 
 These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
 
-Once the per-email sign-in limit is full, **every attempt is rejected with 429, including attempts with the correct password**. This is deliberate: if a correct password still worked when the bucket was full, the limit would not stop guessing. The trade-off is a targeted lockout — about 10 requests every 15 minutes from any IP can keep a known account locked out while the attacker keeps going. Password reset and magic link still work. To use a different balance, change or remove the rule with [`authConfig.rateLimits.signin`](/api-reference/modelence/index/type-aliases/AuthRateLimitsConfig).
+Once the per-email sign-in limit is full, **every attempt is rejected with 429, including attempts with the correct password**. This is deliberate: if a correct password still worked when the bucket was full, the limit would not stop guessing. The trade-off is a targeted lockout — about 10 requests every 15 minutes from any IP can keep a known account locked out while the attacker keeps going. Password reset and magic link still work. To use a different balance, change or remove the rule with [`authConfig.rateLimits.signin`](/api-reference/modelence/server/type-aliases/AuthRateLimitsConfig).
 
 ## Handling Rate Limit Errors
 
