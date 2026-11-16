@@ -13,6 +13,7 @@ const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
 let checkingDueJobs = false;
 const CRON_LOCK_CACHE_DURATION = time.seconds(10);
+const CRON_LOCK_DURATION = time.seconds(30);
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -100,14 +101,20 @@ function isDue({ state }: CronJob, now: number) {
 }
 
 async function tickCronJobs() {
+  // Let a standby take over if this instance is stuck reading schedules.
+  if (checkingDueJobs) {
+    return;
+  }
+
   const now = Date.now();
 
   const ownsLock = await acquireLock('cron', {
+    lockDuration: CRON_LOCK_DURATION,
     successfulLockCacheDuration: CRON_LOCK_CACHE_DURATION,
     failedLockCacheDuration: time.seconds(30),
   });
 
-  if (!ownsLock) {
+  if (!ownsLock || checkingDueJobs) {
     return;
   }
 
@@ -134,7 +141,7 @@ async function tickCronJobs() {
     }
   }
 
-  if (!dueJobs.length || checkingDueJobs) {
+  if (!dueJobs.length) {
     return;
   }
 
@@ -143,8 +150,10 @@ async function tickCronJobs() {
     // Another lock owner may have run these jobs since we last read their schedules.
     await refreshCronJobSchedules(dueJobs);
     const dispatchTs = Date.now();
+    // A cached lock can already be 10s old. Allow at most another 10s for this
+    // tick so dispatch stays within the 30s lock duration.
     if (dispatchTs - now >= CRON_LOCK_CACHE_DURATION) {
-      return; // Check again on the next tick if the read outlasted the lock cache.
+      return;
     }
 
     // TODO: limit the number of jobs running concurrently

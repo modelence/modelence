@@ -57,13 +57,14 @@ describe('cron/jobs', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    mockCaptureError.mockClear();
     mockLogError.mockClear();
     Object.assign(cronStoreMocks, {
       fetch: vi.fn(),
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
     });
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockAcquireLock.mockResolvedValue(true as never);
+    mockAcquireLock.mockClear().mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
     setIntervalMock = vi.spyOn(global, 'setInterval').mockImplementation(((
@@ -244,7 +245,7 @@ describe('cron/jobs', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
-    test('waits for a fresh check when a schedule read outlasts the lock cache', async () => {
+    test('stops renewing the lock while a schedule read is pending', async () => {
       await startCronJobs();
       let finishRead!: (records: []) => void;
       cronStoreMocks.fetch.mockReturnValueOnce(
@@ -254,11 +255,13 @@ describe('cron/jobs', () => {
       );
 
       const pendingTick = intervalCallback?.();
+      await Promise.resolve();
       await tickAt(startTs + 1000);
+      await tickAt(startTs + 10_000);
+      expect(mockAcquireLock).toHaveBeenCalledTimes(1);
       expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
       expect(handler).not.toHaveBeenCalled();
 
-      clock.mockReturnValue(startTs + 10_000);
       finishRead([]);
       await pendingTick;
       expect(handler).not.toHaveBeenCalled();
@@ -343,7 +346,6 @@ describe('cron/jobs', () => {
   });
 
   test('cron loop handles and captures timeout when job runs past its timeout limit', async () => {
-    mockCaptureError.mockClear();
     let resolveHandler: () => void;
     const handlerPromise = new Promise<void>((resolve) => {
       resolveHandler = resolve;
@@ -403,7 +405,6 @@ describe('cron/jobs', () => {
     }
 
     beforeEach(() => {
-      mockCaptureError.mockClear();
       vi.spyOn(Date, 'now').mockReturnValue(startTs);
       cronStoreMocks.fetch.mockResolvedValue([] as never);
     });
