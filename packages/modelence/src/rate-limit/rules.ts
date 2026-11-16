@@ -32,18 +32,105 @@ export async function consumeRateLimit(options: {
   type: RateLimitType;
   value: string;
   message?: string;
-}) {
+}): Promise<void> {
+  await reserveRateLimit(options);
+}
+
+export type RateLimitReservation = {
+  bucket: string;
+  type: RateLimitType;
+  value: string;
+  windowMs: number;
+  windowStart: Date;
+};
+
+/**
+ * Internal counterpart of `consumeRateLimit`. It increments the matching rules
+ * like `consumeRateLimit` does, but returns the reservations so the caller can
+ * release them with `releaseRateLimits` when the operation succeeds. It is not
+ * part of the public API.
+ */
+export async function reserveRateLimit(options: {
+  bucket: string;
+  type: RateLimitType;
+  value: string;
+  message?: string;
+}): Promise<RateLimitReservation[]> {
   const { bucket, type, value, message } = options;
   const rules = allRules.filter((rule) => rule.bucket === bucket && rule.type === type);
   const createError = message ? () => new RateLimitError(message) : undefined;
 
-  for (const rule of rules) {
-    await checkRateLimitRule(rule, value, createError);
+  const reservations: RateLimitReservation[] = [];
+  try {
+    for (const rule of rules) {
+      const windowStart = await checkRateLimitRule(rule, value, createError);
+      reservations.push({
+        bucket: rule.bucket,
+        type: rule.type,
+        value,
+        windowMs: rule.window,
+        windowStart,
+      });
+    }
+  } catch (error) {
+    // A later rule rejecting must not leave the earlier rules' increments
+    // behind; otherwise the caller never receives them and cannot release them.
+    try {
+      await releaseRateLimits(reservations);
+    } catch (releaseError) {
+      console.error('Failed to roll back rate limit reservations', releaseError);
+    }
+    throw error;
+  }
+  return reservations;
+}
+
+/**
+ * Releases reservations returned by `reserveRateLimit`, so an operation that
+ * succeeds does not count against the limit. It returns the reservation to the
+ * window it was taken from, including when that window has rolled over while
+ * the operation was in flight.
+ *
+ * @example
+ * ```ts
+ * const reservations = await reserveRateLimit({ bucket: 'api', type: 'ip', value: '127.0.0.1' });
+ * await releaseRateLimits(reservations);
+ * ```
+ */
+export async function releaseRateLimits(reservations: RateLimitReservation[]) {
+  for (const reservation of reservations) {
+    const { bucket, type, value, windowMs, windowStart } = reservation;
+
+    const released = await dbRateLimits.updateOne(
+      { bucket, type, value, windowMs, windowStart },
+      { $inc: { windowCount: -1 } }
+    );
+
+    if (released.modifiedCount > 0) {
+      continue;
+    }
+
+    // The record shifted into the next window while the operation was in
+    // flight; the reservation was moved into that window's prevWindowCount.
+    await dbRateLimits.updateOne(
+      {
+        bucket,
+        type,
+        value,
+        windowMs,
+        windowStart: new Date(windowStart.getTime() + windowMs),
+      },
+      { $inc: { prevWindowCount: -1 } }
+    );
   }
 }
 
 // Two-bucket sliding window approximation to track rate limits.
-async function checkRateLimitRule(rule: RateLimitRule, value: string, createError?: () => Error) {
+async function checkRateLimitRule(
+  rule: RateLimitRule,
+  value: string,
+  createError?: () => Error
+): Promise<Date> {
   const createRateLimitError = () => {
     return createError
       ? createError()
@@ -88,7 +175,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
 
     if (updatedDoc) {
       await acceptOrReject(updatedDoc);
-      return;
+      return currentWindowDate;
     }
 
     // 2. Read existing record to handle window transition.
@@ -129,7 +216,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
 
       if (shiftedDoc) {
         await acceptOrReject(shiftedDoc);
-        return;
+        return currentWindowDate;
       }
 
       // If another call shifted the window concurrently, retry loop to hit step 1
@@ -156,7 +243,7 @@ async function checkRateLimitRule(rule: RateLimitRule, value: string, createErro
         continue;
       }
       await acceptOrReject(upsertedDoc);
-      return;
+      return currentWindowDate;
     }
   }
 

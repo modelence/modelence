@@ -356,6 +356,45 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
+  test('createIndexes keeps indexes declared with options MongoDB does not store', async () => {
+    const store = createStore({
+      indexes: [
+        { key: { a: 1 }, unique: false },
+        { key: { b: 1 }, hidden: false },
+        { key: { c: 1 }, collation: { locale: 'simple' } },
+      ],
+    });
+    // listIndexes leaves out unique: false, hidden: false and a simple collation
+    const collectionMock = createListingMock([
+      { name: '_modelence_a_1', key: { a: 1 } },
+      { name: '_modelence_b_1', key: { b: 1 } },
+      { name: '_modelence_c_1', key: { c: 1 } },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).not.toHaveBeenCalled();
+    expect(collectionMock.createIndexes).not.toHaveBeenCalled();
+  });
+
+  test('createIndexes rebuilds an index when unique or a non-simple collation is added', async () => {
+    const changedIndexes: IndexDescription[] = [
+      { key: { a: 1 }, unique: true },
+      { key: { a: 1 }, collation: { locale: 'en', strength: 2 } },
+    ];
+    for (const index of changedIndexes) {
+      const store = createStore({ indexes: [index] });
+      const collectionMock = createListingMock([{ name: '_modelence_a_1', key: { a: 1 } }]);
+      (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+      await store.createIndexes();
+
+      expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_a_1');
+      expect(collectionMock.createIndexes).toHaveBeenCalled();
+    }
+  });
+
   test('createIndexes keeps a text index that declares weights for only some fields', async () => {
     const store = createStore({
       indexes: [{ key: { title: 'text', body: 'text' }, weights: { title: 10 } }],

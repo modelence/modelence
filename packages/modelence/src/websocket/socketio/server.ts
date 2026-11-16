@@ -84,7 +84,8 @@ export async function init({
     const token = socket.handshake.auth.token;
 
     try {
-      socket.data = await authenticate(token);
+      // The handshake never returns a session token, so do not save a new one.
+      socket.data = await authenticate(token, { persistNewSession: false });
       next();
     } catch (error) {
       next(error instanceof Error ? error : new Error(String(error)));

@@ -325,7 +325,9 @@ export async function getCallContext(req: Request, res: Response | null = null) 
 
   const hasDatabase = Boolean(getMongodbUri());
   if (hasDatabase) {
-    const { session, user, roles } = await authenticate(authToken);
+    // Only _system.session.init returns a new token to the client, and it saves
+    // the session itself. Other requests must not leave unusable records.
+    const { session, user, roles } = await authenticate(authToken, { persistNewSession: false });
     return {
       clientInfo,
       connectionInfo,

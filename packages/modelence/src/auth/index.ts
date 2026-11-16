@@ -1,14 +1,15 @@
 import { ObjectId } from 'mongodb';
 
-import { obtainSession } from './session';
+import { obtainSession, type ObtainSessionOptions } from './session';
 import { usersCollection } from './db';
 import { getDefaultAuthenticatedRoles, getUnauthenticatedRoles } from './role';
 import { Role, Session, UserInfo } from './types';
 
 export async function authenticate(
-  authToken: string | null
+  authToken: string | null,
+  { persistNewSession = true }: ObtainSessionOptions = {}
 ): Promise<{ session: Session; user: UserInfo | null; roles: Role[] }> {
-  const session = await obtainSession(authToken);
+  const session = await obtainSession(authToken, { persistNewSession });
 
   const userDoc = session.userId
     ? await usersCollection.findOne({

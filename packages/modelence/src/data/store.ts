@@ -205,6 +205,11 @@ const isSameIndexKey = (left: unknown, right: unknown): boolean => {
  * declared fields only, or an unchanged index looks different on every startup and is rebuilt.
  */
 const isSameCollation = (existing: unknown, desired: unknown): boolean => {
+  // MongoDB stores no collation for an index declared with the simple locale.
+  if (existing === undefined && isDocumentRecord(desired) && desired.locale === 'simple') {
+    return true;
+  }
+
   if (!isDocumentRecord(existing) || !isDocumentRecord(desired)) {
     return isDeepStrictEqual(existing, desired);
   }
@@ -260,6 +265,11 @@ const SERVER_DEFAULTED_INDEX_OPTION_FIELDS = [
   '2dsphereIndexVersion',
 ] as const;
 
+/**
+ * Options MongoDB leaves out of the stored index when they are declared `false`.
+ */
+const SERVER_OMITTED_FALSE_OPTION_FIELDS = ['hidden', 'unique'] as const;
+
 const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
   if (!isSameIndexKey(toDeclaredIndexKey(existing, desired.key), desired.key)) {
     return false;
@@ -271,6 +281,11 @@ const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescriptio
   for (const field of SERVER_DEFAULTED_INDEX_OPTION_FIELDS) {
     if (desiredOptions[field] === undefined) {
       delete existingOptions[field];
+    }
+  }
+  for (const field of SERVER_OMITTED_FALSE_OPTION_FIELDS) {
+    if (desiredOptions[field] === false && existingOptions[field] === undefined) {
+      delete desiredOptions[field];
     }
   }
   // MongoDB stores weight 1 for every text field without a declared weight.

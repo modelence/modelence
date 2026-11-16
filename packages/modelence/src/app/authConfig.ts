@@ -75,7 +75,11 @@ export type AuthRateLimitsConfig = {
   signup?: AuthRateLimitOverride[];
   /** Per-IP limits for signup attempts (checked before duplicate detection). */
   signupAttempt?: AuthRateLimitOverride[];
-  /** Per-IP limits for login attempts. */
+  /**
+   * Per-IP and per-email limits for login attempts. The email bucket only counts
+   * failed attempts, and blocks every attempt (even with the correct password)
+   * once it is full.
+   */
   signin?: AuthRateLimitOverride[];
   /** Per-user and per-IP limits for email verification resend requests. */
   verification?: AuthRateLimitOverride[];
@@ -157,13 +161,22 @@ export type BeforeSignupProps = {
  */
 export type AuthOption = {
   /** Callback executed when authentication succeeds */
-  onSuccess?: (user: User) => void;
+  onSuccess?: (user: User) => void | Promise<void>;
   /** Callback executed when authentication fails */
-  onError?: (error: Error) => void;
+  onError?: (error: Error) => void | Promise<void>;
 };
 
 /**
  * Authentication configuration for the application
+ *
+ * The notify-only hooks (`onAfterLogin`, `onLoginError`, `onAfterSignup`,
+ * `onSignupError`, `onAfterEmailVerification`, `onEmailVerificationError`,
+ * `onAfterOAuthLink`, `onOAuthLinkError` and the deprecated `login`/`signup`
+ * callbacks) may be async, but they are not awaited: don't rely on one
+ * finishing before the client gets its response. A hook that throws or rejects
+ * is logged as `Error in <hook> hook:` and does not change the response.
+ * `onBeforeSignup` is the exception: it is awaited, and throwing from it aborts
+ * the signup.
  *
  * @example
  * ```typescript
@@ -256,13 +269,13 @@ export type AuthConfig = {
    * has been linked to the user. Receives `{ provider, user, session, connectionInfo }`.
    * Use for analytics, audit logging, or post-login side effects.
    */
-  onAfterLogin?: (props: AuthSuccessProps) => void;
+  onAfterLogin?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when a login attempt fails. Receives `{ provider, error, session, connectionInfo }`.
    * Use for failure analytics or alerting — does NOT change the response sent to the client.
    */
-  onLoginError?: (props: AuthErrorProps) => void;
+  onLoginError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Hook fired after validation and the built-in disposable-email check, but
@@ -287,39 +300,39 @@ export type AuthConfig = {
    * session is linked. Receives `{ provider, user, session, connectionInfo }`.
    * Common uses: send welcome email, create default workspace, track activation.
    */
-  onAfterSignup?: (props: AuthSuccessProps) => void;
+  onAfterSignup?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when a signup attempt fails (validation, duplicate email, etc.).
    * Receives `{ provider, error, session, connectionInfo }`.
    * Use for failure analytics — does NOT change the response sent to the client.
    */
-  onSignupError?: (props: AuthErrorProps) => void;
+  onSignupError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Fires after a user's email is successfully verified (via the verification
    * link or implicitly via password reset). Receives `{ provider, user, session, connectionInfo }`.
    */
-  onAfterEmailVerification?: (props: AuthSuccessProps) => void;
+  onAfterEmailVerification?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when email verification fails (invalid or expired token).
    * Receives `{ provider, error, session, connectionInfo }`.
    */
-  onEmailVerificationError?: (props: AuthErrorProps) => void;
+  onEmailVerificationError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Fires after an OAuth provider is linked to an existing account
    * (either automatically when `oauthAccountLinking: 'auto'` or via an
    * explicit link flow). Receives `{ provider, user, session, connectionInfo }`.
    */
-  onAfterOAuthLink?: (props: AuthSuccessProps) => void;
+  onAfterOAuthLink?: (props: AuthSuccessProps) => void | Promise<void>;
 
   /**
    * Fires when OAuth account linking fails. Receives
    * `{ provider, error, session, connectionInfo }`.
    */
-  onOAuthLinkError?: (props: AuthErrorProps) => void;
+  onOAuthLinkError?: (props: AuthErrorProps) => void | Promise<void>;
 
   /**
    * Custom handle generator. If provided, overrides the default behavior
