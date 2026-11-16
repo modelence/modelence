@@ -259,7 +259,9 @@ describe('auth/verification', () => {
 
       expect(result?.redirect).toBe('/verified?status=verified');
       expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
-      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', { error: expect.any(Error) });
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
+        error: expect.any(Error),
+      });
       expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     });
 
@@ -680,7 +682,9 @@ describe('auth/verification', () => {
         await new Promise((resolve) => setImmediate(resolve));
 
         expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
-        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', { error: expect.any(Error) });
+        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
+          error: expect.any(Error),
+        });
         expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
       } finally {
         consoleErrorSpy.mockRestore();
@@ -702,7 +706,9 @@ describe('auth/verification', () => {
         await expect(
           handleVerifyEmailMutation({ token: 'token' } as never, context as never)
         ).rejects.toThrow('Invalid or expired verification token');
-        expect(mockLogError).toHaveBeenCalledWith('Error in onEmailVerificationError hook:', { error: expect.any(Error) });
+        expect(mockLogError).toHaveBeenCalledWith('Error in onEmailVerificationError hook:', {
+          error: expect.any(Error),
+        });
         expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
       } finally {
         consoleErrorSpy.mockRestore();

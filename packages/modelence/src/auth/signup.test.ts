@@ -203,8 +203,12 @@ describe('auth/signup', () => {
       expect(result).toBe(insertedId);
       expect(authConfig.onSignupError).not.toHaveBeenCalled();
       expect(authConfig.signup.onError).not.toHaveBeenCalled();
-      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterSignup hook:', { error: expect.any(Error) });
-      expect(mockLogError).toHaveBeenCalledWith('Error in signup.onSuccess hook:', { error: expect.any(Error) });
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterSignup hook:', {
+        error: expect.any(Error),
+      });
+      expect(mockLogError).toHaveBeenCalledWith('Error in signup.onSuccess hook:', {
+        error: expect.any(Error),
+      });
       expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     } finally {
       consoleErrorSpy.mockRestore();

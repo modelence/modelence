@@ -189,8 +189,12 @@ describe('auth/login', () => {
       expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
       expect(authConfig.onLoginError).not.toHaveBeenCalled();
       expect(authConfig.login.onError).not.toHaveBeenCalled();
-      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', { error: expect.any(Error) });
-      expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', { error: expect.any(Error) });
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', {
+        error: expect.any(Error),
+      });
+      expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', {
+        error: expect.any(Error),
+      });
       expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     } finally {
       consoleErrorSpy.mockRestore();
