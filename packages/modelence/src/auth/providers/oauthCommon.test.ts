@@ -13,6 +13,14 @@ const mockGetConfig = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 const mockIssueOAuthExchangeCode = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('../db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -209,14 +217,9 @@ describe('auth/providers/oauthCommon', () => {
           expect(res.status).not.toHaveBeenCalled();
           expect(authConfig.onLoginError).not.toHaveBeenCalled();
           expect(authConfig.login.onError).not.toHaveBeenCalled();
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterLogin hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in login.onSuccess hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -248,14 +251,9 @@ describe('auth/providers/oauthCommon', () => {
           expect(authConfig.onLoginError).toHaveBeenCalledWith(
             expect.objectContaining({ error: updateError })
           );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in login.onError hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onLoginError hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in login.onError hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in onLoginError hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -430,14 +428,9 @@ describe('auth/providers/oauthCommon', () => {
           await new Promise((resolve) => setImmediate(resolve));
 
           expect(authConfig.signup.onError).toHaveBeenCalledWith(lookupError);
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onSignupError hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in signup.onError hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in onSignupError hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in signup.onError hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -588,14 +581,9 @@ describe('auth/providers/oauthCommon', () => {
           expect(res.status).not.toHaveBeenCalled();
           expect(authConfig.onLoginError).not.toHaveBeenCalled();
           expect(authConfig.login.onError).not.toHaveBeenCalled();
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterLogin hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in login.onSuccess hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -849,14 +837,9 @@ describe('auth/providers/oauthCommon', () => {
           expect(authConfig.onLoginError).toHaveBeenCalledWith(
             expect.objectContaining({ error: updateError })
           );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in login.onError hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onLoginError hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in login.onError hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in onLoginError hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -923,14 +906,9 @@ describe('auth/providers/oauthCommon', () => {
           expect(res.status).not.toHaveBeenCalled();
           expect(authConfig.onSignupError).not.toHaveBeenCalled();
           expect(authConfig.signup.onError).not.toHaveBeenCalled();
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in onAfterSignup hook:',
-            expect.any(Error)
-          );
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            'Error in signup.onSuccess hook:',
-            expect.any(Error)
-          );
+          expect(mockLogError).toHaveBeenCalledWith('Error in onAfterSignup hook:', { error: expect.any(Error) });
+          expect(mockLogError).toHaveBeenCalledWith('Error in signup.onSuccess hook:', { error: expect.any(Error) });
+          expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
         } finally {
           consoleErrorSpy.mockRestore();
         }
@@ -1295,10 +1273,8 @@ describe('auth/providers/oauthCommon', () => {
 
         expect(res.redirect).toHaveBeenCalledWith('/');
         expect(linkAuthConfig.onOAuthLinkError).not.toHaveBeenCalled();
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          'Error in onAfterOAuthLink hook:',
-          expect.any(Error)
-        );
+        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterOAuthLink hook:', { error: expect.any(Error) });
+        expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
       } finally {
         consoleErrorSpy.mockRestore();
       }
@@ -1426,6 +1402,13 @@ describe('auth/providers/oauthCommon', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Server error' });
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Unhandled error in authConfig.errorComponent:', {
+        error: expect.objectContaining({ message: 'render failed' }),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'render failed' })
+      );
     });
 
     describe('oauthErrorRedirectUrl', () => {
@@ -1524,7 +1507,11 @@ describe('auth/providers/oauthCommon', () => {
         expect(webRes.redirect).not.toHaveBeenCalled();
         expect(webRes.status).toHaveBeenCalledWith(400);
         expect(webRes.json).toHaveBeenCalledWith({ error: 'Auth failed' });
-        expect(consoleError).toHaveBeenCalled();
+        expect(mockLogError).toHaveBeenCalledWith(
+          expect.stringContaining('Could not build the OAuth error redirect'),
+          { error: expect.any(Error) }
+        );
+        expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
 
         consoleError.mockRestore();
         // clearAllMocks leaves a spy's implementation in place, so this one

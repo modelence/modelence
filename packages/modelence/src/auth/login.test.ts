@@ -20,6 +20,14 @@ const mockGetConfig = vi.fn();
 const mockCompare = vi.fn();
 const mockHashSync = vi.fn(() => '$2b$10$dummyDummyDummyDummyDummyDummyDummyDummy');
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('@/server', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
@@ -181,14 +189,9 @@ describe('auth/login', () => {
       expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
       expect(authConfig.onLoginError).not.toHaveBeenCalled();
       expect(authConfig.login.onError).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error in onAfterLogin hook:',
-        expect.any(Error)
-      );
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error in login.onSuccess hook:',
-        expect.any(Error)
-      );
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', { error: expect.any(Error) });
+      expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', { error: expect.any(Error) });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     } finally {
       consoleErrorSpy.mockRestore();
     }

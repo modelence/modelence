@@ -19,6 +19,14 @@ const mockFindOne = vi.fn();
 const mockInsertOne = vi.fn();
 const mockResolveUniqueHandle = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('../rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
 }));
@@ -195,14 +203,9 @@ describe('auth/signup', () => {
       expect(result).toBe(insertedId);
       expect(authConfig.onSignupError).not.toHaveBeenCalled();
       expect(authConfig.signup.onError).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error in onAfterSignup hook:',
-        expect.any(Error)
-      );
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error in signup.onSuccess hook:',
-        expect.any(Error)
-      );
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterSignup hook:', { error: expect.any(Error) });
+      expect(mockLogError).toHaveBeenCalledWith('Error in signup.onSuccess hook:', { error: expect.any(Error) });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     } finally {
       consoleErrorSpy.mockRestore();
     }

@@ -190,4 +190,26 @@ describe('telemetry/index', () => {
 
     expect(captureError).toHaveBeenCalledWith(error);
   });
+
+  test('captureError wraps a non-Error value', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn();
+    mockGetApm.mockReturnValue({ captureError });
+
+    telemetry.captureError('plain string');
+
+    expect(captureError).toHaveBeenCalledWith(expect.objectContaining({ message: 'plain string' }));
+  });
+
+  test('captureError does not throw on a value that cannot be stringified', () => {
+    mockIsTelemetryEnabled.mockReturnValue(true);
+    const captureError = vi.fn();
+    mockGetApm.mockReturnValue({ captureError });
+
+    // String(Object.create(null)) throws: there is no toString or Symbol.toPrimitive.
+    expect(() => telemetry.captureError(Object.create(null))).not.toThrow();
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Unknown error' })
+    );
+  });
 });

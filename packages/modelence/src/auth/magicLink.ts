@@ -7,6 +7,7 @@ import { usersCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { getAuthConfig } from '@/app/authConfig';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { htmlToText } from '@/utils';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/server';
@@ -95,7 +96,10 @@ async function restoreClaimedMagicLinkToken(
   try {
     await magicLinkTokensCollection.insertOne(claimedToken);
   } catch (restoreError) {
-    console.error('Failed to restore a magic link token after a failed signup:', restoreError);
+    logError('Failed to restore a magic link token after a failed signup:', {
+      error: restoreError,
+    });
+    captureError(restoreError);
   }
 }
 
@@ -260,7 +264,8 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    console.error('Error handling magic link landing:', error);
+    logError('Error handling magic link landing:', { error });
+    captureError(error);
     const message = 'This sign-in link is invalid or has expired.';
     return {
       status: 302,

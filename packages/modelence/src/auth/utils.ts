@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { MongoServerError } from 'mongodb';
+import { captureError, logError } from '@/telemetry';
 import { usersCollection } from './db';
 import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
@@ -202,11 +203,13 @@ export async function resolveUniqueHandle(
  * paths it must not mask the real error being propagated.
  */
 export function fireAuthHook(name: string, invoke: () => void | Promise<void>) {
+  const reportHookError = (error: unknown) => {
+    logError(`Error in ${name} hook:`, { error });
+    captureError(error);
+  };
   try {
-    Promise.resolve(invoke()).catch((hookError: unknown) => {
-      console.error(`Error in ${name} hook:`, hookError);
-    });
+    Promise.resolve(invoke()).catch(reportHookError);
   } catch (hookError) {
-    console.error(`Error in ${name} hook:`, hookError);
+    reportHookError(hookError);
   }
 }

@@ -14,7 +14,8 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
 
     if (typeof authToken === 'string' && getMongodbUri()) {
       try {
-        const { session, user } = await authenticate(authToken);
+        // Custom routes never return a session token, so do not save a new one.
+        const { session, user } = await authenticate(authToken, { persistNewSession: false });
         context = { session, user };
       } catch {
         // If authentication fails, context remains null

@@ -57,13 +57,14 @@ describe('cron/jobs', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    mockCaptureError.mockClear();
     mockLogError.mockClear();
     Object.assign(cronStoreMocks, {
       fetch: vi.fn(),
       upsertOne: vi.fn().mockResolvedValue(undefined as never),
     });
     mockGetMongodbUri.mockReturnValue('mongodb://localhost:27017/test');
-    mockAcquireLock.mockResolvedValue(true as never);
+    mockAcquireLock.mockClear().mockResolvedValue(true as never);
     intervalCallback = null;
     intervalDelay = undefined;
     setIntervalMock = vi.spyOn(global, 'setInterval').mockImplementation(((
@@ -181,6 +182,95 @@ describe('cron/jobs', () => {
     expect(setIntervalMock).not.toHaveBeenCalled();
   });
 
+  describe('refreshing due jobs', () => {
+    const alias = 'cleanup';
+    const startTs = 1_000_000;
+    const handler = vi.fn(async () => {});
+    let clock: MockInstance;
+
+    beforeEach(() => {
+      clock = vi.spyOn(Date, 'now').mockReturnValue(startTs);
+      handler.mockClear();
+      cronStoreMocks.fetch.mockResolvedValue([]);
+      defineCronJob(alias, { interval: 10_000, handler });
+    });
+
+    afterEach(() => clock.mockRestore());
+
+    async function tickAt(ts: number) {
+      clock.mockReturnValue(ts);
+      await intervalCallback?.();
+      await Promise.resolve();
+    }
+
+    test.each([false, true])(
+      'waits for the next interval after another owner ran the job (previous lock result: %s)',
+      async (hadLock) => {
+        cronStoreMocks.fetch.mockResolvedValue([{ alias, lastStartDate: new Date(startTs) }]);
+        await startCronJobs();
+        mockAcquireLock.mockResolvedValue(hadLock);
+        await tickAt(startTs + 1000);
+        expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(1);
+
+        // Another instance ran the job while this scheduler's state was stale.
+        cronStoreMocks.fetch.mockResolvedValue([
+          { alias, lastStartDate: new Date(startTs + 40_000) },
+        ]);
+        mockAcquireLock.mockResolvedValue(true);
+        await tickAt(startTs + 41_000);
+        await tickAt(startTs + 49_000);
+        expect(handler).not.toHaveBeenCalled();
+        expect(cronStoreMocks.upsertOne).not.toHaveBeenCalled();
+
+        await tickAt(startTs + 50_000);
+        expect(handler).toHaveBeenCalledTimes(1);
+        expect(cronStoreMocks.upsertOne).toHaveBeenCalledWith(
+          { alias },
+          { $set: { lastStartDate: new Date(startTs + 50_000) }, $setOnInsert: { alias } }
+        );
+      }
+    );
+
+    test('skips the job when refreshing its schedule fails, then retries', async () => {
+      await startCronJobs();
+      const error = new Error('schedule read failed');
+      cronStoreMocks.fetch.mockRejectedValueOnce(error);
+
+      await tickAt(startTs);
+      expect(handler).not.toHaveBeenCalled();
+      expect(cronStoreMocks.upsertOne).not.toHaveBeenCalled();
+      expect(mockCaptureError).toHaveBeenCalledWith(error);
+
+      await tickAt(startTs + 1000);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    test('stops renewing the lock while a schedule read is pending', async () => {
+      await startCronJobs();
+      let finishRead!: (records: []) => void;
+      cronStoreMocks.fetch.mockReturnValueOnce(
+        new Promise<[]>((resolve) => {
+          finishRead = resolve;
+        })
+      );
+
+      const pendingTick = intervalCallback?.();
+      await Promise.resolve();
+      await tickAt(startTs + 1000);
+      await tickAt(startTs + 10_000);
+      expect(mockAcquireLock).toHaveBeenCalledTimes(1);
+      expect(cronStoreMocks.fetch).toHaveBeenCalledTimes(2);
+      expect(handler).not.toHaveBeenCalled();
+
+      finishRead([]);
+      await pendingTick;
+      expect(handler).not.toHaveBeenCalled();
+
+      await tickAt(startTs + 11_000);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test('cron loop executes job handler and records completion using upsertOne', async () => {
     const handler = vi.fn(async () => {});
     cronStoreMocks.fetch.mockResolvedValue([] as never);
@@ -256,7 +346,6 @@ describe('cron/jobs', () => {
   });
 
   test('cron loop handles and captures timeout when job runs past its timeout limit', async () => {
-    mockCaptureError.mockClear();
     let resolveHandler: () => void;
     const handlerPromise = new Promise<void>((resolve) => {
       resolveHandler = resolve;
@@ -316,7 +405,6 @@ describe('cron/jobs', () => {
     }
 
     beforeEach(() => {
-      mockCaptureError.mockClear();
       vi.spyOn(Date, 'now').mockReturnValue(startTs);
       cronStoreMocks.fetch.mockResolvedValue([] as never);
     });

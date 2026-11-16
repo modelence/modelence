@@ -2,7 +2,7 @@
 
 import { QueryClient, hashKey } from '@tanstack/react-query';
 import { callMethod } from './method';
-import { startWebsockets, subscribeLiveQuery } from '../websocket/client';
+import { startWebsockets, subscribeLiveQuery, reconnectWebsockets } from '../websocket/client';
 
 type Args = Record<string, unknown>;
 
@@ -78,6 +78,9 @@ export function disconnectModelenceQueryClient() {
 
 /** Revalidate all cached queries when restored from BFCache (`event.persisted === true`). */
 export function revalidateModelenceQueries() {
+  if (websocketsStarted) {
+    reconnectWebsockets();
+  }
   if (queryClientRef) {
     void queryClientRef.invalidateQueries();
   }
