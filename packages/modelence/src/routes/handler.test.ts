@@ -121,7 +121,7 @@ describe('routes/handler', () => {
       next
     );
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token', { persistNewSession: false });
   });
 
   test('prefers x-modelence-auth-token over cookie token', async () => {
@@ -140,7 +140,7 @@ describe('routes/handler', () => {
       next
     );
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('header-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('header-token', { persistNewSession: false });
   });
 
   test('redacts secrets from the telemetry transaction context', async () => {
