@@ -11,6 +11,9 @@ import { getMongodbUri } from '@/db/client';
 
 const cronJobs: Record<string, CronJob> = {};
 let cronJobsInterval: NodeJS.Timeout | null = null;
+let checkingDueJobs = false;
+const CRON_LOCK_CACHE_DURATION = time.seconds(10);
+const CRON_LOCK_DURATION = time.seconds(30);
 
 const cronJobsCollection = new Store('_modelenceCronJobs', {
   schema: {
@@ -63,65 +66,107 @@ export async function startCronJobs() {
     throw new Error('Cron jobs already started');
   }
 
-  const aliasList = Object.keys(cronJobs);
-  if (aliasList.length > 0) {
+  const jobs = Object.values(cronJobs);
+  if (jobs.length > 0) {
     if (!getMongodbUri()) {
       console.log('MongoDB URI is not configured. Skipping cron jobs.');
       return;
     }
 
-    const aliasSelector = { alias: { $in: aliasList } };
-
-    const cronJobRecords = await cronJobsCollection.fetch(aliasSelector);
-    const now = Date.now();
-    cronJobRecords.forEach((record) => {
-      const job = cronJobs[record.alias];
-      if (!job) {
-        return;
-      }
-      job.state.scheduledRunTs = record.lastStartDate
-        ? record.lastStartDate.getTime() + job.params.interval
-        : now;
-    });
-
-    Object.values(cronJobs).forEach((job) => {
-      if (!job.state.scheduledRunTs) {
-        job.state.scheduledRunTs = now;
-      }
-    });
-
+    await refreshCronJobSchedules(jobs);
     cronJobsInterval = setInterval(tickCronJobs, time.seconds(1));
   }
 }
 
-async function tickCronJobs() {
+async function refreshCronJobSchedules(jobs: CronJob[]) {
+  const records = await cronJobsCollection.fetch({
+    alias: { $in: jobs.map(({ alias }) => alias) },
+  });
+  const lastStartDates = new Map(records.map(({ alias, lastStartDate }) => [alias, lastStartDate]));
   const now = Date.now();
 
-  const ownsLock = await acquireLock('cron', {
-    successfulLockCacheDuration: time.seconds(10),
-    failedLockCacheDuration: time.seconds(30),
-  });
+  for (const { alias, params, state } of jobs) {
+    const lastStartDate = lastStartDates.get(alias);
+    if (lastStartDate) {
+      const nextRunTs = lastStartDate.getTime() + params.interval;
+      state.scheduledRunTs = Math.max(state.scheduledRunTs ?? nextRunTs, nextRunTs);
+    } else {
+      state.scheduledRunTs ??= now;
+    }
+  }
+}
 
-  if (!ownsLock) {
+function isDue({ state }: CronJob, now: number) {
+  return !state.isRunning && state.scheduledRunTs !== undefined && state.scheduledRunTs <= now;
+}
+
+async function tickCronJobs() {
+  // Let a standby take over if this instance is stuck reading schedules.
+  if (checkingDueJobs) {
     return;
   }
 
+  const now = Date.now();
+
+  const ownsLock = await acquireLock('cron', {
+    lockDuration: CRON_LOCK_DURATION,
+    successfulLockCacheDuration: CRON_LOCK_CACHE_DURATION,
+    failedLockCacheDuration: time.seconds(30),
+  });
+
+  if (!ownsLock || checkingDueJobs) {
+    return;
+  }
+
+  const dueJobs: CronJob[] = [];
   for (const job of Object.values(cronJobs)) {
     const { alias, params, state } = job;
     if (state.isRunning) {
-      if (state.startTs && state.startTs + params.timeout < now) {
-        const timeoutError = new Error(`Cron job '${alias}' timed out after ${params.timeout}ms`);
+      // Nothing aborts the handler on timeout, so the run keeps its slot until it settles.
+      // Restarting it here would stack a new copy on top of a hung one. A handler that never
+      // settles blocks its job until the process restarts, so keep reporting it every timeout.
+      const { startTs, lastTimeoutReportTs } = state;
+      if (startTs && (lastTimeoutReportTs ?? startTs) + params.timeout < now) {
+        state.lastTimeoutReportTs = now;
+        const timeoutError = new Error(
+          `Cron job '${alias}' timed out after ${params.timeout}ms and is still running (${now - startTs}ms elapsed)`
+        );
         captureError(timeoutError);
-        state.isRunning = false;
       }
       continue;
     }
 
-    // TODO: limit the number of jobs running concurrently
-
-    if (state.scheduledRunTs && state.scheduledRunTs <= now) {
-      void runCronJob(job);
+    if (isDue(job, now)) {
+      dueJobs.push(job);
     }
+  }
+
+  if (!dueJobs.length) {
+    return;
+  }
+
+  checkingDueJobs = true;
+  try {
+    // Another lock owner may have run these jobs since we last read their schedules.
+    await refreshCronJobSchedules(dueJobs);
+    const dispatchTs = Date.now();
+    // A cached lock can already be 10s old. Allow at most another 10s for this
+    // tick so dispatch stays within the 30s lock duration.
+    if (dispatchTs - now >= CRON_LOCK_CACHE_DURATION) {
+      return;
+    }
+
+    // TODO: limit the number of jobs running concurrently
+    for (const job of dueJobs) {
+      if (isDue(job, dispatchTs)) {
+        void runCronJob(job);
+      }
+    }
+  } catch (error) {
+    captureError(error instanceof Error ? error : new Error(String(error)));
+    logError('Error refreshing cron job schedules:', { error });
+  } finally {
+    checkingDueJobs = false;
   }
 }
 
@@ -130,6 +175,7 @@ async function runCronJob(job: CronJob) {
   state.isRunning = true;
   const currentStartTs = Date.now();
   state.startTs = currentStartTs;
+  state.lastTimeoutReportTs = undefined;
 
   const transaction = startTransaction('cron', `cron:${alias}`);
   // TODO: enforce job timeout
@@ -142,8 +188,9 @@ async function runCronJob(job: CronJob) {
       }
     );
     await handler();
+    const result = state.lastTimeoutReportTs ? 'timeout' : 'success';
     handleCronJobCompletion(state, params, currentStartTs);
-    transaction.end('success');
+    transaction.end(result);
   } catch (err) {
     handleCronJobCompletion(state, params, currentStartTs);
     const error = err instanceof Error ? err : new Error(String(err));
@@ -158,12 +205,9 @@ function handleCronJobCompletion(
   params: CronJob['params'],
   currentStartTs: number
 ) {
-  // A timed-out run may finish after a newer run has taken over.
-  if (state.startTs !== currentStartTs) {
-    return;
-  }
   state.scheduledRunTs = currentStartTs + params.interval;
   state.startTs = undefined;
+  state.lastTimeoutReportTs = undefined;
   state.isRunning = false;
 }
 

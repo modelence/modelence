@@ -19,6 +19,14 @@ const mockGetAuthConfig = vi.fn();
 const mockValidateEmail = vi.fn<(value: string) => string>();
 const mockConsumeRateLimit = vi.fn();
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('./db', () => ({
   usersCollection: {
     findOne: mockUsersFindOne,
@@ -95,8 +103,12 @@ vi.doMock('./session', () => ({
 }));
 
 const verificationModule = await import('./verification');
-const { handleVerifyEmail, sendVerificationEmail, handleResendEmailVerification } =
-  verificationModule;
+const {
+  handleVerifyEmail,
+  handleVerifyEmailMutation,
+  sendVerificationEmail,
+  handleResendEmailVerification,
+} = verificationModule;
 
 describe('auth/verification', () => {
   beforeEach(() => {
@@ -220,6 +232,37 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=verified',
       });
+    });
+
+    test('a rejecting onAfterEmailVerification hook does not fail the verification', async () => {
+      const tokenDoc = {
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'user@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      };
+      const authConfig = {
+        onAfterEmailVerification: vi.fn().mockRejectedValueOnce(new Error('analytics down')),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue(tokenDoc as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      } as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(result?.redirect).toBe('/verified?status=verified');
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
     });
 
     test('verifies a second address on an account that already has a verified one', async () => {
@@ -531,6 +574,30 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=Invalid%20or%20expired%20verification%20token',
       });
+      // Printed for the Logs page and sent to APM.
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    });
+
+    test('prints and captures a thrown non-Error value', async () => {
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockRejectedValue('db down' as never);
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      // The hook's contract is an Error, so a non-Error value skips it.
+      expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+      expect(result?.redirect).toBe(
+        '/verified?status=error&message=An%20unexpected%20error%20occurred'
+      );
+      expect(mockLogError).toHaveBeenCalledWith('Error verifying email:', { error: 'db down' });
+      expect(mockCaptureError).toHaveBeenCalledWith('db down');
     });
 
     test('appends status to a redirect URL that already has a query string', async () => {
@@ -582,6 +649,70 @@ describe('auth/verification', () => {
         headers: { 'Referrer-Policy': 'no-referrer' },
         redirect: '/verified?status=error&message=User%20not%20found',
       });
+    });
+  });
+
+  describe('handleVerifyEmailMutation', () => {
+    const context = { connectionInfo: { ip: '192.168.1.1' } };
+
+    test('a rejecting onAfterEmailVerification hook does not fail the verification', async () => {
+      const authConfig = {
+        onAfterEmailVerification: vi.fn().mockRejectedValueOnce(new Error('analytics down')),
+        onEmailVerificationError: vi.fn(),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue({
+        _id: 'token-id',
+        token: 'token',
+        userId: 'user123',
+        email: 'user@example.com',
+        expiresAt: new Date(Date.now() + 1000),
+      } as never);
+      mockUsersFindOne.mockResolvedValueOnce({ _id: 'user123' } as never);
+      mockFindOneAndUpdate.mockResolvedValueOnce({
+        _id: 'user123',
+        emails: [{ address: 'user@example.com', verified: true }],
+      } as never);
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        await expect(
+          handleVerifyEmailMutation({ token: 'token' } as never, context as never)
+        ).resolves.toBeUndefined();
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(authConfig.onEmailVerificationError).not.toHaveBeenCalled();
+        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
+          error: expect.any(Error),
+        });
+        expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+
+    test('a throwing onEmailVerificationError hook does not replace the real error', async () => {
+      const authConfig = {
+        onAfterEmailVerification: vi.fn(),
+        onEmailVerificationError: vi.fn().mockImplementationOnce(() => {
+          throw new Error('analytics down');
+        }),
+      };
+      mockGetAuthConfig.mockReturnValue(authConfig);
+      mockTokensFindOne.mockResolvedValue(null as never);
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        await expect(
+          handleVerifyEmailMutation({ token: 'token' } as never, context as never)
+        ).rejects.toThrow('Invalid or expired verification token');
+        expect(mockLogError).toHaveBeenCalledWith('Error in onEmailVerificationError hook:', {
+          error: expect.any(Error),
+        });
+        expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
     });
   });
 

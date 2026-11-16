@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ObjectId } from 'mongodb';
 import { SUPPORTED_OAUTH_PROVIDERS } from './types';
+import { AuthError, ValidationError } from '../error';
 
 const mockRequireById = vi.fn();
 const mockUpdateOne = vi.fn();
@@ -46,18 +47,33 @@ describe('auth/unlinkOAuthProvider', () => {
     mockUpdateOne.mockReset();
   });
 
-  test('throws error when user is not signed in', async () => {
-    await expect(
-      handleUnlinkOAuthProvider({ provider: 'google' }, { ...mockContext, user: null })
-    ).rejects.toThrow('You must be signed in to unlink a provider.');
+  test('throws AuthError when user is not signed in', async () => {
+    const errorPromise = handleUnlinkOAuthProvider(
+      { provider: 'google' },
+      { ...mockContext, user: null }
+    );
+
+    await expect(errorPromise).rejects.toThrow(AuthError);
+    await expect(errorPromise).rejects.toThrow('You must be signed in to unlink a provider.');
+    await expect(errorPromise).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHENTICATED',
+    });
 
     expect(mockRequireById).not.toHaveBeenCalled();
   });
 
-  test('throws error when provider argument is not a valid OAuth provider', async () => {
-    await expect(handleUnlinkOAuthProvider({ provider: 123 }, mockContext)).rejects.toThrow(
+  test('throws ValidationError when provider argument is not a valid OAuth provider', async () => {
+    const errorPromise = handleUnlinkOAuthProvider({ provider: 123 }, mockContext);
+
+    await expect(errorPromise).rejects.toThrow(ValidationError);
+    await expect(errorPromise).rejects.toThrow(
       `Invalid provider. Supported providers are: ${SUPPORTED_OAUTH_PROVIDERS.join(', ')}.`
     );
+    await expect(errorPromise).rejects.toMatchObject({
+      status: 400,
+      code: 'INVALID_PROVIDER',
+    });
 
     expect(mockRequireById).not.toHaveBeenCalled();
   });
@@ -70,7 +86,7 @@ describe('auth/unlinkOAuthProvider', () => {
     );
   });
 
-  test('throws error when provider is not linked to account', async () => {
+  test('throws ValidationError when provider is not linked to account', async () => {
     mockRequireById.mockResolvedValueOnce({
       _id: userId,
       authMethods: {
@@ -78,14 +94,19 @@ describe('auth/unlinkOAuthProvider', () => {
       },
     } as never);
 
-    await expect(handleUnlinkOAuthProvider({ provider: 'google' }, mockContext)).rejects.toThrow(
-      'google is not linked to your account.'
-    );
+    const errorPromise = handleUnlinkOAuthProvider({ provider: 'google' }, mockContext);
+
+    await expect(errorPromise).rejects.toThrow(ValidationError);
+    await expect(errorPromise).rejects.toThrow('google is not linked to your account.');
+    await expect(errorPromise).rejects.toMatchObject({
+      status: 400,
+      code: 'PROVIDER_NOT_LINKED',
+    });
 
     expect(mockUpdateOne).not.toHaveBeenCalled();
   });
 
-  test('throws error when trying to unlink the only auth method (lockout prevention)', async () => {
+  test('throws ValidationError when trying to unlink the only auth method (lockout prevention)', async () => {
     mockRequireById.mockResolvedValueOnce({
       _id: userId,
       authMethods: {
@@ -93,14 +114,21 @@ describe('auth/unlinkOAuthProvider', () => {
       },
     } as never);
 
-    await expect(handleUnlinkOAuthProvider({ provider: 'google' }, mockContext)).rejects.toThrow(
+    const errorPromise = handleUnlinkOAuthProvider({ provider: 'google' }, mockContext);
+
+    await expect(errorPromise).rejects.toThrow(ValidationError);
+    await expect(errorPromise).rejects.toThrow(
       'Cannot unlink your only authentication method. Please add another method first.'
     );
+    await expect(errorPromise).rejects.toMatchObject({
+      status: 400,
+      code: 'CANNOT_UNLINK_ONLY_METHOD',
+    });
 
     expect(mockUpdateOne).not.toHaveBeenCalled();
   });
 
-  test('throws when atomic guard prevents unlink due to concurrent removal', async () => {
+  test('throws ValidationError when atomic guard prevents unlink due to concurrent removal', async () => {
     mockRequireById.mockResolvedValueOnce({
       _id: userId,
       authMethods: {
@@ -111,9 +139,16 @@ describe('auth/unlinkOAuthProvider', () => {
 
     mockUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
 
-    await expect(handleUnlinkOAuthProvider({ provider: 'google' }, mockContext)).rejects.toThrow(
+    const errorPromise = handleUnlinkOAuthProvider({ provider: 'google' }, mockContext);
+
+    await expect(errorPromise).rejects.toThrow(ValidationError);
+    await expect(errorPromise).rejects.toThrow(
       'Cannot unlink your only authentication method. Please add another method first.'
     );
+    await expect(errorPromise).rejects.toMatchObject({
+      status: 400,
+      code: 'CANNOT_UNLINK_ONLY_METHOD',
+    });
   });
 
   test('successfully unlinks provider when user has multiple auth methods', async () => {

@@ -17,28 +17,30 @@ const FETCH_TIMEOUT_MS = 10_000;
 const PROJECT_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.local'];
 
 /*
-  Names a local process must not take from the environment: PORT and the
-  MODELENCE_* variables belong to the local setup, the site URL /api/env
-  returns is the environment's cloud address, not where this process serves,
-  and the environment's NODE_ENV (usually production) would start dev servers
-  like Next.js and Vite in production mode.
+  PORT and MODELENCE_* always belong to the local setup. Dev servers also
+  exclude the cloud site URL and NODE_ENV (usually production). An isolated
+  deploy rehearsal needs these values for declared variables instead; verify
+  sets its own runtime site URL after selecting values for each phase.
 */
-const SKIPPED_NAMES = new Set(['PORT', 'SITE_URL', 'ROOT_URL', 'NODE_ENV']);
+const DEV_SKIPPED_NAMES = new Set(['SITE_URL', 'ROOT_URL', 'NODE_ENV']);
 
-function isSkippedName(name: string): boolean {
-  return SKIPPED_NAMES.has(name) || name.startsWith('MODELENCE_');
+function isSkippedName(name: string, isolated = false): boolean {
+  return (
+    name === 'PORT' || name.startsWith('MODELENCE_') || (!isolated && DEV_SKIPPED_NAMES.has(name))
+  );
 }
 
 export function mergeLocalEnv(
   remote: Record<string, unknown>,
   existing: ProcessEnv,
-  projectNames: ReadonlySet<string>
+  projectNames: ReadonlySet<string>,
+  options: { isolated?: boolean } = {}
 ): ProcessEnv {
   const added = Object.entries(remote).filter(
     ([name, value]) =>
       value !== null &&
       value !== undefined &&
-      !isSkippedName(name) &&
+      !isSkippedName(name, options.isolated) &&
       existing[name] === undefined &&
       !projectNames.has(name)
   );
@@ -123,7 +125,9 @@ export async function loadLocalEnv(
   cwd: string = process.cwd(),
   existing: ProcessEnv = process.env,
   // Where the dev process runs, when not in cwd (a monorepo service's root).
-  appRoot: string = cwd
+  appRoot: string = cwd,
+  // A deploy rehearsal runs a copy without the developer's local env files.
+  options: { isolated?: boolean } = {}
 ): Promise<ProcessEnv> {
   const connection = await readEnvFile(join(cwd, MODELENCE_ENV_FILE));
   const endpoint = connection?.MODELENCE_SERVICE_ENDPOINT;
@@ -136,10 +140,14 @@ export async function loadLocalEnv(
     return { ...existing };
   }
   // The service's own, when it runs elsewhere; the same file when it runs in cwd.
-  const appConnection = await readEnvFile(join(appRoot, MODELENCE_ENV_FILE));
+  const appConnection = options.isolated
+    ? null
+    : await readEnvFile(join(appRoot, MODELENCE_ENV_FILE));
   const local = {
     ...existing,
-    ...(await connectionEnvForAppRoot(connection, appConnection, existing, appRoot)),
+    ...(options.isolated
+      ? {}
+      : await connectionEnvForAppRoot(connection, appConnection, existing, appRoot)),
   };
 
   let remote: Record<string, unknown>;
@@ -158,12 +166,32 @@ export async function loadLocalEnv(
     overrides as well: the repository root's, passed on above, and the
     service's own, which it loads itself.
   */
-  const projectNames = new Set([
-    ...(await readProjectEnvNames([cwd, appRoot])),
-    ...Object.keys(connection),
-    ...Object.keys(appConnection ?? {}),
-  ]);
-  const merged = mergeLocalEnv(remote, local, projectNames);
+  const projectNames = new Set(
+    options.isolated
+      ? []
+      : [
+          ...(await readProjectEnvNames([cwd, appRoot])),
+          ...Object.keys(connection),
+          ...Object.keys(appConnection ?? {}),
+        ]
+  );
+  const merged = mergeLocalEnv(remote, local, projectNames, options);
+  if (options.isolated) {
+    /*
+      A rehearsal passes on only the declared names, which it lists itself, so
+      the full list would read as what the app got. Which environment matters
+      more: its resource URLs are real databases, not local ones.
+    */
+    const environment = connection.MODELENCE_ENVIRONMENT_ID
+      ? `environment ${connection.MODELENCE_ENVIRONMENT_ID} (${endpoint})`
+      : `environment at ${endpoint}`;
+    console.log(
+      `Variables that are neither committed nor set in the shell come from the connected Modelence ${environment}. ` +
+        "Its resource URLs point to that environment's databases, so commands that use them, " +
+        'such as migrations, run against those databases.'
+    );
+    return merged;
+  }
   const loaded = Object.keys(merged).filter((name) => local[name] === undefined);
   if (loaded.length > 0) {
     console.log(`Loaded ${loaded.length} environment variable(s): ${loaded.join(', ')}`);

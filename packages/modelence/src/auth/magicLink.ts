@@ -7,6 +7,7 @@ import { usersCollection, magicLinkTokensCollection } from './db';
 import { getEmailConfig } from '@/app/emailConfig';
 import { getAuthConfig } from '@/app/authConfig';
 import { time } from '@/time';
+import { captureError, logError } from '@/telemetry';
 import { htmlToText } from '@/utils';
 import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/server';
@@ -21,6 +22,7 @@ import {
   resolveUniqueHandle,
   serializeUserForClient,
   isDuplicateEmailError,
+  fireAuthHook,
 } from './utils';
 import { Session, User } from './types';
 
@@ -51,25 +53,6 @@ const ONE_TIME_CODE_LENGTH = 6;
 // A 6-digit code is guessable in a way a 32-byte token is not, so each doc
 // tolerates only a few wrong guesses before it can no longer be used.
 const MAX_CODE_ATTEMPTS = 5;
-
-/**
- * Invokes a notify-only auth hook (onAfterLogin, onLoginError, ...) without
- * letting it affect the auth flow. These hooks are typed `() => void`, but a
- * user can still pass an async function — a rejection from it, never awaited,
- * would be an unhandled promise rejection (which can crash the process). A sync
- * throw is contained the same way. Deliberately NOT awaited: a failing
- * analytics hook must not fail an otherwise-successful login, and in error
- * paths it must not mask the real error being propagated.
- */
-function fireAuthHook(name: string, invoke: (() => void | Promise<void>) | undefined) {
-  try {
-    Promise.resolve(invoke?.()).catch((hookError: unknown) => {
-      console.error(`Error in ${name} hook:`, hookError);
-    });
-  } catch (hookError) {
-    console.error(`Error in ${name} hook:`, hookError);
-  }
-}
 
 function isMagicLinkEnabled(): boolean {
   return Boolean(getAuthConfig().magicLink?.enabled);
@@ -113,7 +96,10 @@ async function restoreClaimedMagicLinkToken(
   try {
     await magicLinkTokensCollection.insertOne(claimedToken);
   } catch (restoreError) {
-    console.error('Failed to restore a magic link token after a failed signup:', restoreError);
+    logError('Failed to restore a magic link token after a failed signup:', {
+      error: restoreError,
+    });
+    captureError(restoreError);
   }
 }
 
@@ -278,7 +264,8 @@ export async function handleMagicLinkLanding(params: RouteParams): Promise<Route
   } catch (error) {
     // Surface a fixed, friendly message; never forward the raw error (ZodError or
     // DB error) into the redirect URL. Log the real cause server-side instead.
-    console.error('Error handling magic link landing:', error);
+    logError('Error handling magic link landing:', { error });
+    captureError(error);
     const message = 'This sign-in link is invalid or has expired.';
     return {
       status: 302,

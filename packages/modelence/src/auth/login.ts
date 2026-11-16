@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
-import { serializeUserForClient } from './utils';
+import { serializeUserForClient, fireAuthHook } from './utils';
 import {
   clearAuthTokenCookie,
   clearSessionUser,
@@ -139,13 +139,15 @@ export async function handleLoginWithPassword(
       setAuthTokenCookie(res, userSession.authToken);
     }
 
-    getAuthConfig().onAfterLogin?.({
-      provider: 'email',
-      user: userDoc,
-      session: userSession,
-      connectionInfo,
-    });
-    getAuthConfig().login?.onSuccess?.(userDoc);
+    fireAuthHook('onAfterLogin', () =>
+      getAuthConfig().onAfterLogin?.({
+        provider: 'email',
+        user: userDoc,
+        session: userSession,
+        connectionInfo,
+      })
+    );
+    fireAuthHook('login.onSuccess', () => getAuthConfig().login?.onSuccess?.(userDoc));
 
     return {
       user: serializeUserForClient(userDoc),
@@ -153,13 +155,15 @@ export async function handleLoginWithPassword(
     };
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onLoginError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
-      getAuthConfig().login?.onError?.(error);
+      fireAuthHook('onLoginError', () =>
+        getAuthConfig().onLoginError?.({
+          provider: 'email',
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+      fireAuthHook('login.onError', () => getAuthConfig().login?.onError?.(error));
     }
     throw error;
   }

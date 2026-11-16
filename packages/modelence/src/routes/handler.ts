@@ -14,7 +14,8 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
 
     if (typeof authToken === 'string' && getMongodbUri()) {
       try {
-        const { session, user } = await authenticate(authToken);
+        // Custom routes never return a session token, so do not save a new one.
+        const { session, user } = await authenticate(authToken, { persistNewSession: false });
         context = { session, user };
       } catch {
         // If authentication fails, context remains null
@@ -67,7 +68,13 @@ export function createRouteHandler(method: string, path: string, handler: RouteH
         }
 
         if (response.redirect) {
-          res.redirect(response.redirect);
+          // res.redirect(url) always sends 302 and overwrites the res.status() above,
+          // so pass the code explicitly to keep 301/303/307/308.
+          const redirectStatus =
+            response.status && response.status >= 300 && response.status < 400
+              ? response.status
+              : 302;
+          res.redirect(redirectStatus, response.redirect);
         } else {
           res.send(response.data);
         }

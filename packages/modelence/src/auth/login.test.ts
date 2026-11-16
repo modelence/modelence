@@ -22,6 +22,14 @@ const mockGetConfig = vi.fn();
 const mockCompare = vi.fn();
 const mockHashSync = vi.fn(() => '$2b$10$dummyDummyDummyDummyDummyDummyDummyDummy');
 
+const mockLogError = vi.fn();
+const mockCaptureError = vi.fn();
+vi.doMock('@/telemetry', async () => ({
+  ...(await vi.importActual<typeof import('@/telemetry')>('@/telemetry')),
+  logError: mockLogError,
+  captureError: mockCaptureError,
+}));
+
 vi.doMock('@/rate-limit/rules', () => ({
   consumeRateLimit: mockConsumeRateLimit,
   reserveRateLimit: mockReserveRateLimit,
@@ -171,6 +179,42 @@ describe('auth/login', () => {
       },
       session: { authToken: FRESH_AUTH_TOKEN },
     });
+  });
+
+  test('a failing login hook does not fail the login', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439011');
+    mockFindOne.mockResolvedValue({
+      _id: userId,
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    authConfig.onAfterLogin.mockImplementationOnce(() => {
+      throw new Error('analytics down');
+    });
+    authConfig.login.onSuccess.mockRejectedValueOnce(new Error('async analytics down'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const result = await handleLoginWithPassword(
+        { email: 'user@example.com', password: 'Secret123' },
+        baseContext as never
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+      expect(authConfig.onLoginError).not.toHaveBeenCalled();
+      expect(authConfig.login.onError).not.toHaveBeenCalled();
+      expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', {
+        error: expect.any(Error),
+      });
+      expect(mockLogError).toHaveBeenCalledWith('Error in login.onSuccess hook:', {
+        error: expect.any(Error),
+      });
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error));
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   test('runs bcrypt against a dummy hash when the email is unknown', async () => {
