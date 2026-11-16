@@ -22,11 +22,8 @@ const mockGetConfig = vi.fn();
 const mockCompare = vi.fn();
 const mockHashSync = vi.fn(() => '$2b$10$dummyDummyDummyDummyDummyDummyDummyDummy');
 
-vi.doMock('@/server', () => ({
-  consumeRateLimit: mockConsumeRateLimit,
-}));
-
 vi.doMock('@/rate-limit/rules', () => ({
+  consumeRateLimit: mockConsumeRateLimit,
   reserveRateLimit: mockReserveRateLimit,
   releaseRateLimits: mockReleaseRateLimits,
 }));
@@ -569,6 +566,28 @@ describe('auth/login', () => {
     // bucket still has no net consumption.
     expect(mockReserveRateLimit).toHaveBeenCalledTimes(1);
     expect(mockReleaseRateLimits).toHaveBeenCalledWith([reservation]);
+  });
+
+  test('still logs in when releasing the reservation fails', async () => {
+    mockFindOne.mockResolvedValue({
+      _id: new ObjectId('507f1f77bcf86cd799439036'),
+      handle: 'demo',
+      authMethods: { password: { hash: 'hashed' } },
+      emails: [{ address: 'user@example.com', verified: true }],
+    } as never);
+    mockCompare.mockResolvedValue(true as never);
+    mockReleaseRateLimits.mockRejectedValue(new Error('release failed') as never);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await handleLoginWithPassword(
+      { email: 'user@example.com', password: 'Secret123' },
+      baseContext as never
+    );
+
+    // A failed release must not block a valid login.
+    expect(result.session).toEqual({ authToken: FRESH_AUTH_TOKEN });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   test('handleLogout clears session user when session exists', async () => {

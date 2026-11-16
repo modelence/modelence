@@ -13,8 +13,12 @@ import {
   startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
-import { consumeRateLimit } from '@/server';
-import { releaseRateLimits, reserveRateLimit } from '@/rate-limit/rules';
+import {
+  consumeRateLimit,
+  releaseRateLimits,
+  reserveRateLimit,
+  type RateLimitReservation,
+} from '@/rate-limit/rules';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -40,6 +44,19 @@ function isEmailVerificationRequired(): boolean {
 
 const SALT_ROUNDS = 10;
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(32).toString('hex'), SALT_ROUNDS);
+
+/**
+ * Releases a reservation without failing the login. A failed release must not
+ * block a valid login; the worst case is one extra attempt counted against the
+ * email limit.
+ */
+async function safeRelease(reservations: RateLimitReservation[]) {
+  try {
+    await releaseRateLimits(reservations);
+  } catch (error) {
+    console.error('Failed to release email rate limit reservation', error);
+  }
+}
 
 export async function handleLoginWithPassword(
   args: Args,
@@ -92,11 +109,7 @@ export async function handleLoginWithPassword(
       isValidPassword = await bcrypt.compare(password, hashToCompare);
     } catch (error) {
       // The password was never compared, so this attempt should not count.
-      try {
-        await releaseRateLimits(emailReservations);
-      } catch (releaseError) {
-        console.error('Failed to release email rate limit reservation', releaseError);
-      }
+      await safeRelease(emailReservations);
       throw error;
     }
 
@@ -106,14 +119,8 @@ export async function handleLoginWithPassword(
       throw incorrectCredentialsError();
     }
 
-    // The password is correct, so release the reserved attempt. A failed
-    // release must not block a valid login; the worst case is one extra attempt
-    // counted against the email.
-    try {
-      await releaseRateLimits(emailReservations);
-    } catch (error) {
-      console.error('Failed to release email rate limit reservation', error);
-    }
+    // The password is correct, so release the reserved attempt.
+    await safeRelease(emailReservations);
 
     // Only check email verification if the user exists and the password is correct,
     // to prevent email enumeration by observing verification errors before password checks.
