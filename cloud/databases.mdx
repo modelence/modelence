@@ -1,24 +1,17 @@
 ---
 title: 'Databases'
-description: 'Databases and caches available to every environment'
+description: 'Managed MongoDB, PostgreSQL and Redis databases'
 icon: 'server'
 ---
 
-Every environment comes with a MongoDB database, and an app can declare managed PostgreSQL databases
-and Redis caches next to its service. All of them are created in the environment's
-[region](/cloud/regions), reach the app through [environment variables](/cloud/environment-variables),
-and are [backed up](/cloud/backups) in production.
+Modelence Cloud runs managed MongoDB, PostgreSQL and Redis databases next to the app. Each one is
+created in the environment's [region](/cloud/regions), its connection string reaches the app as an
+[environment variable](/cloud/environment-variables), and it is [backed up](/cloud/backups) in
+production.
 
-## MongoDB
-
-Each environment gets its own MongoDB database with nothing to declare. Its connection string is in
-`MONGODB_URI` and `MONGO_URL`. Apps built on the Modelence framework use it without any setup.
-
-## PostgreSQL and Redis
-
-Managed databases and caches are declared in the `resources` section of
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and the app reads each one
-through a variable tied to one of its outputs:
+A database is a resource in
+[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and `env` passes its
+connection string to the app:
 
 ```json modelence.config.json
 {
@@ -38,12 +31,9 @@ through a variable tied to one of its outputs:
 }
 ```
 
-The `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
-`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
-separately. The [reference](/deploy/setup#modelence-config-json-reference) lists every plan and
-output.
-
-Managed resources need a paid plan.
+A `url` output is the full connection string, over TLS. The other outputs are its parts, for
+clients that read them separately. The [reference](/deploy/setup#modelence-config-json-reference)
+lists every plan and output.
 
 ## Lifecycle
 
