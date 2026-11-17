@@ -87,6 +87,8 @@ export type EnvDeclaration = ValueEnvDeclaration | ResourceEnvDeclaration;
 
 export interface AppSpec {
   $schema?: string;
+  // Folders that several services build from, outside every service's root.
+  shared?: string[];
   /*
     Everything the app is made of, by the name the project chose: services
     (type/image/root/build/start/static; one is supported today) and the
