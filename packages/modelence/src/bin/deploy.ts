@@ -61,6 +61,8 @@ export interface DeployOptions {
   host?: string;
   prebuilt?: boolean;
   skipEnvCheck?: boolean;
+  // Rebuild and roll out every service, not only the ones that changed.
+  rebuildAll?: boolean;
 }
 
 export async function deploy(options: DeployOptions) {
@@ -167,7 +169,16 @@ export async function deploy(options: DeployOptions) {
     // A deploy picked in the browser had its variables asked for there.
     const checkEnv = ci && !options.skipEnvCheck;
     const start = () =>
-      runDeploy({ session, target: deployTarget, kind, archivePath, spec, checkEnv, revision });
+      runDeploy({
+        session,
+        target: deployTarget,
+        kind,
+        archivePath,
+        spec,
+        checkEnv,
+        rebuildAll: options.rebuildAll ?? false,
+        revision,
+      });
     let started: StartedDeploy;
     try {
       started = await start();

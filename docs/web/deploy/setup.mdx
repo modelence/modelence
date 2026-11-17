@@ -52,7 +52,7 @@ it expects).
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
-| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): the service, and any managed databases, caches and telemetry. Exactly one service is supported today. |
+| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): its services (up to 5; more than one needs a paid plan), and any managed databases, caches and telemetry. See [Several services](#several-services). |
 | `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
 
 A service entry of `resources` takes:
@@ -66,6 +66,7 @@ A service entry of `resources` takes:
 | `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
 | `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
+| `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. |
 
 A managed resource entry of `resources` takes:
 
@@ -73,6 +74,24 @@ A managed resource entry of `resources` takes:
 | --- | --- | --- | --- |
 | `type` | `"postgres"` \| `"redis"` \| `"telemetry"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache, `"telemetry"` the environment's OpenTelemetry endpoint. |
 | `plan` | string | the smallest | The size to create it with. PostgreSQL: `postgres-1gb`, `postgres-2gb`, `postgres-4gb`, `postgres-8gb`, `postgres-16gb` (the RAM of the database). Redis: `redis-250mb`, `redis-1gb`, `redis-5gb` (the data it holds). Telemetry takes no `plan`. |
+
+### Several services
+
+An environment can run several services, each built its own way and running in containers of its
+own. They share a private network that no other environment can reach. The public one serves the
+environment's URL; the others are reached only from the environment's own services. A service gets
+another's address from a `"type": "resource"` variable that names the service (see below).
+
+- A deploy rebuilds and restarts only the services it changed. A service in a `root` of its own is
+  rebuilt when a file under that `root` changes. One that shares a folder with another service, or
+  sits at the project root, is rebuilt when anything outside the other services' folders changes,
+  so keep shared code in a folder of its own rather than inside one service's `root`, and never
+  import one service's files from another. A change to `modelence.config.json` rebuilds the
+  services whose entry changed, and every service when `env` changed. `npx modelence@latest deploy --rebuild-all` rebuilds and
+  restarts every service.
+- A service removed from the file is deleted once the deploy that removed it has finished.
+- Each service's container count and type are set in the dashboard, under the service's
+  **Configure**.
 
 A deploy creates every managed resource the file declares that the environment doesn't have yet, and
 the new version starts only once they are ready. Resources are matched by name, so the same file works
@@ -99,19 +118,22 @@ Each entry of `env` declares one variable:
 A value set in the dashboard overrides a `value` written here, so a literal in the file is the
 committed default rather than a fixed constant.
 
-A variable with `"type": "resource"` takes its value from one output of a managed resource in the same
-file, and takes only these keys:
+A variable with `"type": "resource"` takes its value from one output of a managed resource or another
+service in the same file, and takes only these keys:
 
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `type` | `"resource"` | Required. |
-| `resource` | string | The name of a `postgres`, `redis` or `telemetry` entry in `resources`. |
-| `output` | string | Which value of the resource. PostgreSQL: `url`, `host`, `port`, `user`, `password`, `database`. Redis: `url`, `host`, `port`, `password`. Telemetry: `endpoint`, `headers`. |
+| `resource` | string | The name of a service, `postgres`, `redis` or `telemetry` entry in `resources`. |
+| `output` | string | Which value of the resource. A service: `url`, `host`, `port`. PostgreSQL: `url`, `host`, `port`, `user`, `password`, `database`. Redis: `url`, `host`, `port`, `password`. Telemetry: `endpoint`, `headers`. |
 
 The `url` output is a full connection string: `postgresql://...?sslmode=require` for PostgreSQL and
 `rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them separately,
 such as `PGHOST` and `PGPASSWORD`. These variables reach the running app only, not the build commands.
 They can't be set or changed in the dashboard, where they are listed with the resource they come from.
+
+A service's outputs are its private address: `url` is `http://<host>:<port>`, for example
+`http://worker.<environment id>.cloud.local:3000`. Only the environment's other services reach it.
 
 Telemetry's outputs are the values of the standard OpenTelemetry variables:
 `endpoint` for `OTEL_EXPORTER_OTLP_ENDPOINT` and `headers` for `OTEL_EXPORTER_OTLP_HEADERS`, which

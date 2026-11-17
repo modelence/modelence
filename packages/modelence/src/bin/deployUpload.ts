@@ -23,6 +23,7 @@ export async function runDeploy({
   archivePath,
   spec,
   checkEnv,
+  rebuildAll = false,
   revision,
 }: {
   session: Session;
@@ -34,6 +35,12 @@ export async function runDeploy({
   // Have Studio refuse the deploy before building while a required declared
   // variable has no value (CI deploys, which skip the browser picker).
   checkEnv: boolean;
+  /*
+    Have Studio build and roll out every service of a multi-service app,
+    including the ones it would keep because nothing they are built from
+    changed. A Studio from before that ignores it.
+  */
+  rebuildAll?: boolean;
   revision: SourceRevision;
 }): Promise<StartedDeploy> {
   const { host, token } = session;
@@ -98,6 +105,7 @@ export async function runDeploy({
       kind,
       spec,
       ...(checkEnv ? { checkEnv } : {}),
+      ...(rebuildAll ? { rebuildAll } : {}),
       ...revision,
     },
   });

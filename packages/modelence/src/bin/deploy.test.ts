@@ -472,6 +472,17 @@ describe('in CI', () => {
     const [, , args] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
     expect(args?.body).not.toHaveProperty('checkEnv');
   });
+
+  it('asks Studio to rebuild every service with --rebuild-all, and only then', async () => {
+    await deploy(options);
+    const [, , plain] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
+    expect(plain?.body).not.toHaveProperty('rebuildAll');
+
+    request.mockClear();
+    await deploy({ ...options, rebuildAll: true });
+    const [, , rebuilding] = request.mock.calls.find(([, path]) => path === '/api/deploy')!;
+    expect(rebuilding?.body).toMatchObject({ rebuildAll: true });
+  });
 });
 
 describe('deploy target', () => {
