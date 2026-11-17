@@ -1,18 +1,13 @@
 ---
 title: 'Databases'
-description: 'Databases and caches available to every environment'
+description: 'Managed databases and caches an app declares'
 icon: 'server'
 ---
 
-Every environment comes with a MongoDB database, and an app can declare managed PostgreSQL databases
-and Redis caches next to its service. All of them are created in the environment's
-[region](/cloud/regions), reach the app through [environment variables](/cloud/environment-variables),
-and are [backed up](/cloud/backups) in production.
-
-## MongoDB
-
-Each environment gets its own MongoDB database with nothing to declare. Its connection string is in
-`MONGODB_URI` and `MONGO_URL`. Apps built on the Modelence framework use it without any setup.
+An app can declare managed PostgreSQL databases and Redis caches next to its service. Each one is
+created in the environment's [region](/cloud/regions), reaches the app through
+[environment variables](/cloud/environment-variables), and is [backed up](/cloud/backups) in
+production.
 
 ## PostgreSQL and Redis
 
@@ -57,6 +52,12 @@ works in every environment:
 - Renaming a resource creates a new, empty one, and the old one stays until it is deleted.
 
 Deleting a managed resource permanently deletes its data and its backups.
+
+## MongoDB
+
+Apps built on the Modelence framework store their data in MongoDB, and read its connection string
+from `MONGODB_URI` and `MONGO_URL` without any setup. An app that doesn't use the framework doesn't
+need MongoDB: it can use a managed PostgreSQL database as its main database.
 
 ## Databases hosted elsewhere
 
