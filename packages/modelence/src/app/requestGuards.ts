@@ -58,7 +58,10 @@ export function crossOriginProtection(): RequestHandler {
   };
 }
 
-function isRequestFromAllowedOrigin(req: Request, allowed: Set<string>): boolean {
+export function isRequestFromAllowedOrigin(
+  req: Request,
+  allowed: Set<string> = new Set(getSecurityConfig().allowedOrigins ?? [])
+): boolean {
   if (SAFE_METHODS.has(req.method)) {
     return true;
   }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
+import type { Context } from '../methods/types';
 
 const mockAuthenticate = vi.fn();
 const mockGetMongodbUri = vi.fn();
@@ -141,6 +142,115 @@ describe('routes/handler', () => {
     );
 
     expect(mockAuthenticate).toHaveBeenCalledWith('header-token', { persistNewSession: false });
+  });
+
+  test('falls through to cookie token when x-modelence-auth-token is empty', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    const handler = createRouteHandler('GET', '/test', async () => ({
+      status: 200,
+      data: { ok: true },
+    }));
+
+    await handler(
+      createRequest({
+        headers: { 'x-modelence-auth-token': '' },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token', { persistNewSession: false });
+  });
+
+  test('yields user: null on a cross-origin POST with only the cookie', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    let capturedContext: Pick<Context, 'session' | 'user'> | undefined;
+    const handler = createRouteHandler('POST', '/test', async (_params, context) => {
+      capturedContext = context;
+      return { status: 200, data: { ok: true } };
+    });
+
+    await handler(
+      createRequest({
+        method: 'POST',
+        headers: {
+          origin: 'https://attacker.example.com',
+          host: 'app.example.com',
+        },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+    expect(capturedContext?.user).toBeNull();
+    expect(capturedContext?.session).toBeNull();
+  });
+
+  test('authenticates a cross-origin POST when using the header token', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'header-token', expiresAt: new Date(), userId: null },
+      user: { id: '1', handle: 'testuser', roles: [], hasRole: vi.fn(), requireRole: vi.fn() },
+      roles: [],
+    } as never);
+    let capturedContext: Pick<Context, 'session' | 'user'> | undefined;
+    const handler = createRouteHandler('POST', '/test', async (_params, context) => {
+      capturedContext = context;
+      return { status: 200, data: { ok: true } };
+    });
+
+    await handler(
+      createRequest({
+        method: 'POST',
+        headers: {
+          'x-modelence-auth-token': 'header-token',
+          origin: 'https://attacker.example.com',
+          host: 'app.example.com',
+        },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('header-token', { persistNewSession: false });
+    expect(capturedContext?.user).not.toBeNull();
+    expect(capturedContext?.user?.id).toBe('1');
+  });
+
+  test('authenticates a same-origin POST with the cookie', async () => {
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'cookie-token', expiresAt: new Date(), userId: null },
+      user: { id: '1', handle: 'testuser', roles: [], hasRole: vi.fn(), requireRole: vi.fn() },
+      roles: [],
+    } as never);
+    let capturedContext: Pick<Context, 'session' | 'user'> | undefined;
+    const handler = createRouteHandler('POST', '/test', async (_params, context) => {
+      capturedContext = context;
+      return { status: 200, data: { ok: true } };
+    });
+
+    await handler(
+      createRequest({
+        method: 'POST',
+        headers: {
+          'sec-fetch-site': 'same-origin',
+          origin: 'https://app.example.com',
+          host: 'app.example.com',
+        },
+        cookies: { authToken: 'cookie-token' },
+      }),
+      res,
+      next
+    );
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('cookie-token', { persistNewSession: false });
+    expect(capturedContext?.user).not.toBeNull();
+    expect(capturedContext?.user?.id).toBe('1');
   });
 
   test('redacts secrets from the telemetry transaction context', async () => {
