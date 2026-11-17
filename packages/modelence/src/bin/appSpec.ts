@@ -91,8 +91,8 @@ export interface AppSpec {
   shared?: string[];
   /*
     Everything the app is made of, by the name the project chose: services
-    (type/image/root/build/start/static; one is supported today) and the
-    postgres, redis and telemetry resources a deploy creates (type/plan).
+    (type/image/root/build/start/static; up to 5) and the postgres, redis
+    and telemetry resources a deploy creates (type/plan).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.

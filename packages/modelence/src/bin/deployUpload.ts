@@ -23,7 +23,7 @@ export async function runDeploy({
   archivePath,
   spec,
   checkEnv,
-  rebuildAll = false,
+  rebuildAll,
   revision,
 }: {
   session: Session;
@@ -40,7 +40,7 @@ export async function runDeploy({
     including the ones it would keep because nothing they are built from
     changed. A Studio from before that ignores it.
   */
-  rebuildAll?: boolean;
+  rebuildAll: boolean;
   revision: SourceRevision;
 }): Promise<StartedDeploy> {
   const { host, token } = session;

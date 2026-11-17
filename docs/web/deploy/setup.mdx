@@ -67,7 +67,7 @@ A service entry of `resources` takes:
 | `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
 | `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
-| `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. |
+| `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. When you add a service to an app that is already live, set `"public": true` on the service that serves the site: otherwise it becomes private and the site loses its URL. |
 
 A managed resource entry of `resources` takes:
 
@@ -83,7 +83,7 @@ own. They share a private network that no other environment can reach. The publi
 environment's URL; the others are reached only from the environment's own services. A service gets
 another's address from a `"type": "resource"` variable that names the service (see below).
 
-- A deploy rebuilds and restarts only the services it changed. Each service has a folder of its
+- A deploy rebuilds only the services whose source changed. Each service has a folder of its
   own: its `root`, or for a Dockerfile service at the project root, its Dockerfile's folder
   (`"root": "."`, `"dockerfile": "service2/Dockerfile"`). A change in one service's folder never
   rebuilds another. Services that share a folder, or a Node.js service at the project root, rebuild
@@ -105,12 +105,18 @@ another's address from a `"type": "resource"` variable that names the service (s
   }
   ```
 
-  A service is then rebuilt only when its own folder, a shared folder, or a file at the project
-  root (`package.json`, a lockfile) changes; a change in `docs/` or `scripts/` rebuilds nothing.
-  Without `shared`, a service is rebuilt when anything outside the other services' folders
-  changes. A shared folder can't sit inside a service's folder, and a deploy fails if it doesn't
-  exist. A Dockerfile service sees a shared folder only when its `root` is the project root, since
-  its build reads only its `root`.
+  A shared folder can't sit inside a service's folder, and a deploy fails if it doesn't exist.
+- What else rebuilds a service depends on what its build reads:
+  - A Dockerfile service with a `root` of its own builds only from that `root`, so only a change
+    under that `root` rebuilds it. It can't see shared folders, and a change to one, to a root
+    lockfile or to `docs/` never rebuilds it.
+  - Every other service (a Node.js service, or a Dockerfile service whose `root` is the project
+    root) builds from the whole project. With `shared`, it is rebuilt when its own folder, a shared
+    folder or a file at the project root (`package.json`, a lockfile) changes; a change in `docs/`
+    or `scripts/` rebuilds nothing. Without `shared`, it is rebuilt when anything outside the other
+    services' folders changes.
+- A service that isn't rebuilt keeps running as it is, except a Dockerfile service: it restarts on
+  every deploy, reusing its image when nothing it builds from changed.
 - Never import one service's files from another: a service that does isn't rebuilt when those
   files change, and keeps running its old copy of them. Move them to a shared folder instead.
 - A service is also rebuilt when its base image (`node-22-slim`, or its Dockerfile's last `FROM`)

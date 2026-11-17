@@ -18,7 +18,7 @@ import { resolveAppRoot } from './appRoot';
   defaults; nothing is inferred here.
 */
 
-const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
+const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'shared', 'resources', 'env'];
 
 // Reads and checks modelence.config.json, prints the plan and returns the file's
 // content for the deploy request. Throws when there is no file.
@@ -68,6 +68,7 @@ function assertKnownKeys(spec: AppSpec): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
     }
   }
+  assertFolderList(spec.shared, 'shared');
 
   // Studio rejects these too, but only after the archive is packed and
   // uploaded, and the plan printed before that reads these shapes as typed.
@@ -99,6 +100,22 @@ export function assertCommandList(list: unknown, path: string): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${path}.commands.${index}" must not be empty.`);
     }
   });
+}
+
+// Only the shape: Studio checks that each folder exists and sits outside
+// every service's root, against the uploaded archive.
+function assertFolderList(list: unknown, path: string): void {
+  if (list === undefined) {
+    return;
+  }
+  const isFolderList =
+    Array.isArray(list) &&
+    list.every((folder: unknown) => typeof folder === 'string' && folder.trim() !== '');
+  if (!isFolderList) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME}: "${path}" must be a list of folder names, e.g. ["shared"].`
+    );
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

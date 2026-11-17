@@ -97,6 +97,23 @@ describe('modelence.config.json parsing', () => {
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
+  it('accepts a list of shared folders', async () => {
+    const spec = {
+      shared: ['shared', 'packages/utils'],
+      resources: { app: { type: 'service' } },
+    };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual(spec);
+  });
+
+  it.each([{ shared: 'shared' }, { shared: ['shared', 42] }, { shared: ['  '] }])(
+    'rejects shared folders that are not a list of names (%j)',
+    async (spec) => {
+      await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+      await expect(prepareSpec(dir)).rejects.toThrow('"shared" must be a list of folder names');
+    }
+  );
+
   it('rejects sections of the wrong kind', async () => {
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ env: ['A'] }));
     await expect(prepareSpec(dir)).rejects.toThrow('"env" must be an object');
