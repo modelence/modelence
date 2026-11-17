@@ -9,11 +9,14 @@ created in the environment's [region](/cloud/regions), its connection string rea
 [environment variable](/cloud/environment-variables), and it is [backed up](/cloud/backups) in
 production.
 
-## Declaring resources
+| Database | How it is added | Connection string | Plans |
+| --- | --- | --- | --- |
+| MongoDB | Created with the environment | `MONGODB_URI` (also `MONGO_URL`) | All |
+| PostgreSQL | `"type": "postgres"` in `resources` | The variable `env` ties to its `url` output | Paid |
+| Redis | `"type": "redis"` in `resources` | The variable `env` ties to its `url` output | Paid |
 
-Managed databases and caches are declared in the `resources` section of
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and the app reads each one
-through a variable tied to one of its outputs:
+`resources` and `env` are sections of
+[`modelence.config.json`](/deploy/setup#modelence-config-json-reference):
 
 ```json modelence.config.json
 {
@@ -33,12 +36,10 @@ through a variable tied to one of its outputs:
 }
 ```
 
-The `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
+A `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
 `rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
 separately. The [reference](/deploy/setup#modelence-config-json-reference) lists every plan and
 output.
-
-Managed resources need a paid plan.
 
 ## Lifecycle
 
