@@ -9,14 +9,9 @@ created in the environment's [region](/cloud/regions), its connection string rea
 [environment variable](/cloud/environment-variables), and it is [backed up](/cloud/backups) in
 production.
 
-| Database | How it is added | Connection string | Plans |
-| --- | --- | --- | --- |
-| MongoDB | Created with the environment | `MONGODB_URI` (also `MONGO_URL`) | All |
-| PostgreSQL | `"type": "postgres"` in `resources` | The variable `env` ties to its `url` output | Paid |
-| Redis | `"type": "redis"` in `resources` | The variable `env` ties to its `url` output | Paid |
-
-`resources` and `env` are sections of
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference):
+A database is a resource in
+[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and `env` passes its
+connection string to the app:
 
 ```json modelence.config.json
 {
@@ -36,10 +31,9 @@ production.
 }
 ```
 
-A `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
-`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
-separately. The [reference](/deploy/setup#modelence-config-json-reference) lists every plan and
-output.
+A `url` output is the full connection string, over TLS. The other outputs are its parts, for
+clients that read them separately. The [reference](/deploy/setup#modelence-config-json-reference)
+lists every plan and output.
 
 ## Lifecycle
 
