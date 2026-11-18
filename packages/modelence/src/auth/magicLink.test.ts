@@ -97,6 +97,7 @@ vi.doMock('./disposableEmails', () => ({
 
 vi.doMock('./utils', async () => ({
   setQueryParams: (await vi.importActual<typeof import('./utils')>('./utils')).setQueryParams,
+  fireAuthHook: (await vi.importActual<typeof import('./utils')>('./utils')).fireAuthHook,
   resolveUrl: (baseUrl: string, configuredUrl?: string) => {
     if (!configuredUrl) return baseUrl;
     if (configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')) {
@@ -860,12 +861,10 @@ describe('auth/magicLink', () => {
         expect(onAfterEmailVerification).toHaveBeenCalled();
         expect(onAfterLogin).toHaveBeenCalled();
         // Both failures are printed and sent to APM, not swallowed silently.
-        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
-          hook: 'onAfterEmailVerification',
+        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterEmailVerification hook:', {
           error: expect.objectContaining({ message: 'async hook boom' }),
         });
-        expect(mockLogError).toHaveBeenCalledWith('Error in auth hook', {
-          hook: 'onAfterLogin',
+        expect(mockLogError).toHaveBeenCalledWith('Error in onAfterLogin hook:', {
           error: expect.objectContaining({ message: 'sync hook boom' }),
         });
         expect(mockCaptureError).toHaveBeenCalledTimes(2);

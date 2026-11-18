@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { Args, Context } from '../methods/types';
 import { usersCollection } from './db';
-import { serializeUserForClient } from './utils';
+import { serializeUserForClient, fireAuthHook } from './utils';
 import {
   clearAuthTokenCookie,
   clearSessionUser,
@@ -13,7 +13,12 @@ import {
   startUserSession,
 } from './session';
 import { getEmailConfig } from '@/app/emailConfig';
-import { consumeRateLimit } from '@/server';
+import {
+  consumeRateLimit,
+  releaseRateLimits,
+  reserveRateLimit,
+  type RateLimitReservation,
+} from '@/rate-limit/rules';
 import { validateEmail } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { getConfig } from '@/config/server';
@@ -39,6 +44,19 @@ function isEmailVerificationRequired(): boolean {
 
 const SALT_ROUNDS = 10;
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(32).toString('hex'), SALT_ROUNDS);
+
+/**
+ * Releases a reservation without failing the login. A failed release must not
+ * block a valid login; the worst case is one extra attempt counted against the
+ * email limit.
+ */
+async function safeRelease(reservations: RateLimitReservation[]) {
+  try {
+    await releaseRateLimits(reservations);
+  } catch (error) {
+    console.error('Failed to release email rate limit reservation', error);
+  }
+}
 
 export async function handleLoginWithPassword(
   args: Args,
@@ -66,8 +84,6 @@ export async function handleLoginWithPassword(
     // password is accepted just as a string, so users can still sign in if the password validation rules are changed
     const password = z.string().parse(args.password);
 
-    // TODO: add rate limiting by email (and perhaps IP address overall)
-
     const userDoc = await usersCollection.findOne(
       { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
       { collation: { locale: 'en', strength: 2 } }
@@ -75,13 +91,36 @@ export async function handleLoginWithPassword(
 
     const passwordHash = userDoc?.authMethods?.password?.hash;
 
+    // Reserve a slot atomically before bcrypt, so concurrent guesses cannot all
+    // pass and a full bucket blocks even a correct password. Known and unknown
+    // emails reserve the same way, so the response does not reveal whether the
+    // account exists. The slot is released on success, so only failed attempts
+    // count against the email limit.
+    const emailReservations = await reserveRateLimit({
+      bucket: 'signin',
+      type: 'email',
+      value: email,
+    });
+
     // Always run bcrypt.compare to mitigate timing attacks that could reveal if an email exists.
     const hashToCompare = passwordHash || DUMMY_PASSWORD_HASH;
-    const isValidPassword = await bcrypt.compare(password, hashToCompare);
+    let isValidPassword: boolean;
+    try {
+      isValidPassword = await bcrypt.compare(password, hashToCompare);
+    } catch (error) {
+      // The password was never compared, so this attempt should not count.
+      await safeRelease(emailReservations);
+      throw error;
+    }
 
     if (!passwordHash || !isValidPassword) {
+      // Keep the reservation counted: only failed attempts count against the
+      // email limit.
       throw incorrectCredentialsError();
     }
+
+    // The password is correct, so release the reserved attempt.
+    await safeRelease(emailReservations);
 
     // Only check email verification if the user exists and the password is correct,
     // to prevent email enumeration by observing verification errors before password checks.
@@ -100,13 +139,15 @@ export async function handleLoginWithPassword(
       setAuthTokenCookie(res, userSession.authToken);
     }
 
-    getAuthConfig().onAfterLogin?.({
-      provider: 'email',
-      user: userDoc,
-      session: userSession,
-      connectionInfo,
-    });
-    getAuthConfig().login?.onSuccess?.(userDoc);
+    fireAuthHook('onAfterLogin', () =>
+      getAuthConfig().onAfterLogin?.({
+        provider: 'email',
+        user: userDoc,
+        session: userSession,
+        connectionInfo,
+      })
+    );
+    fireAuthHook('login.onSuccess', () => getAuthConfig().login?.onSuccess?.(userDoc));
 
     return {
       user: serializeUserForClient(userDoc),
@@ -114,13 +155,15 @@ export async function handleLoginWithPassword(
     };
   } catch (error) {
     if (error instanceof Error) {
-      getAuthConfig().onLoginError?.({
-        provider: 'email',
-        error,
-        session,
-        connectionInfo,
-      });
-      getAuthConfig().login?.onError?.(error);
+      fireAuthHook('onLoginError', () =>
+        getAuthConfig().onLoginError?.({
+          provider: 'email',
+          error,
+          session,
+          connectionInfo,
+        })
+      );
+      fireAuthHook('login.onError', () => getAuthConfig().login?.onError?.(error));
     }
     throw error;
   }

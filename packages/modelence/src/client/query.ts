@@ -2,12 +2,13 @@
 
 import { QueryClient, hashKey } from '@tanstack/react-query';
 import { callMethod } from './method';
-import { startWebsockets, subscribeLiveQuery } from '../websocket/client';
+import { startWebsockets, subscribeLiveQuery, reconnectWebsockets } from '../websocket/client';
 
 type Args = Record<string, unknown>;
 
 interface Subscription {
   unsubscribe: () => void;
+  latest?: { data: unknown };
   resolvers: Set<{
     resolve: (data: unknown) => void;
     reject: (error: Error) => void;
@@ -78,6 +79,9 @@ export function disconnectModelenceQueryClient() {
 
 /** Revalidate all cached queries when restored from BFCache (`event.persisted === true`). */
 export function revalidateModelenceQueries() {
+  if (websocketsStarted) {
+    reconnectWebsockets();
+  }
   if (queryClientRef) {
     void queryClientRef.invalidateQueries();
   }
@@ -144,6 +148,9 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
             args,
             (data) => {
               const currentSub = subscriptions.get(subscriptionKey);
+              if (currentSub) {
+                currentSub.latest = { data };
+              }
 
               if (currentSub?.resolvers.size) {
                 currentSub.resolvers.forEach((r) => r.resolve(data));
@@ -169,6 +176,13 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
 
           sub = { unsubscribe, resolvers: new Set() };
           subscriptions.set(subscriptionKey, sub);
+        }
+
+        // A refetch of a running subscription gets no new frame until the data
+        // changes, so it settles with the last value instead of waiting for one.
+        if (sub.latest) {
+          resolve(sub.latest.data as T);
+          return;
         }
 
         // Shared map stores resolvers across `T` instantiations; erase the union.

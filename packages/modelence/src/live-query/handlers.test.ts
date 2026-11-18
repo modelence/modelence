@@ -29,7 +29,7 @@ function createMockSocket(id = 'socket-1'): Socket {
   return {
     id,
     handshake: {
-      address: '127.0.0.1',
+      address: '203.0.113.7',
       headers: { 'user-agent': 'test-agent' },
     },
     emit: vi.fn(),
@@ -40,6 +40,29 @@ describe('live-query/handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthenticate.mockResolvedValue({ session: null, user: null, roles: [] });
+    mockRunLiveMethod.mockRejectedValue(new Error('stop after authentication'));
+  });
+
+  test('does not save a new session for a subscription with a missing or unknown token', async () => {
+    const socket = createMockSocket('socket-1');
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-1',
+      method: 'todos.list',
+      authToken: 'unknown-token',
+    });
+
+    // The subscription never returns a token to the client, so a new
+    // session created here could never be used.
+    expect(mockAuthenticate).toHaveBeenCalledWith('unknown-token', { persistNewSession: false });
+  });
+
+  test('authenticates a subscription without a token the same way', async () => {
+    const socket = createMockSocket('socket-2');
+
+    await handleSubscribeLiveQuery(socket, { subscriptionId: 'sub-2', method: 'todos.list' });
+
+    expect(mockAuthenticate).toHaveBeenCalledWith(null, { persistNewSession: false });
   });
 
   test('logs structured error when liveData.fetch() fails', async () => {
@@ -52,21 +75,21 @@ describe('live-query/handlers', () => {
     mockRunLiveMethod.mockResolvedValue(mockLiveData);
 
     await handleSubscribeLiveQuery(socket, {
-      subscriptionId: 'sub-1',
+      subscriptionId: 'sub-fetch',
       method: 'testMethod',
       args: {},
     });
 
-    // Wait for async fetch to reject
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockLogError).toHaveBeenCalledWith('[LiveQuery] Error fetching data', {
-      method: 'testMethod',
-      subscriptionId: 'sub-1',
-      error: fetchError,
+    await vi.waitFor(() => {
+      expect(mockLogError).toHaveBeenCalledWith('[LiveQuery] Error fetching data', {
+        method: 'testMethod',
+        subscriptionId: 'sub-fetch',
+        error: fetchError,
+      });
     });
+
     expect(socket.emit).toHaveBeenCalledWith('liveQueryError', {
-      subscriptionId: 'sub-1',
+      subscriptionId: 'sub-fetch',
       error: 'fetch failed',
     });
   });
@@ -77,18 +100,18 @@ describe('live-query/handlers', () => {
     mockRunLiveMethod.mockRejectedValue(methodError);
 
     await handleSubscribeLiveQuery(socket, {
-      subscriptionId: 'sub-2',
+      subscriptionId: 'sub-method',
       method: 'failingMethod',
       args: {},
     });
 
     expect(mockLogError).toHaveBeenCalledWith('[LiveQuery] Error in method', {
       method: 'failingMethod',
-      subscriptionId: 'sub-2',
+      subscriptionId: 'sub-method',
       error: methodError,
     });
     expect(socket.emit).toHaveBeenCalledWith('liveQueryError', {
-      subscriptionId: 'sub-2',
+      subscriptionId: 'sub-method',
       error: 'method failed',
     });
   });
@@ -106,15 +129,15 @@ describe('live-query/handlers', () => {
     mockRunLiveMethod.mockResolvedValue(mockLiveData);
 
     await handleSubscribeLiveQuery(socket, {
-      subscriptionId: 'sub-3',
+      subscriptionId: 'sub-unsub',
       method: 'someMethod',
     });
 
-    handleUnsubscribeLiveQuery(socket, { subscriptionId: 'sub-3' });
+    handleUnsubscribeLiveQuery(socket, { subscriptionId: 'sub-unsub' });
 
     expect(cleanup).toHaveBeenCalled();
     expect(mockLogError).toHaveBeenCalledWith('[LiveQuery] Error in cleanup', {
-      subscriptionId: 'sub-3',
+      subscriptionId: 'sub-unsub',
       error: cleanupError,
     });
   });
@@ -144,5 +167,67 @@ describe('live-query/handlers', () => {
       subscriptionId: 'sub-disc',
       error: cleanupError,
     });
+  });
+
+  test('logs structured error when cleaning up existing subscription with same subscriptionId', async () => {
+    const socket = createMockSocket('socket-dup-sub');
+    const existingCleanupError = new Error('existing cleanup failed');
+    const cleanup = vi.fn().mockImplementation(() => {
+      throw existingCleanupError;
+    });
+    const mockLiveData = {
+      fetch: vi.fn().mockResolvedValue({ data: 'ok' }),
+      watch: vi.fn().mockReturnValue(cleanup),
+    };
+    mockRunLiveMethod.mockResolvedValue(mockLiveData);
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-dup',
+      method: 'methodA',
+    });
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-dup',
+      method: 'methodB',
+    });
+
+    expect(cleanup).toHaveBeenCalled();
+    expect(mockLogError).toHaveBeenCalledWith(
+      '[LiveQuery] Error cleaning up existing subscription',
+      {
+        subscriptionId: 'sub-dup',
+        error: existingCleanupError,
+      }
+    );
+  });
+
+  test('logs structured error when cleanup fails after disconnect during setup', async () => {
+    const socket = createMockSocket('socket-disconnect-during-setup');
+    const setupDisconnectError = new Error('disconnect during setup cleanup boom');
+    const cleanup = vi.fn().mockImplementation(() => {
+      throw setupDisconnectError;
+    });
+
+    mockRunLiveMethod.mockImplementation(async () => {
+      handleLiveQueryDisconnect(socket);
+      return {
+        fetch: vi.fn().mockResolvedValue({ data: 'ok' }),
+        watch: vi.fn().mockReturnValue(cleanup),
+      };
+    });
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-setup-disc',
+      method: 'slowSetupMethod',
+    });
+
+    expect(cleanup).toHaveBeenCalled();
+    expect(mockLogError).toHaveBeenCalledWith(
+      '[LiveQuery] Error cleaning up after disconnect during setup',
+      {
+        subscriptionId: 'sub-setup-disc',
+        error: setupDisconnectError,
+      }
+    );
   });
 });

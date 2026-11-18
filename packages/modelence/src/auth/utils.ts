@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { MongoServerError } from 'mongodb';
+import { captureError, logError } from '@/telemetry';
 import { usersCollection } from './db';
 import { User } from './types';
 import { validateHandle, MAX_HANDLE_LENGTH, MIN_HANDLE_LENGTH } from './validators';
@@ -191,4 +192,24 @@ export async function resolveUniqueHandle(
   const rawBase = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '_');
   const baseHandle = rawBase.padEnd(MIN_HANDLE_LENGTH, '_').slice(0, MAX_HANDLE_LENGTH);
   return findAvailableHandle(baseHandle);
+}
+
+/**
+ * Invokes a notify-only auth hook (onAfterLogin, onLoginError, ...) without
+ * letting it affect the auth flow. A sync throw and a rejection from an async
+ * hook are both caught and logged with the hook's name, instead of surfacing as
+ * an anonymous unhandled promise rejection. Deliberately NOT awaited: a failing
+ * analytics hook must not fail an otherwise-successful login, and in error
+ * paths it must not mask the real error being propagated.
+ */
+export function fireAuthHook(name: string, invoke: () => void | Promise<void>) {
+  const reportHookError = (error: unknown) => {
+    logError(`Error in ${name} hook:`, { error });
+    captureError(error);
+  };
+  try {
+    Promise.resolve(invoke()).catch(reportHookError);
+  } catch (hookError) {
+    reportHookError(hookError);
+  }
 }

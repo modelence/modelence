@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 
 vi.doMock('./method', () => ({
   callMethod: vi.fn(),
@@ -6,9 +7,11 @@ vi.doMock('./method', () => ({
 
 const mockStartWebsockets = vi.fn();
 const mockSubscribeLiveQuery = vi.fn();
+const mockReconnectWebsockets = vi.fn();
 vi.doMock('../websocket/client', () => ({
   startWebsockets: mockStartWebsockets,
   subscribeLiveQuery: mockSubscribeLiveQuery,
+  reconnectWebsockets: mockReconnectWebsockets,
 }));
 
 const {
@@ -23,6 +26,7 @@ describe('modelenceLiveQuery', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSubscribeLiveQuery.mockReturnValue(vi.fn());
     disconnectModelenceQueryClient();
   });
 
@@ -41,6 +45,27 @@ describe('modelenceLiveQuery', () => {
     revalidateModelenceQueries();
 
     expect(mockInvalidateQueries).toHaveBeenCalledTimes(1);
+    expect(mockReconnectWebsockets).not.toHaveBeenCalled();
+  });
+
+  test('revalidateModelenceQueries reconnects websockets if websockets were started', () => {
+    // Simulate browser context
+    // @ts-expect-error — minimal stub
+    globalThis.window = {};
+
+    const fakeQueryClient = {
+      getQueryCache: () => ({ subscribe: vi.fn() }),
+      invalidateQueries: vi.fn(),
+    } as unknown as Parameters<typeof connectModelenceQueryClient>[0];
+    connectModelenceQueryClient(fakeQueryClient);
+
+    const options = modelenceLiveQuery('todos.subscribe');
+    void options.queryFn();
+
+    expect(mockStartWebsockets).toHaveBeenCalledTimes(1);
+
+    revalidateModelenceQueries();
+    expect(mockReconnectWebsockets).toHaveBeenCalledTimes(1);
   });
 
   test('queryFn returns a never-resolving promise on the server (no window)', async () => {
@@ -77,5 +102,41 @@ describe('modelenceLiveQuery', () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
+  });
+
+  test('invalidating a live query that already has data settles with the latest value', async () => {
+    // @ts-expect-error minimal window stub
+    globalThis.window = {};
+
+    let pushData: (data: unknown) => void = () => {};
+    mockSubscribeLiveQuery.mockImplementation((_method, _args, onData) => {
+      pushData = onData;
+      return vi.fn();
+    });
+
+    const queryClient = new QueryClient();
+    connectModelenceQueryClient(queryClient);
+
+    const options = modelenceLiveQuery('todos.subscribe');
+    const observer = new QueryObserver(queryClient, options);
+    const unsubscribeObserver = observer.subscribe(() => {});
+
+    await vi.waitFor(() => expect(mockSubscribeLiveQuery).toHaveBeenCalledTimes(1));
+    pushData(['first']);
+    await vi.waitFor(() => expect(observer.getCurrentResult().data).toEqual(['first']));
+    pushData(['second']);
+
+    const settled = await Promise.race([
+      queryClient.invalidateQueries({ queryKey: options.queryKey }).then(() => 'settled'),
+      new Promise<string>((r) => setTimeout(() => r('pending'), 50)),
+    ]);
+
+    expect(settled).toBe('settled');
+    expect(observer.getCurrentResult().data).toEqual(['second']);
+    expect(observer.getCurrentResult().fetchStatus).toBe('idle');
+    expect(mockSubscribeLiveQuery).toHaveBeenCalledTimes(1);
+
+    unsubscribeObserver();
+    queryClient.clear();
   });
 });

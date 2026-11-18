@@ -15,7 +15,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { hashToken } from './tokenHash';
-import { setQueryParams } from './utils';
+import { setQueryParams, fireAuthHook } from './utils';
 
 const USER_COLLATION = { locale: 'en', strength: 2 } as const;
 
@@ -154,20 +154,24 @@ export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: 
       return;
     }
 
-    authConfig.onAfterEmailVerification?.({
-      provider: 'email',
-      user: userDoc as User,
-      session: null,
-      connectionInfo,
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      authConfig.onEmailVerificationError?.({
+    fireAuthHook('onAfterEmailVerification', () =>
+      authConfig.onAfterEmailVerification?.({
         provider: 'email',
-        error,
+        user: userDoc as User,
         session: null,
         connectionInfo,
-      });
+      })
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      fireAuthHook('onEmailVerificationError', () =>
+        authConfig.onEmailVerificationError?.({
+          provider: 'email',
+          error,
+          session: null,
+          connectionInfo,
+        })
+      );
     }
     throw error;
   }
@@ -186,18 +190,20 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
 
     const authConfig = getAuthConfig();
     if (!alreadyVerified) {
-      authConfig.onAfterEmailVerification?.({
-        provider: 'email',
-        user: userDoc as User,
-        session: null,
-        connectionInfo: {
-          baseUrl,
-          ip: params.req.ip || params.req.socket.remoteAddress,
-          userAgent: params.headers['user-agent'],
-          acceptLanguage: params.headers['accept-language'],
-          referrer: params.headers['referer'],
-        },
-      });
+      fireAuthHook('onAfterEmailVerification', () =>
+        authConfig.onAfterEmailVerification?.({
+          provider: 'email',
+          user: userDoc as User,
+          session: null,
+          connectionInfo: {
+            baseUrl,
+            ip: params.req.ip || params.req.socket.remoteAddress,
+            userAgent: params.headers['user-agent'],
+            acceptLanguage: params.headers['accept-language'],
+            referrer: params.headers['referer'],
+          },
+        })
+      );
     }
 
     // No session here: this is a GET that mail scanners open before the user
@@ -213,18 +219,20 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     const message = error instanceof Error ? error.message : 'An unexpected error occurred';
     if (error instanceof Error) {
       const authConfig = getAuthConfig();
-      authConfig.onEmailVerificationError?.({
-        provider: 'email',
-        error,
-        session: null,
-        connectionInfo: {
-          baseUrl,
-          ip: params.req.ip || params.req.socket.remoteAddress,
-          userAgent: params.headers['user-agent'],
-          acceptLanguage: params.headers['accept-language'],
-          referrer: params.headers['referer'],
-        },
-      });
+      fireAuthHook('onEmailVerificationError', () =>
+        authConfig.onEmailVerificationError?.({
+          provider: 'email',
+          error,
+          session: null,
+          connectionInfo: {
+            baseUrl,
+            ip: params.req.ip || params.req.socket.remoteAddress,
+            userAgent: params.headers['user-agent'],
+            acceptLanguage: params.headers['accept-language'],
+            referrer: params.headers['referer'],
+          },
+        })
+      );
     }
     logError('Error verifying email:', { error });
     captureError(error);

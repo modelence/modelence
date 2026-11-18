@@ -15,7 +15,7 @@ import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { time } from '@/time';
 import { captureError, logError } from '@/telemetry';
-import { resolveUniqueHandle } from '../utils';
+import { fireAuthHook, resolveUniqueHandle } from '../utils';
 import { User, Session, UserEmail, OAuthProvider } from '@/auth/types';
 import { ConnectionInfo } from '@/methods/types';
 import {
@@ -319,24 +319,28 @@ async function handleExistingProviderLogin(
     await authenticateUser(res, existingUser._id, userData.providerName, outcome);
 
     if (shouldFireLoginHooks(outcome)) {
-      authConfig.onAfterLogin?.({
-        provider: userData.providerName,
-        user,
-        session,
-        connectionInfo,
-      });
-      authConfig.login?.onSuccess?.(user);
+      fireAuthHook('onAfterLogin', () =>
+        authConfig.onAfterLogin?.({
+          provider: userData.providerName,
+          user,
+          session,
+          connectionInfo,
+        })
+      );
+      fireAuthHook('login.onSuccess', () => authConfig.login?.onSuccess?.(user));
     }
   } catch (error) {
     if (error instanceof Error) {
-      authConfig.login?.onError?.(error);
+      fireAuthHook('login.onError', () => authConfig.login?.onError?.(error));
 
-      authConfig.onLoginError?.({
-        provider: userData.providerName,
-        error,
-        session,
-        connectionInfo,
-      });
+      fireAuthHook('onLoginError', () =>
+        authConfig.onLoginError?.({
+          provider: userData.providerName,
+          error,
+          session,
+          connectionInfo,
+        })
+      );
     }
     throw error;
   }
@@ -431,26 +435,30 @@ async function handleExistingEmailLogin(
       };
 
       if (shouldFireLoginHooks(outcome)) {
-        authConfig.onAfterLogin?.({
-          provider: userData.providerName,
-          user: updatedUser,
-          session,
-          connectionInfo,
-        });
-        authConfig.login?.onSuccess?.(updatedUser);
+        fireAuthHook('onAfterLogin', () =>
+          authConfig.onAfterLogin?.({
+            provider: userData.providerName,
+            user: updatedUser,
+            session,
+            connectionInfo,
+          })
+        );
+        fireAuthHook('login.onSuccess', () => authConfig.login?.onSuccess?.(updatedUser));
       }
 
       return;
     } catch (error) {
       if (error instanceof Error) {
-        authConfig.login?.onError?.(error);
+        fireAuthHook('login.onError', () => authConfig.login?.onError?.(error));
 
-        authConfig.onLoginError?.({
-          provider: userData.providerName,
-          error,
-          session,
-          connectionInfo,
-        });
+        fireAuthHook('onLoginError', () =>
+          authConfig.onLoginError?.({
+            provider: userData.providerName,
+            error,
+            session,
+            connectionInfo,
+          })
+        );
       }
       throw error;
     }
@@ -473,8 +481,10 @@ function reportSignupError(
   }
 
   const authConfig = getAuthConfig();
-  authConfig.onSignupError?.({ provider, error, session, connectionInfo });
-  authConfig.signup?.onError?.(error);
+  fireAuthHook('onSignupError', () =>
+    authConfig.onSignupError?.({ provider, error, session, connectionInfo })
+  );
+  fireAuthHook('signup.onError', () => authConfig.signup?.onError?.(error));
 }
 
 /**
@@ -581,14 +591,16 @@ async function handleNewUserSignup(
     );
 
     if (userDocument) {
-      authConfig.onAfterSignup?.({
-        provider: userData.providerName,
-        user: userDocument,
-        session,
-        connectionInfo,
-      });
+      fireAuthHook('onAfterSignup', () =>
+        authConfig.onAfterSignup?.({
+          provider: userData.providerName,
+          user: userDocument,
+          session,
+          connectionInfo,
+        })
+      );
 
-      authConfig.signup?.onSuccess?.(userDocument);
+      fireAuthHook('signup.onSuccess', () => authConfig.signup?.onSuccess?.(userDocument));
     }
   } catch (error) {
     reportSignupError(error, userData.providerName, session, connectionInfo);
@@ -673,17 +685,6 @@ export function clearOAuthLinkCookie(res: Response) {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
   });
-}
-
-function safelyCallHook(hook?: () => void) {
-  if (!hook) return;
-
-  try {
-    hook();
-  } catch (err) {
-    logError('Error executing OAuth hook:', { error: err });
-    captureError(err);
-  }
 }
 
 export interface OAuthStateResult {
@@ -1080,7 +1081,7 @@ export async function handleOAuthProviderLink(
       const currentUser = await usersCollection.findOne({ _id: userId });
 
       if (!currentUser || currentUser.status === 'deleted' || currentUser.status === 'disabled') {
-        safelyCallHook(() =>
+        fireAuthHook('onOAuthLinkError', () =>
           authConfig.onOAuthLinkError?.({
             provider: userData.providerName,
             error: new Error('User account not found or not active'),
@@ -1099,7 +1100,7 @@ export async function handleOAuthProviderLink(
       const existingProviderId = currentUser?.authMethods?.[userData.providerName]?.id;
 
       if (existingProviderId && existingProviderId !== userData.id) {
-        safelyCallHook(() =>
+        fireAuthHook('onOAuthLinkError', () =>
           authConfig.onOAuthLinkError?.({
             provider: userData.providerName,
             error: new Error(
@@ -1122,7 +1123,7 @@ export async function handleOAuthProviderLink(
       }
 
       // Fallback safety guard in case the DB state does not match any expected branch
-      safelyCallHook(() =>
+      fireAuthHook('onOAuthLinkError', () =>
         authConfig.onOAuthLinkError?.({
           provider: userData.providerName,
           error: new Error(`Unexpected OAuth linking state for ${userData.providerName}`),
@@ -1143,7 +1144,7 @@ export async function handleOAuthProviderLink(
     );
 
     if (updatedUser) {
-      safelyCallHook(() =>
+      fireAuthHook('onAfterOAuthLink', () =>
         authConfig.onAfterOAuthLink?.({
           provider: userData.providerName,
           user: updatedUser,
@@ -1167,7 +1168,7 @@ export async function handleOAuthProviderLink(
     res.redirect('/');
   } catch (error) {
     if (error instanceof MongoServerError && error.code === 11000) {
-      safelyCallHook(() =>
+      fireAuthHook('onOAuthLinkError', () =>
         authConfig.onOAuthLinkError?.({
           provider: userData.providerName,
           error,
@@ -1188,7 +1189,7 @@ export async function handleOAuthProviderLink(
     }
 
     if (error instanceof Error) {
-      safelyCallHook(() =>
+      fireAuthHook('onOAuthLinkError', () =>
         authConfig.onOAuthLinkError?.({
           provider: userData.providerName,
           error,

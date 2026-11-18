@@ -7,13 +7,15 @@ Modelence includes built-in rate limiting on all authentication endpoints to pro
 ## Default Rate Limits
 
 - **Signup**: 20 attempts per 15 minutes, 200 per day (per IP)
-- **Login**: 50 attempts per 15 minutes, 500 per day (per IP)
+- **Login**: 50 attempts per 15 minutes, 500 per day (per IP); 10 failed attempts per 15 minutes (per email)
 - **Email Verification** (resend): 10 per 15 minutes, 100 per day (per IP); 1 per 60 seconds, 10 per day (per user)
 - **Password Reset**: 10 per 15 minutes, 100 per day (per IP); 5 per hour, 10 per day (per email)
 - **Magic Link**: 10 per 15 minutes, 100 per day (per IP); 5 per hour, 10 per day (per email)
 - **One-Time Code**: 20 per 15 minutes, 100 per day (per IP); 10 per hour, 20 per day (per email)
 
 These limits are automatically enforced and will throw a [RateLimitError](/api-reference/modelence/index/classes/RateLimitError) when exceeded.
+
+Once the per-email sign-in limit is full, **every attempt is rejected with 429, including attempts with the correct password**. This is deliberate: if a correct password still worked when the bucket was full, the limit would not stop guessing. The trade-off is a targeted lockout — about 10 requests every 15 minutes from any IP can keep a known account locked out while the attacker keeps going. Password reset and magic link still work. To use a different balance, change or remove the rule with [`authConfig.rateLimits.signin`](/api-reference/modelence/server/type-aliases/AuthRateLimitsConfig).
 
 ## Handling Rate Limit Errors
 
