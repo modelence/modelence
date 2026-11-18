@@ -114,9 +114,12 @@ another's address from a `"type": "resource"` variable that names the service (s
   `package.json` and lockfile it installs from. A change outside its `watchPaths` never rebuilds
   it, so a path left out keeps the service on old code.
 - A service that isn't rebuilt keeps running as it is.
-- A service is also rebuilt when its entry in `modelence.config.json` changed, when `env`
+- A service is also rebuilt when its build settings in `modelence.config.json` changed, when `env`
   changed, or when its base image (`node-22-slim`, or its Dockerfile's last `FROM`) was republished
-  since its last build, unless that `FROM` is pinned by digest (`@sha256:`).
+  since its last build, unless that `FROM` is pinned by digest (`@sha256:`). Any other change to
+  its entry, such as its `port` or `healthCheck`, restarts it without a rebuild.
+- If one service's new version fails to start, that service goes back to the version it ran
+  before, and the others keep their new version. The deploy is marked failed, naming the service.
 - `npx modelence@latest deploy --rebuild-all` rebuilds and restarts every service, whatever its
   `watchPaths`.
 - A service removed from the file is deleted once the deploy that removed it has finished.

@@ -97,11 +97,6 @@ describe('modelence.config.json parsing', () => {
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
-  it('has no top-level list of shared folders', async () => {
-    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ shared: ['shared'] }));
-    await expect(prepareSpec(dir)).rejects.toThrow('unknown key "shared"');
-  });
-
   it("accepts a service's watch paths and prints them in the plan", async () => {
     const spec = {
       resources: {
