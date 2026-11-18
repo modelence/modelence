@@ -392,6 +392,10 @@ describe('auth/session', () => {
       );
 
       expect(res.cookie as Mock).not.toHaveBeenCalled();
+      expect(res.clearCookie as Mock).toHaveBeenCalledWith(
+        'authToken',
+        expect.objectContaining({ httpOnly: true, path: '/' })
+      );
     });
 
     test('saves an unsaved session before returning its token to the client', async () => {
