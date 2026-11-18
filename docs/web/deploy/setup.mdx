@@ -46,15 +46,14 @@ Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment fo
 Modelence Cloud. Comments (`//`, `/* */`) and trailing commas are allowed. Apart from a resource's
 `type`, every key is optional; a missing key takes the default.
 
-The file has three top-level sections: `resources` (what the app is made of), `env` (the variables
-it expects) and, for an app of several services, `shared` (the folders they share).
+The file has two top-level sections: `resources` (what the app is made of) and `env` (the variables
+it expects).
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
 | `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): its services (up to 5; more than one needs a paid plan), and any managed databases, caches and telemetry. See [Several services](#several-services). |
 | `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
-| `shared` | string[] | — | Folders that several services build from, such as `"shared"` or `"packages/utils"`, relative to the project root and outside every service's `root`. Up to 10. See [Several services](#several-services). |
 
 A service entry of `resources` takes:
 
@@ -68,6 +67,7 @@ A service entry of `resources` takes:
 | `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
 | `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. When you add a service to an app that is already live, set `"public": true` on the service that serves the site: otherwise it becomes private and the site loses its URL. |
+| `watchPaths` | string[] | none: every deploy rebuilds the service | Files and folders, relative to the project root, whose changes rebuild the service, such as `["service1", "shared", "package-lock.json"]`. See [Several services](#several-services). |
 
 A managed resource entry of `resources` takes:
 
@@ -83,47 +83,42 @@ own. They share a private network that no other environment can reach. The publi
 environment's URL; the others are reached only from the environment's own services. A service gets
 another's address from a `"type": "resource"` variable that names the service (see below).
 
-- A deploy rebuilds only the services whose source changed. Each service has a folder of its
-  own: its `root`, or for a Dockerfile service at the project root, its Dockerfile's folder
-  (`"root": "."`, `"dockerfile": "service2/Dockerfile"`). A change in one service's folder never
-  rebuilds another. Services that share a folder, or a Node.js service at the project root, rebuild
-  together.
-- Put code that several services use in a folder of its own and list it in `shared`:
+- By default, every deploy rebuilds and restarts every service.
+- To rebuild a service only when its code changes, list the files and folders it is built from
+  in its `watchPaths`, relative to the project root:
 
   ```json
   {
-    "shared": ["shared"],
     "resources": {
       "service1": {
         "type": "service",
         "root": "service1",
         "start": { "commands": ["node server.js"] },
-        "public": true
+        "public": true,
+        "watchPaths": ["service1", "shared", "package.json", "package-lock.json"]
       },
-      "service2": { "type": "service", "dockerfile": "service2/Dockerfile", "port": 8080 }
+      "service2": {
+        "type": "service",
+        "dockerfile": "service2/Dockerfile",
+        "port": 8080,
+        "watchPaths": ["service2"]
+      }
     }
   }
   ```
 
-  A shared folder can't sit inside a service's folder, and a deploy fails if it doesn't exist.
-- What else rebuilds a service depends on what its build reads:
-  - A Dockerfile service with a `root` of its own builds only from that `root`, so only a change
-    under that `root` rebuilds it. It can't see shared folders, and a change to one, to a root
-    lockfile or to `docs/` never rebuilds it.
-  - Every other service (a Node.js service, or a Dockerfile service whose `root` is the project
-    root) builds from the whole project. With `shared`, it is rebuilt when its own folder, a shared
-    folder or a file at the project root (`package.json`, a lockfile) changes; a change in `docs/`
-    or `scripts/` rebuilds nothing. Without `shared`, it is rebuilt when anything outside the other
-    services' folders changes.
-- A service that isn't rebuilt keeps running as it is, except a Dockerfile service: it restarts on
-  every deploy, reusing its image when nothing it builds from changed.
-- Never import one service's files from another: a service that does isn't rebuilt when those
-  files change, and keeps running its old copy of them. Move them to a shared folder instead.
-- A service is also rebuilt when its base image (`node-22-slim`, or its Dockerfile's last `FROM`)
-  was republished since its last build, unless that `FROM` is pinned by digest (`@sha256:`).
-- A change to `modelence.config.json` rebuilds the services whose entry changed, and every service
-  when `env` changed. `npx modelence@latest deploy --rebuild-all` rebuilds and restarts every
-  service.
+  Then a deploy rebuilds the service only when a file under one of these paths changed. Nothing
+  else is added to the list: not the service's own `root`, not the lockfile, not other files at the
+  project root. A path that doesn't exist fails the deploy.
+- List everything the service's build reads: its own folder, any shared code it imports, and the
+  `package.json` and lockfile it installs from. A change outside its `watchPaths` never rebuilds
+  it, so a path left out keeps the service on old code.
+- A service that isn't rebuilt keeps running as it is.
+- A service is also rebuilt when its entry in `modelence.config.json` changed, when `env`
+  changed, or when its base image (`node-22-slim`, or its Dockerfile's last `FROM`) was republished
+  since its last build, unless that `FROM` is pinned by digest (`@sha256:`).
+- `npx modelence@latest deploy --rebuild-all` rebuilds and restarts every service, whatever its
+  `watchPaths`.
 - A service removed from the file is deleted once the deploy that removed it has finished.
 - Each service's container count and type are set in the dashboard, under the service's
   **Configure**.

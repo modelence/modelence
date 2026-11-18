@@ -49,6 +49,12 @@ export interface ServiceResource {
   // package.json `dev` script in root.
   dev?: CommandList;
   static?: StaticMount[];
+  /*
+    Files and folders, relative to the project root, whose changes rebuild
+    this service. Missing means every deploy rebuilds it; with a list, only
+    changes under these paths do, with nothing added on top.
+  */
+  watchPaths?: string[];
 }
 
 // A database, cache or telemetry ingest the deploy creates in the environment.
@@ -87,8 +93,6 @@ export type EnvDeclaration = ValueEnvDeclaration | ResourceEnvDeclaration;
 
 export interface AppSpec {
   $schema?: string;
-  // Folders that several services build from, outside every service's root.
-  shared?: string[];
   /*
     Everything the app is made of, by the name the project chose: services
     (type/image/root/build/start/static; up to 5) and the postgres, redis
@@ -165,6 +169,9 @@ export function formatAppSpec(spec: AppSpec): string[] {
     lines.push(...formatCommands('start', resource.start, '(none)'));
     for (const mount of resource.static ?? []) {
       lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
+    }
+    if (resource.watchPaths) {
+      lines.push(`  watch:   ${resource.watchPaths.join(', ')}`);
     }
   }
 

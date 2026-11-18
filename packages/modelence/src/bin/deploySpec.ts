@@ -18,7 +18,7 @@ import { resolveAppRoot } from './appRoot';
   defaults; nothing is inferred here.
 */
 
-const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'shared', 'resources', 'env'];
+const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
 
 // Reads and checks modelence.config.json, prints the plan and returns the file's
 // content for the deploy request. Throws when there is no file.
@@ -68,8 +68,6 @@ function assertKnownKeys(spec: AppSpec): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
     }
   }
-  assertFolderList(spec.shared, 'shared');
-
   // Studio rejects these too, but only after the archive is packed and
   // uploaded, and the plan printed before that reads these shapes as typed.
   // An empty build list is "no build step"; an empty command never is.
@@ -80,6 +78,7 @@ function assertKnownKeys(spec: AppSpec): void {
     for (const section of ['build', 'start', 'dev'] as const) {
       assertCommandList(resource[section], `resources.${name}.${section}`);
     }
+    assertPathList(resource.watchPaths, `resources.${name}.watchPaths`);
   }
 }
 
@@ -102,18 +101,22 @@ export function assertCommandList(list: unknown, path: string): void {
   });
 }
 
-// Only the shape: Studio checks that each folder exists and sits outside
-// every service's root, against the uploaded archive.
-function assertFolderList(list: unknown, path: string): void {
+/*
+  Only the shape: Studio checks each path against the uploaded archive. An
+  empty list would mean no change ever rebuilds the service, which is never
+  what was meant, so it is refused rather than read as "rebuild on nothing".
+*/
+function assertPathList(list: unknown, path: string): void {
   if (list === undefined) {
     return;
   }
-  const isFolderList =
+  const isPathList =
     Array.isArray(list) &&
-    list.every((folder: unknown) => typeof folder === 'string' && folder.trim() !== '');
-  if (!isFolderList) {
+    list.length > 0 &&
+    list.every((entry: unknown) => typeof entry === 'string' && entry.trim() !== '');
+  if (!isPathList) {
     throw new Error(
-      `${APP_SPEC_FILE_NAME}: "${path}" must be a list of folder names, e.g. ["shared"].`
+      `${APP_SPEC_FILE_NAME}: "${path}" must be a non-empty list of paths, e.g. ["api", "shared"].`
     );
   }
 }

@@ -97,20 +97,32 @@ describe('modelence.config.json parsing', () => {
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
-  it('accepts a list of shared folders', async () => {
+  it('has no top-level list of shared folders', async () => {
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ shared: ['shared'] }));
+    await expect(prepareSpec(dir)).rejects.toThrow('unknown key "shared"');
+  });
+
+  it("accepts a service's watch paths and prints them in the plan", async () => {
     const spec = {
-      shared: ['shared', 'packages/utils'],
-      resources: { app: { type: 'service' } },
+      resources: {
+        app: { type: 'service', watchPaths: ['apps/api', 'shared', 'package-lock.json'] },
+      },
     };
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
     expect(await prepareSpec(dir)).toEqual(spec);
+    expect(logged).toContain('  watch:   apps/api, shared, package-lock.json');
   });
 
-  it.each([{ shared: 'shared' }, { shared: ['shared', 42] }, { shared: ['  '] }])(
-    'rejects shared folders that are not a list of names (%j)',
-    async (spec) => {
-      await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
-      await expect(prepareSpec(dir)).rejects.toThrow('"shared" must be a list of folder names');
+  it.each([[], 'shared', ['shared', 42], ['  ']])(
+    'rejects watch paths that are not a list of paths (%j)',
+    async (watchPaths) => {
+      await writeFile(
+        join(dir, 'modelence.config.json'),
+        JSON.stringify({ resources: { app: { type: 'service', watchPaths } } })
+      );
+      await expect(prepareSpec(dir)).rejects.toThrow(
+        '"resources.app.watchPaths" must be a non-empty list of paths'
+      );
     }
   );
 
