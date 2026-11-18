@@ -186,6 +186,7 @@ http.ListenAndServe(":"+port, mux)
     "worker": {
       "type": "service",
       "dockerfile": "Dockerfile",
+      "public": false,
       "healthCheck": { "type": "none" },
       "rollout": "recreate"
     }
@@ -193,8 +194,9 @@ http.ListenAndServe(":"+port, mux)
 }
 ```
 
-`"rollout": "recreate"` stops the old container before the new one starts, so two versions never
-take the same jobs. A worker usually runs next to a web service; see
+`"public": false` keeps the environment's URL off a service that listens on nothing; a lone service
+is public otherwise. `"rollout": "recreate"` stops the old container before the new one starts, so
+two versions never take the same jobs. A worker usually runs next to a web service; see
 [Several services](/deploy/services).
 
 ## Verifying the build

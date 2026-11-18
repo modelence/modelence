@@ -132,8 +132,8 @@ command instead, in its own terminal.
 
 ## Examples
 
-**A site and a background worker** in one Node.js project. Both build from the project root and share
-its code and lockfile, so both watch them:
+**A site and a background worker** in one Node.js project. Both build from the whole project, so
+neither sets `watchPaths`, and every deploy rebuilds both:
 
 ```json modelence.config.json
 {
