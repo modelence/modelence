@@ -189,10 +189,20 @@ export async function obtainSession(
     if (!existingSession && !isHex64) {
       existingSession = await sessionsCollection.findOne({ authToken });
       if (existingSession) {
-        await sessionsCollection.updateOne(
-          { _id: existingSession._id as ObjectId },
-          { $set: { authToken: hashedToken } }
-        );
+        const expiresAt =
+          existingSession.expiresAt instanceof Date
+            ? existingSession.expiresAt
+            : new Date(existingSession.expiresAt);
+
+        if (!(expiresAt.getTime() > Date.now())) {
+          await sessionsCollection.deleteOne({ _id: existingSession._id as ObjectId });
+          existingSession = null;
+        } else {
+          await sessionsCollection.updateOne(
+            { _id: existingSession._id as ObjectId },
+            { $set: { authToken: hashedToken } }
+          );
+        }
       }
     }
 
@@ -202,7 +212,7 @@ export async function obtainSession(
           ? existingSession.expiresAt
           : new Date(existingSession.expiresAt);
 
-      if (expiresAt.getTime() <= Date.now()) {
+      if (!(expiresAt.getTime() > Date.now())) {
         await sessionsCollection.deleteOne({ _id: existingSession._id as ObjectId });
       } else {
         return {
@@ -322,7 +332,7 @@ async function processSessionHeartbeat(session: Session) {
   const newExpiresAt = new Date(now + time.days(7));
 
   await sessionsCollection.updateOne(
-    { authToken: hashToken(session.authToken) },
+    { authToken: hashToken(session.authToken), expiresAt: { $gt: new Date(now) } },
     {
       $set: {
         lastActiveDate: new Date(now),
@@ -343,14 +353,12 @@ export function setAuthTokenCookie(res: Response, authToken: string) {
 }
 
 export function clearAuthTokenCookie(res: Response) {
-  if (typeof res?.clearCookie === 'function') {
-    res.clearCookie('authToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  });
 }
 
 export default new Module('_system.session', {

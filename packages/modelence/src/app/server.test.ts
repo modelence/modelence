@@ -387,7 +387,36 @@ describe('app/server getCallContext', () => {
 
     await getCallContext(req, res);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('stale-cookie-token');
+    expect(mockAuthenticate).toHaveBeenCalledWith('stale-cookie-token', {
+      persistNewSession: false,
+    });
+    expect(clearCookie).toHaveBeenCalledWith(
+      'authToken',
+      expect.objectContaining({ httpOnly: true, path: '/' })
+    );
+  });
+
+  test('clears authToken cookie when session points to a disabled or deleted user', async () => {
+    const clearCookie = vi.fn();
+    const res = { clearCookie } as unknown as Response;
+    const req = createRequest({
+      cookies: { authToken: 'stale-user-cookie' },
+      body: {},
+      headers: { host: 'localhost:3000' },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'session-token', expiresAt: new Date(), userId: 'deleted-user-id' },
+      user: null,
+      roles: ['guest'],
+    } as never);
+
+    await getCallContext(req, res);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('stale-user-cookie', {
+      persistNewSession: false,
+    });
     expect(clearCookie).toHaveBeenCalledWith(
       'authToken',
       expect.objectContaining({ httpOnly: true, path: '/' })

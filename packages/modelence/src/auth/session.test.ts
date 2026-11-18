@@ -178,13 +178,48 @@ describe('auth/session', () => {
     findOneMock.mockResolvedValueOnce(expiredLegacy as never);
     deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
     insertOneMock.mockResolvedValue({ acknowledged: true } as never);
-    const updateOneMockLocal = vi.fn().mockResolvedValue({ acknowledged: true } as never);
-    (sessionsCollection as unknown as { updateOne: typeof updateOneMockLocal }).updateOne =
-      updateOneMockLocal;
 
     const result = await obtainSession('legacy-raw-token');
 
     expect(deleteOneMock).toHaveBeenCalledWith({ _id: expiredLegacy._id });
+    expect(updateOneMock).not.toHaveBeenCalled();
+    expect(insertOneMock).toHaveBeenCalled();
+    expect(result.authToken).toBe('auth-token');
+    expect(result.userId).toBeNull();
+  });
+
+  test('obtainSession returns unsaved session on expired token when persistNewSession is false', async () => {
+    const expired = {
+      _id: new ObjectId(),
+      authToken: 'token',
+      expiresAt: new Date(Date.now() - 1000),
+      userId: new ObjectId(),
+    };
+    findOneMock.mockResolvedValue(expired as never);
+    deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+
+    const result = await obtainSession('token', { persistNewSession: false });
+
+    expect(findOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
+    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expired._id });
+    expect(insertOneMock).not.toHaveBeenCalled();
+    expect(isSessionSaved(result)).toBe(false);
+  });
+
+  test('obtainSession rejects session with invalid or unparseable expiresAt (fail closed)', async () => {
+    const invalidSession = {
+      _id: new ObjectId(),
+      authToken: 'token',
+      expiresAt: 'not-a-valid-date',
+      userId: new ObjectId(),
+    };
+    findOneMock.mockResolvedValue(invalidSession as never);
+    deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+    insertOneMock.mockResolvedValue({ acknowledged: true } as never);
+
+    const result = await obtainSession('token');
+
+    expect(deleteOneMock).toHaveBeenCalledWith({ _id: invalidSession._id });
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
     expect(result.userId).toBeNull();
@@ -242,7 +277,11 @@ describe('auth/session', () => {
     });
 
     test('still returns the existing session when the token is found', async () => {
-      const existing = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+      const existing = {
+        authToken: 'token',
+        expiresAt: new Date(Date.now() + 60_000),
+        userId: new ObjectId(),
+      };
       findOneMock.mockResolvedValue(existing as never);
 
       const result = await obtainSession('token', { persistNewSession: false });
@@ -472,7 +511,11 @@ describe('auth/session', () => {
     });
 
     test('does not throw when res is null (in-process invocations)', async () => {
-      const session = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+      const session = {
+        authToken: 'token',
+        expiresAt: new Date(Date.now() + 60_000),
+        userId: new ObjectId(),
+      };
 
       await sessionSystemModule.mutations.init.call(
         sessionSystemModule,
@@ -492,7 +535,11 @@ describe('auth/session', () => {
   describe('_system.session.heartbeat', () => {
     test('updates lastActiveDate and expiresAt on active session', async () => {
       updateOneMock.mockResolvedValue({ acknowledged: true } as never);
-      const session = { authToken: 'token', expiresAt: new Date(), userId: new ObjectId() };
+      const session = {
+        authToken: 'token',
+        expiresAt: new Date(Date.now() + 60_000),
+        userId: new ObjectId(),
+      };
 
       await sessionSystemModule.mutations.heartbeat.call(
         sessionSystemModule,
@@ -507,7 +554,7 @@ describe('auth/session', () => {
       );
 
       expect(updateOneMock).toHaveBeenCalledWith(
-        { authToken: 'hashed-auth-token' },
+        { authToken: 'hashed-auth-token', expiresAt: { $gt: expect.any(Date) } },
         {
           $set: {
             lastActiveDate: expect.any(Date),
