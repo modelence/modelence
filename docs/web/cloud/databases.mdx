@@ -17,7 +17,7 @@ Each environment gets its own MongoDB database with nothing to declare. Its conn
 ## PostgreSQL and Redis
 
 Managed databases and caches are declared in the `resources` section of
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and the app reads each one
+[`modelence.config.json`](/deploy/config), and the app reads each one
 through a variable tied to one of its outputs:
 
 ```json modelence.config.json
@@ -40,7 +40,7 @@ through a variable tied to one of its outputs:
 
 The `url` output is a full connection string, `postgresql://...?sslmode=require` for PostgreSQL and
 `rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
-separately. The [reference](/deploy/setup#modelence-config-json-reference) lists every plan and
+separately. The [reference](/deploy/config) lists every plan and
 output.
 
 Managed resources need a paid plan.

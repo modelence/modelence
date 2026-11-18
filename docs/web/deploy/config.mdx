@@ -1,0 +1,175 @@
+---
+title: 'modelence.config.json'
+description: 'Every key of modelence.config.json: services, managed resources and variables'
+icon: 'file-code'
+---
+
+`modelence.config.json` sits at the project root and is the whole contract between the project and
+Modelence Cloud. Comments (`//`, `/* */`) and trailing commas are allowed. Apart from a resource's
+`type`, every key is optional; a missing key takes the default.
+
+To set a project up step by step, follow [Deploy Setup](/deploy/setup). This page lists every key.
+
+## Top level
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
+| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): its services, and any managed databases, caches and telemetry. |
+| `env` | object | `{}` | The variables the app expects, keyed by name. See [Variables](#variables). |
+
+## Services
+
+A resource with `"type": "service"` is a process built from this repository and run in containers of
+its own. A service is built one of two ways:
+
+- **Node.js** (the default): Modelence Cloud builds the image on an official Node.js image, runs the
+  `build` commands and starts the `start` commands.
+- **Dockerfile**: the service sets `dockerfile`, and the project's own Dockerfile builds the image.
+  Use it for any language, or for a Node.js app that needs system packages. See
+  [Dockerfile services](/deploy/dockerfile).
+
+An environment runs up to 5 services. More than one needs a paid plan. See
+[Several services](/deploy/services).
+
+### Keys of every service
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"service"` | required | What the resource is. |
+| `root` | string | `"."` | Subdirectory that holds the service, relative to the project root (monorepos). For a Node.js service, commands run there and the whole repository is still copied. For a Dockerfile service, it is the build context: the build sees only the files under it. |
+| `start.commands` | string[] | see below | Commands that start the process, run in order; the last one must keep running. A Node.js service without `start` has no process: it serves only its `static` directories. A Dockerfile service without `start` runs its Dockerfile's `ENTRYPOINT` and `CMD`; with `start`, the commands replace them and run under `/bin/sh -c`. |
+| `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
+| `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. See [Several services](/deploy/services#public-and-private-services). |
+| `watchPaths` | string[] | none: every deploy rebuilds the service | Files and folders, relative to the project root, whose changes rebuild the service, such as `["api", "shared", "package-lock.json"]`. 1 to 20 paths. See [What a deploy rebuilds](/deploy/services#what-a-deploy-rebuilds). |
+| `healthCheck` | object | `{ "type": "tcp" }` | How the platform decides a container is healthy. See [Health checks](#health-checks). |
+| `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"` starts the new ones and stops the old ones once the new ones are healthy, so both versions run for a while. `"recreate"` stops the old ones first, with a short gap, for a process that must never run twice, such as a bot that holds one connection. |
+| `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL`, 2 to 120. The container stops receiving new traffic when `SIGTERM` is sent. |
+
+### Keys of a Node.js service
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `image` | string | `"node-22-slim"` | Base image, `node-<version>-<variant>`: a Node.js major (`"node-22-slim"`) or exact version (`"node-22.23.1-alpine"`), `18` or newer. `slim` is glibc and works with prebuilt native binaries; `alpine` is smaller. |
+| `build.commands` | string[] | `["npm install"]` | Commands that install dependencies and build the app, run in order in `root`. `[]` means there is no build step. Only npm is preinstalled. |
+| `static` | `[{ path, dir }]` | `[]` | Directories the platform serves in front of the process. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. Requests that match no file fall back to the directory's `index.html`, so single-page apps route on the client. Requests that no directory answers go to the process. |
+
+The process must listen on the port in the `PORT` environment variable. A hardcoded port never
+receives traffic.
+
+### Keys of a Dockerfile service
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `dockerfile` | string | — | The Dockerfile, relative to `root` (`"Dockerfile"`, `"docker/api.Dockerfile"`). Can't be combined with `image`, `build` or `static`: the Dockerfile defines the image and the build. |
+| `port` | number | `3000` | The port the process listens on, for an image that has one built in (`EXPOSE 8000`, `--port 8000`). The container also gets it as `PORT`. Allowed only with `dockerfile`. |
+
+### Health checks
+
+A container is checked every 5 seconds. 10 failures in a row replace it, and a deploy whose new
+containers never become healthy rolls the service back.
+
+| Value | Healthy when |
+| --- | --- |
+| `{ "type": "tcp" }` | Something accepts connections on the service's port. The default. |
+| `{ "type": "http", "path": "/health" }` | `GET` on the path answers with a 2xx status within 4 seconds. Redirects are followed, so point `path` at an endpoint that answers 2xx itself. The request carries the `Host` that real traffic carries and `X-Forwarded-Proto: https`. |
+| `{ "type": "none" }` | The container is running. For a process that listens on no port, such as a queue worker. |
+
+`tcp` and `http` take `gracePeriod`: the seconds after a container starts during which failed checks
+don't count, 0 to 300, default 60. Raise it for an app that loads a model or warms a cache before it
+listens.
+
+The check connects from outside the container, so the process must listen on `0.0.0.0`, not only on
+`127.0.0.1`.
+
+### Missing, empty and none
+
+A missing `build` runs `npm install`; `"build": { "commands": [] }` means there is no build step. A
+missing `start` means no process for a Node.js service, and the Dockerfile's own `CMD` for a
+Dockerfile service. An empty command string `""` is invalid and is rejected.
+
+## Managed resources
+
+A database, cache or telemetry endpoint that a deploy creates in the environment.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"postgres"` \| `"redis"` \| `"telemetry"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache, `"telemetry"` the environment's OpenTelemetry endpoint. |
+| `plan` | string | the smallest | The size to create it with. PostgreSQL: `postgres-1gb`, `postgres-2gb`, `postgres-4gb`, `postgres-8gb`, `postgres-16gb` (the RAM of the database). Redis: `redis-250mb`, `redis-1gb`, `redis-5gb` (the data it holds). Telemetry takes no `plan`. |
+
+PostgreSQL and Redis need a paid plan. Telemetry needs a plan with monitoring (Pro and up). It gives
+the environment a private OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days
+and shown on the environment's **Monitoring** page. Logs need no setup: the app's output is
+collected and shown on the **Logs** page.
+
+A deploy creates every managed resource the file declares that the environment doesn't have yet,
+and the new version starts only once they are ready. Resources are matched by name, so the same file
+works in every environment:
+
+- A resource that already exists is kept as it is, with its data. `plan` is read only when the
+  resource is created, so changing it later has no effect.
+- A resource removed from the file is not deleted. Delete it in the dashboard under **Resources**
+  when it is no longer needed; a database or cache is billed until then.
+- Renaming a resource creates a new, empty one. The old one stays until it is deleted.
+
+An environment can have up to 10 managed resources, telemetry included, and at most one of them can
+be telemetry.
+
+## Variables
+
+Every service gets these variables at start:
+
+- `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment (both
+  hold the same connection string).
+- `SITE_URL` and `ROOT_URL`: the environment's public URL (both hold the same value).
+- `PORT`: the port the process must listen on.
+- Any variables the user defines in the dashboard under **Environment variables**.
+- The variables `env` ties to a resource, such as `DATABASE_URL` from a PostgreSQL database's `url`.
+
+Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be defined by the user.
+
+Each entry of `env` declares one variable:
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `type` | `"text"` \| `"secret"` \| `"resource"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. `"resource"` takes the value from a resource; see below. |
+| `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build, which needs anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. A Dockerfile service reads build variables differently; see [Variables in the build](/deploy/dockerfile#variables-in-the-build). |
+| `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
+| `required` | boolean | `true` | Whether the app needs a value to run. A deploy asks for every required variable that has no value, and a CI deploy fails without one. Set `false` for a variable the app runs without (an optional integration's key). |
+
+A value set in the dashboard overrides a `value` written here, so a literal in the file is the
+committed default rather than a fixed constant. Every service of the environment gets every
+variable.
+
+### Resource variables
+
+A variable with `"type": "resource"` takes its value from one output of a managed resource or of
+another service in the same file, and takes only these keys:
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"resource"` | Required. |
+| `resource` | string | The name of a service, `postgres`, `redis` or `telemetry` entry in `resources`. |
+| `output` | string | Which value of the resource. A service: `url`, `host`, `port`. PostgreSQL: `url`, `host`, `port`, `user`, `password`, `database`. Redis: `url`, `host`, `port`, `password`. Telemetry: `endpoint`, `headers`. |
+
+The `url` output is a full connection string: `postgresql://...?sslmode=require` for PostgreSQL and
+`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them
+separately, such as `PGHOST` and `PGPASSWORD`. These variables reach the running app only, not the
+build. They can't be set or changed in the dashboard, where they are listed with the resource they
+come from.
+
+A service's outputs are its private address: `url` is `http://<host>:<port>`, for example
+`http://worker.<environment id>.cloud.local:3000`. Only the environment's other services reach it.
+See [Several services](/deploy/services#reaching-another-service).
+
+Telemetry's outputs are the values of the standard OpenTelemetry variables: `endpoint` for
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `headers` for `OTEL_EXPORTER_OTLP_HEADERS`, which holds the
+environment's credentials. The endpoint takes OTLP over HTTP and is private: only the running app
+reaches it, not the build or a local machine.
+
+<Note>
+Apps built on the Modelence framework need no file: `npx modelence@latest deploy` recognizes the
+`modelence` dependency and keeps building them locally, as it always has. To build one on Modelence
+Cloud instead, describe it like any other Node.js app:
+`"build": { "commands": ["npm ci", "npm run build"] }` and `"start": { "commands": ["npm start"] }`.
+</Note>

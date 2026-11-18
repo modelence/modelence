@@ -1,0 +1,210 @@
+---
+title: 'Dockerfile Services'
+description: 'Deploy a service in any language from its own Dockerfile'
+icon: 'docker'
+---
+
+A service that sets `dockerfile` is built from the project's own Dockerfile instead of the Node.js
+build. Use it for a service in any language (Python, Go, Ruby, Java, Rust, PHP, .NET…), or for a
+Node.js app that needs system packages the Node.js image doesn't have.
+
+A Node.js app that the regular build can run should stay a Node.js service, even if it has a
+Dockerfile: that build needs no Dockerfile upkeep and serves `static` directories.
+
+## The file
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "dockerfile": "Dockerfile",
+      "port": 8000
+    }
+  }
+}
+```
+
+- `dockerfile` is relative to `root` (default `"."`, the project root), and `root` is the build
+  context: the build sees only the files under it. For a service in `services/api/` with its
+  Dockerfile there, set `"root": "services/api"` and `"dockerfile": "Dockerfile"`.
+- `port` is the port the process listens on, default `3000`.
+- `image`, `build` and `static` can't be used with `dockerfile`: the Dockerfile defines the image and
+  the build.
+
+The other service keys work as for any service. See the
+[reference](/deploy/config#keys-of-every-service).
+
+## What the Dockerfile must do
+
+- **Listen on `0.0.0.0` on the service's port.** Traffic and the health check come from outside
+  the container, so a process bound to `127.0.0.1` (the default of `uvicorn`, `gunicorn` and
+  `flask run`) never receives them. The container gets the port as `PORT`. Either read `PORT`, or
+  listen on a fixed port and set `port` to it.
+- **Start the process with `CMD` or `ENTRYPOINT`.** The image runs as the Dockerfile leaves it:
+  `ENTRYPOINT`, `CMD`, `USER` and `WORKDIR` apply. Set `start` in the file only to replace them; its
+  commands run under `/bin/sh -c`.
+- **Stop on `SIGTERM`.** A stopping container gets `SIGTERM`, then `SIGKILL` after `stopTimeout`
+  seconds (default 30). Use the exec form (`CMD ["uvicorn", ...]`), or `exec` in a shell form, so the
+  signal reaches the process and not a shell in front of it.
+- **Pull base images from the mirror.** Docker Hub limits how often images can be pulled, so a
+  build can fail on `FROM python:3.13-slim`. Use the same image from
+  `public.ecr.aws/docker/library/`, for example `FROM public.ecr.aws/docker/library/python:3.13-slim`.
+- **Keep the build context small.** Add a `.dockerignore` in `root` for `.git`, dependency folders
+  (`node_modules`, `.venv`), build output and local `.env` files.
+
+Multi-stage builds work, and so does any `USER`.
+
+## Variables at runtime
+
+The container gets the same variables as any service, set in its environment at start: `MONGODB_URI`,
+`SITE_URL`, `PORT`, the dashboard's variables and the outputs `env` ties to resources. See
+[Variables](/deploy/config#variables). Read them from the environment as usual, such as
+`os.environ["DATABASE_URL"]` in Python.
+
+## Variables in the build
+
+A variable scoped to the build (`"scopes": ["build", "runtime"]`) reaches a Dockerfile in one of two
+ways.
+
+**A `value` written in the file** arrives as a build argument. Declare it with `ARG` before use:
+
+```dockerfile
+ARG PUBLIC_API_URL
+RUN npm run build
+```
+
+**A value set in the dashboard** arrives as a BuildKit secret, so it never ends up in an image layer.
+Read it in the `RUN` step that needs it:
+
+```dockerfile
+RUN --mount=type=secret,id=modelence-build-env \
+    sh -c 'set -a; . /run/secrets/modelence-build-env; set +a; npm run build'
+```
+
+The secret is readable by root only. After a `USER` instruction, add the user's id to the mount, such
+as `--mount=type=secret,id=modelence-build-env,uid=1000`.
+
+## Health checks
+
+By default a container is healthy once something accepts connections on its port
+(`{ "type": "tcp" }`). Use `{ "type": "http", "path": "/health" }` for an app with a health
+endpoint, and `{ "type": "none" }` for a process that listens on no port, such as a queue worker. See
+[Health checks](/deploy/config#health-checks).
+
+## Running it locally
+
+`modelence dev` runs the service's `dev` commands on the local machine, not in Docker, with the
+connected environment's variables. A project without a `package.json` needs `dev` set, for example
+`"dev": { "commands": ["uvicorn main:app --reload --port 8000"] }`.
+
+## Writing a Dockerfile
+
+When a project has no Dockerfile, write one in `root`. Follow these rules:
+
+- Start from the official image for the language, from the mirror, at the version the project
+  declares (`.python-version`, `pyproject.toml`, `go.mod`, `.ruby-version`, `pom.xml`).
+- Copy the dependency manifest first and install, then copy the rest of the source, so a change to
+  the code doesn't reinstall the dependencies.
+- Install with the project's lockfile when it has one (`uv sync --frozen`, `poetry install`,
+  `go mod download`, `bundle install`).
+- Start a production server, not a development one: `gunicorn` or `uvicorn` without `--reload`, not
+  `flask run` or `manage.py runserver`.
+- Add a `.dockerignore`.
+
+**Python (FastAPI)**, listening on a fixed port that `port` names:
+
+```dockerfile Dockerfile
+FROM public.ecr.aws/docker/library/python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "dockerfile": "Dockerfile",
+      "port": 8000
+    }
+  }
+}
+```
+
+For Django, run `gunicorn <project>.wsgi --bind 0.0.0.0:8000` instead. Add the environment's host to
+`ALLOWED_HOSTS`, for example from `SITE_URL`.
+
+**Go**, built in one stage and run from a small image in a second. The program reads `PORT`:
+
+```dockerfile Dockerfile
+FROM public.ecr.aws/docker/library/golang:1.23 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/server .
+
+FROM public.ecr.aws/docker/library/alpine:3.20
+COPY --from=build /out/server /server
+USER 65534
+CMD ["/server"]
+```
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "dockerfile": "Dockerfile"
+    }
+  }
+}
+```
+
+```go
+port := os.Getenv("PORT")
+if port == "" {
+	port = "3000"
+}
+http.ListenAndServe(":"+port, mux)
+```
+
+**A queue worker** that serves no traffic needs no port and no health endpoint:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "worker": {
+      "type": "service",
+      "dockerfile": "Dockerfile",
+      "healthCheck": { "type": "none" },
+      "rollout": "recreate"
+    }
+  }
+}
+```
+
+`"rollout": "recreate"` stops the old container before the new one starts, so two versions never
+take the same jobs. A worker usually runs next to a web service; see
+[Several services](/deploy/services).
+
+## Verifying the build
+
+Build and run the image locally before deploying, with the same context and port:
+
+```bash
+docker build -f <root>/<dockerfile> -t modelence-check <root>
+docker run --rm -e PORT=<port> -p <port>:<port> modelence-check
+```
+
+Confirm the app answers on `http://localhost:<port>`, and that the health check path, if set, answers
+2xx. If Docker isn't installed, tell the user that the image was not checked locally.

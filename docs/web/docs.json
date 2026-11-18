@@ -22,6 +22,14 @@
             ]
           },
           {
+            "group": "Deploy",
+            "pages": [
+              "deploy/config",
+              "deploy/dockerfile",
+              "deploy/services"
+            ]
+          },
+          {
             "group": "Configuration",
             "pages": [
               "cloud/environment-variables"

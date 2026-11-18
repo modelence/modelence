@@ -1,0 +1,195 @@
+---
+title: 'Several Services'
+description: 'Run a web app, APIs and workers side by side in one environment'
+icon: 'layer-group'
+---
+
+An environment can run several services: a web app next to an API in another language, or a
+background worker next to the site. Each service is built its own way, Node.js or
+[Dockerfile](/deploy/dockerfile), and runs in containers of its own. The services share a private
+network that no other environment can reach.
+
+- An environment runs up to 5 services. More than one needs a paid plan.
+- Several services are for different processes. To run more copies of the same process, raise the
+  service's container count in the dashboard instead.
+
+## The file
+
+Each service is one entry of `resources`. This app has a Node.js site in `web/` and a Python API in
+`ml/` that only the site calls:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "web": {
+      "type": "service",
+      "root": "web",
+      "build": { "commands": ["npm ci", "npm run build"] },
+      "start": { "commands": ["node server.js"] },
+      "public": true,
+      "watchPaths": ["web"]
+    },
+    "ml": {
+      "type": "service",
+      "root": "ml",
+      "dockerfile": "Dockerfile",
+      "port": 8000,
+      "watchPaths": ["ml"]
+    }
+  },
+  "env": {
+    "ML_URL": { "type": "resource", "resource": "ml", "output": "url" }
+  }
+}
+```
+
+`web` serves the environment's URL and reads the API's address from `ML_URL`. `ml` can't be reached
+from the internet.
+
+## Public and private services
+
+- **The public service** gets the environment's URL and its custom domains. At most one service can
+  be public.
+- **A private service** is reached only from the environment's other services.
+
+A lone service is public unless it sets `"public": false`. With several, every service is private
+unless it sets `"public": true`. So **when you add a service to an app that is already live, set
+`"public": true` on the service that serves the site.** A deploy that would take the URL away from
+the site is refused before it builds.
+
+An environment where no service is public, such as one that runs only workers, has no URL.
+
+## Reaching another service
+
+A service gets another's address from a variable of `"type": "resource"` that names it:
+
+```json
+"env": {
+  "WORKER_URL": { "type": "resource", "resource": "worker", "output": "url" }
+}
+```
+
+| Output | Value |
+| --- | --- |
+| `url` | `http://<host>:<port>`, such as `http://worker.<environment id>.cloud.local:3000` |
+| `host` | `worker.<environment id>.cloud.local` |
+| `port` | The port the service listens on: `3000` for a Node.js service, its `port` for a Dockerfile one. |
+
+Every service gets every variable, so any service can read `WORKER_URL`. Calls on the private network
+are plain HTTP. Don't hardcode an address: it contains the environment's id, so it differs in every
+environment.
+
+The host is the service's name in lowercase, with `_` written as `-`. So a private service's name must
+end in a letter or a digit, and two names can't differ only in case or in `_` and `-`.
+
+## What a deploy does
+
+1. **It builds the services one after another**, in the order of the file. If one fails to build,
+   the deploy stops and no service is updated.
+2. **It rolls out each service on its own.** If one service's new version fails to start, that
+   service goes back to the version it ran before, and the others keep their new version. The
+   deploy is marked failed, naming the service.
+3. **It deletes the services removed from the file**, once the deploy has finished. Renaming a
+   service creates a new service and deletes the old one.
+
+### What a deploy rebuilds
+
+By default, every deploy rebuilds and restarts every service. To rebuild a service only when its code
+changes, list the files and folders it is built from in its `watchPaths`, relative to the project
+root. Then a deploy rebuilds the service only when:
+
+- a file under one of its `watchPaths` changed;
+- `env` changed;
+- its base image (`node-22-slim`, or its Dockerfile's last `FROM`) was republished since its last
+  build, unless that `FROM` is pinned by digest (`@sha256:`);
+- one of these keys of its entry changed:
+  - a Node.js service: `image`, `root`, `build`, `start` or `static`;
+  - a Dockerfile service: `root` or `dockerfile`.
+
+A change to its `healthCheck`, `rollout` or `stopTimeout`, and for a Dockerfile service to its
+`start` or `port`, restarts it without a rebuild. A service that is neither rebuilt nor restarted
+keeps running as it is.
+
+Nothing is added to `watchPaths` for you: not the service's own `root`, not the lockfile, not other
+files at the project root. List everything the service's build reads: its own folder, any shared
+code it imports, and the `package.json` and lockfile it installs from. A change outside its
+`watchPaths` never rebuilds it, so a path left out keeps the service on old code. A path that
+doesn't exist fails the deploy.
+
+`npx modelence@latest deploy --rebuild-all` rebuilds and restarts every service, whatever its
+`watchPaths`.
+
+## Scaling and billing
+
+Each service's container count and container type are set in the dashboard, under the service's
+**Configure**. Each service is billed for its own containers.
+
+## Running locally
+
+`modelence dev` runs one service, so it refuses a file with several. Start each service with its own
+command instead, in its own terminal.
+
+## Examples
+
+**A site and a background worker** in one Node.js project. Both build from the project root and share
+its code and lockfile, so both watch them:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "web": {
+      "type": "service",
+      "build": { "commands": ["npm ci", "npm run build"] },
+      "start": { "commands": ["node dist/server.js"] },
+      "public": true
+    },
+    "worker": {
+      "type": "service",
+      "build": { "commands": ["npm ci", "npm run build"] },
+      "start": { "commands": ["node dist/worker.js"] },
+      "healthCheck": { "type": "none" },
+      "rollout": "recreate"
+    },
+    "queue": { "type": "redis" }
+  },
+  "env": {
+    "REDIS_URL": { "type": "resource", "resource": "queue", "output": "url" }
+  }
+}
+```
+
+The worker listens on no port, so it has no health check. `"rollout": "recreate"` stops the old
+worker before the new one starts, so a job is never taken by both versions. Keep the worker on one
+container if its jobs must not run twice, or have each job take a lock in the database.
+
+**An npm workspaces monorepo** with a public site and a private API that both import
+`packages/shared`:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "web": {
+      "type": "service",
+      "build": { "commands": ["npm ci", "npm run build -w apps/web"] },
+      "start": { "commands": ["node apps/web/dist/server.js"] },
+      "public": true,
+      "watchPaths": ["apps/web", "packages/shared", "package.json", "package-lock.json"]
+    },
+    "api": {
+      "type": "service",
+      "build": { "commands": ["npm ci", "npm run build -w apps/api"] },
+      "start": { "commands": ["node apps/api/dist/server.js"] },
+      "watchPaths": ["apps/api", "packages/shared", "package.json", "package-lock.json"]
+    }
+  },
+  "env": {
+    "API_URL": { "type": "resource", "resource": "api", "output": "url" }
+  }
+}
+```
+
+A change in `apps/api` rebuilds only `api`. A change in `packages/shared` or the lockfile rebuilds
+both.
