@@ -181,6 +181,7 @@ export async function obtainSession(
   if (authToken) {
     const hashedToken = hashToken(authToken);
     let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
+    let isLegacy = false;
 
     // Legacy fallback: try raw token lookup (pre-hash sessions)
     // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
@@ -188,33 +189,24 @@ export async function obtainSession(
     const isHex64 = /^[0-9a-f]{64}$/i.test(authToken);
     if (!existingSession && !isHex64) {
       existingSession = await sessionsCollection.findOne({ authToken });
-      if (existingSession) {
-        const expiresAt =
-          existingSession.expiresAt instanceof Date
-            ? existingSession.expiresAt
-            : new Date(existingSession.expiresAt);
+      isLegacy = !!existingSession;
+    }
 
-        if (!(expiresAt.getTime() > Date.now())) {
-          await sessionsCollection.deleteOne({ _id: existingSession._id as ObjectId });
-          existingSession = null;
-        } else {
+    if (existingSession) {
+      const expiresAt = new Date(existingSession.expiresAt);
+      if (!(expiresAt.getTime() > Date.now())) {
+        await sessionsCollection.deleteOne({
+          _id: existingSession._id as ObjectId,
+          expiresAt: { $lte: new Date() },
+        });
+        existingSession = null;
+      } else {
+        if (isLegacy) {
           await sessionsCollection.updateOne(
             { _id: existingSession._id as ObjectId },
             { $set: { authToken: hashedToken } }
           );
         }
-      }
-    }
-
-    if (existingSession) {
-      const expiresAt =
-        existingSession.expiresAt instanceof Date
-          ? existingSession.expiresAt
-          : new Date(existingSession.expiresAt);
-
-      if (!(expiresAt.getTime() > Date.now())) {
-        await sessionsCollection.deleteOne({ _id: existingSession._id as ObjectId });
-      } else {
         return {
           authToken,
           expiresAt,

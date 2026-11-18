@@ -161,7 +161,10 @@ describe('auth/session', () => {
     const result = await obtainSession('token');
 
     expect(findOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
-    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expired._id });
+    expect(deleteOneMock).toHaveBeenCalledWith({
+      _id: expired._id,
+      expiresAt: { $lte: expect.any(Date) },
+    });
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
     expect(result.userId).toBeNull();
@@ -181,7 +184,10 @@ describe('auth/session', () => {
 
     const result = await obtainSession('legacy-raw-token');
 
-    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expiredLegacy._id });
+    expect(deleteOneMock).toHaveBeenCalledWith({
+      _id: expiredLegacy._id,
+      expiresAt: { $lte: expect.any(Date) },
+    });
     expect(updateOneMock).not.toHaveBeenCalled();
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
@@ -201,7 +207,10 @@ describe('auth/session', () => {
     const result = await obtainSession('token', { persistNewSession: false });
 
     expect(findOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
-    expect(deleteOneMock).toHaveBeenCalledWith({ _id: expired._id });
+    expect(deleteOneMock).toHaveBeenCalledWith({
+      _id: expired._id,
+      expiresAt: { $lte: expect.any(Date) },
+    });
     expect(insertOneMock).not.toHaveBeenCalled();
     expect(isSessionSaved(result)).toBe(false);
   });
@@ -219,7 +228,10 @@ describe('auth/session', () => {
 
     const result = await obtainSession('token');
 
-    expect(deleteOneMock).toHaveBeenCalledWith({ _id: invalidSession._id });
+    expect(deleteOneMock).toHaveBeenCalledWith({
+      _id: invalidSession._id,
+      expiresAt: { $lte: expect.any(Date) },
+    });
     expect(insertOneMock).toHaveBeenCalled();
     expect(result.authToken).toBe('auth-token');
     expect(result.userId).toBeNull();

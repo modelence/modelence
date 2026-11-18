@@ -396,31 +396,32 @@ describe('app/server getCallContext', () => {
     );
   });
 
-  test('clears authToken cookie when session points to a disabled or deleted user', async () => {
+  test('does NOT clear authToken cookie when request resolves with an authenticated user', async () => {
     const clearCookie = vi.fn();
     const res = { clearCookie } as unknown as Response;
     const req = createRequest({
-      cookies: { authToken: 'stale-user-cookie' },
+      cookies: { authToken: 'valid-user-cookie' },
       body: {},
       headers: { host: 'localhost:3000' },
       protocol: 'https',
     });
     mockGetMongodbUri.mockReturnValue('mongodb://localhost');
     mockAuthenticate.mockResolvedValue({
-      session: { authToken: 'session-token', expiresAt: new Date(), userId: 'deleted-user-id' },
-      user: null,
-      roles: ['guest'],
+      session: {
+        authToken: 'valid-session-token',
+        expiresAt: new Date(Date.now() + 60_000),
+        userId: 'user-1',
+      },
+      user: { id: 'user-1', handle: 'demo' },
+      roles: ['user'],
     } as never);
 
     await getCallContext(req, res);
 
-    expect(mockAuthenticate).toHaveBeenCalledWith('stale-user-cookie', {
+    expect(mockAuthenticate).toHaveBeenCalledWith('valid-user-cookie', {
       persistNewSession: false,
     });
-    expect(clearCookie).toHaveBeenCalledWith(
-      'authToken',
-      expect.objectContaining({ httpOnly: true, path: '/' })
-    );
+    expect(clearCookie).not.toHaveBeenCalled();
   });
 
   test('does NOT clear authToken cookie when request has no authToken cookie', async () => {
