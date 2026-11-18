@@ -36,7 +36,8 @@ Each variable the app expects is declared by name in `env`:
 - **`text`** (the default) is a plain setting. A `value` in the file is the committed default, and a
   value set for an environment overrides it.
 - **`secret`** is for keys, tokens and passwords. It never carries a `value` in the file, and its
-  value is write-only once set.
+  value is encrypted and left out of the variable list in the dashboard. Environment members can open a
+  secret to view or change it, and every view is logged.
 - **`resource`** takes its value from a managed database or cache declared in the same file. It
   can't be set by hand. See [Databases](/cloud/databases).
 

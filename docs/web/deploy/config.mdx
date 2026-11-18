@@ -132,7 +132,7 @@ Each entry of `env` declares one variable:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `type` | `"text"` \| `"secret"` \| `"resource"` | `"text"` | `"secret"` is write-only in the dashboard and revealed one value at a time. `"resource"` takes the value from a resource; see below. |
+| `type` | `"text"` \| `"secret"` \| `"resource"` | `"text"` | `"secret"` is hidden in the dashboard variable list and revealed one value at a time, with each view logged. `"resource"` takes the value from a resource; see below. |
 | `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build, which needs anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. A Dockerfile service reads build variables differently; see [Variables in the build](/deploy/dockerfile#variables-in-the-build). |
 | `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
 | `required` | boolean | `true` | Whether the app needs a value to run. A deploy asks for every required variable that has no value, and a CI deploy fails without one. Set `false` for a variable the app runs without (an optional integration's key). |
