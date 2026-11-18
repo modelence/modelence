@@ -37,6 +37,13 @@ export interface CommandList {
   commands: string[];
 }
 
+export type ServiceHealthCheck =
+  | { type: 'tcp'; gracePeriod?: number }
+  | { type: 'http'; path: string; gracePeriod?: number }
+  | { type: 'none' };
+
+export type ServiceRollout = 'overlap' | 'recreate';
+
 // A client-only site is a service without `start`, serving its `static` mounts.
 export interface ServiceResource {
   type: 'service';
@@ -49,6 +56,20 @@ export interface ServiceResource {
   // package.json `dev` script in root.
   dev?: CommandList;
   static?: StaticMount[];
+  /*
+    The project's own Dockerfile, relative to `root`, which is the build
+    context. Replaces `image`, `build` and `static`; `start`, when set,
+    replaces its ENTRYPOINT and CMD.
+  */
+  dockerfile?: string;
+  // The port a Dockerfile service listens on (default 3000); a Node.js
+  // service listens on PORT.
+  port?: number;
+  healthCheck?: ServiceHealthCheck;
+  rollout?: ServiceRollout;
+  // Seconds between SIGTERM and SIGKILL when a container stops.
+  stopTimeout?: number;
+  public?: boolean;
   /*
     Files and folders, relative to the project root, whose changes rebuild
     this service. Missing means every deploy rebuilds it; with a list, only
@@ -95,8 +116,8 @@ export interface AppSpec {
   $schema?: string;
   /*
     Everything the app is made of, by the name the project chose: services
-    (type/image/root/build/start/static; up to 5) and the postgres, redis
-    and telemetry resources a deploy creates (type/plan).
+    (type/image/root/build/start/static, or a dockerfile; up to 5) and the
+    postgres, redis and telemetry resources a deploy creates (type/plan).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -161,18 +182,7 @@ export function formatAppSpec(spec: AppSpec): string[] {
     if (services.length > 1) {
       lines.push(`  resource: ${name}`);
     }
-    lines.push(`  image:   ${resource.image ?? 'default (node-22-slim)'}`);
-    if (resource.root && resource.root !== '.') {
-      lines.push(`  root:    ${resource.root}`);
-    }
-    lines.push(...formatCommands('build', resource.build, 'default (npm install)'));
-    lines.push(...formatCommands('start', resource.start, '(none)'));
-    for (const mount of resource.static ?? []) {
-      lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
-    }
-    if (resource.watchPaths) {
-      lines.push(`  watch:   ${resource.watchPaths.join(', ')}`);
-    }
+    lines.push(...formatService(resource));
   }
 
   for (const [name, resource] of entries) {
@@ -195,6 +205,38 @@ export function formatAppSpec(spec: AppSpec): string[] {
     lines.push(`  env:     ${key} (${kind})`);
   }
 
+  return lines;
+}
+
+/*
+  A Dockerfile service has no image or build of the Node.js runtime to show,
+  and without `start` it runs its Dockerfile's own CMD rather than nothing.
+*/
+function formatService(resource: ServiceResource): string[] {
+  const lines: string[] = [];
+  const { dockerfile } = resource;
+  if (dockerfile === undefined) {
+    lines.push(`  image:   ${resource.image ?? 'default (node-22-slim)'}`);
+  }
+  if (resource.root && resource.root !== '.') {
+    lines.push(`  root:    ${resource.root}`);
+  }
+  if (dockerfile === undefined) {
+    lines.push(...formatCommands('build', resource.build, 'default (npm install)'));
+    lines.push(...formatCommands('start', resource.start, '(none)'));
+  } else {
+    lines.push(`  dockerfile: ${dockerfile}`);
+    if (resource.port !== undefined) {
+      lines.push(`  port:    ${resource.port}`);
+    }
+    lines.push(...formatCommands('start', resource.start, "(the Dockerfile's CMD)"));
+  }
+  for (const mount of resource.static ?? []) {
+    lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
+  }
+  if (resource.watchPaths) {
+    lines.push(`  watch:   ${resource.watchPaths.join(', ')}`);
+  }
   return lines;
 }
 

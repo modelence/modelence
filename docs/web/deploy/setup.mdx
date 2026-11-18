@@ -59,7 +59,7 @@ A service entry of `resources` takes:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `type` | `"service"` | required | What the resource is. `"service"` is a Node.js app built from this repository. |
+| `type` | `"service"` | required | What the resource is. `"service"` is a process built from this repository: a Node.js app, or anything with a `dockerfile`. |
 | `image` | string | `"node-22-slim"` | Base image, `node-<version>-<variant>`: a Node.js major (`"node-22-slim"`) or exact version (`"node-22.23.1-alpine"`), `18` or newer. `slim` is glibc and works with prebuilt native binaries; `alpine` is smaller. |
 | `root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `static` directories are relative to it. |
 | `build.commands` | string[] | `["npm install"]` | Commands that install dependencies and build the app, run in order. `[]` means there is no build step. |
@@ -68,6 +68,11 @@ A service entry of `resources` takes:
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
 | `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. When you add a service to an app that is already live, set `"public": true` on the service that serves the site: otherwise it becomes private and the site loses its URL. |
 | `watchPaths` | string[] | none: every deploy rebuilds the service | Files and folders, relative to the project root, whose changes rebuild the service, such as `["service1", "shared", "package-lock.json"]`. See [Several services](#several-services). |
+| `dockerfile` | string | none | Build the service from the project's own Dockerfile, a path relative to `root` (`"Dockerfile"`), with `root` as the build context. For a service that isn't Node.js, or that needs system packages. Can't be combined with `image`, `build` or `static`. The image runs as the Dockerfile leaves it; `start`, when set, replaces its `ENTRYPOINT` and `CMD`. The process must listen on `0.0.0.0` (not `127.0.0.1`) on the port in `PORT`. Build-scoped `env` values arrive as build arguments (declare them with `ARG`). |
+| `port` | number | `3000` | The port a `dockerfile` service listens on, for an image that has one built in. The container gets it as `PORT`. Only for a `dockerfile` service: a Node.js service listens on `PORT`. |
+| `healthCheck` | object | `{ "type": "tcp" }` | How the platform decides a container is healthy, checked every 5 seconds. `{ "type": "tcp" }`: something accepts connections on `PORT`. `{ "type": "http", "path": "/health" }`: `GET` on the path answers with a 2xx status within 4 seconds. `{ "type": "none" }`: the container is running, for a process that listens on no port (a queue worker). `tcp` and `http` take `gracePeriod`, the seconds after start during which failed checks don't count. 10 failures in a row replace the container, and a deploy whose containers never become healthy rolls back. |
+| `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"` starts the new ones and stops the old ones once the new ones are healthy, so both versions run for a while. `"recreate"` stops the old ones first, with a short gap, for a process that must not run twice. |
+| `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL`, 2 to 120. |
 
 A managed resource entry of `resources` takes:
 
@@ -99,7 +104,8 @@ another's address from a `"type": "resource"` variable that names the service (s
       },
       "service2": {
         "type": "service",
-        "dockerfile": "service2/Dockerfile",
+        "root": "service2",
+        "dockerfile": "Dockerfile",
         "port": 8080,
         "watchPaths": ["service2"]
       }
@@ -114,10 +120,14 @@ another's address from a `"type": "resource"` variable that names the service (s
   `package.json` and lockfile it installs from. A change outside its `watchPaths` never rebuilds
   it, so a path left out keeps the service on old code.
 - A service that isn't rebuilt keeps running as it is.
-- A service is also rebuilt when its build settings in `modelence.config.json` changed, when `env`
-  changed, or when its base image (`node-22-slim`, or its Dockerfile's last `FROM`) was republished
-  since its last build, unless that `FROM` is pinned by digest (`@sha256:`). Any other change to
-  its entry, such as its `port` or `healthCheck`, restarts it without a rebuild.
+- A service is also rebuilt when `env` changed, when its base image (`node-22-slim`, or its
+  Dockerfile's last `FROM`) was republished since its last build, unless that `FROM` is pinned by
+  digest (`@sha256:`), or when one of these keys of its entry changed:
+  - a Node.js service: `image`, `root`, `build`, `start` or `static`;
+  - a `dockerfile` service: `root` or `dockerfile`.
+
+  A change to its `healthCheck`, `rollout` or `stopTimeout`, and for a `dockerfile` service to its
+  `start` or `port`, restarts it without a rebuild.
 - If one service's new version fails to start, that service goes back to the version it ran
   before, and the others keep their new version. The deploy is marked failed, naming the service.
 - `npx modelence@latest deploy --rebuild-all` rebuilds and restarts every service, whatever its
@@ -388,7 +398,8 @@ Report the project as not compatible with Modelence Cloud, and say why, when:
   process, or a database other than the provided ones (MySQL, Elasticsearch…) that would have to run
   alongside the app. One web process is run, and MongoDB, PostgreSQL and Redis are the only databases
   provisioned.
-- **It needs Docker Compose** or a custom Dockerfile to run.
+- **It needs Docker Compose** to run. A project with its own Dockerfile can be deployed as a
+  service with `dockerfile`.
 
 A database hosted elsewhere is not a reason to report the project as not compatible. An app that
 connects over the network to Supabase, Neon, PlanetScale, a managed Redis or any other hosted

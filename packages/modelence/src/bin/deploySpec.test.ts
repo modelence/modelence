@@ -234,6 +234,33 @@ describe('plan formatting', () => {
     expect(lines).toContain('  env:     API_KEY (secret)');
   });
 
+  // The Dockerfile defines the image and build, and its CMD runs without start.
+  it("prints a Dockerfile service's Dockerfile and port instead of the Node.js defaults", () => {
+    expect(
+      formatAppSpec({
+        resources: {
+          worker: { type: 'service', root: 'worker', dockerfile: 'Dockerfile', port: 8080 },
+        },
+      })
+    ).toEqual([
+      '  root:    worker',
+      '  dockerfile: Dockerfile',
+      '  port:    8080',
+      "  start:   (the Dockerfile's CMD)",
+    ]);
+    expect(
+      formatAppSpec({
+        resources: {
+          worker: {
+            type: 'service',
+            dockerfile: 'worker/Dockerfile',
+            start: { commands: ['python -m worker'] },
+          },
+        },
+      })
+    ).toEqual(['  dockerfile: worker/Dockerfile', '  start:   python -m worker']);
+  });
+
   it('labels each resource only when there is more than one', () => {
     expect(formatAppSpec({ resources: { api: { type: 'service' } } })).not.toContain(
       '  resource: api'
