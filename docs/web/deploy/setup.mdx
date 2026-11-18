@@ -1,12 +1,13 @@
 ---
 title: 'Deploy Setup'
-description: 'Set up an existing Node.js project for Modelence Cloud by writing modelence.config.json'
+description: 'Set up an existing project for Modelence Cloud by writing modelence.config.json'
 icon: 'rocket'
 ---
 
 This page is written for a coding agent. It describes what Modelence Cloud runs, the
-`modelence.config.json` file that tells it how, and the steps to set up an existing Node.js project.
-If you are a person, hand it to your agent:
+`modelence.config.json` file that tells it how, and the steps to set up an existing project: a
+Node.js app, or an app in any other language that builds with its own Dockerfile. If you are a
+person, hand it to your agent:
 
 ```text
 Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment for this project
@@ -14,11 +15,18 @@ Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment fo
 
 ## What Modelence Cloud runs
 
-- **A Docker image built from the repository** on an official Node.js image, 18 or newer (default
-  `node-22-slim`, set with `image`). The `build` commands run in order in the resource's root; only
-  npm is preinstalled.
-- **One web process**, started with the resource's `start` commands. The last one must keep running
-  and listen on the port in the `PORT` environment variable — a hardcoded port never receives traffic.
+- **A Docker image built from the repository**, in one of two ways:
+  - **A Node.js app** is built on an official Node.js image, 18 or newer (default `node-22-slim`,
+    set with `image`). The `build` commands run in order in the resource's root; only npm is
+    preinstalled.
+  - **Any other app**, such as Python, Go, Ruby, Java, PHP or .NET, is built from the project's
+    own Dockerfile, set with `dockerfile`. So is a Node.js app that needs system packages, such as
+    ffmpeg. See [Projects with a Dockerfile](#projects-with-a-dockerfile).
+- **One process**, started with the resource's `start` commands, or, for a Dockerfile, with the
+  image's own `ENTRYPOINT` and `CMD` when `start` is not set. The last command must keep running.
+  A web process listens on all interfaces, on the port in the `PORT` environment variable. That is
+  3000 unless a Dockerfile service sets another with `port`. A process that serves no traffic, such
+  as a queue worker or a bot, sets `"healthCheck": { "type": "none" }` and needs no port.
 - **Optional static directories** (the resource's `static`) served in front of that process by the platform.
   Requests that match no file fall back to the directory's `index.html`, so single-page apps route on
   the client.
@@ -59,13 +67,18 @@ A service entry of `resources` takes:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `type` | `"service"` | required | What the resource is. `"service"` is a Node.js app built from this repository. |
+| `type` | `"service"` | required | What the resource is. `"service"` is a process built from this repository: a Node.js app, or an app in any language with a `dockerfile`. |
 | `image` | string | `"node-22-slim"` | Base image, `node-<version>-<variant>`: a Node.js major (`"node-22-slim"`) or exact version (`"node-22.23.1-alpine"`), `18` or newer. `slim` is glibc and works with prebuilt native binaries; `alpine` is smaller. |
 | `root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `static` directories are relative to it. |
 | `build.commands` | string[] | `["npm install"]` | Commands that install dependencies and build the app, run in order. `[]` means there is no build step. |
-| `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
+| `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. With `dockerfile`, a missing `start` runs the image's own `ENTRYPOINT` and `CMD` instead. |
 | `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
 | `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
+| `dockerfile` | string | none | Build the service from this Dockerfile instead of `image` and `build`. The path is relative to `root`, and `root` is the build context. `image`, `build` and `static` can't be set with it. The image runs as the Dockerfile leaves it (`ENTRYPOINT`, `CMD`, `USER`, `WORKDIR`); `start`, when set, replaces `ENTRYPOINT` and `CMD`. See [Projects with a Dockerfile](#projects-with-a-dockerfile). |
+| `port` | number | `3000` | Dockerfile services only. The port the app listens on, for an image that has one built in (`EXPOSE 8000`, `--port 8000`). The container gets it as `PORT`, and traffic and the health check go to it. A Node.js service always listens on `PORT`. |
+| `healthCheck` | object | `{ "type": "tcp" }` | How the platform tells that a container is healthy. It is checked every 5 seconds; 10 failures in a row replace the container, and a deploy whose containers never get healthy rolls back. `{ "type": "tcp" }`: something accepts connections on the port. `{ "type": "http", "path": "/health" }`: a `GET` of `path` answers with a 2xx status. A redirect counts as a failure. The request carries the environment's hostname as `Host` and `X-Forwarded-Proto: https`, like real traffic. `{ "type": "none" }`: healthy once it runs, for a process that serves no traffic (a queue worker, a bot holding a gateway connection). Don't use it for a web service: it would get traffic before it listens, and return errors during each deploy. `tcp` and `http` also take `gracePeriod`: seconds after start during which failing checks don't count, from 0 to 300, default 60. Raise it for an app that loads a model or warms a cache before it listens. |
+| `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"`: the new containers start, and the old ones stop once the new ones are healthy. There is no gap, but both versions run for a while. `"recreate"`: the old containers stop before the new ones start, at the cost of a short gap. A deploy then never adds containers, but with a container count above 1 the copies still run side by side. For a process that must never run twice, such as a bot that allows one connection, use `"recreate"` and keep the container count at 1. |
+| `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL` to finish its work, from 2 to 120. It stops receiving new traffic when `SIGTERM` is sent. |
 
 A managed resource entry of `resources` takes:
 
@@ -239,7 +252,72 @@ output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project 
 }
 ```
 
+**Python web app with a Dockerfile** - the image is built from the project's `Dockerfile` and runs
+its own `CMD`, so there is no `start`. The server listens on `0.0.0.0` and port 8000, which `port`
+tells the platform, and `/health` answers once the app is ready:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "api": {
+      "type": "service",
+      "dockerfile": "Dockerfile",
+      "port": 8000,
+      "healthCheck": { "type": "http", "path": "/health" }
+    },
+    "main-db": { "type": "postgres" }
+  },
+  "env": {
+    "DATABASE_URL": { "type": "resource", "resource": "main-db", "output": "url" },
+    "OPENAI_API_KEY": { "type": "secret" }
+  }
+}
+```
+
+```dockerfile Dockerfile
+FROM public.ecr.aws/docker/library/python:3.13-slim
+# Send logs as they are written, not when the buffer fills
+ENV PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /srv
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd --create-home app
+USER app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**Python worker** - a queue consumer that serves no traffic, so it has no health check. `start`
+replaces the image's `ENTRYPOINT` and `CMD`. Only one copy may run at a time, so a deploy stops the
+old container first and gives it 90 seconds to finish the jobs it holds. The container count must
+stay at 1, because `"recreate"` doesn't stop several containers from running side by side:
+
+```json modelence.config.json
+{
+  "$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1",
+  "resources": {
+    "worker": {
+      "type": "service",
+      "dockerfile": "Dockerfile",
+      "start": { "commands": ["python -m worker"] },
+      "healthCheck": { "type": "none" },
+      "rollout": "recreate",
+      "stopTimeout": 90
+    }
+  },
+  "env": {
+    "REDIS_URL": { "type": "secret" }
+  }
+}
+```
+
 ## Setting up a project
+
+These steps are for a Node.js app. For an app in any other language, or one that already builds with
+its own Dockerfile, follow [Projects with a Dockerfile](#projects-with-a-dockerfile) instead.
 
 Follow these steps in order. Do not skip the verification step.
 
@@ -323,17 +401,129 @@ Non-secret settings that belong with the code (a base path, a public API path) g
 `env` section instead, with a `value`, so they are versioned with the repository. Give anything a
 bundler inlines `"scopes": ["build", "runtime"]` so it reaches the build as well as the running app.
 
+## Projects with a Dockerfile
+
+Use this path for an app that is not Node.js, such as Python, Go, Ruby, Java, PHP or .NET. Use it
+also for a Node.js app that needs system packages the Node.js image doesn't have. The image is built
+from the project's Dockerfile and runs as that Dockerfile leaves it: the platform adds nothing to it.
+The environment's variables are set in the container's environment when it starts, and the health
+check runs from outside the container. Follow these steps in order, and do not skip the verification
+step.
+
+1. **Find or write the Dockerfile.** Use the project's own if it builds a production image;
+   otherwise write one. A multi-stage build is fine, and only the final stage runs. Any base image
+   works, Alpine and distroless included. Pull base images through the mirror, as in
+   `FROM public.ecr.aws/docker/library/python:3.13-slim`, not from Docker Hub
+   (`FROM python:3.13-slim`), which rate-limits the shared build machines.
+
+2. **Decide how the app starts.** By default the image's own `ENTRYPOINT` and `CMD` run, in its
+   `WORKDIR` and as its `USER`. When they already start the production server, leave `start` out.
+   Otherwise set `start.commands`, for example `["python -m app"]`: it replaces `ENTRYPOINT` and
+   `CMD`, and the commands run in order under `/bin/sh -c`, so `$PORT` expands and the image needs
+   `/bin/sh`. If the image's entrypoint script prepares something before the app starts, run that
+   script first in `start`. Keep migrations out of both, for the reasons in step 4 of
+   [Setting up a project](#setting-up-a-project).
+
+3. **Listen on all interfaces, on the service's port.** A web server must listen on `0.0.0.0`; the
+   health check and the traffic reach the container at its network address, so a server bound to
+   `127.0.0.1` fails the check. Many Python servers bind to `127.0.0.1` unless told otherwise, so pass
+   the host: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, or `gunicorn -b 0.0.0.0:$PORT app:app`.
+   The port is 3000, given to the container as `PORT`. When the image has another port built in, as
+   in `EXPOSE 8000` or `--port 8000`, set `"port": 8000` instead of changing the image. Development
+   servers, such as `flask run`, `python manage.py runserver` or `uvicorn --reload`, must not be used.
+
+4. **Choose the health check.** The default, `{ "type": "tcp" }`, passes once the port accepts
+   connections. If the app has a health endpoint, use `{ "type": "http", "path": "/health" }`: it
+   passes on a 2xx answer, and a redirect fails it. The request carries the environment's hostname
+   as `Host` and `X-Forwarded-Proto: https`, so an app that checks hosts or forces HTTPS answers it as
+   it answers real traffic. If the app needs more than a minute before it listens, for example to
+   load a model, raise `gracePeriod` (up to 300 seconds). A process that serves no traffic, such as a
+   queue worker or a bot that holds a gateway connection, sets `{ "type": "none" }` and needs no port.
+   A web service must not use it: with no check, a container counts as ready as soon as it runs, so
+   it gets traffic before it listens and returns errors during each deploy.
+
+5. **Pass build-time values.** A build-scoped `env` entry with a `value` in the file reaches the
+   build as a build argument: declare it with `ARG NAME` in the stage that uses it. Values set in the
+   dashboard are not build arguments, because build arguments are kept in the image's history.
+   A `RUN` step reads them from a build secret, which only root can read unless the mount names the
+   user. After `USER` with id 1000, add `uid=1000`; before `USER`, leave it out:
+
+   ```dockerfile
+   RUN --mount=type=secret,id=modelence-build-env,uid=1000 \
+     sh -c 'set -a; . /run/secrets/modelence-build-env; set +a; python scripts/download_model.py'
+   ```
+
+   Never write a secret into the image with `ENV`, `ARG` or a file. Variables for the running app
+   need nothing in the Dockerfile: they are set when the container starts.
+
+6. **Set how the service is replaced and stopped.** On `SIGTERM` the app should finish its work in
+   progress and exit, within `stopTimeout` (30 seconds by default). The signal reaches the app even
+   when a shell or a launcher script starts it. When two copies must never run at once, set
+   `"rollout": "recreate"` and keep the container count at 1. `"recreate"` only keeps a deploy from
+   adding containers: with a count above 1, the copies still run side by side. A bot that allows one
+   connection is an example, and so is a worker that holds state in memory.
+
+   For a Python app, set `ENV PYTHONUNBUFFERED=1` in the Dockerfile. Python buffers its output when
+   it is not writing to a terminal, so without it logs arrive late, and the last lines before a crash
+   can be lost.
+
+7. **Write `modelence.config.json`** with one service entry that sets `dockerfile` (relative to
+   `root`), and `start`, `port` and `healthCheck` as decided above, as in the
+   [Python examples](#examples). Set `root` to the directory the Dockerfile's `COPY` paths are
+   relative to; it is the build context. A `.dockerignore` at `root` is used. Add managed resources
+   and `env` as described in step 7 of [Setting up a project](#setting-up-a-project), and add
+   `$schema`.
+
+8. **Verify locally** with Docker, from `root`. Replace `<port>` with the service's port (3000
+   unless `port` is set):
+
+   ```bash
+   docker build -f Dockerfile -t modelence-check .
+   docker run --rm -e PORT=<port> -p <port>:<port> modelence-check
+   ```
+
+   With `start` set, run it the way the platform does instead, with `<start>` being the `start`
+   commands joined with ` && `:
+
+   ```bash
+   docker run --rm -e PORT=<port> -p <port>:<port> --entrypoint /bin/sh modelence-check -c '<start>'
+   ```
+
+   For a web service, confirm the app answers on `http://localhost:<port>`. For an `http` health
+   check, confirm that
+   `curl -i -H 'X-Forwarded-Proto: https' http://localhost:<port><path>` answers with a 2xx status,
+   not a redirect. For a process with `{ "type": "none" }`, confirm it keeps running.
+   `modelence verify` rehearses Node.js builds only, so don't use it for these projects.
+
+9. **Commit and deploy** as in steps 9 and 10 of [Setting up a project](#setting-up-a-project).
+
+### Several services
+
+An environment runs one service. For a project made of several processes, such as an API, a worker
+and a bot, deploy each one to its own environment:
+
+- Put a `modelence.config.json` in each service's directory, and run `npx modelence@latest deploy`
+  from that directory, choosing that service's environment, or naming it with `--app` and `--env`.
+  The CLI remembers the app per directory, in `.modelence/project.json`, but not the environment.
+- Only that directory is uploaded, so its Dockerfile can't `COPY` files from outside it. Move
+  shared code inside each service's directory, or publish it as a package.
+- Services can't reach each other over a private network. They talk through their public URLs, or
+  through a queue or database hosted elsewhere, such as Redis, that each environment gets the URL of
+  in **Environment variables**. A managed resource belongs to the one environment that declares it.
+
 ## When the project is not compatible
 
 Report the project as not compatible with Modelence Cloud, and say why, when:
 
-- **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
-  Node.js frontend in front. The image runs Node.js only.
-- **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
-  process, or a database other than the provided ones (MySQL, Elasticsearch…) that would have to run
-  alongside the app. One web process is run, and MongoDB, PostgreSQL and Redis are the only databases
-  provisioned.
-- **It needs Docker Compose** or a custom Dockerfile to run.
+- **It needs a database other than the provided ones** running alongside it, such as MySQL or
+  Elasticsearch. MongoDB, PostgreSQL and Redis are the only databases provisioned.
+- **Its processes must reach each other over a private network.** Examples are an app with a
+  sidecar, or services that call each other on internal addresses, as Docker Compose sets up. Each
+  environment runs one image, and environments can't reach each other privately. Processes that
+  talk only through public URLs, or through a queue or database hosted elsewhere, can be deployed as
+  [several services](#several-services).
+- **It needs a GPU.** Containers run on CPUs only.
+- **Its image takes more than an hour to build**, which is the build time limit.
 
 A database hosted elsewhere is not a reason to report the project as not compatible. An app that
 connects over the network to Supabase, Neon, PlanetScale, a managed Redis or any other hosted
@@ -344,12 +534,13 @@ as `VITE_SUPABASE_URL`, also needs to be available at build time, as described i
 
 Then suggest what the user can do instead: replace the database with one that is provided (MongoDB
 through `MONGODB_URI`, or a managed PostgreSQL or Redis resource), or keep the incompatible parts on
-another host and deploy only the Node.js web app.
+another host and deploy only the parts that fit.
 
 Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
-several replicas, and each one would run every job — emails sent twice, charges made twice. If the
-user wants to do it anyway, tell them that each job needs a lock held in the database, so that only
-one replica runs it at a time.
+several replicas, and each one would run every job — emails sent twice, charges made twice. Deploy
+the worker as a service of its own instead, as described in [Several services](#several-services),
+with `"healthCheck": { "type": "none" }`. If the user wants it inside the web process anyway, tell them that
+each job needs a lock held in the database, so that only one replica runs it at a time.
 
 ## Meteor
 
