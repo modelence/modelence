@@ -30,7 +30,7 @@ its own. A service is built one of two ways:
   [Dockerfile services](/deploy/dockerfile).
 
 An environment runs up to 5 services. More than one needs a paid plan. See
-[Several services](/deploy/services).
+[Multiple services](/deploy/services).
 
 ### Keys of every service
 
@@ -160,7 +160,7 @@ come from.
 A service's outputs are its private address: `url` is `http://<host>:<port>` on its main port, for
 example `http://worker.<environment id>.cloud.local:3000`, and `host` reaches every one of its
 `ports`. Only the environment's other services reach it.
-See [Several services](/deploy/services#reaching-another-service).
+See [Multiple services](/deploy/services#reaching-another-service).
 
 Telemetry's outputs are the values of the standard OpenTelemetry variables: `endpoint` for
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `headers` for `OTEL_EXPORTER_OTLP_HEADERS`, which holds the

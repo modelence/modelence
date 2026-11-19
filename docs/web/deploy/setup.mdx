@@ -19,7 +19,7 @@ URL:
   it before writing the file.
 - [Dockerfile Services](https://docs.modelence.com/deploy/dockerfile.md): for a service that isn't
   Node.js, or that has its own Dockerfile.
-- [Several Services](https://docs.modelence.com/deploy/services.md): for a project with more than one
+- [Multiple services](https://docs.modelence.com/deploy/services.md): for a project with more than one
   process, such as a site and a worker.
 
 ## What Modelence Cloud runs
@@ -58,7 +58,7 @@ Decide this for every process the project runs in production:
   project's Dockerfile if it has one that works, or write one. Follow
   [Dockerfile Services](/deploy/dockerfile).
 - **More than one process**, such as a site and a background worker, or a frontend and an API in
-  another language, is several services. Follow [Several Services](/deploy/services). More than one
+  another language, is multiple services. Follow [Multiple services](/deploy/services). More than one
   service needs a paid plan: tell the user.
 
 A `docker-compose.yml` is not read, but it shows the processes. Each entry built from the repository
@@ -176,7 +176,7 @@ output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project 
 ```
 
 Examples in other languages are on [Dockerfile Services](/deploy/dockerfile), and examples with
-several services are on [Several Services](/deploy/services).
+multiple services are on [Multiple services](/deploy/services).
 
 ## Setting up a project
 
@@ -218,7 +218,7 @@ Follow these steps in order. Do not skip the verification step.
    fixed port other than 3000, main port first.
 
 5. **Don't run migrations at start.** Do not add database migrations to `start` or to a Dockerfile's
-   `CMD`: every container runs them on every start, several at once during a rollout, and a slow one
+   `CMD`: every container runs them on every start, multiple at once during a rollout, and a slow one
    is killed by the health check partway through. Leave them out and tell the user to run them against
    the environment's database before deploying. A step may run before the server only if it is fast
    and safe to run in parallel, such as `prisma generate`.
@@ -234,9 +234,9 @@ Follow these steps in order. Do not skip the verification step.
 7. **Write `modelence.config.json`** at the repository root, with one entry in `resources` for each
    service (`"type": "service"`), as described in [modelence.config.json](/deploy/config).
    - Add any managed resources from step 6 next to the services, with their variables in `env`.
-   - With several services, put the one that serves the site first in `resources`: the first deploy
+   - With multiple services, put the one that serves the site first in `resources`: the first deploy
      attaches the environment's URL to it. Give each service that calls another a `"type": "resource"` variable with the other's `url`. See
-     [Several Services](/deploy/services).
+     [Multiple services](/deploy/services).
    - Add a `telemetry` resource only when the user asks for traces or metrics, or the project already
      uses OpenTelemetry: a deploy fails on a plan without monitoring. Tie
      `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` to its outputs instead of a
@@ -304,8 +304,8 @@ through `MONGODB_URI`, or a managed PostgreSQL or Redis resource), or keep the i
 another host and deploy the rest.
 
 Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
-several replicas, and each one would run every job: emails sent twice, charges made twice. Run it as
-a service of its own, as described in [Several Services](/deploy/services#examples).
+multiple replicas, and each one would run every job: emails sent twice, charges made twice. Run it as
+a service of its own, as described in [Multiple services](/deploy/services#examples).
 
 ## Meteor
 
