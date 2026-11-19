@@ -52,8 +52,8 @@ A service lists the ports it listens on in `ports`, main port first. Without it,
 on `3000`.
 
 - **The main port** is the one the container gets as `PORT`, and the one the health check probes. A
-  Node.js service's main port is always `3000`, so its `ports` list extra ports after it:
-  `[3000, 9090]`.
+  Node.js service's main port is always `3000`, so its `ports` lists `3000` first, then any extra
+  ports: `[3000, 9090]`.
 - **Every port** is reachable from the environment's other services, and any of them can take a
   hostname.
 
