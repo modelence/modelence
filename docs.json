@@ -14,7 +14,7 @@
         "tab": "Cloud",
         "groups": [
           {
-            "group": "Get Started",
+            "group": "Get started",
             "pages": [
               "index",
               "deploy/setup",
@@ -55,7 +55,7 @@
         "tab": "Framework",
         "groups": [
           {
-            "group": "Get Started",
+            "group": "Get started",
             "pages": [
               "quickstart",
               "ai-coding-agents",
@@ -63,7 +63,7 @@
             ]
           },
           {
-            "group": "Core Concepts",
+            "group": "Core concepts",
             "pages": [
               "core-concepts/project-structure",
               "core-concepts/modules",
@@ -493,7 +493,7 @@
       },
       {
         "label": "Blog",
-        "href": "https://modelence.medium.com"
+        "href": "https://modelence.com/blog"
       }
     ],
     "primary": {
