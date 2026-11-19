@@ -5,7 +5,9 @@ import { tmpdir } from 'os';
 import { delimiter, dirname, join, normalize } from 'path';
 import {
   APP_SPEC_FILE_NAME,
+  isDockerfileService,
   isManagedResource,
+  type NodeServiceResource,
   type ServiceResource,
   type AppSpec,
   type EnvDeclaration,
@@ -67,6 +69,13 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     );
   }
   const resource = services[0];
+  if (isDockerfileService(resource)) {
+    throw new Error(
+      'modelence verify rehearses Node.js services only. Check a Dockerfile service with ' +
+        '`docker build` and `docker run -e PORT=<port> -p <port>:<port>`; see ' +
+        'https://docs.modelence.com/deploy/dockerfile#verifying-the-build.'
+    );
+  }
 
   /*
     Build commands and the runtime run in process groups of their own, so a
@@ -126,7 +135,7 @@ interface Run {
 }
 
 async function rehearse(
-  resource: ServiceResource,
+  resource: NodeServiceResource,
   envDeclarations: NonNullable<AppSpec['env']>,
   env: ProcessEnv,
   appRoot: string,

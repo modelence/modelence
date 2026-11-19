@@ -68,7 +68,6 @@ function assertKnownKeys(spec: AppSpec): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${section}" must be an object.`);
     }
   }
-
   // Studio rejects these too, but only after the archive is packed and
   // uploaded, and the plan printed before that reads these shapes as typed.
   // An empty build list is "no build step"; an empty command never is.
@@ -79,6 +78,8 @@ function assertKnownKeys(spec: AppSpec): void {
     for (const section of ['build', 'start', 'dev'] as const) {
       assertCommandList(resource[section], `resources.${name}.${section}`);
     }
+    assertPathList(resource.watchPaths, `resources.${name}.watchPaths`);
+    assertPortList(resource.ports, `resources.${name}.ports`);
   }
 }
 
@@ -99,6 +100,50 @@ export function assertCommandList(list: unknown, path: string): void {
       throw new Error(`${APP_SPEC_FILE_NAME}: "${path}.commands.${index}" must not be empty.`);
     }
   });
+}
+
+/*
+  Only the shape: Studio checks each path against the uploaded archive. An
+  empty list would mean no change ever rebuilds the service, which is never
+  what was meant, so it is refused rather than read as "rebuild on nothing".
+*/
+function assertPathList(list: unknown, path: string): void {
+  if (list === undefined) {
+    return;
+  }
+  const isPathList =
+    Array.isArray(list) &&
+    list.length > 0 &&
+    list.every((entry: unknown) => typeof entry === 'string' && entry.trim() !== '');
+  if (!isPathList) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME}: "${path}" must be a non-empty list of paths, e.g. ["api", "shared"].`
+    );
+  }
+}
+
+const MAX_PORT = 65535;
+
+/*
+  Only the shape, like the watch paths: Studio enforces the count and the
+  main-port rules. A single number, as `port` used to be, is the likely
+  mistake, and the plan would otherwise crash on it.
+*/
+function assertPortList(list: unknown, path: string): void {
+  if (list === undefined) {
+    return;
+  }
+  const isPortList =
+    Array.isArray(list) &&
+    list.length > 0 &&
+    list.every(
+      (entry: unknown) => Number.isInteger(entry) && Number(entry) >= 1 && Number(entry) <= MAX_PORT
+    );
+  if (!isPortList) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME}: "${path}" must be a non-empty list of port numbers, e.g. [8000].`
+    );
+  }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

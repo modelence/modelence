@@ -10,7 +10,7 @@ created in the environment's [region](/cloud/regions), its connection string rea
 production.
 
 A database is a resource in
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference), and `env` passes its
+[`modelence.config.json`](/deploy/config), and `env` passes its
 connection string to the app:
 
 ```json modelence.config.json
@@ -32,7 +32,7 @@ connection string to the app:
 ```
 
 A `url` output is the full connection string, over TLS. The other outputs are its parts, for
-clients that read them separately. The [reference](/deploy/setup#modelence-config-json-reference)
+clients that read them separately. The [reference](/deploy/config)
 lists every plan and output.
 
 ## Lifecycle

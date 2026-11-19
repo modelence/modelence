@@ -37,18 +37,69 @@ export interface CommandList {
   commands: string[];
 }
 
-// A client-only site is a service without `start`, serving its `static` mounts.
-export interface ServiceResource {
+export type ServiceHealthCheck =
+  | { type: 'tcp'; gracePeriod?: number }
+  | { type: 'http'; path: string; gracePeriod?: number }
+  | { type: 'none' };
+
+export type ServiceRollout = 'overlap' | 'recreate';
+
+// The keys every service takes, however its image is built.
+interface ServiceResourceBase {
   type: 'service';
-  // node-<version>-<variant>, e.g. "node-22-slim" or "node-22.23.1-alpine".
-  image?: string;
   root?: string;
-  build?: CommandList;
   start?: CommandList;
   // What `modelence dev` runs locally; never deployed. Missing means the
   // package.json `dev` script in root.
   dev?: CommandList;
+  healthCheck?: ServiceHealthCheck;
+  rollout?: ServiceRollout;
+  // Seconds between SIGTERM and SIGKILL when a container stops.
+  stopTimeout?: number;
+  /*
+    The ports the process listens on, main port first: the container gets
+    it as PORT and the health check probes it. A Node.js service's main
+    port is 3000. Missing means [3000]. Which hostname goes to which port is
+    set in the dashboard.
+  */
+  ports?: number[];
+  /*
+    Files and folders, relative to the project root, whose changes rebuild
+    this service. Missing means every deploy rebuilds it; with a list, only
+    changes under these paths do, with nothing added on top.
+  */
+  watchPaths?: string[];
+}
+
+/*
+  Built on a Node.js image with the build commands, listening on PORT. A
+  client-only site is a service without `start`, serving its `static` mounts.
+*/
+export interface NodeServiceResource extends ServiceResourceBase {
+  // node-<version>-<variant>, e.g. "node-22-slim" or "node-22.23.1-alpine".
+  image?: string;
+  build?: CommandList;
   static?: StaticMount[];
+  dockerfile?: never;
+}
+
+/*
+  Built from the project's own Dockerfile, relative to `root`, which is the
+  build context. `start`, when set, replaces its ENTRYPOINT and CMD.
+*/
+export interface DockerfileServiceResource extends ServiceResourceBase {
+  dockerfile: string;
+  image?: never;
+  build?: never;
+  static?: never;
+}
+
+export type ServiceResource = NodeServiceResource | DockerfileServiceResource;
+
+export function isDockerfileService(
+  resource: ServiceResource
+): resource is DockerfileServiceResource {
+  return resource.dockerfile !== undefined;
 }
 
 // A database, cache or telemetry ingest the deploy creates in the environment.
@@ -89,7 +140,7 @@ export interface AppSpec {
   $schema?: string;
   /*
     Everything the app is made of, by the name the project chose: services
-    (type/image/root/build/start/static; one is supported today) and the
+    (type/image/root/build/start/static, or a dockerfile; up to 5) and the
     postgres, redis and telemetry resources a deploy creates (type/plan).
   */
   resources?: Record<string, AppResource>;
@@ -155,15 +206,7 @@ export function formatAppSpec(spec: AppSpec): string[] {
     if (services.length > 1) {
       lines.push(`  resource: ${name}`);
     }
-    lines.push(`  image:   ${resource.image ?? 'default (node-22-slim)'}`);
-    if (resource.root && resource.root !== '.') {
-      lines.push(`  root:    ${resource.root}`);
-    }
-    lines.push(...formatCommands('build', resource.build, 'default (npm install)'));
-    lines.push(...formatCommands('start', resource.start, '(none)'));
-    for (const mount of resource.static ?? []) {
-      lines.push(`  static:  ${mount.path} -> ${mount.dir}/`);
-    }
+    lines.push(...formatService(resource));
   }
 
   for (const [name, resource] of entries) {
@@ -187,6 +230,30 @@ export function formatAppSpec(spec: AppSpec): string[] {
   }
 
   return lines;
+}
+
+/*
+  A Dockerfile service has no image or build of the Node.js runtime to show,
+  and without `start` it runs its Dockerfile's own CMD rather than nothing.
+*/
+function formatService(resource: ServiceResource): string[] {
+  const root = resource.root && resource.root !== '.' ? [`  root:    ${resource.root}`] : [];
+  const watch = resource.watchPaths ? [`  watch:   ${resource.watchPaths.join(', ')}`] : [];
+  const ports = resource.ports ? [`  ports:   ${resource.ports.join(', ')}`] : [];
+  const lines = isDockerfileService(resource)
+    ? [
+        ...root,
+        `  dockerfile: ${resource.dockerfile}`,
+        ...formatCommands('start', resource.start, "(the Dockerfile's CMD)"),
+      ]
+    : [
+        `  image:   ${resource.image ?? 'default (node-22-slim)'}`,
+        ...root,
+        ...formatCommands('build', resource.build, 'default (npm install)'),
+        ...formatCommands('start', resource.start, '(none)'),
+        ...(resource.static ?? []).map((mount) => `  static:  ${mount.path} -> ${mount.dir}/`),
+      ];
+  return [...lines, ...ports, ...watch];
 }
 
 // One line per command, in the order they run. A missing list is filled in

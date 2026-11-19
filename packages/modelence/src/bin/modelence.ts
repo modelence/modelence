@@ -60,6 +60,10 @@ program
     '--skip-env-check',
     'In CI, deploy even when variables modelence.config.json requires have no value'
   )
+  .option(
+    '--rebuild-all',
+    'Rebuild and restart every service, including those unchanged since the last deploy'
+  )
   // Nothing asks for confirmation any more; still accepted so scripts keep working.
   .addOption(new Option('-y, --yes').hideHelp())
   .action(async (options) => {

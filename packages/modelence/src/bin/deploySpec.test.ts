@@ -97,6 +97,50 @@ describe('modelence.config.json parsing', () => {
     await expect(prepareSpec(dir)).rejects.toThrow('unknown key "builds"');
   });
 
+  it("accepts a service's watch paths and prints them in the plan", async () => {
+    const spec = {
+      resources: {
+        app: { type: 'service', watchPaths: ['apps/api', 'shared', 'package-lock.json'] },
+      },
+    };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual(spec);
+    expect(logged).toContain('  watch:   apps/api, shared, package-lock.json');
+  });
+
+  it.each([[], 'shared', ['shared', 42], ['  ']])(
+    'rejects watch paths that are not a list of paths (%j)',
+    async (watchPaths) => {
+      await writeFile(
+        join(dir, 'modelence.config.json'),
+        JSON.stringify({ resources: { app: { type: 'service', watchPaths } } })
+      );
+      await expect(prepareSpec(dir)).rejects.toThrow(
+        '"resources.app.watchPaths" must be a non-empty list of paths'
+      );
+    }
+  );
+
+  it("accepts a service's ports and prints them in the plan", async () => {
+    const spec = { resources: { app: { type: 'service', ports: [3000, 9090] } } };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual(spec);
+    expect(logged).toContain('  ports:   3000, 9090');
+  });
+
+  it.each([8000, [], ['8000'], [80.5], [0], [65536]])(
+    'rejects ports that are not a list of port numbers (%j)',
+    async (ports) => {
+      await writeFile(
+        join(dir, 'modelence.config.json'),
+        JSON.stringify({ resources: { app: { type: 'service', ports } } })
+      );
+      await expect(prepareSpec(dir)).rejects.toThrow(
+        '"resources.app.ports" must be a non-empty list of port numbers'
+      );
+    }
+  );
+
   it('rejects sections of the wrong kind', async () => {
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ env: ['A'] }));
     await expect(prepareSpec(dir)).rejects.toThrow('"env" must be an object');
@@ -208,6 +252,38 @@ describe('plan formatting', () => {
     expect(lines).toContain('  static:  / -> client/dist/');
     expect(lines).toContain('  env:     VITE_BASE (text)');
     expect(lines).toContain('  env:     API_KEY (secret)');
+  });
+
+  // The Dockerfile defines the image and build, and its CMD runs without start.
+  it("prints a Dockerfile service's Dockerfile and ports instead of the Node.js defaults", () => {
+    expect(
+      formatAppSpec({
+        resources: {
+          worker: {
+            type: 'service',
+            root: 'worker',
+            dockerfile: 'Dockerfile',
+            ports: [8080, 9090],
+          },
+        },
+      })
+    ).toEqual([
+      '  root:    worker',
+      '  dockerfile: Dockerfile',
+      "  start:   (the Dockerfile's CMD)",
+      '  ports:   8080, 9090',
+    ]);
+    expect(
+      formatAppSpec({
+        resources: {
+          worker: {
+            type: 'service',
+            dockerfile: 'worker/Dockerfile',
+            start: { commands: ['python -m worker'] },
+          },
+        },
+      })
+    ).toEqual(['  dockerfile: worker/Dockerfile', '  start:   python -m worker']);
   });
 
   it('labels each resource only when there is more than one', () => {

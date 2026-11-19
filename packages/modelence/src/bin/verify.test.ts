@@ -654,6 +654,15 @@ server.listen(0, () => {
     expect(output()).toContain('"root" is "web", but none of the uploaded files are in it');
   });
 
+  // The rehearsal runs the Node.js build, which a Dockerfile service doesn't have.
+  it('refuses a Dockerfile service, pointing at docker instead', async () => {
+    await project({ Dockerfile: 'FROM scratch' }, { dockerfile: 'Dockerfile', ports: [8000] });
+    await expect(run()).rejects.toThrow(
+      'modelence verify rehearses Node.js services only. Check a Dockerfile service with'
+    );
+    expect(output()).not.toContain('$ npm install');
+  });
+
   it('rejects a timeout that is not a positive number', async () => {
     await project({}, { build: { commands: [] }, start: { commands: ['node .'] } });
     await expect(verify({ timeout: '-5' })).rejects.toThrow('--timeout must be a positive number');
