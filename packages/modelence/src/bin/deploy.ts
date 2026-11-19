@@ -9,7 +9,7 @@ import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
-import { readAppSpecFile, type AppSpec } from './appSpec';
+import { isManagedResource, readAppSpecFile, type AppSpec } from './appSpec';
 import { describeOtherHosts, resolveTargetFromOptions } from './deployTarget';
 import { isCI } from './terminal';
 import {
@@ -130,6 +130,7 @@ export async function deploy(options: DeployOptions) {
         appId: project.appId,
         hint: namedTarget ?? undefined,
         env: spec?.env,
+        services: getServiceNames(spec),
       });
       token = auth.token;
       await rememberToken(host, auth.token, auth.expiresAt);
@@ -301,4 +302,11 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// The services the file declares; its postgres, redis and telemetry resources aren't containers.
+function getServiceNames(spec: AppSpec | undefined): string[] {
+  return Object.entries(spec?.resources ?? {})
+    .filter(([, resource]) => !isManagedResource(resource))
+    .map(([name]) => name);
 }

@@ -185,6 +185,23 @@ describe('deploy orchestration', () => {
     );
   });
 
+  // The picker sizes a new environment for every service; a database isn't one.
+  it('sends the declared services to the picker', async () => {
+    const declared = {
+      resources: {
+        ...spec.resources,
+        worker: { type: 'service', dockerfile: 'Dockerfile' },
+        db: { type: 'postgres' },
+      },
+    };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    await deploy(options);
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy', services: ['app', 'worker'] })
+    );
+  });
+
   it('reauthorizes once when the upload authorization is rejected', async () => {
     vi.mocked(authenticateCli)
       .mockResolvedValueOnce({ token: 'browser-token', target: picked })
