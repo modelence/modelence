@@ -362,13 +362,15 @@ describe('data/store', () => {
         { key: { a: 1 }, unique: false },
         { key: { b: 1 }, hidden: false },
         { key: { c: 1 }, collation: { locale: 'simple' } },
+        { key: { d: 1 }, sparse: false },
       ],
     });
-    // listIndexes leaves out unique: false, hidden: false and a simple collation
+    // listIndexes leaves out unique: false, hidden: false, sparse: false and a simple collation
     const collectionMock = createListingMock([
       { name: '_modelence_a_1', key: { a: 1 } },
       { name: '_modelence_b_1', key: { b: 1 } },
       { name: '_modelence_c_1', key: { c: 1 } },
+      { name: '_modelence_d_1', key: { d: 1 } },
     ]);
     (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
 
@@ -378,9 +380,10 @@ describe('data/store', () => {
     expect(collectionMock.createIndexes).not.toHaveBeenCalled();
   });
 
-  test('createIndexes rebuilds an index when unique or a non-simple collation is added', async () => {
+  test('createIndexes rebuilds an index when unique, sparse, or a non-simple collation is added', async () => {
     const changedIndexes: IndexDescription[] = [
       { key: { a: 1 }, unique: true },
+      { key: { a: 1 }, sparse: true },
       { key: { a: 1 }, collation: { locale: 'en', strength: 2 } },
     ];
     for (const index of changedIndexes) {
@@ -393,6 +396,21 @@ describe('data/store', () => {
       expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_a_1');
       expect(collectionMock.createIndexes).toHaveBeenCalled();
     }
+  });
+
+  test('createIndexes rebuilds an index when sparse is changed from true to false', async () => {
+    const store = createStore({
+      indexes: [{ key: { a: 1 }, sparse: false }],
+    });
+    const collectionMock = createListingMock([
+      { name: '_modelence_a_1', key: { a: 1 }, sparse: true },
+    ]);
+    (store as unknown as { collection: typeof collectionMock }).collection = collectionMock;
+
+    await store.createIndexes();
+
+    expect(collectionMock.dropIndex).toHaveBeenCalledWith('_modelence_a_1');
+    expect(collectionMock.createIndexes).toHaveBeenCalled();
   });
 
   test('createIndexes keeps a text index that declares weights for only some fields', async () => {
