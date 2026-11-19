@@ -6,6 +6,7 @@ import { isSetupRequired } from '../app/setupStatus';
 import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
+import { consumeRateLimit } from '../rate-limit/rules';
 import { time } from '../time';
 import { hashToken } from './tokenHash';
 import { OAuthProvider, Session } from './types';
@@ -288,8 +289,6 @@ export async function invalidateAllUserSessions(userId: ObjectId) {
 }
 
 export async function createSession(userId: ObjectId | null = null): Promise<Session> {
-  // TODO: add rate-limiting and captcha handling
-
   const authToken = randomBytes(32).toString('base64url');
   const now = Date.now();
   const expiresAt = new Date(now + time.days(7));
@@ -345,7 +344,11 @@ export function clearAuthTokenCookie(res: Response) {
 export default new Module('_system.session', {
   stores: [sessionsCollection, linkNoncesCollection, oauthExchangeCodesCollection],
   mutations: {
-    init: async function (args, { session: contextSession, user, res }) {
+    init: async function (args, { session: contextSession, user, res, connectionInfo }) {
+      if (connectionInfo?.ip && (!contextSession || !contextSession.userId)) {
+        await consumeRateLimit({ bucket: 'sessionInit', type: 'ip', value: connectionInfo.ip });
+      }
+
       // Requests with a missing or unknown token carry an unsaved session (see
       // obtainSession). This is where a new token reaches the client, over
       // HTTP or through SSR, so save the session now, keeping its token.

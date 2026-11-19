@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { ObjectId } from 'mongodb';
+import { RateLimitError } from '../error';
+
+const mockConsumeRateLimit = vi.fn();
 
 const mockRandomBytes = vi.fn((): { toString: () => string } => ({
   toString: () => 'auth-token',
@@ -38,6 +41,10 @@ vi.doMock('@/time', () => ({
 
 vi.doMock('@/config/server', () => ({
   getPublicConfigs: vi.fn(() => ({})),
+}));
+
+vi.doMock('../rate-limit/rules', () => ({
+  consumeRateLimit: mockConsumeRateLimit,
 }));
 
 const sessionModule = await import('./session');
@@ -439,6 +446,115 @@ describe('auth/session', () => {
           res: null,
         }
       );
+    });
+  });
+
+  describe('_system.session.init rate limiting', () => {
+    test('consumes sessionInit rate limit for anonymous sessions when IP is present', async () => {
+      const session = { authToken: 'anon-token', expiresAt: new Date(), userId: null };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: { ip: '203.0.113.1' } as never,
+          res: null,
+        }
+      );
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'sessionInit',
+        type: 'ip',
+        value: '203.0.113.1',
+      });
+    });
+
+    test('consumes sessionInit rate limit when session is null and IP is present', async () => {
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session: null,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: { ip: '203.0.113.2' } as never,
+          res: null,
+        }
+      );
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'sessionInit',
+        type: 'ip',
+        value: '203.0.113.2',
+      });
+    });
+
+    test('skips sessionInit rate limit for authenticated sessions', async () => {
+      const session = { authToken: 'auth-token', expiresAt: new Date(), userId: new ObjectId() };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: { id: 'user-1', email: 'test@example.com' },
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: { ip: '203.0.113.1' } as never,
+          res: null,
+        }
+      );
+
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    });
+
+    test('skips sessionInit rate limit when connectionInfo or IP is missing', async () => {
+      const session = { authToken: 'anon-token', expiresAt: new Date(), userId: null };
+
+      await sessionSystemModule.mutations.init.call(
+        sessionSystemModule,
+        {},
+        {
+          session,
+          user: null,
+          roles: [],
+          clientInfo: {} as never,
+          connectionInfo: {} as never,
+          res: null,
+        }
+      );
+
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    });
+
+    test('throws RateLimitError when sessionInit rate limit is exceeded', async () => {
+      mockConsumeRateLimit.mockRejectedValueOnce(
+        new RateLimitError('Too many session initialization requests.')
+      );
+
+      const session = { authToken: 'anon-token', expiresAt: new Date(), userId: null };
+
+      await expect(
+        sessionSystemModule.mutations.init.call(
+          sessionSystemModule,
+          {},
+          {
+            session,
+            user: null,
+            roles: [],
+            clientInfo: {} as never,
+            connectionInfo: { ip: '203.0.113.99' } as never,
+            res: null,
+          }
+        )
+      ).rejects.toThrow(RateLimitError);
     });
   });
 

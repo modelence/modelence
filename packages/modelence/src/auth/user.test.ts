@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { MongoServerError } from 'mongodb';
 
 const mockRandomBytes = vi.fn();
 const mockInsertOne = vi.fn();
+const mockConsumeRateLimit = vi.fn();
 const mockDbDisposableEmailDomains = { name: 'disposable' };
 const mockEmailVerificationTokensCollection = { name: 'verification' };
 const mockResetPasswordTokensCollection = { name: 'reset' };
@@ -93,6 +95,10 @@ vi.doMock('../time', () => ({
   time: mockTime,
 }));
 
+vi.doMock('../rate-limit/rules', () => ({
+  consumeRateLimit: mockConsumeRateLimit,
+}));
+
 class ModuleMock {
   name: string;
   config: unknown;
@@ -113,6 +119,7 @@ describe('auth/user', () => {
   beforeEach(() => {
     mockRandomBytes.mockReset();
     mockInsertOne.mockReset();
+    mockConsumeRateLimit.mockReset();
   });
 
   test('createGuestUser inserts guest account and returns id', async () => {
@@ -131,7 +138,76 @@ describe('auth/user', () => {
       createdAt: expect.any(Date),
       authMethods: {},
     });
+    expect(mockConsumeRateLimit).not.toHaveBeenCalled();
     expect(result).toBe(insertedId);
+  });
+
+  test('createGuestUser consumes signup rate limits when IP is provided', async () => {
+    mockRandomBytes.mockReturnValue({
+      toString: () => 'validguest12',
+    });
+    const insertedId = 'guest-id-2';
+    mockInsertOne.mockResolvedValue({ insertedId } as never);
+
+    const result = await createGuestUser({ ip: '192.168.1.100' });
+
+    expect(mockConsumeRateLimit).toHaveBeenCalledTimes(2);
+    expect(mockConsumeRateLimit).toHaveBeenNthCalledWith(1, {
+      bucket: 'signupAttempt',
+      type: 'ip',
+      value: '192.168.1.100',
+    });
+    expect(mockConsumeRateLimit).toHaveBeenNthCalledWith(2, {
+      bucket: 'signup',
+      type: 'ip',
+      value: '192.168.1.100',
+    });
+    expect(result).toBe(insertedId);
+  });
+
+  test('createGuestUser retries when handle collides and succeeds on next attempt', async () => {
+    let callCount = 0;
+    mockRandomBytes.mockImplementation(() => {
+      callCount++;
+      return { toString: () => (callCount === 1 ? 'collide123' : 'success123') };
+    });
+
+    const duplicateError = new MongoServerError({ message: 'duplicate key error' });
+    duplicateError.code = 11000;
+
+    const insertedId = 'guest-id-after-retry';
+    mockInsertOne
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce({ insertedId } as never);
+
+    const result = await createGuestUser();
+
+    expect(mockInsertOne).toHaveBeenCalledTimes(2);
+    expect(mockInsertOne).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ handle: 'guest_collide123' })
+    );
+    expect(mockInsertOne).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ handle: 'guest_success123' })
+    );
+    expect(result).toBe(insertedId);
+  });
+
+  test('createGuestUser throws when max collision retry attempts are exhausted', async () => {
+    mockRandomBytes.mockReturnValue({
+      toString: () => 'duplicate99',
+    });
+
+    const duplicateError = new MongoServerError({ message: 'duplicate key error' });
+    duplicateError.code = 11000;
+
+    mockInsertOne.mockRejectedValue(duplicateError);
+
+    await expect(createGuestUser()).rejects.toThrow(
+      'Could not generate unique guest handle after exhausting all attempts.'
+    );
+    expect(mockInsertOne).toHaveBeenCalledTimes(5);
   });
 
   test('module registers stores, handlers, and rate limits', () => {
@@ -231,9 +307,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 27 rules covering all auth buckets', () => {
+    test('produces exactly 29 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(27);
+      expect(rules).toHaveLength(29);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -247,6 +323,7 @@ describe('auth/user', () => {
           'oneTimeCode',
           'oauthExchange',
           'updateProfile',
+          'sessionInit',
         ])
       );
     });
@@ -319,6 +396,28 @@ describe('auth/user', () => {
       expect(profileRules).toEqual([
         { bucket: 'updateProfile', type: 'user', window: 15 * 60 * 1000, limit: 10 },
         { bucket: 'updateProfile', type: 'user', window: 24 * 60 * 60 * 1000, limit: 200 },
+      ]);
+    });
+
+    test('limits anonymous session initialization per IP by default', () => {
+      const rules = buildAuthRateLimits();
+
+      const sessionRules = rules.filter((rule) => rule.bucket === 'sessionInit');
+      expect(sessionRules).toEqual([
+        { bucket: 'sessionInit', type: 'ip', window: 15 * 60 * 1000, limit: 100 },
+        { bucket: 'sessionInit', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 1000 },
+      ]);
+    });
+
+    test('allows session initialization limits to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        sessionInit: [{ type: 'ip', window: 15 * 60 * 1000, limit: 50 }],
+      });
+
+      const sessionRules = rules.filter((rule) => rule.bucket === 'sessionInit');
+      expect(sessionRules).toEqual([
+        { bucket: 'sessionInit', type: 'ip', window: 15 * 60 * 1000, limit: 50 },
+        { bucket: 'sessionInit', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 1000 },
       ]);
     });
 
