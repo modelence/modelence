@@ -121,6 +121,26 @@ describe('modelence.config.json parsing', () => {
     }
   );
 
+  it("accepts a service's ports and prints them in the plan", async () => {
+    const spec = { resources: { app: { type: 'service', ports: [3000, 9090] } } };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual(spec);
+    expect(logged).toContain('  ports:   3000, 9090');
+  });
+
+  it.each([8000, [], ['8000'], [80.5], [0], [65536]])(
+    'rejects ports that are not a list of port numbers (%j)',
+    async (ports) => {
+      await writeFile(
+        join(dir, 'modelence.config.json'),
+        JSON.stringify({ resources: { app: { type: 'service', ports } } })
+      );
+      await expect(prepareSpec(dir)).rejects.toThrow(
+        '"resources.app.ports" must be a non-empty list of port numbers'
+      );
+    }
+  );
+
   it('rejects sections of the wrong kind', async () => {
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ env: ['A'] }));
     await expect(prepareSpec(dir)).rejects.toThrow('"env" must be an object');

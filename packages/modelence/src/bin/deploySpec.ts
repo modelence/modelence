@@ -79,6 +79,7 @@ function assertKnownKeys(spec: AppSpec): void {
       assertCommandList(resource[section], `resources.${name}.${section}`);
     }
     assertPathList(resource.watchPaths, `resources.${name}.watchPaths`);
+    assertPortList(resource.ports, `resources.${name}.ports`);
   }
 }
 
@@ -117,6 +118,30 @@ function assertPathList(list: unknown, path: string): void {
   if (!isPathList) {
     throw new Error(
       `${APP_SPEC_FILE_NAME}: "${path}" must be a non-empty list of paths, e.g. ["api", "shared"].`
+    );
+  }
+}
+
+const MAX_PORT = 65535;
+
+/*
+  Only the shape, like the watch paths: Studio enforces the count and the
+  main-port rules. A single number, as `port` used to be, is the likely
+  mistake, and the plan would otherwise crash on it.
+*/
+function assertPortList(list: unknown, path: string): void {
+  if (list === undefined) {
+    return;
+  }
+  const isPortList =
+    Array.isArray(list) &&
+    list.length > 0 &&
+    list.every(
+      (entry: unknown) => Number.isInteger(entry) && Number(entry) >= 1 && Number(entry) <= MAX_PORT
+    );
+  if (!isPortList) {
+    throw new Error(
+      `${APP_SPEC_FILE_NAME}: "${path}" must be a non-empty list of port numbers, e.g. [8000].`
     );
   }
 }
