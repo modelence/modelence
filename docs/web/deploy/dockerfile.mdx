@@ -1,5 +1,5 @@
 ---
-title: 'Dockerfile Services'
+title: 'Dockerfile services'
 description: 'Deploy a service in any language from its own Dockerfile'
 icon: 'docker'
 ---
@@ -199,7 +199,7 @@ http.ListenAndServe(":"+port, mux)
 The first deploy attaches the environment's URL to the first service, so for an environment that
 runs only this worker, detach the URL in the dashboard under **Domains**. `"rollout": "recreate"` stops the old container before the new one starts, so
 two versions never take the same jobs. A worker usually runs next to a web service; see
-[Several services](/deploy/services).
+[Multiple services](/deploy/services).
 
 ## Verifying the build
 

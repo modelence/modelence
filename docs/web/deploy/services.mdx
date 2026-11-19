@@ -1,16 +1,16 @@
 ---
-title: 'Several Services'
+title: 'Multiple services'
 description: 'Run a web app, APIs and workers side by side in one environment'
 icon: 'layer-group'
 ---
 
-An environment can run several services: a web app next to an API in another language, or a
+An environment can run multiple services: a web app next to an API in another language, or a
 background worker next to the site. Each service is built its own way, Node.js or
 [Dockerfile](/deploy/dockerfile), and runs in containers of its own. The services share a private
 network that no other environment can reach.
 
 - An environment runs up to 5 services. More than one needs a paid plan.
-- Several services are for different processes. To run more copies of the same process, raise the
+- Multiple services are for different processes. To run more copies of the same process, raise the
   service's container count in the dashboard instead.
 
 ## The file
@@ -63,7 +63,7 @@ A service can list up to 10 ports.
 
 Which service and port a hostname goes to is set in the dashboard, under **Domains**, not in the
 file, so the same file can deploy to every environment. That holds for the environment's own URL
-(`<app>-<environment>.cloud.modelence.app`) and for each custom domain. One service can take several
+(`<app>-<environment>.cloud.modelence.app`) and for each custom domain. One service can take multiple
 hostnames on different ports, for example a site on its main port and an admin UI on another.
 
 - **The first deploy** attaches the environment's URL to the main port of the first service in the
@@ -148,7 +148,7 @@ Each service's container count and container type are set in the dashboard, unde
 
 ## Running locally
 
-`modelence dev` runs one service, so it refuses a file with several. Start each service with its own
+`modelence dev` runs one service, so it refuses a file with multiple services. Start each service with its own
 command instead, in its own terminal.
 
 ## Examples
