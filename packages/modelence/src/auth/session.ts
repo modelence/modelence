@@ -345,7 +345,9 @@ export default new Module('_system.session', {
   stores: [sessionsCollection, linkNoncesCollection, oauthExchangeCodesCollection],
   mutations: {
     init: async function (args, { session: contextSession, user, res, connectionInfo }) {
-      if (connectionInfo?.ip && (!contextSession || !contextSession.userId)) {
+      // Only rate-limit anonymous sessions. When contextSession is null (no database
+      // configured / setup required), skip rate-limiting so the setup screen can load.
+      if (connectionInfo?.ip && contextSession && !contextSession.userId) {
         await consumeRateLimit({ bucket: 'sessionInit', type: 'ip', value: connectionInfo.ip });
       }
 

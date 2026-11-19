@@ -474,7 +474,7 @@ describe('auth/session', () => {
       });
     });
 
-    test('consumes sessionInit rate limit when session is null and IP is present', async () => {
+    test('skips sessionInit rate limit when session is null (no-database / setup mode)', async () => {
       await sessionSystemModule.mutations.init.call(
         sessionSystemModule,
         {},
@@ -488,12 +488,7 @@ describe('auth/session', () => {
         }
       );
 
-      expect(mockConsumeRateLimit).toHaveBeenCalledTimes(1);
-      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'sessionInit',
-        type: 'ip',
-        value: '203.0.113.2',
-      });
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
     });
 
     test('skips sessionInit rate limit for authenticated sessions', async () => {
