@@ -48,7 +48,9 @@ The other service keys work as for any service. See the
   commands run under `/bin/sh -c`.
 - **Stop on `SIGTERM`.** A stopping container gets `SIGTERM`, then `SIGKILL` after `stopTimeout`
   seconds (default 30). Use the exec form (`CMD ["uvicorn", ...]`), or `exec` in a shell form, so the
-  signal reaches the process and not a shell in front of it.
+  signal reaches the process and not a shell in front of it. Requests can still arrive for about 10
+  seconds after `SIGTERM`, so a server that must not drop any keeps serving that long before it exits.
+  See [`stopTimeout`](/deploy/config#keys-of-every-service).
 - **Pull base images from the mirror.** Docker Hub limits how often images can be pulled, so a
   build can fail on `FROM python:3.13-slim`. Use the same image from
   `public.ecr.aws/docker/library/`, for example `FROM public.ecr.aws/docker/library/python:3.13-slim`.

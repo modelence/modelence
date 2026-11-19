@@ -44,7 +44,7 @@ An environment runs up to 5 services. More than one needs a paid plan. See
 | `watchPaths` | string[] | none: every deploy rebuilds the service | Files and folders, relative to the project root, whose changes rebuild the service, such as `["api", "shared", "package-lock.json"]`. 1 to 20 paths. See [What a deploy rebuilds](/deploy/services#what-a-deploy-rebuilds). |
 | `healthCheck` | object | `{ "type": "tcp" }` | How the platform decides a container is healthy. See [Health checks](#health-checks). |
 | `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"` starts the new ones and stops the old ones once the new ones are healthy, so both versions run for a while. `"recreate"` stops the old ones first, with a short gap, for a process that must never run twice, such as a bot that holds one connection. |
-| `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL`, 2 to 120. The container stops receiving new traffic when `SIGTERM` is sent. |
+| `stopTimeout` | number | `30` | Seconds a stopping container gets between `SIGTERM` and `SIGKILL`, 2 to 120. Requests can still reach it for about 10 seconds after `SIGTERM`, public and private alike: from callers that looked up its address just before, and over connections already open. To stop without dropping any, keep serving for 10 to 15 seconds after `SIGTERM`, then close open connections and exit. |
 
 ### Keys of a Node.js service
 
