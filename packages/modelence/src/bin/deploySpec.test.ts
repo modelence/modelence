@@ -235,18 +235,23 @@ describe('plan formatting', () => {
   });
 
   // The Dockerfile defines the image and build, and its CMD runs without start.
-  it("prints a Dockerfile service's Dockerfile and port instead of the Node.js defaults", () => {
+  it("prints a Dockerfile service's Dockerfile and ports instead of the Node.js defaults", () => {
     expect(
       formatAppSpec({
         resources: {
-          worker: { type: 'service', root: 'worker', dockerfile: 'Dockerfile', port: 8080 },
+          worker: {
+            type: 'service',
+            root: 'worker',
+            dockerfile: 'Dockerfile',
+            ports: [8080, 9090],
+          },
         },
       })
     ).toEqual([
       '  root:    worker',
       '  dockerfile: Dockerfile',
-      '  port:    8080',
       "  start:   (the Dockerfile's CMD)",
+      '  ports:   8080, 9090',
     ]);
     expect(
       formatAppSpec({

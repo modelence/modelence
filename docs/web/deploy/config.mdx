@@ -40,7 +40,7 @@ An environment runs up to 5 services. More than one needs a paid plan. See
 | `root` | string | `"."` | Subdirectory that holds the service, relative to the project root (monorepos). For a Node.js service, commands run there and the whole repository is still copied. For a Dockerfile service, it is the build context: the build sees only the files under it. |
 | `start.commands` | string[] | see below | Commands that start the process, run in order; the last one must keep running. A Node.js service without `start` has no process: it serves only its `static` directories. A Dockerfile service without `start` runs its Dockerfile's `ENTRYPOINT` and `CMD`; with `start`, the commands replace them and run under `/bin/sh -c`. |
 | `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
-| `public` | boolean | `true` for a lone service, `false` with several | Whether the service gets the environment's URL and custom domains. At most one service can be public. See [Several services](/deploy/services#public-and-private-services). |
+| `ports` | number[] | `[3000]` | The ports the process listens on, main port first, such as `[8000]` or `[15672, 5672]`. The container gets the main port as `PORT`, and the health check probes it. A Node.js service's main port is `3000`, so it lists only extra ports after it. Up to 10. Which hostname goes to which port is set in the dashboard. See [Ports](/deploy/services#ports) and [Domains](/deploy/services#domains). |
 | `watchPaths` | string[] | none: every deploy rebuilds the service | Files and folders, relative to the project root, whose changes rebuild the service, such as `["api", "shared", "package-lock.json"]`. 1 to 20 paths. See [What a deploy rebuilds](/deploy/services#what-a-deploy-rebuilds). |
 | `healthCheck` | object | `{ "type": "tcp" }` | How the platform decides a container is healthy. See [Health checks](#health-checks). |
 | `rollout` | `"overlap"` \| `"recreate"` | `"overlap"` | How a deploy replaces running containers. `"overlap"` starts the new ones and stops the old ones once the new ones are healthy, so both versions run for a while. `"recreate"` stops the old ones first, with a short gap, for a process that must never run twice, such as a bot that holds one connection. |
@@ -62,7 +62,6 @@ receives traffic.
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `dockerfile` | string | — | The Dockerfile, relative to `root` (`"Dockerfile"`, `"docker/api.Dockerfile"`). Can't be combined with `image`, `build` or `static`: the Dockerfile defines the image and the build. |
-| `port` | number | `3000` | The port the process listens on, for an image that has one built in (`EXPOSE 8000`, `--port 8000`). The container also gets it as `PORT`. Allowed only with `dockerfile`. |
 
 ### Health checks
 
@@ -71,8 +70,8 @@ containers never become healthy rolls the service back.
 
 | Value | Healthy when |
 | --- | --- |
-| `{ "type": "tcp" }` | Something accepts connections on the service's port. The default. |
-| `{ "type": "http", "path": "/health" }` | `GET` on the path answers with a 2xx status within 4 seconds. Redirects are followed, so point `path` at an endpoint that answers 2xx itself. The request carries the `Host` that real traffic carries and `X-Forwarded-Proto: https`. |
+| `{ "type": "tcp" }` | Something accepts connections on the service's main port. The default. |
+| `{ "type": "http", "path": "/health" }` | `GET` on the path answers with a 2xx status within 4 seconds. Redirects are followed, so point `path` at an endpoint that answers 2xx itself. The request goes to the main port and carries the `Host` that real traffic carries and `X-Forwarded-Proto: https`. |
 | `{ "type": "none" }` | The container is running. For a process that listens on no port, such as a queue worker. |
 
 `tcp` and `http` take `gracePeriod`: the seconds after a container starts during which failed checks
@@ -122,7 +121,7 @@ Every service gets these variables at start:
 - `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment (both
   hold the same connection string).
 - `SITE_URL` and `ROOT_URL`: the environment's public URL (both hold the same value).
-- `PORT`: the port the process must listen on.
+- `PORT`: the service's main port, which the process must listen on.
 - Any variables the user defines in the dashboard under **Environment variables**.
 - The variables `env` ties to a resource, such as `DATABASE_URL` from a PostgreSQL database's `url`.
 
@@ -158,8 +157,9 @@ separately, such as `PGHOST` and `PGPASSWORD`. These variables reach the running
 build. They can't be set or changed in the dashboard, where they are listed with the resource they
 come from.
 
-A service's outputs are its private address: `url` is `http://<host>:<port>`, for example
-`http://worker.<environment id>.cloud.local:3000`. Only the environment's other services reach it.
+A service's outputs are its private address: `url` is `http://<host>:<port>` on its main port, for
+example `http://worker.<environment id>.cloud.local:3000`, and `host` reaches every one of its
+`ports`. Only the environment's other services reach it.
 See [Several services](/deploy/services#reaching-another-service).
 
 Telemetry's outputs are the values of the standard OpenTelemetry variables: `endpoint` for

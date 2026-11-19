@@ -56,7 +56,13 @@ interface ServiceResourceBase {
   rollout?: ServiceRollout;
   // Seconds between SIGTERM and SIGKILL when a container stops.
   stopTimeout?: number;
-  public?: boolean;
+  /*
+    The ports the process listens on, main port first: the container gets
+    it as PORT and the health check probes it. A Node.js service's main
+    port is 3000. Missing means [3000]. Which hostname goes to which port is
+    set in the dashboard.
+  */
+  ports?: number[];
   /*
     Files and folders, relative to the project root, whose changes rebuild
     this service. Missing means every deploy rebuilds it; with a list, only
@@ -75,7 +81,6 @@ export interface NodeServiceResource extends ServiceResourceBase {
   build?: CommandList;
   static?: StaticMount[];
   dockerfile?: never;
-  port?: never;
 }
 
 /*
@@ -84,8 +89,6 @@ export interface NodeServiceResource extends ServiceResourceBase {
 */
 export interface DockerfileServiceResource extends ServiceResourceBase {
   dockerfile: string;
-  // The port the process listens on; default 3000.
-  port?: number;
   image?: never;
   build?: never;
   static?: never;
@@ -236,11 +239,11 @@ export function formatAppSpec(spec: AppSpec): string[] {
 function formatService(resource: ServiceResource): string[] {
   const root = resource.root && resource.root !== '.' ? [`  root:    ${resource.root}`] : [];
   const watch = resource.watchPaths ? [`  watch:   ${resource.watchPaths.join(', ')}`] : [];
+  const ports = resource.ports ? [`  ports:   ${resource.ports.join(', ')}`] : [];
   const lines = isDockerfileService(resource)
     ? [
         ...root,
         `  dockerfile: ${resource.dockerfile}`,
-        ...(resource.port === undefined ? [] : [`  port:    ${resource.port}`]),
         ...formatCommands('start', resource.start, "(the Dockerfile's CMD)"),
       ]
     : [
@@ -250,7 +253,7 @@ function formatService(resource: ServiceResource): string[] {
         ...formatCommands('start', resource.start, '(none)'),
         ...(resource.static ?? []).map((mount) => `  static:  ${mount.path} -> ${mount.dir}/`),
       ];
-  return [...lines, ...watch];
+  return [...lines, ...ports, ...watch];
 }
 
 // One line per command, in the order they run. A missing list is filled in

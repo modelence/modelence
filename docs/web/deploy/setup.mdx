@@ -30,8 +30,10 @@ URL:
     with the `start` commands. Only npm is preinstalled. Optional `static` directories are served in
     front of the process by the platform.
   - **Dockerfile**: from the project's own Dockerfile, in any language.
-- **One public service** that gets the environment's URL. Other services are private: only the
-  environment's own services reach them.
+- **Hostnames attached in the dashboard.** The environment's URL and each custom domain go to a
+  service and one of its `ports`, set under **Domains**, not in the file. The first deploy attaches
+  the URL to the first service. Services and ports without a hostname are reached only by the
+  environment's own services.
 - **Optional managed PostgreSQL databases and Redis caches**, declared in `resources` next to the
   services. A deploy creates each one, and the app gets its connection details through the variables
   `env` ties to it. They need a paid plan.
@@ -40,7 +42,8 @@ URL:
 - **Environment variables injected at start**, in every service:
   - `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment.
   - `SITE_URL` and `ROOT_URL`: the environment's public URL.
-  - `PORT`: the port the process must listen on. A hardcoded port never receives traffic.
+  - `PORT`: the service's main port, which the process must listen on. A hardcoded port never
+    receives traffic.
   - The variables the user defines in the dashboard, and the ones `env` ties to a resource.
 
 Containers have no persistent disk: each deploy replaces them, and files written to disk are lost.
@@ -60,8 +63,7 @@ Decide this for every process the project runs in production:
 
 A `docker-compose.yml` is not read, but it shows the processes. Each entry built from the repository
 (`build:`) becomes a service. A `postgres`, `redis` or `mongo` image becomes a provided database. A
-`Procfile` lists processes the same way: `web` is the public service, and the others are private
-services.
+`Procfile` lists processes the same way: `web` serves the site, so it goes first in `resources`.
 
 ## Node.js examples
 
@@ -212,8 +214,8 @@ Follow these steps in order. Do not skip the verification step.
      already builds on Alpine), and set `root` when the app lives in a subdirectory.
 
 4. **For each Dockerfile service**, follow [Dockerfile Services](/deploy/dockerfile): use or write
-   the Dockerfile, make the process listen on `0.0.0.0`, and set `port` when it listens on a fixed
-   port other than 3000.
+   the Dockerfile, make the process listen on `0.0.0.0`, and set `ports` when it listens on a
+   fixed port other than 3000, main port first.
 
 5. **Don't run migrations at start.** Do not add database migrations to `start` or to a Dockerfile's
    `CMD`: every container runs them on every start, several at once during a rollout, and a slow one
@@ -232,8 +234,8 @@ Follow these steps in order. Do not skip the verification step.
 7. **Write `modelence.config.json`** at the repository root, with one entry in `resources` for each
    service (`"type": "service"`), as described in [modelence.config.json](/deploy/config).
    - Add any managed resources from step 6 next to the services, with their variables in `env`.
-   - With several services, set `"public": true` on the one that serves the site, and give each
-     service that calls another a `"type": "resource"` variable with the other's `url`. See
+   - With several services, put the one that serves the site first in `resources`: the first deploy
+     attaches the environment's URL to it. Give each service that calls another a `"type": "resource"` variable with the other's `url`. See
      [Several Services](/deploy/services).
    - Add a `telemetry` resource only when the user asks for traces or metrics, or the project already
      uses OpenTelemetry: a deploy fails on a plan without monitoring. Tie

@@ -27,14 +27,13 @@ Each service is one entry of `resources`. This app has a Node.js site in `web/` 
       "root": "web",
       "build": { "commands": ["npm ci", "npm run build"] },
       "start": { "commands": ["node server.js"] },
-      "public": true,
       "watchPaths": ["web"]
     },
     "ml": {
       "type": "service",
       "root": "ml",
       "dockerfile": "Dockerfile",
-      "port": 8000,
+      "ports": [8000],
       "watchPaths": ["ml"]
     }
   },
@@ -44,21 +43,43 @@ Each service is one entry of `resources`. This app has a Node.js site in `web/` 
 }
 ```
 
-`web` serves the environment's URL and reads the API's address from `ML_URL`. `ml` can't be reached
-from the internet.
+`web` reads the API's address from `ML_URL`. With the environment's URL attached to `web`, `ml`
+can't be reached from the internet.
 
-## Public and private services
+## Ports
 
-- **The public service** gets the environment's URL and its custom domains. At most one service can
-  be public.
-- **A private service** is reached only from the environment's other services.
+A service lists the ports it listens on in `ports`, main port first. Without it, a service listens
+on `3000`.
 
-A lone service is public unless it sets `"public": false`. With several, every service is private
-unless it sets `"public": true`. So **when you add a service to an app that is already live, set
-`"public": true` on the service that serves the site.** A deploy that would take the URL away from
-the site is refused before it builds.
+- **The main port** is the one the container gets as `PORT`, and the one the health check probes. A
+  Node.js service's main port is always `3000`, so its `ports` list extra ports after it:
+  `[3000, 9090]`.
+- **Every port** is reachable from the environment's other services, and any of them can take a
+  hostname.
 
-An environment where no service is public, such as one that runs only workers, has no URL.
+A service can list up to 10 ports.
+
+## Domains
+
+Which service and port a hostname goes to is set in the dashboard, under **Domains**, not in the
+file, so the same file can deploy to every environment. That holds for the environment's own URL
+(`<app>-<environment>.cloud.modelence.app`) and for each custom domain. One service can take several
+hostnames on different ports, for example a site on its main port and an admin UI on another.
+
+- **The first deploy** attaches the environment's URL to the main port of the first service in the
+  file. Change it in **Domains** at any time.
+- **A custom domain** is attached when you add it. A domain added without a target follows the
+  environment's URL.
+- **The environment's URL can be detached**, for an environment that runs only workers. It then has
+  no public address.
+- **Changing a target** moves the hostname at once when the service already listens on that port.
+  If it doesn't yet, the hostname moves when the deploy that adds the port takes over.
+
+Hostnames carry HTTP traffic only. A service or port with no hostname attached is reached only from
+the environment's other services.
+
+A deploy that removes a service or a port that a hostname is attached to is refused before it
+builds. Attach the hostname elsewhere first, or keep the service or port.
 
 ## Reaching another service
 
@@ -72,16 +93,16 @@ A service gets another's address from a variable of `"type": "resource"` that na
 
 | Output | Value |
 | --- | --- |
-| `url` | `http://<host>:<port>`, such as `http://worker.<environment id>.cloud.local:3000` |
-| `host` | `worker.<environment id>.cloud.local` |
-| `port` | The port the service listens on: `3000` for a Node.js service, its `port` for a Dockerfile one. |
+| `url` | `http://<host>:<port>` on the main port, such as `http://worker.<environment id>.cloud.local:3000` |
+| `host` | `worker.<environment id>.cloud.local`. It reaches every port in the service's `ports`. |
+| `port` | The service's main port: the first of its `ports`, `3000` without them. |
 
 Every service gets every variable, so any service can read `WORKER_URL`. Calls on the private network
 are plain HTTP. Don't hardcode an address: it contains the environment's id, so it differs in every
 environment.
 
-The host is the service's name in lowercase, with `_` written as `-`. So a private service's name must
-end in a letter or a digit, and two names can't differ only in case or in `_` and `-`.
+To reach another port than the main one, combine `host` with that port. The host is the service's
+name in lowercase, with `_` written as `-`. So a service's name must end in a letter or a digit, and two names can't differ only in case or in `_` and `-`.
 
 ## What a deploy does
 
@@ -108,7 +129,7 @@ root. Then a deploy rebuilds the service only when:
   - a Dockerfile service: `root` or `dockerfile`.
 
 A change to its `healthCheck`, `rollout` or `stopTimeout`, and for a Dockerfile service to its
-`start` or `port`, restarts it without a rebuild. A service that is neither rebuilt nor restarted
+`start`, and a change to any service's `ports`, restarts it without a rebuild. A service that is neither rebuilt nor restarted
 keeps running as it is.
 
 Nothing is added to `watchPaths` for you: not the service's own `root`, not the lockfile, not other
@@ -142,8 +163,7 @@ neither sets `watchPaths`, and every deploy rebuilds both:
     "web": {
       "type": "service",
       "build": { "commands": ["npm ci", "npm run build"] },
-      "start": { "commands": ["node dist/server.js"] },
-      "public": true
+      "start": { "commands": ["node dist/server.js"] }
     },
     "worker": {
       "type": "service",
@@ -164,7 +184,7 @@ The worker listens on no port, so it has no health check. `"rollout": "recreate"
 worker before the new one starts, so a job is never taken by both versions. Keep the worker on one
 container if its jobs must not run twice, or have each job take a lock in the database.
 
-**An npm workspaces monorepo** with a public site and a private API that both import
+**An npm workspaces monorepo** with a site and an internal API that both import
 `packages/shared`:
 
 ```json modelence.config.json
@@ -175,7 +195,6 @@ container if its jobs must not run twice, or have each job take a lock in the da
       "type": "service",
       "build": { "commands": ["npm ci", "npm run build -w apps/web"] },
       "start": { "commands": ["node apps/web/dist/server.js"] },
-      "public": true,
       "watchPaths": ["apps/web", "packages/shared", "package.json", "package-lock.json"]
     },
     "api": {

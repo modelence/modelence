@@ -656,7 +656,7 @@ server.listen(0, () => {
 
   // The rehearsal runs the Node.js build, which a Dockerfile service doesn't have.
   it('refuses a Dockerfile service, pointing at docker instead', async () => {
-    await project({ Dockerfile: 'FROM scratch' }, { dockerfile: 'Dockerfile', port: 8000 });
+    await project({ Dockerfile: 'FROM scratch' }, { dockerfile: 'Dockerfile', ports: [8000] });
     await expect(run()).rejects.toThrow(
       'modelence verify rehearses Node.js services only. Check a Dockerfile service with'
     );

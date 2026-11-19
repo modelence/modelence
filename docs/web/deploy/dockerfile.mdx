@@ -20,7 +20,7 @@ Dockerfile: that build needs no Dockerfile upkeep and serves `static` directorie
     "api": {
       "type": "service",
       "dockerfile": "Dockerfile",
-      "port": 8000
+      "ports": [8000]
     }
   }
 }
@@ -29,7 +29,8 @@ Dockerfile: that build needs no Dockerfile upkeep and serves `static` directorie
 - `dockerfile` is relative to `root` (default `"."`, the project root), and `root` is the build
   context: the build sees only the files under it. For a service in `services/api/` with its
   Dockerfile there, set `"root": "services/api"` and `"dockerfile": "Dockerfile"`.
-- `port` is the port the process listens on, default `3000`.
+- `ports` lists the ports the process listens on, main port first, default `[3000]`. See
+  [Ports](/deploy/services#ports).
 - `image`, `build` and `static` can't be used with `dockerfile`: the Dockerfile defines the image and
   the build.
 
@@ -38,10 +39,10 @@ The other service keys work as for any service. See the
 
 ## What the Dockerfile must do
 
-- **Listen on `0.0.0.0` on the service's port.** Traffic and the health check come from outside
+- **Listen on `0.0.0.0` on the service's ports.** Traffic and the health check come from outside
   the container, so a process bound to `127.0.0.1` (the default of `uvicorn`, `gunicorn` and
-  `flask run`) never receives them. The container gets the port as `PORT`. Either read `PORT`, or
-  listen on a fixed port and set `port` to it.
+  `flask run`) never receives them. The container gets the main port as `PORT`. Either read `PORT`,
+  or listen on a fixed port and list it first in `ports`.
 - **Start the process with `CMD` or `ENTRYPOINT`.** The image runs as the Dockerfile leaves it:
   `ENTRYPOINT`, `CMD`, `USER` and `WORKDIR` apply. Set `start` in the file only to replace them; its
   commands run under `/bin/sh -c`.
@@ -113,7 +114,7 @@ When a project has no Dockerfile, write one in `root`. Follow these rules:
   `flask run` or `manage.py runserver`.
 - Add a `.dockerignore`.
 
-**Python (FastAPI)**, listening on a fixed port that `port` names:
+**Python (FastAPI)**, listening on a fixed port that `ports` names:
 
 ```dockerfile Dockerfile
 FROM public.ecr.aws/docker/library/python:3.13-slim
@@ -132,7 +133,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     "api": {
       "type": "service",
       "dockerfile": "Dockerfile",
-      "port": 8000
+      "ports": [8000]
     }
   }
 }
@@ -186,7 +187,6 @@ http.ListenAndServe(":"+port, mux)
     "worker": {
       "type": "service",
       "dockerfile": "Dockerfile",
-      "public": false,
       "healthCheck": { "type": "none" },
       "rollout": "recreate"
     }
@@ -194,14 +194,14 @@ http.ListenAndServe(":"+port, mux)
 }
 ```
 
-`"public": false` keeps the environment's URL off a service that listens on nothing; a lone service
-is public otherwise. `"rollout": "recreate"` stops the old container before the new one starts, so
+The first deploy attaches the environment's URL to the first service, so for an environment that
+runs only this worker, detach the URL in the dashboard under **Domains**. `"rollout": "recreate"` stops the old container before the new one starts, so
 two versions never take the same jobs. A worker usually runs next to a web service; see
 [Several services](/deploy/services).
 
 ## Verifying the build
 
-Build and run the image locally before deploying, with the same context and port:
+Build and run the image locally before deploying, with the same context and main port:
 
 ```bash
 docker build -f <root>/<dockerfile> -t modelence-check <root>
