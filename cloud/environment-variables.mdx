@@ -6,13 +6,13 @@ icon: 'key'
 
 An app on Modelence Cloud reads its settings and secrets from environment variables. Some are
 provided by the platform in every environment, and the rest are declared in the `env` section of
-[`modelence.config.json`](/deploy/setup#modelence-config-json-reference) and set per environment.
+[`modelence.config.json`](/deploy/config) and set per environment.
 
 ## Provided variables
 
 | Variable | Value |
 | --- | --- |
-| `PORT` | The port the web process must listen on. |
+| `PORT` | The service's main port, the first of its [`ports`](/deploy/services#ports), which the process must listen on. |
 | `SITE_URL`, `ROOT_URL` | The environment's public URL. Both hold the same value. |
 | `MONGODB_URI`, `MONGO_URL` | The connection string of the environment's MongoDB database. Both hold the same value. |
 

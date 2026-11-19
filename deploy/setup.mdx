@@ -1,137 +1,73 @@
 ---
 title: 'Deploy Setup'
-description: 'Set up an existing Node.js project for Modelence Cloud by writing modelence.config.json'
+description: 'Set up an existing project for Modelence Cloud by writing modelence.config.json'
 icon: 'rocket'
 ---
 
-This page is written for a coding agent. It describes what Modelence Cloud runs, the
-`modelence.config.json` file that tells it how, and the steps to set up an existing Node.js project.
-If you are a person, hand it to your agent:
+This page is written for a coding agent. It describes what Modelence Cloud runs, how to choose how
+each part of a project is built, and the steps to write and check `modelence.config.json`. If you are
+a person, hand it to your agent:
 
 ```text
 Use https://docs.modelence.com/deploy/setup.md to set up Modelence deployment for this project
 ```
 
+Read these pages too when the project needs them. Each one is also served as Markdown at its `.md`
+URL:
+
+- [modelence.config.json](https://docs.modelence.com/deploy/config.md): every key of the file. Read
+  it before writing the file.
+- [Dockerfile Services](https://docs.modelence.com/deploy/dockerfile.md): for a service that isn't
+  Node.js, or that has its own Dockerfile.
+- [Several Services](https://docs.modelence.com/deploy/services.md): for a project with more than one
+  process, such as a site and a worker.
+
 ## What Modelence Cloud runs
 
-- **A Docker image built from the repository** on an official Node.js image, 18 or newer (default
-  `node-22-slim`, set with `image`). The `build` commands run in order in the resource's root; only
-  npm is preinstalled.
-- **One web process**, started with the resource's `start` commands. The last one must keep running
-  and listen on the port in the `PORT` environment variable — a hardcoded port never receives traffic.
-- **Optional static directories** (the resource's `static`) served in front of that process by the platform.
-  Requests that match no file fall back to the directory's `index.html`, so single-page apps route on
-  the client.
+- **One or more services**, each built from the repository into a Docker image and run in containers
+  of its own. A service is built one of two ways:
+  - **Node.js**: on an official Node.js image, 18 or newer, with the `build` commands, and started
+    with the `start` commands. Only npm is preinstalled. Optional `static` directories are served in
+    front of the process by the platform.
+  - **Dockerfile**: from the project's own Dockerfile, in any language.
+- **Hostnames attached in the dashboard.** The environment's URL and each custom domain go to a
+  service and one of its `ports`, set under **Domains**, not in the file. The first deploy attaches
+  the URL to the first service. Services and ports without a hostname are reached only by the
+  environment's own services.
 - **Optional managed PostgreSQL databases and Redis caches**, declared in `resources` next to the
-  service. A deploy creates each one in the environment's region, and the app gets its connection
-  details through the variables `env` ties to it. They need a paid Modelence Cloud plan.
-- **Optional telemetry**, a `resources` entry of type `"telemetry"`. It gives the environment a
-  private OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days and shown on the
-  environment's **Monitoring** page. It needs a Modelence Cloud plan with monitoring (Pro and up).
-  Logs need no setup: the app's output is collected and shown on the **Logs** page.
-- **Environment variables injected at start:**
-  - `MONGODB_URI` and `MONGO_URL` — a MongoDB Atlas database provisioned for this environment
-    (both hold the same connection string).
-  - `SITE_URL` and `ROOT_URL` — the environment's public URL (both hold the same value).
-  - `PORT` — the port the web process must listen on.
-  - Any variables the user defines in the dashboard under **Environment variables**.
-  - The variables `env` ties to a managed resource, such as `DATABASE_URL` from a PostgreSQL
-    database's `url`, or `OTEL_EXPORTER_OTLP_ENDPOINT` from telemetry's `endpoint`.
+  services. A deploy creates each one, and the app gets its connection details through the variables
+  `env` ties to it. They need a paid plan.
+- **Optional telemetry**, a `resources` entry of type `"telemetry"`, for the app's traces and metrics.
+  It needs a plan with monitoring (Pro and up). Logs need no setup.
+- **Environment variables injected at start**, in every service:
+  - `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment.
+  - `SITE_URL` and `ROOT_URL`: the environment's public URL.
+  - `PORT`: the service's main port, which the process must listen on. A hardcoded port never
+    receives traffic.
+  - The variables the user defines in the dashboard, and the ones `env` ties to a resource.
 
-  Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be defined by the user.
+Containers have no persistent disk: each deploy replaces them, and files written to disk are lost.
 
-## modelence.config.json reference
+## Choose how each service is built
 
-`modelence.config.json` sits at the project root and is the whole contract between the project and
-Modelence Cloud. Comments (`//`, `/* */`) and trailing commas are allowed. Apart from a resource's
-`type`, every key is optional; a missing key takes the default.
+Decide this for every process the project runs in production:
 
-The file has two top-level sections: `resources` (what the app is made of) and `env` (the variables
-it expects).
+- **A Node.js app** is a Node.js service. Use the examples below.
+- **An app in another language** (Python, Go, Ruby, Java, Rust, PHP, .NET…), **or a Node.js app that
+  needs system packages** (`ffmpeg`, Chromium, native libraries), is a Dockerfile service. Use the
+  project's Dockerfile if it has one that works, or write one. Follow
+  [Dockerfile Services](/deploy/dockerfile).
+- **More than one process**, such as a site and a background worker, or a frontend and an API in
+  another language, is several services. Follow [Several Services](/deploy/services). More than one
+  service needs a paid plan: tell the user.
 
-| Key | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `$schema` | string | — | Set to `https://cloud.modelence.com/schema/modelence.config.json?version=1` for editor validation and completion. `version` is the format version the file is written for. |
-| `resources` | object | `{}` | Everything the app is made of, keyed by a name you choose (`"api"`, `"main-db"`): the service, and any managed databases, caches and telemetry. Exactly one service is supported today. |
-| `env` | object | `{}` | The variables the app expects, keyed by name. See below. |
+A `docker-compose.yml` is not read, but it shows the processes. Each entry built from the repository
+(`build:`) becomes a service. A `postgres`, `redis` or `mongo` image becomes a provided database. A
+`Procfile` lists processes the same way: `web` serves the site, so it goes first in `resources`.
 
-A service entry of `resources` takes:
+## Node.js examples
 
-| Key | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `type` | `"service"` | required | What the resource is. `"service"` is a Node.js app built from this repository. |
-| `image` | string | `"node-22-slim"` | Base image, `node-<version>-<variant>`: a Node.js major (`"node-22-slim"`) or exact version (`"node-22.23.1-alpine"`), `18` or newer. `slim` is glibc and works with prebuilt native binaries; `alpine` is smaller. |
-| `root` | string | `"."` | Subdirectory that holds the app, relative to the repository root (monorepos). Commands run there, and `static` directories are relative to it. |
-| `build.commands` | string[] | `["npm install"]` | Commands that install dependencies and build the app, run in order. `[]` means there is no build step. |
-| `start.commands` | string[] | none | Commands that start the web process, run in order; the last one must keep running. Omit `start` when there is no process: the site is static only and `static` must be set. |
-| `dev.commands` | string[] | the package.json `dev` script in `root` | Commands `modelence dev` runs locally in `root`, in order, with the connected environment's variables; the last one must keep running. Never used by a deploy. |
-| `static` | `[{ path, dir }]` | `[]` | Directories to serve. `path` is an absolute URL prefix (`"/"`, `"/docs"`); `dir` is relative to `root` and must exist after the build. |
-
-A managed resource entry of `resources` takes:
-
-| Key | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `type` | `"postgres"` \| `"redis"` \| `"telemetry"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache, `"telemetry"` the environment's OpenTelemetry endpoint. |
-| `plan` | string | the smallest | The size to create it with. PostgreSQL: `postgres-1gb`, `postgres-2gb`, `postgres-4gb`, `postgres-8gb`, `postgres-16gb` (the RAM of the database). Redis: `redis-250mb`, `redis-1gb`, `redis-5gb` (the data it holds). Telemetry takes no `plan`. |
-
-A deploy creates every managed resource the file declares that the environment doesn't have yet, and
-the new version starts only once they are ready. Resources are matched by name, so the same file works
-in every environment:
-
-- A resource that already exists is kept as it is, with its data. `plan` is read only when the resource
-  is created, so changing it later has no effect.
-- A resource removed from the file is not deleted. Delete it in the dashboard under **Resources** when
-  it is no longer needed; a database or cache is billed until then.
-- Renaming a resource creates a new, empty one. The old one stays until it is deleted.
-
-An environment can have up to 10 managed resources, telemetry included, and at most one of them can be
-telemetry.
-
-Each entry of `env` declares one variable:
-
-| Key | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `type` | `"text"` \| `"secret"` \| `"resource"` | `"text"` | `"secret"` is hidden in the dashboard variable list and revealed one value at a time, with each view logged. `"resource"` takes the value from a managed resource; see below. |
-| `scopes` | (`"build"` \| `"runtime"`)[] | `["runtime"]` | Which phases the variable reaches. `"runtime"` is the running app; `"build"` is the build commands — needed for anything a bundler inlines, such as Vite's `VITE_*`. A value scoped to `["build"]` alone never reaches the running app. |
-| `value` | string | — | A non-secret literal committed with the repository (a base path, a public API URL). Omit it to declare only the name: the dashboard then lists the variable and the user sets it per environment. A `"secret"` may never carry a value. |
-| `required` | boolean | `true` | Whether the app needs a value to run. A deploy asks for every required variable that has no value, and a CI deploy fails without one. Set `false` for a variable the app runs without (an optional integration's key). |
-
-A value set in the dashboard overrides a `value` written here, so a literal in the file is the
-committed default rather than a fixed constant.
-
-A variable with `"type": "resource"` takes its value from one output of a managed resource in the same
-file, and takes only these keys:
-
-| Key | Type | Meaning |
-| --- | --- | --- |
-| `type` | `"resource"` | Required. |
-| `resource` | string | The name of a `postgres`, `redis` or `telemetry` entry in `resources`. |
-| `output` | string | Which value of the resource. PostgreSQL: `url`, `host`, `port`, `user`, `password`, `database`. Redis: `url`, `host`, `port`, `password`. Telemetry: `endpoint`, `headers`. |
-
-The `url` output is a full connection string: `postgresql://...?sslmode=require` for PostgreSQL and
-`rediss://...` (TLS) for Redis. The other outputs are its parts, for clients that read them separately,
-such as `PGHOST` and `PGPASSWORD`. These variables reach the running app only, not the build commands.
-They can't be set or changed in the dashboard, where they are listed with the resource they come from.
-
-Telemetry's outputs are the values of the standard OpenTelemetry variables:
-`endpoint` for `OTEL_EXPORTER_OTLP_ENDPOINT` and `headers` for `OTEL_EXPORTER_OTLP_HEADERS`, which
-holds the environment's credentials. The endpoint takes OTLP over HTTP and is private: only the
-running app reaches it, not the build or a local machine.
-
-<Note>
-Apps built on the Modelence framework need no file: `npx modelence@latest deploy` recognizes the
-`modelence` dependency and keeps building them locally, as it always has. To build one on Modelence Cloud
-instead, describe it like any other Node.js app: `"build": { "commands": ["npm ci", "npm run build"] }`
-and `"start": { "commands": ["npm start"] }`.
-</Note>
-
-**Missing, empty and none**: a missing `build` runs `npm install`; `"build": { "commands": [] }` means
-there is no build step. A missing `start` means there is no process. An empty command string `""` is
-invalid and is rejected.
-
-## Examples
-
-**Express API only** — no build step, the server serves everything:
+**Express API only**: no build step, the server serves everything:
 
 ```json modelence.config.json
 {
@@ -147,7 +83,7 @@ invalid and is rejected.
 }
 ```
 
-**Vite static site** — built once, served by the platform, no process:
+**Vite static site**: built once, served by the platform, no process:
 
 ```json modelence.config.json
 {
@@ -163,7 +99,7 @@ invalid and is rejected.
 }
 ```
 
-**Express API + Vite frontend** — the frontend in `client/` is built into `client/dist` and served at
+**Express API + Vite frontend**: the frontend in `client/` is built into `client/dist` and served at
 `/`; requests that match no file reach the API. `VITE_API_URL` is scoped to the build as well because
 Vite inlines it while building:
 
@@ -188,7 +124,7 @@ Vite inlines it while building:
 }
 ```
 
-**Express API with PostgreSQL and Redis** - the deploy creates the database and the cache, and the
+**Express API with PostgreSQL and Redis**: the deploy creates the database and the cache, and the
 app reads them from `DATABASE_URL` and `REDIS_URL`:
 
 ```json modelence.config.json
@@ -211,7 +147,7 @@ app reads them from `DATABASE_URL` and `REDIS_URL`:
 }
 ```
 
-**Express API with telemetry** - the OpenTelemetry SDK reads the two variables, so requests and
+**Express API with telemetry**: the OpenTelemetry SDK reads the two variables, so requests and
 database calls reach the environment without code changes. Logs are already collected from the app's
 output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project depends on
 `@opentelemetry/auto-instrumentations-node`, which `--require` loads before the server:
@@ -239,67 +175,86 @@ output, so `OTEL_LOGS_EXPORTER` turns off the SDK's own log export. The project 
 }
 ```
 
+Examples in other languages are on [Dockerfile Services](/deploy/dockerfile), and examples with
+several services are on [Several Services](/deploy/services).
+
 ## Setting up a project
 
 Follow these steps in order. Do not skip the verification step.
 
-1. **Inspect `package.json`.** Read `scripts`, `engines.node`, `type` and the dependencies. Note which
-   framework builds the frontend (Vite, Next.js, Create React App, Angular, Astro…) and what runs the
-   server (Express, Fastify, Koa, Hono, NestJS, a framework's own server…).
+1. **Inspect the project.** Find its languages and package managers (`package.json`,
+   `pyproject.toml`, `requirements.txt`, `go.mod`, `Gemfile`, `pom.xml`…), any `Dockerfile`,
+   `docker-compose.yml` or `Procfile`, and how a monorepo is laid out. List the processes it runs in
+   production: the web server, and any worker, scheduler or second API.
 
-2. **Pick the install command from the lockfile.**
-   - `package-lock.json` in sync with `package.json` → `npm ci`. If it is stale or missing, use
-     `npm install`.
-   - `pnpm-lock.yaml` → `corepack enable && pnpm install --frozen-lockfile`.
-   - `yarn.lock` → `corepack enable && yarn install --frozen-lockfile` (Yarn 1) or
-     `corepack enable && yarn install --immutable` (Yarn 2+).
+2. **Choose how each process is built**, as described in
+   [Choose how each service is built](#choose-how-each-service-is-built). Name each service after what
+   it does (`web`, `api`, `worker`).
 
-   Only npm is preinstalled in the build image; `corepack enable` makes pnpm and Yarn available at the
-   version `packageManager` in `package.json` names.
+3. **For each Node.js service:**
+   - **Pick the install command from the lockfile.** `package-lock.json` in sync with
+     `package.json` → `npm ci`; if it is stale or missing, `npm install`. `pnpm-lock.yaml` →
+     `corepack enable && pnpm install --frozen-lockfile`. `yarn.lock` →
+     `corepack enable && yarn install --frozen-lockfile` (Yarn 1) or
+     `corepack enable && yarn install --immutable` (Yarn 2+). `corepack enable` makes pnpm and Yarn
+     available at the version `packageManager` in `package.json` names.
+   - **Find the build output.** Vite writes `dist/`, Create React App and Angular write `build/` or
+     `dist/<project>/browser`, Astro writes `dist/`. Next.js needs `next build` and its own server
+     (`next start`), not a static mount, unless `output: 'export'` is set. Check the framework config
+     for a changed `outDir`.
+   - **Check the start script.** `vite`, `vite preview`, `react-scripts start`, `next dev`,
+     `nodemon`, `ts-node-dev` and `tsx watch` are development servers. Do not use them. Replace them
+     with a production start (`node dist/server.js` after a TypeScript build, `next start`,
+     `node server.js`) or, for a pure frontend, a static mount and no `start`.
+   - **Make the server read `PORT`**, for example `app.listen(Number(process.env.PORT) || 3000)`.
+     Bind to all interfaces (the default), not to `127.0.0.1` only. If the frontend and the API are
+     served together, the server must be the one process: the static mount handles the frontend
+     files, the server handles everything else.
+   - **Pick `image`** from `engines.node` (default `node-22-slim`; use `slim` unless the project
+     already builds on Alpine), and set `root` when the app lives in a subdirectory.
 
-3. **Find the build output.** Vite writes `dist/`, Create React App and Angular write `build/` or
-   `dist/<project>/browser`, Astro writes `dist/`, Next.js needs `next build` and its own server
-   (`next start`), not a static mount, unless `output: 'export'` is set. Check the framework config for
-   a changed `outDir`.
+4. **For each Dockerfile service**, follow [Dockerfile Services](/deploy/dockerfile): use or write
+   the Dockerfile, make the process listen on `0.0.0.0`, and set `ports` when it listens on a
+   fixed port other than 3000, main port first.
 
-4. **Check the start script.** `vite`, `vite preview`, `react-scripts start`, `next dev`, `nodemon`,
-   `ts-node-dev` and `tsx watch` are development servers. Do not use them. Replace them with a
-   production start (`node dist/server.js` after a TypeScript build, `next start`, `node server.js`)
-   or, for a pure frontend, a static mount and no `start`. Do not add database migrations to
-   `start.commands`: every container runs them on every start, several at once during a rollout,
-   and a slow one is killed by the health check partway through. Leave migrations out of the file
-   and tell the user to run them against the environment's database before deploying. A step may go
-   first in `start.commands` only if it is fast and safe to run in parallel, such as `prisma generate`.
-
-5. **Make the server read `PORT`.** The listen call must use `process.env.PORT`, for example
-   `app.listen(Number(process.env.PORT) || 3000)`. Bind to all interfaces (the default), not to
-   `127.0.0.1` only. If the frontend and the API are served together, the server must be the one
-   process — the static mount handles the frontend files, the server handles everything else.
+5. **Don't run migrations at start.** Do not add database migrations to `start` or to a Dockerfile's
+   `CMD`: every container runs them on every start, several at once during a rollout, and a slow one
+   is killed by the health check partway through. Leave them out and tell the user to run them against
+   the environment's database before deploying. A step may run before the server only if it is fast
+   and safe to run in parallel, such as `prisma generate`.
 
 6. **Use the provided databases.** If the project needs MongoDB, read the connection string from
-   `process.env.MONGODB_URI` (or `MONGO_URL`) instead of a hardcoded one. If it needs PostgreSQL or
-   Redis that it doesn't already have hosted somewhere, declare a managed resource for it in step 7 and
-   tie the variable the code reads (`DATABASE_URL`, `REDIS_URL`) to its `url` output. A database hosted
-   elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep the connection code and read
-   its URL and keys from environment variables. Other databases, such as MySQL, are not provisioned. See
-   [Compatibility](#when-the-project-is-not-compatible).
+   the `MONGODB_URI` (or `MONGO_URL`) variable instead of a hardcoded one. If it needs PostgreSQL or
+   Redis that it doesn't already have hosted somewhere, declare a managed resource for it in step 7
+   and tie the variable the code reads (`DATABASE_URL`, `REDIS_URL`) to its `url` output. A database
+   hosted elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep the connection code
+   and read its URL and keys from environment variables. Other databases, such as MySQL, are not
+   provisioned. See [Compatibility](#when-the-project-is-not-compatible).
 
-7. **Write `modelence.config.json`** at the repository root with the values found above, as a single
-   service entry in `resources` (`"type": "service"`). Pick `image` from `engines.node` (default
-   `node-22-slim`; use `slim` unless the project already builds on Alpine). Set `root` when the app
-   lives in a subdirectory. Add any managed resources from step 6 next to the service, with their
-   variables in `env`. Add a `telemetry` resource only when the user asks for traces or metrics, or the
-   project already uses OpenTelemetry: a deploy fails on a plan without monitoring. Tie
-   `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` to its outputs instead of a hardcoded
-   collector. Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
+7. **Write `modelence.config.json`** at the repository root, with one entry in `resources` for each
+   service (`"type": "service"`), as described in [modelence.config.json](/deploy/config).
+   - Add any managed resources from step 6 next to the services, with their variables in `env`.
+   - With several services, put the one that serves the site first in `resources`: the first deploy
+     attaches the environment's URL to it. Give each service that calls another a `"type": "resource"` variable with the other's `url`. See
+     [Several Services](/deploy/services).
+   - Add a `telemetry` resource only when the user asks for traces or metrics, or the project already
+     uses OpenTelemetry: a deploy fails on a plan without monitoring. Tie
+     `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` to its outputs instead of a
+     hardcoded collector.
+   - Add `"$schema": "https://cloud.modelence.com/schema/modelence.config.json?version=1"`.
 
-8. **Verify locally.** Run the build commands, then the start commands with `PORT=3000` set, in
-   order — exactly as written in the file — and confirm the app answers on
-   `http://localhost:3000` (for a static site, confirm the `dir` exists after the build and holds
-   `index.html`). Fix the file or the code until this works; a deploy runs the same commands.
+8. **Verify locally**, each service on its own:
+   - A Node.js service: run its build commands, then its start commands with `PORT=3000` set, in
+     order and exactly as written in the file, and confirm the app answers on
+     `http://localhost:3000`. For a static site, confirm the `dir` exists after the build and holds
+     `index.html`.
+   - A Dockerfile service: build and run its image as described in
+     [Verifying the build](/deploy/dockerfile#verifying-the-build).
+
+   Fix the file or the code until this works; a deploy runs the same build.
 
 9. **Commit `modelence.config.json`** together with any code changes (the `PORT` change, the
-   production start script).
+   production start script, a new Dockerfile).
 
 10. **Run `npx modelence@latest deploy`** in the project directory yourself, with a timeout of at
     least 15 minutes. It opens the browser, where the user signs in, picks the organization,
@@ -311,13 +266,15 @@ Follow these steps in order. Do not skip the verification step.
 
 ### Runtime values and secrets
 
-When the app needs a value that must not be committed — an API key, an OAuth secret, a third-party
-URL — declare it by name in the file's `env` section, without a `value` and with `"type": "secret"`
+When the app needs a value that must not be committed (an API key, an OAuth secret, a third-party
+URL), declare it by name in the file's `env` section, without a `value` and with `"type": "secret"`
 for anything sensitive. The deploy asks the user for it in the browser; it can be changed later in
 the Modelence Cloud dashboard under **Environment variables**. A value only the build needs (a
 `VITE_*` or `NEXT_PUBLIC_*` variable that is inlined into the frontend) gets
 `"scopes": ["build", "runtime"]`; never give a build scope to anything the browser must not see. Mark
-a variable the app runs without `"required": false`. Read the values from `process.env` as usual.
+a variable the app runs without `"required": false`. Read the values from the environment as usual
+(`process.env`, `os.environ`, `os.Getenv`). A Dockerfile reads build variables in its own way; see
+[Variables in the build](/deploy/dockerfile#variables-in-the-build).
 
 Non-secret settings that belong with the code (a base path, a public API path) go in the file's
 `env` section instead, with a `value`, so they are versioned with the repository. Give anything a
@@ -327,13 +284,13 @@ bundler inlines `"scopes": ["build", "runtime"]` so it reaches the build as well
 
 Report the project as not compatible with Modelence Cloud, and say why, when:
 
-- **It is not a Node.js application** — Java, Python, Go, PHP, Ruby, .NET and so on, even with a
-  Node.js frontend in front. The image runs Node.js only.
-- **It requires a second long-running process**: a separate worker or queue consumer, a scheduler
-  process, or a database other than the provided ones (MySQL, Elasticsearch…) that would have to run
-  alongside the app. One web process is run, and MongoDB, PostgreSQL and Redis are the only databases
-  provisioned.
-- **It needs Docker Compose** or a custom Dockerfile to run.
+- **It needs a database or another stateful server that isn't provided** and that the user doesn't
+  host elsewhere: MySQL, Elasticsearch, RabbitMQ and so on. MongoDB, PostgreSQL and Redis are the only
+  ones provisioned, and a service can't run one itself, since containers have no persistent disk.
+- **It keeps data on the local disk**: a SQLite file, or uploads written to a folder. Each deploy
+  replaces the containers and loses those files. Suggest PostgreSQL or MongoDB for the data, and an
+  external storage service for files.
+- **It needs more than 5 services.**
 
 A database hosted elsewhere is not a reason to report the project as not compatible. An app that
 connects over the network to Supabase, Neon, PlanetScale, a managed Redis or any other hosted
@@ -344,16 +301,15 @@ as `VITE_SUPABASE_URL`, also needs to be available at build time, as described i
 
 Then suggest what the user can do instead: replace the database with one that is provided (MongoDB
 through `MONGODB_URI`, or a managed PostgreSQL or Redis resource), or keep the incompatible parts on
-another host and deploy only the Node.js web app.
+another host and deploy the rest.
 
 Do not move a worker, queue consumer or scheduled job into the web process. The web process can run as
-several replicas, and each one would run every job — emails sent twice, charges made twice. If the
-user wants to do it anyway, tell them that each job needs a lock held in the database, so that only
-one replica runs it at a time.
+several replicas, and each one would run every job: emails sent twice, charges made twice. Run it as
+a service of its own, as described in [Several Services](/deploy/services#examples).
 
 ## Meteor
 
-<Note>Early support — the commands below work but Meteor is not yet a first-class runtime.</Note>
+<Note>Early support: the commands below work but Meteor is not yet a first-class runtime.</Note>
 
 Meteor bundles its own server; build it into a directory outside the source tree and start the bundle
 with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are already injected. Match
