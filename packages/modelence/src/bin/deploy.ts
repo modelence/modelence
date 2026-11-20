@@ -9,7 +9,7 @@ import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
-import { isManagedResource, readAppSpecFile, type AppSpec } from './appSpec';
+import { getServices, readAppSpecFile, type AppSpec } from './appSpec';
 import { describeOtherHosts, resolveTargetFromOptions } from './deployTarget';
 import { isCI } from './terminal';
 import {
@@ -130,7 +130,7 @@ export async function deploy(options: DeployOptions) {
         appId: project.appId,
         hint: namedTarget ?? undefined,
         env: spec?.env,
-        services: getServiceNames(spec),
+        services: getPickerServices(kind, spec),
       });
       token = auth.token;
       await rememberToken(host, auth.token, auth.expiresAt);
@@ -304,9 +304,9 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-// The services the file declares; its postgres, redis and telemetry resources aren't containers.
-function getServiceNames(spec: AppSpec | undefined): string[] {
-  return Object.entries(spec?.resources ?? {})
-    .filter(([, resource]) => !isManagedResource(resource))
-    .map(([name]) => name);
+// The picker sizes a new environment for these. Studio builds a --prebuilt
+// bundle as one service whatever the file declares, so a bundle sends none
+// and the picker counts one container, as it did before.
+function getPickerServices(kind: UploadKind, spec: AppSpec | undefined): string[] | undefined {
+  return kind === 'source' && spec ? getServices(spec).map(([name]) => name) : undefined;
 }

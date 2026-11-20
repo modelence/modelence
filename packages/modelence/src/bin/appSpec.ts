@@ -118,6 +118,13 @@ export function isManagedResource(resource: AppResource): resource is ManagedRes
   return resource.type === 'postgres' || resource.type === 'redis' || resource.type === 'telemetry';
 }
 
+// The resources that run as containers, by name, in the file's order.
+export function getServices(spec: AppSpec): (readonly [string, ServiceResource])[] {
+  return Object.entries(spec.resources ?? {}).flatMap(([name, resource]) =>
+    isManagedResource(resource) ? [] : [[name, resource] as const]
+  );
+}
+
 export interface ValueEnvDeclaration {
   type?: EnvDeclarationType;
   // The phases the value reaches; default ["runtime"].
@@ -197,9 +204,7 @@ export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Prom
 export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
   const entries = Object.entries(spec.resources ?? {});
-  const services = entries.flatMap(([name, resource]) =>
-    isManagedResource(resource) ? [] : [[name, resource] as const]
-  );
+  const services = getServices(spec);
 
   for (const [name, resource] of services) {
     // Only label the service when there is more than one to tell apart.
