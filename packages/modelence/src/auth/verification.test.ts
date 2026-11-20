@@ -650,10 +650,69 @@ describe('auth/verification', () => {
         redirect: '/verified?status=error&message=User%20not%20found',
       });
     });
+
+    test('consumes verification rate limit by IP and redirects with error when exceeded', async () => {
+      mockConsumeRateLimit.mockRejectedValueOnce(
+        new Error('Rate limit exceeded for verification') as never
+      );
+
+      const result = await handleVerifyEmail(baseParams as never);
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '192.168.1.1',
+      });
+      expect(result).toEqual({
+        status: 302,
+        headers: { 'Referrer-Policy': 'no-referrer' },
+        redirect: '/verified?status=error&message=Rate%20limit%20exceeded%20for%20verification',
+      });
+      expect(mockTokensFindOne).not.toHaveBeenCalled();
+    });
+
+    test('skips consuming verification rate limit when IP is not present', async () => {
+      const paramsWithoutIp = {
+        ...baseParams,
+        req: { ip: undefined, socket: {} },
+      };
+      mockTokensFindOne.mockResolvedValue(null as never);
+
+      await handleVerifyEmail(paramsWithoutIp as never);
+
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    });
   });
 
   describe('handleVerifyEmailMutation', () => {
     const context = { connectionInfo: { ip: '192.168.1.1' } };
+
+    test('consumes verification rate limit by IP before looking up token', async () => {
+      mockConsumeRateLimit.mockRejectedValueOnce(
+        new Error('Rate limit exceeded for verification') as never
+      );
+
+      await expect(
+        handleVerifyEmailMutation({ token: 'token' } as never, context as never)
+      ).rejects.toThrow('Rate limit exceeded for verification');
+
+      expect(mockConsumeRateLimit).toHaveBeenCalledWith({
+        bucket: 'verification',
+        type: 'ip',
+        value: '192.168.1.1',
+      });
+      expect(mockTokensFindOne).not.toHaveBeenCalled();
+    });
+
+    test('skips consuming verification rate limit when IP is not present', async () => {
+      mockTokensFindOne.mockResolvedValue(null as never);
+
+      await expect(
+        handleVerifyEmailMutation({ token: 'token' } as never, { connectionInfo: {} } as never)
+      ).rejects.toThrow('Invalid or expired verification token');
+
+      expect(mockConsumeRateLimit).not.toHaveBeenCalled();
+    });
 
     test('a rejecting onAfterEmailVerification hook does not fail the verification', async () => {
       const authConfig = {
