@@ -1,0 +1,39 @@
+/*
+ * Neutral navigation accents, matching modelence.com: the active page in the
+ * sidebar, the section label above the page title and the active entry in
+ * "On this page" use grays instead of the brand purple. Links and buttons in
+ * the content keep the theme color from docs.json.
+ */
+
+#sidebar-content li[data-active] > a {
+  background-color: rgb(17 24 39 / 0.06) !important;
+  color: #111827 !important;
+}
+#sidebar-content li[data-active] > a svg {
+  background-color: #111827 !important;
+}
+html.dark #sidebar-content li[data-active] > a {
+  background-color: rgb(255 255 255 / 0.08) !important;
+  color: #f3f4f6 !important;
+}
+html.dark #sidebar-content li[data-active] > a svg {
+  background-color: #f3f4f6 !important;
+}
+
+.eyebrow {
+  color: #6b7280 !important;
+}
+html.dark .eyebrow {
+  color: #9ca3af !important;
+}
+
+/* Mintlify renders the TOC as li.toc-item; the element form covers templates
+   that use a custom toc-item element. */
+.toc-item[data-active-deepest] > a,
+toc-item[data-active-deepest] > a {
+  color: #111827 !important;
+}
+html.dark .toc-item[data-active-deepest] > a,
+html.dark toc-item[data-active-deepest] > a {
+  color: #f3f4f6 !important;
+}
