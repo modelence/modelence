@@ -93,6 +93,8 @@ export type AuthRateLimitsConfig = {
   oauthExchange?: AuthRateLimitOverride[];
   /** Per-user rate limits for profile updates. */
   updateProfile?: AuthRateLimitOverride[];
+  /** Per-IP rate limits for anonymous session initialization. */
+  sessionInit?: AuthRateLimitOverride[];
 };
 
 type GenerateHandleProps = {
