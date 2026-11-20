@@ -53,6 +53,11 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     // don't stop one client cycling through many addresses.
     { bucket: 'verification', type: 'ip', window: time.minutes(15), limit: 10 },
     { bucket: 'verification', type: 'ip', window: time.days(1), limit: 100 },
+    // Redeeming an email verification token. Tokens are 256-bit hex, so this guards
+    // against bulk guessing and replay floods while leaving ample room for shared NATs
+    // and email security scanners that open the link ahead of the user.
+    { bucket: 'verifyEmail', type: 'ip', window: time.minutes(15), limit: 60 },
+    { bucket: 'verifyEmail', type: 'ip', window: time.days(1), limit: 600 },
     { bucket: 'passwordReset', type: 'ip', window: time.minutes(15), limit: 10 },
     { bucket: 'passwordReset', type: 'ip', window: time.days(1), limit: 100 },
     { bucket: 'passwordReset', type: 'email', window: time.hours(1), limit: 5 },
@@ -82,6 +87,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'signupAttempt',
     'signin',
     'verification',
+    'verifyEmail',
     'passwordReset',
     'magicLink',
     'oneTimeCode',

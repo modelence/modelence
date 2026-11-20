@@ -83,6 +83,8 @@ export type AuthRateLimitsConfig = {
   signin?: AuthRateLimitOverride[];
   /** Per-user and per-IP limits for email verification resend requests. */
   verification?: AuthRateLimitOverride[];
+  /** Per-IP limits for email verification token redemptions. */
+  verifyEmail?: AuthRateLimitOverride[];
   /** Rate limits for password reset requests. */
   passwordReset?: AuthRateLimitOverride[];
   /** Rate limits for magic link requests. */

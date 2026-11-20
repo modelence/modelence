@@ -651,27 +651,27 @@ describe('auth/verification', () => {
       });
     });
 
-    test('consumes verification rate limit by IP and redirects with error when exceeded', async () => {
+    test('consumes verifyEmail rate limit by IP and redirects with error when exceeded', async () => {
       mockConsumeRateLimit.mockRejectedValueOnce(
-        new Error('Rate limit exceeded for verification') as never
+        new Error('Rate limit exceeded for verifyEmail') as never
       );
 
       const result = await handleVerifyEmail(baseParams as never);
 
       expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'verification',
+        bucket: 'verifyEmail',
         type: 'ip',
         value: '192.168.1.1',
       });
       expect(result).toEqual({
         status: 302,
         headers: { 'Referrer-Policy': 'no-referrer' },
-        redirect: '/verified?status=error&message=Rate%20limit%20exceeded%20for%20verification',
+        redirect: '/verified?status=error&message=Rate%20limit%20exceeded%20for%20verifyEmail',
       });
       expect(mockTokensFindOne).not.toHaveBeenCalled();
     });
 
-    test('skips consuming verification rate limit when IP is not present', async () => {
+    test('skips consuming verifyEmail rate limit when IP is not present', async () => {
       const paramsWithoutIp = {
         ...baseParams,
         req: { ip: undefined, socket: {} },
@@ -687,24 +687,24 @@ describe('auth/verification', () => {
   describe('handleVerifyEmailMutation', () => {
     const context = { connectionInfo: { ip: '192.168.1.1' } };
 
-    test('consumes verification rate limit by IP before looking up token', async () => {
+    test('consumes verifyEmail rate limit by IP before looking up token', async () => {
       mockConsumeRateLimit.mockRejectedValueOnce(
-        new Error('Rate limit exceeded for verification') as never
+        new Error('Rate limit exceeded for verifyEmail') as never
       );
 
       await expect(
         handleVerifyEmailMutation({ token: 'token' } as never, context as never)
-      ).rejects.toThrow('Rate limit exceeded for verification');
+      ).rejects.toThrow('Rate limit exceeded for verifyEmail');
 
       expect(mockConsumeRateLimit).toHaveBeenCalledWith({
-        bucket: 'verification',
+        bucket: 'verifyEmail',
         type: 'ip',
         value: '192.168.1.1',
       });
       expect(mockTokensFindOne).not.toHaveBeenCalled();
     });
 
-    test('skips consuming verification rate limit when IP is not present', async () => {
+    test('skips consuming verifyEmail rate limit when IP is not present', async () => {
       mockTokensFindOne.mockResolvedValue(null as never);
 
       await expect(

@@ -151,7 +151,7 @@ export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: 
     const ip = connectionInfo?.ip;
     if (ip) {
       await consumeRateLimit({
-        bucket: 'verification',
+        bucket: 'verifyEmail',
         type: 'ip',
         value: ip,
       });
@@ -197,7 +197,7 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     const ip = params.req.ip || params.req.socket?.remoteAddress;
     if (ip) {
       await consumeRateLimit({
-        bucket: 'verification',
+        bucket: 'verifyEmail',
         type: 'ip',
         value: ip,
       });
