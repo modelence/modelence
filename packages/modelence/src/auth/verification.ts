@@ -148,6 +148,15 @@ export async function handleVerifyEmailMutation(args: Args, { connectionInfo }: 
   const authConfig = getAuthConfig();
 
   try {
+    const ip = connectionInfo?.ip;
+    if (ip) {
+      await consumeRateLimit({
+        bucket: 'verifyEmail',
+        type: 'ip',
+        value: ip,
+      });
+    }
+
     const token = z.string().min(1).parse(args.token);
     const { userDoc, alreadyVerified } = await verifyEmailToken(token);
     if (alreadyVerified) {
@@ -185,6 +194,15 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
     baseUrl ||
     '/';
   try {
+    const ip = params.req.ip || params.req.socket?.remoteAddress;
+    if (ip) {
+      await consumeRateLimit({
+        bucket: 'verifyEmail',
+        type: 'ip',
+        value: ip,
+      });
+    }
+
     const token = z.string().parse(params.query.token);
     const { userDoc, alreadyVerified } = await verifyEmailToken(token);
 
