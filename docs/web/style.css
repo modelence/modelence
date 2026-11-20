@@ -27,9 +27,13 @@ html.dark .eyebrow {
   color: #9ca3af !important;
 }
 
-.toc-item[data-active-deepest] > a {
+/* Mintlify renders the TOC as li.toc-item; the element form covers templates
+   that use a custom toc-item element. */
+.toc-item[data-active-deepest] > a,
+toc-item[data-active-deepest] > a {
   color: #111827 !important;
 }
-html.dark .toc-item[data-active-deepest] > a {
+html.dark .toc-item[data-active-deepest] > a,
+html.dark toc-item[data-active-deepest] > a {
   color: #f3f4f6 !important;
 }
