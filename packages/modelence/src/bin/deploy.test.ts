@@ -185,6 +185,34 @@ describe('deploy orchestration', () => {
     );
   });
 
+  // The picker sizes a new environment for every service; a database isn't one.
+  it('sends the declared services to the picker', async () => {
+    const declared = {
+      resources: {
+        ...spec.resources,
+        worker: { type: 'service', dockerfile: 'Dockerfile' },
+        db: { type: 'postgres' },
+      },
+    };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    await deploy(options);
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({ pick: 'deploy', services: ['app', 'worker'] })
+    );
+  });
+
+  // Studio runs a bundle as one container, whatever the file declares.
+  it('sends no services to the picker for a --prebuilt deploy', async () => {
+    const declared = {
+      resources: { ...spec.resources, worker: { type: 'service', dockerfile: 'Dockerfile' } },
+    };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    vi.mocked(getProjectPath).mockImplementation((...parts: string[]) => join(project, ...parts));
+    await deploy({ ...options, prebuilt: true });
+    expect(vi.mocked(authenticateCli).mock.calls[0][1]?.services).toBeUndefined();
+  });
+
   it('reauthorizes once when the upload authorization is rejected', async () => {
     vi.mocked(authenticateCli)
       .mockResolvedValueOnce({ token: 'browser-token', target: picked })
