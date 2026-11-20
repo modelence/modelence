@@ -114,33 +114,12 @@ works in every environment:
 An environment can have up to 10 managed resources, telemetry included, and at most one of them can
 be telemetry.
 
-## Platform resources
-
-The platform's own MongoDB database and Elastic metrics storage. They take only a `type`, and a file
-can declare at most one of each.
-
-| `type` | Meaning |
-| --- | --- |
-| `"mongodb"` | A MongoDB Atlas database for the environment. Every service gets its connection string as `MONGODB_URI` and `MONGO_URL`, and the dashboard shows it under **Database**. |
-| `"elastic"` | The metrics storage that Modelence framework apps send their metrics to. Other apps should use `telemetry` instead. |
-
-```json
-"resources": {
-  "app": { "type": "service", "start": { "commands": ["node server.js"] } },
-  "db": { "type": "mongodb" }
-}
-```
-
-A deploy creates them when the environment doesn't have them yet. They are included in the plan and
-are kept as they are when removed from the file. They have no outputs, so `env` cannot tie a variable
-to them.
-
 ## Variables
 
 Every service gets these variables at start:
 
-- `MONGODB_URI` and `MONGO_URL`: the environment's MongoDB database, when the file declares a
-  `mongodb` resource (both hold the same connection string).
+- `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment (both
+  hold the same connection string).
 - `SITE_URL` and `ROOT_URL`: the environment's public URL (both hold the same value).
 - `PORT`: the service's main port, which the process must listen on.
 - Any variables the user defines in the dashboard under **Environment variables**.
@@ -192,7 +171,5 @@ reaches it, not the build or a local machine.
 Apps built on the Modelence framework need no file: `npx modelence@latest deploy` recognizes the
 `modelence` dependency and keeps building them locally, as it always has. To build one on Modelence
 Cloud instead, describe it like any other Node.js app:
-`"build": { "commands": ["npm ci", "npm run build"] }` and `"start": { "commands": ["npm start"] }`,
-and declare its database and metrics storage: `"db": { "type": "mongodb" }` and
-`"metrics": { "type": "elastic" }`.
+`"build": { "commands": ["npm ci", "npm run build"] }` and `"start": { "commands": ["npm start"] }`.
 </Note>

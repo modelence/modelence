@@ -40,8 +40,7 @@ URL:
 - **Optional telemetry**, a `resources` entry of type `"telemetry"`, for the app's traces and metrics.
   It needs a plan with monitoring (Pro and up). Logs need no setup.
 - **Environment variables injected at start**, in every service:
-  - `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database, when the file declares a `mongodb`
-    resource.
+  - `MONGODB_URI` and `MONGO_URL`: a MongoDB Atlas database provisioned for this environment.
   - `SITE_URL` and `ROOT_URL`: the environment's public URL.
   - `PORT`: the service's main port, which the process must listen on. A hardcoded port never
     receives traffic.
@@ -224,9 +223,8 @@ Follow these steps in order. Do not skip the verification step.
    the environment's database before deploying. A step may run before the server only if it is fast
    and safe to run in parallel, such as `prisma generate`.
 
-6. **Use the provided databases.** If the project needs MongoDB, declare a `mongodb` resource in
-   step 7 and read the connection string from the `MONGODB_URI` (or `MONGO_URL`) variable instead of
-   a hardcoded one. If it needs PostgreSQL or
+6. **Use the provided databases.** If the project needs MongoDB, read the connection string from
+   the `MONGODB_URI` (or `MONGO_URL`) variable instead of a hardcoded one. If it needs PostgreSQL or
    Redis that it doesn't already have hosted somewhere, declare a managed resource for it in step 7
    and tie the variable the code reads (`DATABASE_URL`, `REDIS_URL`) to its `url` output. A database
    hosted elsewhere (Supabase, Neon, PlanetScale and so on) works as it is: keep the connection code
@@ -236,10 +234,6 @@ Follow these steps in order. Do not skip the verification step.
 7. **Write `modelence.config.json`** at the repository root, with one entry in `resources` for each
    service (`"type": "service"`), as described in [modelence.config.json](/deploy/config).
    - Add any managed resources from step 6 next to the services, with their variables in `env`.
-   - For MongoDB, add `"db": { "type": "mongodb" }`. It needs no `env` entry.
-   - For an app built on the Modelence framework (it depends on the `modelence` package), add both
-     `"db": { "type": "mongodb" }` and `"metrics": { "type": "elastic" }`: the framework stores its
-     data and sends its metrics there.
    - With multiple services, put the one that serves the site first in `resources`: the first deploy
      attaches the environment's URL to it. Give each service that calls another a `"type": "resource"` variable with the other's `url`. See
      [Multiple services](/deploy/services).
@@ -318,8 +312,7 @@ a service of its own, as described in [Multiple services](/deploy/services#examp
 <Note>Early support: the commands below work but Meteor is not yet a first-class runtime.</Note>
 
 Meteor bundles its own server; build it into a directory outside the source tree and start the bundle
-with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are injected; `MONGO_URL` needs
-the `mongodb` resource below. Match
+with Node.js. `ROOT_URL` and `MONGO_URL`, which Meteor reads at start, are already injected. Match
 `image` to the Meteor release: Meteor 3 runs on Node 22.
 
 ```json modelence.config.json
@@ -338,8 +331,7 @@ the `mongodb` resource below. Match
         ]
       },
       "start": { "commands": ["node /tmp/meteor-build/bundle/main.js"] }
-    },
-    "db": { "type": "mongodb" }
+    }
   }
 }
 ```
