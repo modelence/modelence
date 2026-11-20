@@ -3,7 +3,7 @@ import {
   APP_SPEC_FILE_NAME,
   SETUP_DOCS_URL,
   formatAppSpec,
-  isManagedResource,
+  isProvidedResource,
   readAppSpecFile,
   type AppSpec,
   type StaticMount,
@@ -29,7 +29,7 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
   }
   assertKnownKeys(spec);
   for (const resource of Object.values(spec.resources ?? {})) {
-    if (resource && !isManagedResource(resource) && resource.root !== undefined) {
+    if (resource && !isProvidedResource(resource) && resource.root !== undefined) {
       await resolveAppRoot(cwd, resource.root);
     }
   }

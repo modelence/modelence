@@ -25,7 +25,8 @@ export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence 
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvDeclarationScope = 'build' | 'runtime';
 export type ManagedResourceType = 'postgres' | 'redis' | 'telemetry';
-export type ResourceType = 'service' | ManagedResourceType;
+export type PlatformResourceType = 'mongodb' | 'elastic';
+export type ResourceType = 'service' | ManagedResourceType | PlatformResourceType;
 
 export interface StaticMount {
   path: string;
@@ -110,12 +111,31 @@ export interface ManagedResource {
   plan?: string;
 }
 
-export type AppResource = ServiceResource | ManagedResource;
+/*
+  The platform's MongoDB database or Elastic metrics storage. Modelence
+  framework apps get both; other apps get one only when the file declares it.
+*/
+export interface PlatformResource {
+  type: PlatformResourceType;
+}
+
+export type AppResource = ServiceResource | ManagedResource | PlatformResource;
 
 // Checked by name: the CLI reads the file before Studio validates it, so a
 // missing or misspelled type must not pass as a managed resource.
 export function isManagedResource(resource: AppResource): resource is ManagedResource {
   return resource.type === 'postgres' || resource.type === 'redis' || resource.type === 'telemetry';
+}
+
+export function isPlatformResource(resource: AppResource): resource is PlatformResource {
+  return resource.type === 'mongodb' || resource.type === 'elastic';
+}
+
+// Anything the platform provides rather than builds; every other entry is a service.
+export function isProvidedResource(
+  resource: AppResource
+): resource is ManagedResource | PlatformResource {
+  return isManagedResource(resource) || isPlatformResource(resource);
 }
 
 export interface ValueEnvDeclaration {
@@ -141,7 +161,8 @@ export interface AppSpec {
   /*
     Everything the app is made of, by the name the project chose: services
     (type/image/root/build/start/static, or a dockerfile; up to 5) and the
-    postgres, redis and telemetry resources a deploy creates (type/plan).
+    postgres, redis and telemetry resources a deploy creates (type/plan), and
+    the platform's mongodb and elastic (type).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -198,7 +219,7 @@ export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
   const entries = Object.entries(spec.resources ?? {});
   const services = entries.flatMap(([name, resource]) =>
-    isManagedResource(resource) ? [] : [[name, resource] as const]
+    isProvidedResource(resource) ? [] : [[name, resource] as const]
   );
 
   for (const [name, resource] of services) {
@@ -212,6 +233,10 @@ export function formatAppSpec(spec: AppSpec): string[] {
   for (const [name, resource] of entries) {
     if (resource.type === 'telemetry') {
       lines.push(`  telemetry: ${name}`);
+    } else if (isPlatformResource(resource)) {
+      lines.push(
+        `  ${resource.type === 'mongodb' ? 'db:     ' : 'metrics:'} ${name} (${resource.type})`
+      );
     } else if (isManagedResource(resource)) {
       lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
     }
