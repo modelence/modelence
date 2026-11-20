@@ -268,7 +268,7 @@ const SERVER_DEFAULTED_INDEX_OPTION_FIELDS = [
 /**
  * Options MongoDB leaves out of the stored index when they are declared `false`.
  */
-const SERVER_OMITTED_FALSE_OPTION_FIELDS = ['hidden', 'unique'] as const;
+const SERVER_OMITTED_FALSE_OPTION_FIELDS = ['hidden', 'unique', 'sparse'] as const;
 
 const isSameIndexDefinition = (existing: ExistingIndex, desired: IndexDescription): boolean => {
   if (!isSameIndexKey(toDeclaredIndexKey(existing, desired.key), desired.key)) {
