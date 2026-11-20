@@ -90,4 +90,24 @@ describe('auth/index', () => {
       "Access denied - role 'missing' required"
     );
   });
+
+  test('returns user: null and unauthenticated roles when session points to a disabled or deleted user', async () => {
+    const userId = new ObjectId('507f1f77bcf86cd799439011');
+    mockObtainSession.mockResolvedValue({
+      authToken: 'token',
+      expiresAt: new Date(Date.now() + 60_000),
+      userId,
+    } as never);
+    mockFindOne.mockResolvedValue(null as never);
+    mockGetUnauthenticatedRoles.mockReturnValue(['guest']);
+
+    const result = await authenticate('token');
+
+    expect(mockFindOne).toHaveBeenCalledWith({
+      _id: userId,
+      status: { $nin: ['deleted', 'disabled'] },
+    });
+    expect(result.user).toBeNull();
+    expect(result.roles).toEqual(['guest']);
+  });
 });

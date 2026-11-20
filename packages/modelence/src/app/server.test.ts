@@ -369,6 +369,82 @@ describe('app/server getCallContext', () => {
     expect(ctx.clientInfo.screenWidth).toBe(100);
   });
 
+  test('clears authToken cookie when database returns an unauthenticated or expired session', async () => {
+    const clearCookie = vi.fn();
+    const res = { clearCookie } as unknown as Response;
+    const req = createRequest({
+      cookies: { authToken: 'stale-cookie-token' },
+      body: {},
+      headers: { host: 'localhost:3000' },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'new-anon-token', expiresAt: new Date(), userId: null },
+      user: null,
+      roles: ['guest'],
+    } as never);
+
+    await getCallContext(req, res);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('stale-cookie-token', {
+      persistNewSession: false,
+    });
+    expect(clearCookie).toHaveBeenCalledWith(
+      'authToken',
+      expect.objectContaining({ httpOnly: true, path: '/' })
+    );
+  });
+
+  test('does NOT clear authToken cookie when request resolves with an authenticated user', async () => {
+    const clearCookie = vi.fn();
+    const res = { clearCookie } as unknown as Response;
+    const req = createRequest({
+      cookies: { authToken: 'valid-user-cookie' },
+      body: {},
+      headers: { host: 'localhost:3000' },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: {
+        authToken: 'valid-session-token',
+        expiresAt: new Date(Date.now() + 60_000),
+        userId: 'user-1',
+      },
+      user: { id: 'user-1', handle: 'demo' },
+      roles: ['user'],
+    } as never);
+
+    await getCallContext(req, res);
+
+    expect(mockAuthenticate).toHaveBeenCalledWith('valid-user-cookie', {
+      persistNewSession: false,
+    });
+    expect(clearCookie).not.toHaveBeenCalled();
+  });
+
+  test('does NOT clear authToken cookie when request has no authToken cookie', async () => {
+    const clearCookie = vi.fn();
+    const res = { clearCookie } as unknown as Response;
+    const req = createRequest({
+      cookies: {},
+      body: {},
+      headers: { host: 'localhost:3000' },
+      protocol: 'https',
+    });
+    mockGetMongodbUri.mockReturnValue('mongodb://localhost');
+    mockAuthenticate.mockResolvedValue({
+      session: { authToken: 'new-anon-token', expiresAt: new Date(), userId: null },
+      user: null,
+      roles: ['guest'],
+    } as never);
+
+    await getCallContext(req, res);
+
+    expect(clearCookie).not.toHaveBeenCalled();
+  });
+
   test('does not trust X-Forwarded-For when the request IP is direct', async () => {
     const req = createRequest({
       body: {

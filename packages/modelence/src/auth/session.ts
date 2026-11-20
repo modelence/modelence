@@ -181,6 +181,7 @@ export async function obtainSession(
   if (authToken) {
     const hashedToken = hashToken(authToken);
     let existingSession = await sessionsCollection.findOne({ authToken: hashedToken });
+    let isLegacy = false;
 
     // Legacy fallback: try raw token lookup (pre-hash sessions)
     // Ensure the authToken is not a hex-encoded SHA-256 hash to prevent
@@ -188,20 +189,30 @@ export async function obtainSession(
     const isHex64 = /^[0-9a-f]{64}$/i.test(authToken);
     if (!existingSession && !isHex64) {
       existingSession = await sessionsCollection.findOne({ authToken });
-      if (existingSession) {
-        await sessionsCollection.updateOne(
-          { _id: existingSession._id as ObjectId },
-          { $set: { authToken: hashedToken } }
-        );
-      }
+      isLegacy = !!existingSession;
     }
 
     if (existingSession) {
-      return {
-        authToken,
-        expiresAt: new Date(existingSession.expiresAt),
-        userId: existingSession.userId ?? null,
-      };
+      const expiresAt = new Date(existingSession.expiresAt);
+      if (!(expiresAt.getTime() > Date.now())) {
+        await sessionsCollection.deleteOne({
+          _id: existingSession._id as ObjectId,
+          expiresAt: { $lte: new Date() },
+        });
+        existingSession = null;
+      } else {
+        if (isLegacy) {
+          await sessionsCollection.updateOne(
+            { _id: existingSession._id as ObjectId },
+            { $set: { authToken: hashedToken } }
+          );
+        }
+        return {
+          authToken,
+          expiresAt,
+          userId: existingSession.userId ?? null,
+        };
+      }
     }
   }
 
@@ -313,7 +324,7 @@ async function processSessionHeartbeat(session: Session) {
   const newExpiresAt = new Date(now + time.days(7));
 
   await sessionsCollection.updateOne(
-    { authToken: hashToken(session.authToken) },
+    { authToken: hashToken(session.authToken), expiresAt: { $gt: new Date(now) } },
     {
       $set: {
         lastActiveDate: new Date(now),
