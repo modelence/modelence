@@ -61,8 +61,8 @@ Multi-stage builds work, and so does any `USER`.
 
 ## Variables at runtime
 
-The container gets the same variables as any service, set in its environment at start: `MONGODB_URI`,
-`SITE_URL`, `PORT`, the dashboard's variables and the outputs `env` ties to resources. See
+The container gets the same variables as any service, set in its environment at start: `MONGODB_URI`
+(with a `mongodb` resource), `SITE_URL`, `PORT`, the dashboard's variables and the outputs `env` ties to resources. See
 [Variables](/deploy/config#variables). Read them from the environment as usual, such as
 `os.environ["DATABASE_URL"]` in Python.
 

@@ -14,7 +14,7 @@ provided by the platform in every environment, and the rest are declared in the 
 | --- | --- |
 | `PORT` | The service's main port, the first of its [`ports`](/deploy/services#ports), which the process must listen on. |
 | `SITE_URL`, `ROOT_URL` | The environment's public URL. Both hold the same value. |
-| `MONGODB_URI`, `MONGO_URL` | The connection string of the environment's MongoDB database. Both hold the same value. |
+| `MONGODB_URI`, `MONGO_URL` | The connection string of the environment's MongoDB database, when it has one (a Modelence framework app, or a `mongodb` resource in `modelence.config.json`). Both hold the same value. |
 
 Names starting with `MODELENCE_`, and `PORT`, are reserved and cannot be declared by the app.
 
