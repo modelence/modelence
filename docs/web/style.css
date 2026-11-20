@@ -5,18 +5,18 @@
  * the content keep the theme color from docs.json.
  */
 
-#navigation-items li[data-active-nav-item='true'] > a {
+#sidebar-content li[data-active] > a {
   background-color: rgb(17 24 39 / 0.06) !important;
   color: #111827 !important;
 }
-#navigation-items li[data-active-nav-item='true'] > a svg {
+#sidebar-content li[data-active] > a svg {
   background-color: #111827 !important;
 }
-html.dark #navigation-items li[data-active-nav-item='true'] > a {
+html.dark #sidebar-content li[data-active] > a {
   background-color: rgb(255 255 255 / 0.08) !important;
   color: #f3f4f6 !important;
 }
-html.dark #navigation-items li[data-active-nav-item='true'] > a svg {
+html.dark #sidebar-content li[data-active] > a svg {
   background-color: #f3f4f6 !important;
 }
 
@@ -27,9 +27,9 @@ html.dark .eyebrow {
   color: #9ca3af !important;
 }
 
-a[data-layout-item='toc-item-link'][data-active='true'] {
+.toc-item[data-active-deepest] > a {
   color: #111827 !important;
 }
-html.dark a[data-layout-item='toc-item-link'][data-active='true'] {
+html.dark .toc-item[data-active-deepest] > a {
   color: #f3f4f6 !important;
 }
