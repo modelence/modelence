@@ -1,0 +1,35 @@
+/*
+ * Neutral navigation accents, matching modelence.com: the active page in the
+ * sidebar, the section label above the page title and the active entry in
+ * "On this page" use grays instead of the brand purple. Links and buttons in
+ * the content keep the theme color from docs.json.
+ */
+
+#navigation-items li[data-active-nav-item='true'] > a {
+  background-color: rgb(17 24 39 / 0.06) !important;
+  color: #111827 !important;
+}
+#navigation-items li[data-active-nav-item='true'] > a svg {
+  background-color: #111827 !important;
+}
+html.dark #navigation-items li[data-active-nav-item='true'] > a {
+  background-color: rgb(255 255 255 / 0.08) !important;
+  color: #f3f4f6 !important;
+}
+html.dark #navigation-items li[data-active-nav-item='true'] > a svg {
+  background-color: #f3f4f6 !important;
+}
+
+.eyebrow {
+  color: #6b7280 !important;
+}
+html.dark .eyebrow {
+  color: #9ca3af !important;
+}
+
+a[data-layout-item='toc-item-link'][data-active='true'] {
+  color: #111827 !important;
+}
+html.dark a[data-layout-item='toc-item-link'][data-active='true'] {
+  color: #f3f4f6 !important;
+}
