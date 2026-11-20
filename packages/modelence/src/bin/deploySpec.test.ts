@@ -297,6 +297,24 @@ describe('plan formatting', () => {
     expect(lines).toContain('  resource: web');
   });
 
+  it("lists the platform's mongodb and elastic apart from the service", () => {
+    expect(
+      formatAppSpec({
+        resources: {
+          api: { type: 'service', start: { commands: ['node server.js'] } },
+          db: { type: 'mongodb' },
+          metrics: { type: 'elastic' },
+        },
+      })
+    ).toEqual([
+      '  image:   default (node-22-slim)',
+      '  build:   default (npm install)',
+      '  start:   node server.js',
+      '  db:      db (mongodb)',
+      '  metrics: metrics (elastic)',
+    ]);
+  });
+
   it('lists managed resources apart from the service, with what each variable takes', () => {
     expect(
       formatAppSpec({

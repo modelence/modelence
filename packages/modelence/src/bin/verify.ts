@@ -6,7 +6,7 @@ import { delimiter, dirname, join, normalize } from 'path';
 import {
   APP_SPEC_FILE_NAME,
   isDockerfileService,
-  isManagedResource,
+  isProvidedResource,
   type NodeServiceResource,
   type ServiceResource,
   type AppSpec,
@@ -61,7 +61,7 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
   }
   const spec = await prepareSpec(cwd);
   const services = Object.values(spec.resources ?? {}).filter(
-    (resource): resource is ServiceResource => !isManagedResource(resource)
+    (resource): resource is ServiceResource => !isProvidedResource(resource)
   );
   if (services.length !== 1) {
     throw new Error(
