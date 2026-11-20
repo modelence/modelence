@@ -3,13 +3,44 @@ import { RouteHandler } from './types';
 import { ModelenceError } from '../error';
 import { authenticate } from '../auth';
 import { getMongodbUri } from '../db/client';
+import { isRequestFromAllowedOrigin } from '../app/requestGuards';
 import type { Context } from '../methods/types';
 import { startTransaction, redactSensitive, captureError, logError } from '../telemetry';
 
-// TODO: Use cookies for authentication and automatically add session/user to context if accessing from browser
+/**
+ * Resolves the authentication token for a custom route.
+ *
+ * Precedence: The x-modelence-auth-token header is checked first, then the authToken cookie.
+ * (Note: getCallContext uses the opposite order, so this header-first precedence is intentional).
+ *
+ * For unsafe HTTP methods (anything other than GET, HEAD, and OPTIONS), cookie-based authentication
+ * is only accepted when the request origin passes isRequestFromAllowedOrigin. If the origin check
+ * fails, the cookie is ignored and null is returned (yielding an anonymous context rather than
+ * rejecting the request outright). The header token does not require origin checks.
+ */
+function resolveRouteAuthToken(req: Request): string | null {
+  const headerToken = req.headers['x-modelence-auth-token'];
+  if (typeof headerToken === 'string' && headerToken.length > 0) {
+    return headerToken;
+  }
+
+  const cookieToken = req.cookies?.authToken;
+  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+    if (!isRequestFromAllowedOrigin(req)) {
+      return null;
+    }
+    return cookieToken;
+  }
+
+  return null;
+}
+
 export function createRouteHandler(method: string, path: string, handler: RouteHandler) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const authToken = req.headers['x-modelence-auth-token'];
+    if (!req.method) {
+      req.method = method.toUpperCase();
+    }
+    const authToken = resolveRouteAuthToken(req);
     let context: Pick<Context, 'session' | 'user'> = { session: null, user: null };
 
     if (typeof authToken === 'string' && getMongodbUri()) {
