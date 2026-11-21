@@ -16,10 +16,19 @@ describe('auth/disposableEmails', () => {
     findOneSpy.mockResolvedValueOnce({ domain: 'temp-mail.org' } as never);
 
     expect(await isDisposableEmail('user@temp-mail.org')).toBe(true);
-    expect(findOneSpy).toHaveBeenCalledWith({ domain: 'temp-mail.org' });
+    expect(findOneSpy).toHaveBeenCalledWith({ domain: { $in: ['temp-mail.org'] } });
 
     findOneSpy.mockResolvedValueOnce(null);
     expect(await isDisposableEmail('user@example.com')).toBe(false);
+  });
+
+  test('isDisposableEmail also checks parent domains of a subdomain', async () => {
+    findOneSpy.mockResolvedValueOnce({ domain: 'mailinator.com' } as never);
+
+    expect(await isDisposableEmail('user@team.mailinator.com')).toBe(true);
+    expect(findOneSpy).toHaveBeenCalledWith({
+      domain: { $in: ['team.mailinator.com', 'mailinator.com'] },
+    });
   });
 
   test('cron handler downloads domain list and stores batches', async () => {
