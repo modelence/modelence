@@ -524,7 +524,7 @@ describe('auth/providers/oauthCommon — mobile', () => {
       );
 
       expect(res.redirect).toHaveBeenCalledWith(
-        'myapp://auth?error=User+account+is+not+active.&errorCode=oauth_failed'
+        'myapp://auth?error=User+account+is+not+active.&errorCode=account_inactive'
       );
       expect(mockIssueOAuthExchangeCode).not.toHaveBeenCalled();
     });
