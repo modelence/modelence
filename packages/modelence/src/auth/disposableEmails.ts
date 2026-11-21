@@ -7,8 +7,9 @@ export async function isDisposableEmail(email: string): Promise<boolean> {
     return false;
   }
 
-  const domain = emailParts[1];
-  const result = await dbDisposableEmailDomains.findOne({ domain });
+  const labels = emailParts[1].split('.');
+  const domains = labels.slice(0, -1).map((_, i) => labels.slice(i).join('.'));
+  const result = await dbDisposableEmailDomains.findOne({ domain: { $in: domains } });
   return Boolean(result);
 }
 
