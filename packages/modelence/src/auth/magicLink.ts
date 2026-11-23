@@ -13,7 +13,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { isDisposableEmail } from './disposableEmails';
-import { setAuthTokenCookie, startUserSession } from './session';
+import { invalidateAllUserSessions, setAuthTokenCookie, startUserSession } from './session';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
@@ -422,16 +422,23 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
     const wasUnverified = !isNew && !emailDoc?.verified;
     if (wasUnverified) {
+      // Until now nobody had proven they own this address: anyone can password
+      // sign up with an email they don't control, then link OAuth providers
+      // (and hold sessions) while verification is not enforced. Treat every
+      // credential and session attached before this proof as untrusted, or the
+      // pre-registering party keeps access to the account the owner now uses.
       // Same strength-2 collation as the lookups: the stored address may keep
       // its original casing (e.g. OAuth-created accounts) while `email` is
       // lowercased, or the positional update silently matches nothing. Return
-      // the updated doc so hooks and the response see `verified: true`.
+      // the updated doc so hooks and the response see the claimed state.
       const verifiedDoc = await usersCollection.findOneAndUpdate(
         { _id: userDoc._id, 'emails.address': email },
-        { $set: { 'emails.$.verified': true } },
+        { $set: { 'emails.$.verified': true, authMethods: {} } },
         { collation: USER_COLLATION, returnDocument: 'after' }
       );
       currentUserDoc = verifiedDoc ?? userDoc;
+      // Before starting the new session, or it would be deleted too.
+      await invalidateAllUserSessions(userDoc._id);
     }
 
     const userSession = await startUserSession(session.authToken, currentUserDoc._id);

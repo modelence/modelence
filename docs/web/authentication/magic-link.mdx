@@ -47,7 +47,7 @@ startApp({
 4. The link points at a Modelence server route, **not** your SPA page. That route validates the token, stores it in a short-lived `httpOnly` cookie, and redirects to your configured `redirectUrl` **without the token in the URL**. The token is **not** consumed at this step, so email security scanners that prefetch links cannot burn it
 5. On that page, you call `loginWithMagicLink()` — the token is read server-side from the cookie, atomically consumed (single-use), and the user is signed in. Alternatively, the user types the code anywhere and you call `loginWithOneTimeCode({ email, code })`
 6. If no account exists for the email and `allowSignup` is enabled, one is created first (see [Sign-Up Behavior](#sign-up-behavior))
-7. The email address is marked as verified — using the emailed link or code proves ownership
+7. The email address is marked as verified — using the emailed link or code proves ownership. If the address was not verified before, any password or linked OAuth provider already on the account is removed and all of its other sessions are signed out (see [Existing Unverified Accounts](#existing-unverified-accounts))
 
 <Note>
 The magic link token never reaches your client code or appears in a browser URL — it is exchanged server-side through an `httpOnly` cookie, the same pattern used by [password reset](/authentication/password-reset). This closes the window where a token could leak via the address bar, browser history, or the `Referer` header.
@@ -205,6 +205,16 @@ With `allowSignup` enabled, when a magic link is used for an email with no exist
 - No password is set — the user can keep signing in with magic links, add a password later via password reset, or link an OAuth provider
 
 For existing accounts, magic link works regardless of how the account was originally created (password or OAuth) — [`onAfterLogin`](/authentication/hooks) fires as usual. All magic link hook invocations use `provider: 'magicLink'`.
+
+### Existing Unverified Accounts
+
+Anyone can sign up with a password using an email address they don't own. The account stays unverified until someone proves they own the address. When a magic link or one-time code is the first such proof, Modelence treats everything attached to the account before it as untrusted:
+
+- The password and any linked OAuth providers are removed
+- Every other session for the account is signed out
+- [`onAfterEmailVerification`](/authentication/hooks) fires, then `onAfterLogin`
+
+The owner keeps signing in with magic links, and can set a password through [password reset](/authentication/password-reset) or link an OAuth provider again. Accounts whose email was already verified are not affected.
 
 ## Custom Email Template
 
