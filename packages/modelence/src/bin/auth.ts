@@ -66,6 +66,7 @@ export async function authenticateCli(
     appId,
     hint,
     env,
+    services,
   }: {
     pick?: CliAuthPick;
     purpose?: 'deploy';
@@ -74,16 +75,26 @@ export async function authenticateCli(
     appId?: string;
     hint?: CliTarget;
     env?: Record<string, EnvDeclaration>;
+    // The services modelence.config.json declares, by name.
+    services?: string[];
   } = {}
 ): Promise<CliAuthResult> {
   // Only the picker has a variables step; nothing is sent otherwise.
   const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
+  // The picker sizes a new environment for every service, so a free size that
+  // can't hold them all isn't offered.
+  const declaredServices =
+    pick === 'deploy' && services && services.length > 0 ? services : undefined;
   const codeVerifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   const response = await fetch(`${host}/api/cli/auth`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ codeChallenge, ...(declaredEnv ? { env: declaredEnv } : {}) }),
+    body: JSON.stringify({
+      codeChallenge,
+      ...(declaredEnv ? { env: declaredEnv } : {}),
+      ...(declaredServices ? { services: declaredServices } : {}),
+    }),
   });
 
   if (!response.ok) {

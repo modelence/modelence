@@ -6,9 +6,8 @@ import { delimiter, dirname, join, normalize } from 'path';
 import {
   APP_SPEC_FILE_NAME,
   isDockerfileService,
-  isManagedResource,
+  getServices,
   type NodeServiceResource,
-  type ServiceResource,
   type AppSpec,
   type EnvDeclaration,
 } from './appSpec';
@@ -60,9 +59,7 @@ export async function verify(options: VerifyOptions = {}): Promise<boolean> {
     );
   }
   const spec = await prepareSpec(cwd);
-  const services = Object.values(spec.resources ?? {}).filter(
-    (resource): resource is ServiceResource => !isManagedResource(resource)
-  );
+  const services = getServices(spec).map(([, resource]) => resource);
   if (services.length !== 1) {
     throw new Error(
       `${APP_SPEC_FILE_NAME} must describe exactly one service (found ${services.length}).`

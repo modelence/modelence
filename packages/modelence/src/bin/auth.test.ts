@@ -196,6 +196,19 @@ describe('authenticateCli declared variables', () => {
     await authenticateCli(host, { purpose: 'deploy', env });
     expect(JSON.parse(String(authRequest()?.body)).env).toBeUndefined();
   });
+
+  it('sends the declared services to the deploy picker', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { pick: 'deploy', purpose: 'deploy', services: ['web', 'worker'] });
+    expect(JSON.parse(String(authRequest()?.body))).toMatchObject({ services: ['web', 'worker'] });
+  });
+
+  // No picker, no new environment to size.
+  it('sends no services when the page only authorizes', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { purpose: 'deploy', services: ['web', 'worker'] });
+    expect(JSON.parse(String(authRequest()?.body)).services).toBeUndefined();
+  });
 });
 
 describe('authenticateCli deploy target hint', () => {
