@@ -1,7 +1,10 @@
 import { randomBytes } from 'crypto';
+import { MongoServerError } from 'mongodb';
 
 import type { AuthRateLimitsConfig } from '../app/authConfig';
 import { Module } from '../app/module';
+import type { ConnectionInfo } from '../methods/types';
+import { consumeRateLimit } from '../rate-limit/rules';
 import { RateLimitRule } from '../rate-limit/types';
 import { time } from '../time';
 import {
@@ -71,6 +74,8 @@ function defaultAuthRateLimits(): RateLimitRule[] {
     { bucket: 'oauthExchange', type: 'ip', window: time.days(1), limit: 300 },
     { bucket: 'updateProfile', type: 'user', window: time.minutes(15), limit: 30 },
     { bucket: 'updateProfile', type: 'user', window: time.days(1), limit: 200 },
+    { bucket: 'sessionInit', type: 'ip', window: time.minutes(15), limit: 100 },
+    { bucket: 'sessionInit', type: 'ip', window: time.days(1), limit: 1000 },
   ];
 }
 
@@ -87,6 +92,7 @@ function collectOverrides(config: AuthRateLimitsConfig): RateLimitRule[] {
     'oneTimeCode',
     'oauthExchange',
     'updateProfile',
+    'sessionInit',
   ];
 
   for (const bucket of buckets) {
@@ -142,24 +148,41 @@ export function buildAuthRateLimits(config: AuthRateLimitsConfig = {}): RateLimi
   return merged;
 }
 
-export async function createGuestUser() {
-  // TODO: add rate-limiting and captcha handling
+export async function createGuestUser(connectionInfo?: ConnectionInfo) {
+  if (connectionInfo?.ip) {
+    await consumeRateLimit({ bucket: 'signupAttempt', type: 'ip', value: connectionInfo.ip });
+    await consumeRateLimit({ bucket: 'signup', type: 'ip', value: connectionInfo.ip });
+  }
 
-  const guestId = randomBytes(9)
-    .toString('base64')
-    .replace(/[+/]/g, (c) => (c === '+' ? 'a' : 'b'));
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const guestId = randomBytes(9)
+      .toString('base64')
+      .replace(/[+/]/g, (c) => (c === '+' ? 'a' : 'b'));
 
-  const handle = `guest_${guestId}`;
-  // TODO: re-try on handle collision
+    const handle = `guest_${guestId}`;
 
-  const result = await usersCollection.insertOne({
-    handle,
-    status: 'active',
-    createdAt: new Date(),
-    authMethods: {},
-  });
+    try {
+      const result = await usersCollection.insertOne({
+        handle,
+        status: 'active',
+        createdAt: new Date(),
+        authMethods: {},
+      });
 
-  return result.insertedId;
+      return result.insertedId;
+    } catch (err: unknown) {
+      if (err instanceof MongoServerError && err.code === 11000) {
+        if (attempt < maxAttempts - 1) {
+          continue;
+        }
+        throw new Error('Could not generate unique guest handle after exhausting all attempts.');
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('Could not generate unique guest handle after exhausting all attempts.');
 }
 
 export default new Module('_system.user', {
