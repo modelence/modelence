@@ -740,7 +740,7 @@ describe('auth/magicLink', () => {
         // is lowercased, and without the collation the positional update
         // would silently match nothing.
         expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-          { _id: userId, 'emails.address': email },
+          { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
           { $set: { 'emails.$.verified': true, authMethods: {} } },
           { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
@@ -828,7 +828,7 @@ describe('auth/magicLink', () => {
           // write that marks the email verified.
           expect(mockUsersFindOneAndUpdate).toHaveBeenCalledTimes(1);
           expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-            { _id: userId, 'emails.address': email },
+            { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
             { $set: { 'emails.$.verified': true, authMethods: {} } },
             { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
           );
@@ -878,7 +878,7 @@ describe('auth/magicLink', () => {
           await handleLoginWithOneTimeCode({ email, code: '482193' }, createContext({ session }));
 
           expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-            { _id: userId, 'emails.address': email },
+            { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
             { $set: { 'emails.$.verified': true, authMethods: {} } },
             { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
           );
@@ -905,6 +905,45 @@ describe('auth/magicLink', () => {
           expect(mockUsersFindOneAndUpdate).not.toHaveBeenCalled();
           expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
           expect(mockStartUserSession).toHaveBeenCalled();
+        });
+
+        test('keeps what a concurrent verification set up when it proved ownership first', async () => {
+          // Read unverified, but a verification link or password reset verified
+          // the address before this claim ran: the guarded write matches nothing.
+          const email = 'user@example.com';
+          const userId = new ObjectId();
+          const onAfterEmailVerification = vi.fn();
+          const onAfterLogin = vi.fn();
+          mockGetAuthConfig.mockReturnValue({
+            magicLink: { enabled: true, allowSignup: true },
+            onAfterEmailVerification,
+            onAfterLogin,
+          });
+          const tokenDoc = createMockToken({ email });
+          mockTokensFindOne.mockResolvedValue(tokenDoc);
+          mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+          const staleDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: false }],
+          });
+          const ownerDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: true }],
+            authMethods: { password: { hash: 'owner-hash' } },
+          });
+          mockUsersFindOne.mockResolvedValueOnce(staleDoc).mockResolvedValue(ownerDoc);
+          mockUsersFindOneAndUpsert.mockResolvedValue({ doc: staleDoc, isNew: false } as never);
+          mockUsersFindOneAndUpdate.mockResolvedValue(null);
+
+          const { context } = createLoginContext({ cookieToken: 'raw-token' });
+          await handleLoginWithMagicLink({}, context);
+
+          // The owner's sessions survive, and the verification was theirs to report.
+          expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
+          expect(onAfterEmailVerification).not.toHaveBeenCalled();
+          // Hooks and the response see the current doc, not the stale read.
+          expect(onAfterLogin).toHaveBeenCalledWith(expect.objectContaining({ user: ownerDoc }));
+          expect(mockSerializeUserForClient).toHaveBeenCalledWith(ownerDoc);
         });
       });
 
@@ -969,6 +1008,9 @@ describe('auth/magicLink', () => {
         const unverifiedDoc = createMockUser({ emails: [{ address: email, verified: false }] });
         mockUsersFindOne.mockResolvedValue(unverifiedDoc);
         mockUsersFindOneAndUpsert.mockResolvedValue({ doc: unverifiedDoc, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(
+          createMockUser({ _id: unverifiedDoc!._id, emails: [{ address: email, verified: true }] })
+        );
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -1453,7 +1495,7 @@ describe('auth/magicLink', () => {
 
         // The magic link proves ownership → the email is marked verified...
         expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-          { _id: userId, 'emails.address': email },
+          { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
           { $set: { 'emails.$.verified': true, authMethods: {} } },
           { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );

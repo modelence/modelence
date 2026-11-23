@@ -14,6 +14,7 @@ import { validateEmail, validatePassword } from './validators';
 import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
+import { claimUnverifiedEmail } from './claimEmail';
 import { hashToken } from './tokenHash';
 import { setQueryParams, resolveUrl } from './utils';
 
@@ -281,25 +282,21 @@ export async function handleResetPassword(args: Args, context: Context) {
   // password again — undoing the lockout below.
   await resetPasswordTokensCollection.deleteMany({ userId: userDoc._id });
 
+  // The reset token proves ownership of the email. If this is the first such
+  // proof, the claim also drops the password and linked OAuth providers that
+  // whoever pre-registered the address may have attached (the same rule as the
+  // magic link path). It must run before the new password is set, or it would
+  // wipe that too. Legacy tokens predate the `email` field, so there is no
+  // address to claim for them.
+  if (resetTokenDoc.email) {
+    await claimUnverifiedEmail(userDoc._id, resetTokenDoc.email);
+  }
+
   // Update user's password
   await usersCollection.updateOne(
     { _id: userDoc._id },
     { $set: { 'authMethods.password.hash': hash } }
   );
-
-  // Mark the email as verified since the user proved ownership via the reset token.
-  // Match with strength-2 collation: `resetTokenDoc.email` is lowercased, but the
-  // stored address may keep its original casing (e.g. OAuth-created accounts), and
-  // without the collation the positional `$` update would match nothing — leaving
-  // the email unverified after a successful reset and blocking password login when
-  // verification is required.
-  if (resetTokenDoc.email) {
-    await usersCollection.updateOne(
-      { _id: userDoc._id, 'emails.address': resetTokenDoc.email },
-      { $set: { 'emails.$.verified': true } },
-      { collation: { locale: 'en', strength: 2 } }
-    );
-  }
 
   // Invalidate all existing sessions for this user so that other browsers/devices
   // are forced to re-authenticate with the new password

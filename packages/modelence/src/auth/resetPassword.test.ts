@@ -34,6 +34,7 @@ const mockGetConfig = vi.fn();
 const mockInvalidateAllUserSessions = vi.fn();
 const mockMagicLinkTokensDeleteMany = vi.fn();
 const mockResetTokensDeleteMany = vi.fn();
+const mockClaimUnverifiedEmail = vi.fn(async (_userId: unknown, _email: string) => null);
 
 const mockLogError = vi.fn();
 const mockCaptureError = vi.fn();
@@ -45,6 +46,10 @@ vi.doMock('@/telemetry', async () => ({
 
 vi.doMock('./session', () => ({
   invalidateAllUserSessions: mockInvalidateAllUserSessions,
+}));
+
+vi.doMock('./claimEmail', () => ({
+  claimUnverifiedEmail: mockClaimUnverifiedEmail,
 }));
 
 vi.doMock('@/server', () => ({
@@ -676,18 +681,11 @@ describe('auth/resetPassword', () => {
       expect(mockResetTokensFindOneAndDelete).toHaveBeenCalledWith({ _id: tokenDoc!._id });
       expect(mockUsersFindOne).toHaveBeenCalledWith({ _id: userId });
       expect(mockBcryptHash).toHaveBeenCalledWith(password, 10);
-      expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
-        1,
+      expect(mockClaimUnverifiedEmail).toHaveBeenCalledWith(userId, email);
+      expect(mockUsersUpdateOne).toHaveBeenCalledTimes(1);
+      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
         { _id: userId },
         { $set: { 'authMethods.password.hash': hashedPassword } }
-      );
-      // The verify write uses strength-2 collation so a lowercased token email
-      // still matches a stored address that kept its original casing.
-      expect(mockUsersUpdateOne).toHaveBeenNthCalledWith(
-        2,
-        { _id: userId, 'emails.address': email },
-        { $set: { 'emails.$.verified': true } },
-        { collation: { locale: 'en', strength: 2 } }
       );
       expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
       expect(mockResetTokensDeleteOne).not.toHaveBeenCalled();
@@ -810,36 +808,40 @@ describe('auth/resetPassword', () => {
       expect(mockUsersUpdateOne).not.toHaveBeenCalled();
     });
 
-    test('verifies the email with strength-2 collation so mixed-case stored addresses still match', async () => {
+    test('claims the address before setting the new password, so the claim cannot wipe it', async () => {
+      // A reset can be the first proof that someone owns the address. The claim
+      // then drops the password and OAuth providers whoever pre-registered it
+      // attached; run after the password write, it would drop the new one too.
       const token = 'validtoken123';
       const password = 'NewP@ssw0rd!';
       const userId = new ObjectId();
-      // Token email is lowercased; the stored address kept its original casing
-      // (e.g. an OAuth-created account). Without collation the positional update
-      // would miss and leave the email unverified after a successful reset.
-      const tokenEmail = 'user@example.com';
+      const email = 'user@example.com';
 
       mockValidatePassword.mockReturnValue(password);
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
           _id: userId,
-          emails: [{ address: 'User@Example.com', verified: false }],
-          authMethods: { password: { hash: 'oldHash' } },
+          emails: [{ address: email, verified: false }],
+          authMethods: {
+            password: { hash: 'attacker-hash' },
+            google: { id: 'attacker-google-id' },
+          },
         })
       );
       mockBcryptHash.mockResolvedValue('hashedNewPassword');
 
-      const tokenDoc = createMockResetToken({ userId, email: tokenEmail, token });
+      const tokenDoc = createMockResetToken({ userId, email, token });
       mockResetTokensFindOne.mockResolvedValue(tokenDoc);
       mockResetTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
 
       await handleResetPassword({ token, password }, createContext());
 
-      expect(mockUsersUpdateOne).toHaveBeenCalledWith(
-        { _id: userId, 'emails.address': tokenEmail },
-        { $set: { 'emails.$.verified': true } },
-        { collation: { locale: 'en', strength: 2 } }
+      expect(mockClaimUnverifiedEmail).toHaveBeenCalledWith(userId, email);
+      expect(mockClaimUnverifiedEmail.mock.invocationCallOrder[0]).toBeLessThan(
+        mockUsersUpdateOne.mock.invocationCallOrder[0]
       );
+      // Sessions are signed out whether or not the claim ran.
+      expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
     });
 
     test('revokes outstanding magic link tokens for all of the user emails, lowercased', async () => {
@@ -996,6 +998,7 @@ describe('auth/resetPassword', () => {
 
       await handleResetPassword({ token, password }, createContext());
 
+      expect(mockClaimUnverifiedEmail).not.toHaveBeenCalled();
       expect(mockUsersUpdateOne).toHaveBeenCalledTimes(1);
       expect(mockUsersUpdateOne).toHaveBeenCalledWith(
         { _id: userId },

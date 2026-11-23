@@ -214,7 +214,7 @@ Anyone can sign up with a password using an email address they don't own. The ac
 - Every other session for the account is signed out
 - [`onAfterEmailVerification`](/authentication/hooks) fires, then `onAfterLogin`
 
-The owner keeps signing in with magic links, and can set a password through [password reset](/authentication/password-reset) or link an OAuth provider again. Accounts whose email was already verified are not affected.
+The owner keeps signing in with magic links, and can set a password through [password reset](/authentication/password-reset) or link an OAuth provider again. Accounts whose email was already verified are not affected. A [password reset](/authentication/password-reset) that is the first proof follows the same rule: it removes linked OAuth providers before it sets the new password.
 
 ## Custom Email Template
 
