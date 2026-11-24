@@ -274,7 +274,21 @@ function LoginPage() {
 }
 ```
 
-`error` is for display and its wording may change. Branch on `errorCode` (`invalid_state`, `email_exists`, `account_inactive`, `signup_rejected`, ...) for anything programmatic.
+`error` is for display and its wording may change. Branch on `errorCode` for anything programmatic:
+
+| `errorCode` | Sent when |
+| --- | --- |
+| `missing_code` | The provider redirected back without an authorization code. |
+| `invalid_state` | The sign-in or linking state is missing, expired or doesn't match. |
+| `invalid_redirect` | The mobile redirect target is missing or not allowed. |
+| `invalid_link_nonce` | The nonce for linking a provider is invalid or expired. |
+| `account_inactive` | The matching user account is disabled or deleted. |
+| `email_exists` | A user with this email already exists and the provider account can't be attached to it automatically. Sign in another way first, then link the provider. |
+| `email_required` | The provider didn't return a usable (verified) email address. |
+| `signup_rejected` | Your `onBeforeSignup` hook threw a `ModelenceError` for the new account. |
+| `not_signed_in` | A provider link was started without a signed-in user. |
+| `link_failed` | The provider account couldn't be linked, for example because it is already linked to a different user. |
+| `oauth_failed` | Any other failure, such as an error talking to the provider. |
 
 When both `oauthErrorRedirectUrl` and `errorComponent` are set, the redirect wins and `errorComponent` is not called.
 
