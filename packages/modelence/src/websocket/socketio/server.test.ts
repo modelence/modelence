@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { Server } from 'http';
 import type { Socket } from 'socket.io';
-import type { Session, User } from '@/auth/types';
+import type { Session, UserInfo } from '@/auth/types';
 import { ServerChannel as ServerChannelClass } from '../serverChannel';
 import { setSecurityConfig } from '@/app/securityConfig';
 
@@ -138,7 +138,7 @@ describe('websocket/socketio/server', () => {
   test('init configures socket server, middleware, and channel handlers', async () => {
     mockGetConfig.mockReturnValue(true);
     const accessSpy = vi.fn(
-      async (_props: { user: User | null; session: Session | null; roles: string[] }) => true
+      async (_props: { user: UserInfo | null; session: Session | null; roles: string[] }) => true
     );
     await websocketProvider.init({
       httpServer: {} as Server,

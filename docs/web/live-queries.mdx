@@ -339,6 +339,11 @@ With this setup, when any client creates or updates a todo, all connected client
 
 Live queries are built on top of WebSockets internally, but provide a higher-level abstraction for the common pattern of keeping query data in sync.
 
+Before each live query update, Modelence checks that the subscriber still has
+the same user and roles and that the session remains valid. If access changes,
+the subscription stops and the client receives a `liveQueryError` with
+`Access revoked`. Subscribe again after a role change to use the new access.
+
 ## Common Pitfalls
 
 ### Missing QueryClient connection
