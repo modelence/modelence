@@ -2,6 +2,7 @@ import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
 import { authenticate } from '@/auth';
+import { isAuthStillCurrent } from '@/auth/revalidation';
 import { getConfig } from '@/config/server';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
@@ -18,6 +19,7 @@ import { createClientIpResolver } from '@/app/clientIp';
 let socketServer: SocketServer | null = null;
 let activeChannels: ServerChannel[] = [];
 let multiInstance = false;
+const roomDeliveryQueues = new Map<string, Promise<void>>();
 
 const COLLECTION = '_modelenceSocketio';
 const ADAPTER_TTL_SECONDS = 60;
@@ -31,7 +33,6 @@ export async function init({
 }) {
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
-  multiInstance = isMultiInstance;
   const resolveClientIp = createClientIpResolver();
   activeChannels = channels;
 
@@ -70,6 +71,8 @@ export async function init({
     }
   }
 
+  multiInstance = Boolean(mongoCollection);
+
   socketServer = new SocketServer(httpServer, {
     cors: {
       origin: '*',
@@ -87,7 +90,7 @@ export async function init({
   socketServer.on(
     '_modelenceSecureBroadcast',
     (payload: { category: string; id: string; data: unknown }) => {
-      void deliverProtectedBroadcast(payload);
+      queueProtectedBroadcast(payload);
     }
   );
 
@@ -117,29 +120,29 @@ export async function init({
         return;
       }
       const [category] = channelName.split(':');
-      let authorized = false;
-
-      for (const channel of channels) {
-        if (channel.category === category) {
-          // A connection may have outlived its session or a role change.
+      const channel = channels.find((item) => item.category === category);
+      if (!channel) {
+        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+        return;
+      }
+      try {
+        if (channel.canAccessChannel) {
           const current = await authenticate(socket.data.session?.authToken ?? null, {
             persistNewSession: false,
           });
           if (
-            current.user?.id === socket.data.user?.id &&
-            current.session.expiresAt > new Date() &&
-            (!channel.canAccessChannel || (await channel.canAccessChannel(current)))
+            !isAuthStillCurrent(socket.data, current) ||
+            !(await channel.canAccessChannel(current))
           ) {
-            void socket.join(channelName);
-            authorized = true;
-            socket.emit('joinedChannel', channelName);
+            socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+            return;
           }
-          break; // Found matching channel - stop searching
         }
-      }
-
-      if (!authorized) {
-        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+        await socket.join(channelName);
+        socket.emit('joinedChannel', channelName);
+      } catch (error) {
+        logError('Failed to authorize channel join:', { error, category });
+        socket.emit('joinError', { channel: channelName, error: 'Unable to join channel' });
       }
     });
 
@@ -171,10 +174,24 @@ function broadcast<T>({ category, id, data }: { category: string; id: string; da
   // Each instance reauthorizes its own sockets. Do not fetch remote sockets:
   // their data includes bearer session tokens, which would otherwise travel
   // through the MongoDB adapter's request/response collection.
-  void deliverProtectedBroadcast({ category, id, data });
+  queueProtectedBroadcast({ category, id, data });
   if (multiInstance) {
-    socketServer.serverSideEmit('_modelenceSecureBroadcast', { category, id, data });
+    try {
+      socketServer.serverSideEmit('_modelenceSecureBroadcast', { category, id, data });
+    } catch (error) {
+      logError('Failed to forward channel broadcast:', { error, category });
+    }
   }
+}
+
+function queueProtectedBroadcast<T>(payload: { category: string; id: string; data: T }) {
+  const room = `${payload.category}:${payload.id}`;
+  const previous = roomDeliveryQueues.get(room) ?? Promise.resolve();
+  const next = previous.then(() => deliverProtectedBroadcast(payload));
+  roomDeliveryQueues.set(room, next);
+  void next.finally(() => {
+    if (roomDeliveryQueues.get(room) === next) roomDeliveryQueues.delete(room);
+  });
 }
 
 async function deliverProtectedBroadcast<T>({
@@ -198,16 +215,15 @@ async function deliverProtectedBroadcast<T>({
             persistNewSession: false,
           });
           if (
-            current.user?.id !== socket.data.user?.id ||
-            !(current.session.expiresAt > new Date()) ||
+            !isAuthStillCurrent(socket.data, current) ||
             !(await channel.canAccessChannel!(current))
           ) {
             await socket.leave(room);
+            socket.emit('leftChannel', room);
             return;
           }
           socket.emit(category, data);
         } catch (error) {
-          await socket.leave(room);
           logError('Failed to authorize channel recipient:', { error, category });
         }
       })

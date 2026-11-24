@@ -52,6 +52,7 @@ const remoteSocket = {
   data: {
     user: { id: '1' },
     session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+    roles: [],
   },
   emit: vi.fn(),
   leave: vi.fn(),
@@ -322,7 +323,8 @@ describe('websocket/socketio/server', () => {
     websocketProvider.broadcast({ category: 'private', id: 'room', data: { secret: 'x' } });
 
     await vi.waitFor(() => expect(remoteSocket.leave).toHaveBeenCalledWith('private:room'));
-    expect(remoteSocket.emit).not.toHaveBeenCalled();
+    expect(remoteSocket.emit).not.toHaveBeenCalledWith('private', { secret: 'x' });
+    expect(remoteSocket.emit).toHaveBeenCalledWith('leftChannel', 'private:room');
     expect(canAccess).toHaveBeenCalled();
   });
 
@@ -356,6 +358,82 @@ describe('websocket/socketio/server', () => {
       id: 'room',
       data: { secret: 'x' },
     });
-    expect(mockIn).toHaveBeenCalledWith('private:room');
+    await vi.waitFor(() => expect(mockIn).toHaveBeenCalledWith('private:room'));
+  });
+
+  test('does not forward protected broadcasts without a MongoDB adapter', async () => {
+    mockGetConfig.mockReturnValue(true);
+    mockGetClient.mockReturnValue(null);
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', vi.fn().mockResolvedValue(true))],
+    });
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: 1 });
+
+    expect(serverInstance.serverSideEmit).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(remoteSocket.emit).toHaveBeenCalledWith('private', 1));
+  });
+
+  test('keeps a recipient in the room after a transient auth error', async () => {
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', vi.fn().mockResolvedValue(true))],
+    });
+    mockAuthenticate.mockRejectedValueOnce(new Error('database unavailable'));
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: 1 });
+
+    await vi.waitFor(() => expect(mockAuthenticate).toHaveBeenCalled());
+    expect(remoteSocket.leave).not.toHaveBeenCalled();
+    expect(remoteSocket.emit).not.toHaveBeenCalledWith('private', 1);
+  });
+
+  test('reports a transient auth error when joining a protected channel', async () => {
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', vi.fn().mockResolvedValue(true))],
+    });
+    const { socket, socketEvents } = buildSocket();
+    eventHandlers.connection?.(socket);
+    mockAuthenticate.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await socketEvents.joinChannel('private:room');
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.emit).toHaveBeenCalledWith('joinError', {
+      channel: 'private:room',
+      error: 'Unable to join channel',
+    });
+  });
+
+  test('delivers consecutive protected broadcasts in order', async () => {
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', vi.fn().mockResolvedValue(true))],
+    });
+    let releaseFirst: ((value: unknown) => void) | undefined;
+    mockAuthenticate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFirst = resolve;
+        })
+    );
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: 1 });
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: 2 });
+    await vi.waitFor(() => expect(releaseFirst).toBeDefined());
+    expect(mockAuthenticate).toHaveBeenCalledTimes(1);
+    releaseFirst?.({
+      user: { id: '1' },
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      roles: [],
+    });
+
+    await vi.waitFor(() => expect(remoteSocket.emit).toHaveBeenCalledTimes(2));
+    expect(remoteSocket.emit.mock.calls).toEqual([
+      ['private', 1],
+      ['private', 2],
+    ]);
   });
 });

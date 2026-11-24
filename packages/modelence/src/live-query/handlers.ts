@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { authenticate } from '../auth';
+import { isAuthStillCurrent } from '../auth/revalidation';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
 import { LiveQueryCleanup } from './context';
@@ -99,22 +100,27 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
 
     const liveData = await runLiveMethod(method, args, context);
 
+    const stopRevokedSubscription = () => {
+      subscription.aborted = true;
+      try {
+        subscription.cleanup?.();
+      } catch (error) {
+        console.error('[LiveQuery] Error cleaning up revoked subscription:', error);
+      }
+      // A replacement may now own the same subscription ID.
+      if (subs.get(subscriptionId) === subscription) {
+        subs.delete(subscriptionId);
+        socket.emit('liveQueryError', { subscriptionId, error: 'Access revoked' });
+      }
+    };
+
     const fetchAndEmit = async () => {
+      if (subscription.aborted) return;
       // The subscription can remain open after logout, expiry, or a role
       // change. Stop it before using the handler's captured auth context.
       const current = await authenticate(authToken ?? null, { persistNewSession: false });
-      const sameUser = current.user?.id === user?.id;
-      const sameRoles = JSON.stringify(current.roles) === JSON.stringify(roles);
-      const sameAssignedRoles = JSON.stringify(current.user?.roles) === JSON.stringify(user?.roles);
-      if (
-        !sameUser ||
-        !sameRoles ||
-        !sameAssignedRoles ||
-        (current.session?.expiresAt && current.session.expiresAt <= new Date())
-      ) {
-        subscription.aborted = true;
-        subscription.cleanup?.();
-        subs.delete(subscriptionId);
+      if (!isAuthStillCurrent({ session, user, roles }, current)) {
+        stopRevokedSubscription();
         return;
       }
       const data = sanitizeResult(await liveData.fetch());
