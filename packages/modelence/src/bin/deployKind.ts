@@ -53,7 +53,7 @@ export function describeDeployKind(decision: DeployKindDecision): string | null 
   );
 }
 
-async function dependsOnModelence(cwd: string): Promise<boolean> {
+export async function dependsOnModelence(cwd: string): Promise<boolean> {
   let content: string;
   try {
     content = await fs.readFile(join(cwd, 'package.json'), 'utf8');

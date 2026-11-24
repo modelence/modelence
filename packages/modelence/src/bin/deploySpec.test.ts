@@ -56,6 +56,70 @@ describe('modelence.config.json presence', () => {
   });
 });
 
+describe('Modelence framework apps', () => {
+  const service = { app: { type: 'service', start: { commands: ['npm start'] } } };
+  const dependOnModelence = () =>
+    writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({ dependencies: { modelence: '^0.18.0' } })
+    );
+
+  it('adds the MongoDB and Elastic the file leaves out, without touching the file', async () => {
+    await dependOnModelence();
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: service }));
+    expect(await prepareSpec(dir)).toEqual({
+      resources: { ...service, db: { type: 'mongodb' }, metrics: { type: 'elastic' } },
+    });
+    expect(logged).toContain('  db:      db (mongodb)');
+    expect(logged).toContain('  metrics: metrics (elastic)');
+    expect(logged).toContain('  (db and metrics added: a Modelence app always needs them)');
+    expect(await readAppSpecFile(dir)).toEqual({ resources: service });
+  });
+
+  it('keeps the ones the file declares, under their own names', async () => {
+    await dependOnModelence();
+    const spec = { resources: { ...service, main: { type: 'mongodb' }, db: { type: 'redis' } } };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual({
+      resources: { ...spec.resources, metrics: { type: 'elastic' } },
+    });
+  });
+
+  it('picks a free name when db is taken', async () => {
+    await dependOnModelence();
+    const spec = {
+      resources: { ...service, db: { type: 'postgres' }, metrics: { type: 'telemetry' } },
+    };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify(spec));
+    expect(await prepareSpec(dir)).toEqual({
+      resources: {
+        ...spec.resources,
+        'db-2': { type: 'mongodb' },
+        'metrics-2': { type: 'elastic' },
+      },
+    });
+  });
+
+  it('finds the framework in a service root', async () => {
+    await mkdir(join(dir, 'apps/web'), { recursive: true });
+    await writeFile(
+      join(dir, 'apps/web/package.json'),
+      JSON.stringify({ dependencies: { modelence: '^0.18.0' } })
+    );
+    const resources = { web: { type: 'service', root: 'apps/web' } };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources }));
+    expect(await prepareSpec(dir)).toEqual({
+      resources: { ...resources, db: { type: 'mongodb' }, metrics: { type: 'elastic' } },
+    });
+  });
+
+  it('adds nothing to an app that does not depend on modelence', async () => {
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ dependencies: { express: '^4' } }));
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: service }));
+    expect(await prepareSpec(dir)).toEqual({ resources: service });
+  });
+});
+
 describe('modelence.config.json parsing', () => {
   it('accepts comments and trailing commas', async () => {
     await writeFile(
@@ -295,6 +359,24 @@ describe('plan formatting', () => {
     });
     expect(lines).toContain('  resource: api');
     expect(lines).toContain('  resource: web');
+  });
+
+  it("lists the platform's mongodb and elastic apart from the service", () => {
+    expect(
+      formatAppSpec({
+        resources: {
+          api: { type: 'service', start: { commands: ['node server.js'] } },
+          db: { type: 'mongodb' },
+          metrics: { type: 'elastic' },
+        },
+      })
+    ).toEqual([
+      '  image:   default (node-22-slim)',
+      '  build:   default (npm install)',
+      '  start:   node server.js',
+      '  db:      db (mongodb)',
+      '  metrics: metrics (elastic)',
+    ]);
   });
 
   it('lists managed resources apart from the service, with what each variable takes', () => {

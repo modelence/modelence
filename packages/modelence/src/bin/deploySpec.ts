@@ -2,43 +2,68 @@ import {
   AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
   SETUP_DOCS_URL,
+  addFrameworkResources,
   formatAppSpec,
-  isManagedResource,
+  isServiceResource,
   readAppSpecFile,
   type AppSpec,
   type StaticMount,
 } from './appSpec';
 import { resolveAppRoot } from './appRoot';
+import { dependsOnModelence } from './deployKind';
 
 /*
   modelence.config.json is the whole contract between a project and Modelence
   Cloud: the CLI reads it, checks what only the local file system can tell
   (the file exists, root is a real directory in the upload) and sends
   it on. Studio validates it against the schema and fills in the runtime's
-  defaults; nothing is inferred here.
+  defaults. The one thing added here is the MongoDB and Elastic a Modelence
+  framework app always needs, when its file leaves them out.
 */
 
 const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
 
-// Reads and checks modelence.config.json, prints the plan and returns the file's
-// content for the deploy request. Throws when there is no file.
+/*
+  Reads and checks modelence.config.json, prints the plan and returns the
+  spec for the deploy request: the file's content, plus the MongoDB and
+  Elastic a Modelence framework app needs when the file leaves them out
+  (addFrameworkResources). Throws when there is no file.
+*/
 export async function prepareSpec(cwd: string): Promise<AppSpec> {
-  const spec = await readAppSpecFile(cwd);
-  if (!spec) {
+  const file = await readAppSpecFile(cwd);
+  if (!file) {
     throw new Error(missingSpecMessage(cwd));
   }
-  assertKnownKeys(spec);
-  for (const resource of Object.values(spec.resources ?? {})) {
-    if (resource && !isManagedResource(resource) && resource.root !== undefined) {
-      await resolveAppRoot(cwd, resource.root);
+  assertKnownKeys(file);
+  // A service in a subfolder (`root`) has its package.json there, so each
+  // one is checked for the framework, not only the project's own.
+  const serviceRoots: string[] = [];
+  for (const resource of Object.values(file.resources ?? {})) {
+    if (resource && isServiceResource(resource) && resource.root !== undefined) {
+      serviceRoots.push(await resolveAppRoot(cwd, resource.root));
     }
   }
+  const { spec, added } = (await usesModelence([cwd, ...serviceRoots]))
+    ? addFrameworkResources(file)
+    : { spec: file, added: [] };
 
   console.log(`Build plan (${APP_SPEC_FILE_NAME}):`);
   for (const line of formatAppSpec(spec)) {
     console.log(line);
   }
+  if (added.length > 0) {
+    console.log(`  (${added.join(' and ')} added: a Modelence app always needs them)`);
+  }
   return spec;
+}
+
+async function usesModelence(directories: string[]): Promise<boolean> {
+  for (const directory of directories) {
+    if (await dependsOnModelence(directory)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function missingSpecMessage(cwd: string): string {

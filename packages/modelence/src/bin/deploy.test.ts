@@ -192,6 +192,9 @@ describe('deploy orchestration', () => {
         ...spec.resources,
         worker: { type: 'service', dockerfile: 'Dockerfile' },
         db: { type: 'postgres' },
+        // Platform resources run no container, so the picker never sizes one for them.
+        mongo: { type: 'mongodb' },
+        metrics: { type: 'elastic' },
       },
     };
     await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));

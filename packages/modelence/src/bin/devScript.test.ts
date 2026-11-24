@@ -152,6 +152,17 @@ describe('resolveDevTarget', () => {
     expect(await resolveDevTarget(spec, root)).toEqual({ kind: 'script', root });
   });
 
+  it("doesn't count the platform's mongodb and elastic as services", async () => {
+    const spec = {
+      resources: {
+        app: { type: 'service' as const },
+        db: { type: 'mongodb' as const },
+        metrics: { type: 'elastic' as const },
+      },
+    };
+    expect(await resolveDevTarget(spec, root)).toEqual({ kind: 'script', root });
+  });
+
   it('falls back to the project root without a service', async () => {
     expect(await resolveDevTarget({}, root)).toEqual({ kind: 'script', root });
   });

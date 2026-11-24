@@ -25,7 +25,8 @@ export const AGENT_SETUP_PROMPT = `Use ${SETUP_DOCS_URL}.md to set up Modelence 
 export type EnvDeclarationType = 'text' | 'secret';
 export type EnvDeclarationScope = 'build' | 'runtime';
 export type ManagedResourceType = 'postgres' | 'redis' | 'telemetry';
-export type ResourceType = 'service' | ManagedResourceType;
+export type PlatformResourceType = 'mongodb' | 'elastic';
+export type ResourceType = 'service' | ManagedResourceType | PlatformResourceType;
 
 export interface StaticMount {
   path: string;
@@ -110,7 +111,18 @@ export interface ManagedResource {
   plan?: string;
 }
 
-export type AppResource = ServiceResource | ManagedResource;
+/*
+  The platform's MongoDB database or Elastic metrics storage. Unlike a
+  managed resource it has no plan and no outputs. Other apps get one only
+  when the file declares it; a Modelence framework app always gets both,
+  since `modelence deploy` adds the ones its file leaves out
+  (addFrameworkResources) and a build without a file gets them from Studio.
+*/
+export interface PlatformResource {
+  type: PlatformResourceType;
+}
+
+export type AppResource = ServiceResource | ManagedResource | PlatformResource;
 
 // Checked by name: the CLI reads the file before Studio validates it, so a
 // missing or misspelled type must not pass as a managed resource.
@@ -118,11 +130,49 @@ export function isManagedResource(resource: AppResource): resource is ManagedRes
   return resource.type === 'postgres' || resource.type === 'redis' || resource.type === 'telemetry';
 }
 
+export function isPlatformResource(resource: AppResource): resource is PlatformResource {
+  return resource.type === 'mongodb' || resource.type === 'elastic';
+}
+
+// Everything else is a service, so an entry with a missing or misspelled
+// type is sent on as one and Studio reports it.
+export function isServiceResource(resource: AppResource): resource is ServiceResource {
+  return !isManagedResource(resource) && !isPlatformResource(resource);
+}
+
 // The resources that run as containers, by name, in the file's order.
 export function getServices(spec: AppSpec): (readonly [string, ServiceResource])[] {
   return Object.entries(spec.resources ?? {}).flatMap(([name, resource]) =>
-    isManagedResource(resource) ? [] : [[name, resource] as const]
+    isServiceResource(resource) ? [[name, resource] as const] : []
   );
+}
+
+const FRAMEWORK_RESOURCES = [
+  ['mongodb', 'db'],
+  ['elastic', 'metrics'],
+] as const;
+
+/*
+  A Modelence framework app always keeps its data in the platform's MongoDB
+  and sends its metrics to Elastic, so the spec a deploy sends declares both
+  even when the file leaves them out. Only the sent spec changes, never the
+  file. Returns the names of the entries it added.
+*/
+export function addFrameworkResources(spec: AppSpec): { spec: AppSpec; added: string[] } {
+  const resources = { ...(spec.resources ?? {}) };
+  const added: string[] = [];
+  for (const [type, baseName] of FRAMEWORK_RESOURCES) {
+    if (Object.values(resources).some((resource) => resource?.type === type)) {
+      continue;
+    }
+    let name: string = baseName;
+    for (let suffix = 2; name in resources; suffix++) {
+      name = `${baseName}-${suffix}`;
+    }
+    resources[name] = { type };
+    added.push(name);
+  }
+  return { spec: added.length > 0 ? { ...spec, resources } : spec, added };
 }
 
 export interface ValueEnvDeclaration {
@@ -148,7 +198,8 @@ export interface AppSpec {
   /*
     Everything the app is made of, by the name the project chose: services
     (type/image/root/build/start/static, or a dockerfile; up to 5) and the
-    postgres, redis and telemetry resources a deploy creates (type/plan).
+    postgres, redis and telemetry resources a deploy creates (type/plan), and
+    the platform's mongodb and elastic (type).
   */
   resources?: Record<string, AppResource>;
   // The variables the app expects; values live in the dashboard.
@@ -217,6 +268,9 @@ export function formatAppSpec(spec: AppSpec): string[] {
   for (const [name, resource] of entries) {
     if (resource.type === 'telemetry') {
       lines.push(`  telemetry: ${name}`);
+    } else if (isPlatformResource(resource)) {
+      const label = resource.type === 'mongodb' ? 'db:' : 'metrics:';
+      lines.push(`  ${label.padEnd(8)} ${name} (${resource.type})`);
     } else if (isManagedResource(resource)) {
       lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
     }
