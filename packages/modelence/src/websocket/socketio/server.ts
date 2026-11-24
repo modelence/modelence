@@ -17,6 +17,7 @@ import { createClientIpResolver } from '@/app/clientIp';
 
 let socketServer: SocketServer | null = null;
 let activeChannels: ServerChannel[] = [];
+let multiInstance = false;
 
 const COLLECTION = '_modelenceSocketio';
 const ADAPTER_TTL_SECONDS = 60;
@@ -30,6 +31,7 @@ export async function init({
 }) {
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
+  multiInstance = isMultiInstance;
   const resolveClientIp = createClientIpResolver();
   activeChannels = channels;
 
@@ -81,6 +83,13 @@ export async function init({
   socketServer.on('error', (error) => {
     logError('Socket.IO error:', { error });
   });
+
+  socketServer.on(
+    '_modelenceSecureBroadcast',
+    (payload: { category: string; id: string; data: unknown }) => {
+      void deliverProtectedBroadcast(payload);
+    }
+  );
 
   socketServer.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
@@ -159,36 +168,53 @@ function broadcast<T>({ category, id, data }: { category: string; id: string; da
     return;
   }
 
-  // Authorize each recipient at delivery time. Room membership alone remains
-  // after logout, session expiry, or a role change. fetchSockets includes peers
-  // on other instances when the MongoDB adapter is enabled.
-  void socketServer
-    .in(room)
-    .fetchSockets()
-    .then(async (sockets) => {
-      await Promise.all(
-        sockets.map(async (socket) => {
-          try {
-            const current = await authenticate(socket.data.session?.authToken ?? null, {
-              persistNewSession: false,
-            });
-            if (
-              current.user?.id !== socket.data.user?.id ||
-              !(current.session.expiresAt > new Date()) ||
-              !(await channel.canAccessChannel!(current))
-            ) {
-              await socket.leave(room);
-              return;
-            }
-            socket.emit(category, data);
-          } catch (error) {
+  // Each instance reauthorizes its own sockets. Do not fetch remote sockets:
+  // their data includes bearer session tokens, which would otherwise travel
+  // through the MongoDB adapter's request/response collection.
+  void deliverProtectedBroadcast({ category, id, data });
+  if (multiInstance) {
+    socketServer.serverSideEmit('_modelenceSecureBroadcast', { category, id, data });
+  }
+}
+
+async function deliverProtectedBroadcast<T>({
+  category,
+  id,
+  data,
+}: {
+  category: string;
+  id: string;
+  data: T;
+}) {
+  const channel = activeChannels.find((item) => item.category === category);
+  if (!socketServer || !channel?.canAccessChannel) return;
+  const room = `${category}:${id}`;
+  try {
+    const sockets = await socketServer.local.in(room).fetchSockets();
+    await Promise.all(
+      sockets.map(async (socket) => {
+        try {
+          const current = await authenticate(socket.data.session?.authToken ?? null, {
+            persistNewSession: false,
+          });
+          if (
+            current.user?.id !== socket.data.user?.id ||
+            !(current.session.expiresAt > new Date()) ||
+            !(await channel.canAccessChannel!(current))
+          ) {
             await socket.leave(room);
-            logError('Failed to authorize channel recipient:', { error, category });
+            return;
           }
-        })
-      );
-    })
-    .catch((error) => logError('Failed to broadcast channel message:', { error, category }));
+          socket.emit(category, data);
+        } catch (error) {
+          await socket.leave(room);
+          logError('Failed to authorize channel recipient:', { error, category });
+        }
+      })
+    );
+  } catch (error) {
+    logError('Failed to broadcast channel message:', { error, category });
+  }
 }
 
 export default {

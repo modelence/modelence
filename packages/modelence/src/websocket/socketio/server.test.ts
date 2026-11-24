@@ -69,7 +69,8 @@ const serverInstance = {
     socketMiddlewares.push(handler);
   }),
   to: mockTo,
-  in: mockIn,
+  local: { in: mockIn },
+  serverSideEmit: vi.fn(),
 };
 
 vi.doMock('socket.io', () => ({
@@ -338,5 +339,23 @@ describe('websocket/socketio/server', () => {
       expect(remoteSocket.emit).toHaveBeenCalledWith('private', { secret: 'x' })
     );
     expect(remoteSocket.leave).not.toHaveBeenCalled();
+  });
+
+  test('asks peer instances to check their own sockets without fetching remote session data', async () => {
+    mockGetConfig.mockReturnValue(true);
+    const canAccess = vi.fn().mockResolvedValue(true);
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', canAccess)],
+    });
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: { secret: 'x' } });
+
+    expect(serverInstance.serverSideEmit).toHaveBeenCalledWith('_modelenceSecureBroadcast', {
+      category: 'private',
+      id: 'room',
+      data: { secret: 'x' },
+    });
+    expect(mockIn).toHaveBeenCalledWith('private:room');
   });
 });
