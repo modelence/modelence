@@ -2,6 +2,7 @@ import {
   AGENT_SETUP_PROMPT,
   APP_SPEC_FILE_NAME,
   SETUP_DOCS_URL,
+  addFrameworkResources,
   formatAppSpec,
   isProvidedResource,
   readAppSpecFile,
@@ -9,6 +10,7 @@ import {
   type StaticMount,
 } from './appSpec';
 import { resolveAppRoot } from './appRoot';
+import { dependsOnModelence } from './deployKind';
 
 /*
   modelence.config.json is the whole contract between a project and Modelence
@@ -20,14 +22,21 @@ import { resolveAppRoot } from './appRoot';
 
 const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
 
-// Reads and checks modelence.config.json, prints the plan and returns the file's
-// content for the deploy request. Throws when there is no file.
+/*
+  Reads and checks modelence.config.json, prints the plan and returns the
+  spec for the deploy request: the file's content, plus the MongoDB and
+  Elastic a Modelence framework app needs when the file leaves them out
+  (addFrameworkResources). Throws when there is no file.
+*/
 export async function prepareSpec(cwd: string): Promise<AppSpec> {
-  const spec = await readAppSpecFile(cwd);
-  if (!spec) {
+  const file = await readAppSpecFile(cwd);
+  if (!file) {
     throw new Error(missingSpecMessage(cwd));
   }
-  assertKnownKeys(spec);
+  assertKnownKeys(file);
+  const { spec, added } = (await dependsOnModelence(cwd))
+    ? addFrameworkResources(file)
+    : { spec: file, added: [] };
   for (const resource of Object.values(spec.resources ?? {})) {
     if (resource && !isProvidedResource(resource) && resource.root !== undefined) {
       await resolveAppRoot(cwd, resource.root);
@@ -37,6 +46,9 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
   console.log(`Build plan (${APP_SPEC_FILE_NAME}):`);
   for (const line of formatAppSpec(spec)) {
     console.log(line);
+  }
+  if (added.length > 0) {
+    console.log(`  (${added.join(' and ')} added: a Modelence app always needs them)`);
   }
   return spec;
 }

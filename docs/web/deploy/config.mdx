@@ -194,5 +194,6 @@ Apps built on the Modelence framework need no file: `npx modelence@latest deploy
 Cloud instead, describe it like any other Node.js app:
 `"build": { "commands": ["npm ci", "npm run build"] }` and `"start": { "commands": ["npm start"] }`,
 and declare its database and metrics storage: `"db": { "type": "mongodb" }` and
-`"metrics": { "type": "elastic" }`.
+`"metrics": { "type": "elastic" }`. When the file leaves them out, `modelence deploy` adds both for
+a Modelence app, so its deploy never starts without a database.
 </Note>

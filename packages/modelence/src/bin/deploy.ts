@@ -31,8 +31,9 @@ import { followDeploy } from './deployStatus';
 
   Default path — any Node.js app: the source tree is uploaded and built
   remotely as the project's modelence.config.json describes. Studio resolves that
-  file against the defaults of its runtime and nothing else; the CLI neither
-  inspects nor amends anything. `--prebuilt` keeps the historical
+  file against the defaults of its runtime and nothing else. The CLI amends
+  it in one case only: a Modelence framework app gets the MongoDB and
+  Elastic it always needs when the file leaves them out (deploySpec.ts). `--prebuilt` keeps the historical
   Modelence path: build locally, upload .modelence/build — and so does a
   Modelence framework app that has no modelence.config.json, so projects that
   deployed before the file existed keep deploying unchanged (deployKind.ts).

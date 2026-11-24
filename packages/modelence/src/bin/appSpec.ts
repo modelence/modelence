@@ -138,6 +138,34 @@ export function isProvidedResource(
   return isManagedResource(resource) || isPlatformResource(resource);
 }
 
+const FRAMEWORK_RESOURCES = [
+  ['mongodb', 'db'],
+  ['elastic', 'metrics'],
+] as const;
+
+/*
+  A Modelence framework app always keeps its data in the platform's MongoDB
+  and sends its metrics to Elastic, so the spec a deploy sends declares both
+  even when the file leaves them out. Only the sent spec changes, never the
+  file. Returns the names of the entries it added.
+*/
+export function addFrameworkResources(spec: AppSpec): { spec: AppSpec; added: string[] } {
+  const resources = { ...(spec.resources ?? {}) };
+  const added: string[] = [];
+  for (const [type, baseName] of FRAMEWORK_RESOURCES) {
+    if (Object.values(resources).some((resource) => resource?.type === type)) {
+      continue;
+    }
+    let name: string = baseName;
+    for (let suffix = 2; name in resources; suffix++) {
+      name = `${baseName}-${suffix}`;
+    }
+    resources[name] = { type };
+    added.push(name);
+  }
+  return { spec: added.length > 0 ? { ...spec, resources } : spec, added };
+}
+
 export interface ValueEnvDeclaration {
   type?: EnvDeclarationType;
   // The phases the value reaches; default ["runtime"].

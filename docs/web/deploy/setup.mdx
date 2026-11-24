@@ -237,9 +237,10 @@ Follow these steps in order. Do not skip the verification step.
    service (`"type": "service"`), as described in [modelence.config.json](/deploy/config).
    - Add any managed resources from step 6 next to the services, with their variables in `env`.
    - For MongoDB, add `"db": { "type": "mongodb" }`. It needs no `env` entry.
-   - For an app built on the Modelence framework (it depends on the `modelence` package), add both
+   - An app built on the Modelence framework (it depends on the `modelence` package) needs both
      `"db": { "type": "mongodb" }` and `"metrics": { "type": "elastic" }`: the framework stores its
-     data and sends its metrics there.
+     data and sends its metrics there. `modelence deploy` adds them when the file leaves them out,
+     but write them in the file anyway, so the file shows everything the app uses.
    - With multiple services, put the one that serves the site first in `resources`: the first deploy
      attaches the environment's URL to it. Give each service that calls another a `"type": "resource"` variable with the other's `url`. See
      [Multiple services](/deploy/services).
