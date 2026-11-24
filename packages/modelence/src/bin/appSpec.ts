@@ -112,8 +112,11 @@ export interface ManagedResource {
 }
 
 /*
-  The platform's MongoDB database or Elastic metrics storage. Modelence
-  framework apps get both; other apps get one only when the file declares it.
+  The platform's MongoDB database or Elastic metrics storage. Unlike a
+  managed resource it has no plan and no outputs. Other apps get one only
+  when the file declares it; a Modelence framework app always gets both,
+  since `modelence deploy` adds the ones its file leaves out
+  (addFrameworkResources) and a build without a file gets them from Studio.
 */
 export interface PlatformResource {
   type: PlatformResourceType;
@@ -131,11 +134,17 @@ export function isPlatformResource(resource: AppResource): resource is PlatformR
   return resource.type === 'mongodb' || resource.type === 'elastic';
 }
 
-// Anything the platform provides rather than builds; every other entry is a service.
-export function isProvidedResource(
-  resource: AppResource
-): resource is ManagedResource | PlatformResource {
-  return isManagedResource(resource) || isPlatformResource(resource);
+// Everything else is a service, so an entry with a missing or misspelled
+// type is sent on as one and Studio reports it.
+export function isServiceResource(resource: AppResource): resource is ServiceResource {
+  return !isManagedResource(resource) && !isPlatformResource(resource);
+}
+
+// The resources that run as containers, by name, in the file's order.
+export function getServices(spec: AppSpec): (readonly [string, ServiceResource])[] {
+  return Object.entries(spec.resources ?? {}).flatMap(([name, resource]) =>
+    isServiceResource(resource) ? [[name, resource] as const] : []
+  );
 }
 
 const FRAMEWORK_RESOURCES = [
@@ -246,9 +255,7 @@ export async function writeAppSpecFile(spec: AppSpec, cwd = process.cwd()): Prom
 export function formatAppSpec(spec: AppSpec): string[] {
   const lines: string[] = [];
   const entries = Object.entries(spec.resources ?? {});
-  const services = entries.flatMap(([name, resource]) =>
-    isProvidedResource(resource) ? [] : [[name, resource] as const]
-  );
+  const services = getServices(spec);
 
   for (const [name, resource] of services) {
     // Only label the service when there is more than one to tell apart.
@@ -262,9 +269,8 @@ export function formatAppSpec(spec: AppSpec): string[] {
     if (resource.type === 'telemetry') {
       lines.push(`  telemetry: ${name}`);
     } else if (isPlatformResource(resource)) {
-      lines.push(
-        `  ${resource.type === 'mongodb' ? 'db:     ' : 'metrics:'} ${name} (${resource.type})`
-      );
+      const label = resource.type === 'mongodb' ? 'db:' : 'metrics:';
+      lines.push(`  ${label.padEnd(8)} ${name} (${resource.type})`);
     } else if (isManagedResource(resource)) {
       lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
     }

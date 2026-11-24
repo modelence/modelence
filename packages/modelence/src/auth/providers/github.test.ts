@@ -238,7 +238,8 @@ describe('auth/providers/github', () => {
       res,
       400,
       'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
-      { platform: 'web' }
+      { platform: 'web' },
+      'email_required'
     );
     expect(mockHandleOAuthUserAuthentication).not.toHaveBeenCalled();
   });

@@ -36,6 +36,7 @@ const mockStartUserSession = vi.fn(async (_previousAuthToken: string | null, use
   expiresAt: new Date(),
 }));
 const mockSetAuthTokenCookie = vi.fn();
+const mockInvalidateAllUserSessions = vi.fn(async (_userId: unknown) => {});
 const mockResolveUniqueHandle = vi.fn();
 const mockSerializeUserForClient = vi.fn();
 
@@ -50,6 +51,7 @@ vi.doMock('@/telemetry', async () => ({
 vi.doMock('./session', () => ({
   startUserSession: mockStartUserSession,
   setAuthTokenCookie: mockSetAuthTokenCookie,
+  invalidateAllUserSessions: mockInvalidateAllUserSessions,
 }));
 
 vi.doMock('@/server', () => ({
@@ -706,7 +708,7 @@ describe('auth/magicLink', () => {
         const verifiedDoc = createMockUser({
           _id: userId,
           emails: [{ address: email, verified: true }],
-          authMethods: { password: { hash: 'hash' } },
+          authMethods: {},
         });
         // Pre-gate lookup (signup enabled) finds the existing user, so the
         // signup side effects are skipped.
@@ -738,8 +740,8 @@ describe('auth/magicLink', () => {
         // is lowercased, and without the collation the positional update
         // would silently match nothing.
         expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-          { _id: userId, 'emails.address': email },
-          { $set: { 'emails.$.verified': true } },
+          { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
+          { $set: { 'emails.$.verified': true, authMethods: {} } },
           { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
         expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
@@ -784,6 +786,165 @@ describe('auth/magicLink', () => {
         expect(onAfterEmailVerification).toHaveBeenCalledWith(
           expect.objectContaining({ provider: 'magicLink' })
         );
+      });
+
+      describe('pre-registered unverified account', () => {
+        // Anyone can password-sign-up an address they don't own; the account
+        // sits unverified with the signer's credentials. The magic link is the
+        // first proof of ownership, so nothing attached before it may survive.
+        const setupPreRegisteredAccount = (email: string, userId: ObjectId) => {
+          const tokenDoc = createMockToken({ email });
+          mockTokensFindOne.mockResolvedValue(tokenDoc);
+          mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+          const attackerDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: false }],
+            authMethods: {
+              password: { hash: 'attacker-hash' },
+              google: { id: 'attacker-google-id' },
+              github: { id: 'attacker-github-id' },
+            },
+          });
+          const claimedDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: true }],
+            authMethods: {},
+          });
+          mockUsersFindOne.mockResolvedValue(attackerDoc);
+          mockUsersFindOneAndUpsert.mockResolvedValue({ doc: attackerDoc, isNew: false } as never);
+          mockUsersFindOneAndUpdate.mockResolvedValue(claimedDoc);
+          return { claimedDoc };
+        };
+
+        test('removes every auth method attached before the email was verified', async () => {
+          const email = 'victim@example.com';
+          const userId = new ObjectId();
+          setupPreRegisteredAccount(email, userId);
+
+          const { context } = createLoginContext({ cookieToken: 'raw-token' });
+          await handleLoginWithMagicLink({}, context);
+
+          // Password and linked OAuth providers are wiped in the same atomic
+          // write that marks the email verified.
+          expect(mockUsersFindOneAndUpdate).toHaveBeenCalledTimes(1);
+          expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
+            { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
+            { $set: { 'emails.$.verified': true, authMethods: {} } },
+            { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
+          );
+        });
+
+        test('ends every existing session before starting the new one', async () => {
+          const email = 'victim@example.com';
+          const userId = new ObjectId();
+          setupPreRegisteredAccount(email, userId);
+
+          const session = createSession();
+          const { context } = createLoginContext({ cookieToken: 'raw-token', session });
+          await handleLoginWithMagicLink({}, context);
+
+          expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+          expect(mockStartUserSession).toHaveBeenCalledWith(session.authToken, userId);
+          // Order matters: invalidating after would delete the fresh session too.
+          expect(mockInvalidateAllUserSessions.mock.invocationCallOrder[0]).toBeLessThan(
+            mockStartUserSession.mock.invocationCallOrder[0]
+          );
+        });
+
+        test('hooks and the response see the claimed doc without the stale credentials', async () => {
+          const email = 'victim@example.com';
+          const userId = new ObjectId();
+          const onAfterLogin = vi.fn();
+          mockGetAuthConfig.mockReturnValue({
+            magicLink: { enabled: true, allowSignup: true },
+            onAfterLogin,
+          });
+          const { claimedDoc } = setupPreRegisteredAccount(email, userId);
+
+          const { context } = createLoginContext({ cookieToken: 'raw-token' });
+          await handleLoginWithMagicLink({}, context);
+
+          expect(onAfterLogin).toHaveBeenCalledWith(expect.objectContaining({ user: claimedDoc }));
+          expect(mockSerializeUserForClient).toHaveBeenCalledWith(claimedDoc);
+        });
+
+        test('applies to the one-time code path too', async () => {
+          const email = 'victim@example.com';
+          const userId = new ObjectId();
+          mockValidateEmail.mockReturnValue(email);
+          setupPreRegisteredAccount(email, userId);
+
+          const session = createSession();
+          await handleLoginWithOneTimeCode({ email, code: '482193' }, createContext({ session }));
+
+          expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
+            { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
+            { $set: { 'emails.$.verified': true, authMethods: {} } },
+            { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
+          );
+          expect(mockInvalidateAllUserSessions).toHaveBeenCalledWith(userId);
+        });
+
+        test('an already-verified account keeps its auth methods and other sessions', async () => {
+          const email = 'user@example.com';
+          const tokenDoc = createMockToken({ email });
+          mockTokensFindOne.mockResolvedValue(tokenDoc);
+          mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+          const verifiedDoc = createMockUser({
+            emails: [{ address: email, verified: true }],
+            authMethods: { password: { hash: 'owner-hash' }, google: { id: 'owner-google-id' } },
+          });
+          mockUsersFindOne.mockResolvedValue(verifiedDoc);
+          mockUsersFindOneAndUpsert.mockResolvedValue({ doc: verifiedDoc, isNew: false } as never);
+
+          const { context } = createLoginContext({ cookieToken: 'raw-token' });
+          await handleLoginWithMagicLink({}, context);
+
+          // The owner already proved the address; signing in from another
+          // device must not log them out everywhere or drop their password.
+          expect(mockUsersFindOneAndUpdate).not.toHaveBeenCalled();
+          expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
+          expect(mockStartUserSession).toHaveBeenCalled();
+        });
+
+        test('keeps what a concurrent verification set up when it proved ownership first', async () => {
+          // Read unverified, but a verification link or password reset verified
+          // the address before this claim ran: the guarded write matches nothing.
+          const email = 'user@example.com';
+          const userId = new ObjectId();
+          const onAfterEmailVerification = vi.fn();
+          const onAfterLogin = vi.fn();
+          mockGetAuthConfig.mockReturnValue({
+            magicLink: { enabled: true, allowSignup: true },
+            onAfterEmailVerification,
+            onAfterLogin,
+          });
+          const tokenDoc = createMockToken({ email });
+          mockTokensFindOne.mockResolvedValue(tokenDoc);
+          mockTokensFindOneAndDelete.mockResolvedValue(tokenDoc);
+          const staleDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: false }],
+          });
+          const ownerDoc = createMockUser({
+            _id: userId,
+            emails: [{ address: email, verified: true }],
+            authMethods: { password: { hash: 'owner-hash' } },
+          });
+          mockUsersFindOne.mockResolvedValueOnce(staleDoc).mockResolvedValue(ownerDoc);
+          mockUsersFindOneAndUpsert.mockResolvedValue({ doc: staleDoc, isNew: false } as never);
+          mockUsersFindOneAndUpdate.mockResolvedValue(null);
+
+          const { context } = createLoginContext({ cookieToken: 'raw-token' });
+          await handleLoginWithMagicLink({}, context);
+
+          // The owner's sessions survive, and the verification was theirs to report.
+          expect(mockInvalidateAllUserSessions).not.toHaveBeenCalled();
+          expect(onAfterEmailVerification).not.toHaveBeenCalled();
+          // Hooks and the response see the current doc, not the stale read.
+          expect(onAfterLogin).toHaveBeenCalledWith(expect.objectContaining({ user: ownerDoc }));
+          expect(mockSerializeUserForClient).toHaveBeenCalledWith(ownerDoc);
+        });
       });
 
       test('hooks receive the post-verification doc, not the stale pre-update snapshot', async () => {
@@ -847,6 +1008,9 @@ describe('auth/magicLink', () => {
         const unverifiedDoc = createMockUser({ emails: [{ address: email, verified: false }] });
         mockUsersFindOne.mockResolvedValue(unverifiedDoc);
         mockUsersFindOneAndUpsert.mockResolvedValue({ doc: unverifiedDoc, isNew: false } as never);
+        mockUsersFindOneAndUpdate.mockResolvedValue(
+          createMockUser({ _id: unverifiedDoc!._id, emails: [{ address: email, verified: true }] })
+        );
 
         const { context, clearCookie } = createLoginContext({ cookieToken: 'raw-token' });
 
@@ -1331,8 +1495,8 @@ describe('auth/magicLink', () => {
 
         // The magic link proves ownership → the email is marked verified...
         expect(mockUsersFindOneAndUpdate).toHaveBeenCalledWith(
-          { _id: userId, 'emails.address': email },
-          { $set: { 'emails.$.verified': true } },
+          { _id: userId, emails: { $elemMatch: { address: email, verified: { $ne: true } } } },
+          { $set: { 'emails.$.verified': true, authMethods: {} } },
           { collation: { locale: 'en', strength: 2 }, returnDocument: 'after' }
         );
         // ...and the verification hook fires (it would not on the signup tail).

@@ -293,7 +293,7 @@ async function handleExistingProviderLogin(
 
   try {
     if (existingUser.status === 'disabled' || existingUser.status === 'deleted') {
-      sendOAuthError(res, 400, 'User account is not active.', outcome);
+      sendOAuthError(res, 400, 'User account is not active.', outcome, 'account_inactive');
       return;
     }
 
@@ -360,7 +360,7 @@ async function handleExistingEmailLogin(
 
   if (linkingMode === 'auto' && userData.emailVerified) {
     if (existingUserByEmail.status === 'disabled' || existingUserByEmail.status === 'deleted') {
-      sendOAuthError(res, 400, 'User account is not active.', outcome);
+      sendOAuthError(res, 400, 'User account is not active.', outcome, 'account_inactive');
       return;
     }
 
@@ -374,7 +374,8 @@ async function handleExistingEmailLogin(
         res,
         400,
         'User with this email already exists. Please log in instead.',
-        outcome
+        outcome,
+        'email_exists'
       );
       return;
     }
@@ -416,7 +417,8 @@ async function handleExistingEmailLogin(
           res,
           400,
           'User with this email already exists. Please log in instead.',
-          outcome
+          outcome,
+          'email_exists'
         );
         return;
       }
@@ -466,7 +468,13 @@ async function handleExistingEmailLogin(
   }
 
   // Manual mode (default) or unverified email — reject
-  sendOAuthError(res, 400, 'User with this email already exists. Please log in instead.', outcome);
+  sendOAuthError(
+    res,
+    400,
+    'User with this email already exists. Please log in instead.',
+    outcome,
+    'email_exists'
+  );
   return;
 }
 
@@ -643,7 +651,8 @@ export async function handleOAuthUserAuthentication(
       res,
       400,
       `Email address is required for ${userData.providerName} authentication.`,
-      outcome
+      outcome,
+      'email_required'
     );
     return;
   }
@@ -915,9 +924,13 @@ export function resolveMobileRedirectRequest(
   const redirectUri = typeof req.query.redirectUri === 'string' ? req.query.redirectUri : '';
 
   if (!redirectUri) {
-    sendOAuthError(res, 400, 'A redirectUri is required for mobile authentication.', {
-      platform: 'api',
-    });
+    sendOAuthError(
+      res,
+      400,
+      'A redirectUri is required for mobile authentication.',
+      { platform: 'api' },
+      'invalid_redirect'
+    );
     return { ok: false };
   }
 
@@ -1042,7 +1055,7 @@ export async function handleOAuthProviderLink(
   if (linkedUserId) {
     if (!ObjectId.isValid(linkedUserId)) {
       clearOAuthLinkCookie(res);
-      sendOAuthError(res, 400, 'Invalid OAuth linking state.', outcome);
+      sendOAuthError(res, 400, 'Invalid OAuth linking state.', outcome, 'invalid_state');
       return;
     }
     resolvedUserId = new ObjectId(linkedUserId);
@@ -1052,7 +1065,7 @@ export async function handleOAuthProviderLink(
 
   if (!resolvedUserId) {
     clearOAuthLinkCookie(res);
-    sendOAuthError(res, 401, 'You must be signed in to link a provider.', outcome);
+    sendOAuthError(res, 401, 'You must be signed in to link a provider.', outcome, 'not_signed_in');
     return;
   }
 
@@ -1093,7 +1106,7 @@ export async function handleOAuthProviderLink(
 
         clearOAuthLinkCookie(res);
 
-        sendOAuthError(res, 400, 'User account is not active.', outcome);
+        sendOAuthError(res, 400, 'User account is not active.', outcome, 'account_inactive');
         return;
       }
 
@@ -1118,7 +1131,8 @@ export async function handleOAuthProviderLink(
           res,
           400,
           `You have already linked a different ${userData.providerName} account.`,
-          outcome
+          outcome,
+          'link_failed'
         );
         return;
       }
@@ -1135,7 +1149,13 @@ export async function handleOAuthProviderLink(
 
       clearOAuthLinkCookie(res);
 
-      sendOAuthError(res, 400, `Unable to link ${userData.providerName} account.`, outcome);
+      sendOAuthError(
+        res,
+        400,
+        `Unable to link ${userData.providerName} account.`,
+        outcome,
+        'link_failed'
+      );
       return;
     }
 
@@ -1184,7 +1204,8 @@ export async function handleOAuthProviderLink(
         res,
         400,
         `This ${userData.providerName} account is already linked to a different user.`,
-        outcome
+        outcome,
+        'link_failed'
       );
       return;
     }

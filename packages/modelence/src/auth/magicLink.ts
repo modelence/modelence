@@ -14,6 +14,7 @@ import { consumeRateLimit } from '@/server';
 import { getConfig } from '@/config/server';
 import { isDisposableEmail } from './disposableEmails';
 import { setAuthTokenCookie, startUserSession } from './session';
+import { claimUnverifiedEmail } from './claimEmail';
 import { hashToken } from './tokenHash';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
@@ -420,18 +421,20 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
     // signup may have left it unverified — this link is the proof that verifies
     // it. Skip the redundant write when already verified.
     const emailDoc = userDoc.emails?.find((e) => e.address.toLowerCase() === email);
-    const wasUnverified = !isNew && !emailDoc?.verified;
-    if (wasUnverified) {
-      // Same strength-2 collation as the lookups: the stored address may keep
-      // its original casing (e.g. OAuth-created accounts) while `email` is
-      // lowercased, or the positional update silently matches nothing. Return
-      // the updated doc so hooks and the response see `verified: true`.
-      const verifiedDoc = await usersCollection.findOneAndUpdate(
-        { _id: userDoc._id, 'emails.address': email },
-        { $set: { 'emails.$.verified': true } },
-        { collation: USER_COLLATION, returnDocument: 'after' }
-      );
-      currentUserDoc = verifiedDoc ?? userDoc;
+    let claimedEmail = false;
+    if (!isNew && !emailDoc?.verified) {
+      // First proof of ownership: the claim also drops the password, linked
+      // OAuth providers and sessions the pre-registering party may hold. It
+      // signs out every session, so it must run before the new one starts.
+      const claimedDoc = await claimUnverifiedEmail(userDoc._id, email);
+      if (claimedDoc) {
+        currentUserDoc = claimedDoc;
+        claimedEmail = true;
+      } else {
+        // A concurrent verification, reset or link proved ownership first and
+        // its credentials stand. Re-read so hooks and the response see them.
+        currentUserDoc = (await usersCollection.findOne({ _id: userDoc._id })) ?? userDoc;
+      }
     }
 
     const userSession = await startUserSession(session.authToken, currentUserDoc._id);
@@ -450,7 +453,7 @@ async function authenticateMagicLinkUser(params: MagicLinkAuthParams) {
         })
       );
     } else {
-      if (wasUnverified) {
+      if (claimedEmail) {
         fireAuthHook('onAfterEmailVerification', () =>
           authConfig.onAfterEmailVerification?.({
             provider: 'magicLink',

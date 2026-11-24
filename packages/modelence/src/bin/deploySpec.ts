@@ -4,7 +4,7 @@ import {
   SETUP_DOCS_URL,
   addFrameworkResources,
   formatAppSpec,
-  isProvidedResource,
+  isServiceResource,
   readAppSpecFile,
   type AppSpec,
   type StaticMount,
@@ -38,7 +38,7 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
     ? addFrameworkResources(file)
     : { spec: file, added: [] };
   for (const resource of Object.values(spec.resources ?? {})) {
-    if (resource && !isProvidedResource(resource) && resource.root !== undefined) {
+    if (resource && isServiceResource(resource) && resource.root !== undefined) {
       await resolveAppRoot(cwd, resource.root);
     }
   }
