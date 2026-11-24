@@ -407,6 +407,30 @@ describe('websocket/socketio/server', () => {
     });
   });
 
+  test('accepts a newly granted role without reconnecting the socket', async () => {
+    const canAccess = vi.fn(async (auth: { user: { roles?: string[] } | null }) =>
+      Boolean(auth.user?.roles?.includes('admin'))
+    );
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', canAccess)],
+    });
+    const { socket, socketEvents } = buildSocket();
+    eventHandlers.connection?.(socket);
+    mockAuthenticate.mockResolvedValue({
+      user: { id: '1', roles: ['admin'] },
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      roles: ['admin'],
+    });
+
+    await socketEvents.joinChannel('private:room');
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: 1 });
+
+    expect(socket.join).toHaveBeenCalledWith('private:room');
+    await vi.waitFor(() => expect(remoteSocket.emit).toHaveBeenCalledWith('private', 1));
+    expect(remoteSocket.leave).not.toHaveBeenCalled();
+  });
+
   test('delivers consecutive protected broadcasts in order', async () => {
     await websocketProvider.init({
       httpServer: {} as Server,

@@ -13,11 +13,16 @@ function sameRoles(a: string[] | undefined, b: string[] | undefined): boolean {
 }
 
 /** Recheck a long-lived socket or subscription against fresh authentication. */
-export function isAuthStillCurrent(initial: AuthSnapshot, current: AuthSnapshot): boolean {
+export function isSameAuthenticatedUser(initial: AuthSnapshot, current: AuthSnapshot): boolean {
   // Keep the expiry check here until the obtainSession fix in #465 lands.
   if (current.session?.expiresAt && !(current.session.expiresAt > new Date())) return false;
+  return initial.user?.id === current.user?.id;
+}
+
+/** Live-query handlers capture roles, so changes require a fresh subscription. */
+export function isAuthStillCurrent(initial: AuthSnapshot, current: AuthSnapshot): boolean {
   return (
-    initial.user?.id === current.user?.id &&
+    isSameAuthenticatedUser(initial, current) &&
     sameRoles(initial.roles, current.roles) &&
     sameRoles(initial.user?.roles, current.user?.roles)
   );

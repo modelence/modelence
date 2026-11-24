@@ -2,7 +2,7 @@ import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
 import { authenticate } from '@/auth';
-import { isAuthStillCurrent } from '@/auth/revalidation';
+import { isSameAuthenticatedUser } from '@/auth/revalidation';
 import { getConfig } from '@/config/server';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
@@ -131,7 +131,7 @@ export async function init({
             persistNewSession: false,
           });
           if (
-            !isAuthStillCurrent(socket.data, current) ||
+            !isSameAuthenticatedUser(socket.data, current) ||
             !(await channel.canAccessChannel(current))
           ) {
             socket.emit('joinError', { channel: channelName, error: 'Access denied' });
@@ -215,7 +215,7 @@ async function deliverProtectedBroadcast<T>({
             persistNewSession: false,
           });
           if (
-            !isAuthStillCurrent(socket.data, current) ||
+            !isSameAuthenticatedUser(socket.data, current) ||
             !(await channel.canAccessChannel!(current))
           ) {
             await socket.leave(room);
