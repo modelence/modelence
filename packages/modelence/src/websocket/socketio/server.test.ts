@@ -48,6 +48,16 @@ vi.doMock('@/config/server', () => ({
 const eventHandlers: Record<string, ((...args: unknown[]) => void) | undefined> = {};
 const socketMiddlewares: Array<(socket: Socket, next: () => void) => void> = [];
 const toEmit = vi.fn();
+const remoteSocket = {
+  data: {
+    user: { id: '1' },
+    session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+  },
+  emit: vi.fn(),
+  leave: vi.fn(),
+};
+const fetchSockets = vi.fn().mockResolvedValue([remoteSocket]);
+const mockIn = vi.fn(() => ({ fetchSockets }));
 const mockTo = vi.fn(() => ({
   emit: toEmit,
 }));
@@ -59,6 +69,7 @@ const serverInstance = {
     socketMiddlewares.push(handler);
   }),
   to: mockTo,
+  in: mockIn,
 };
 
 vi.doMock('socket.io', () => ({
@@ -81,8 +92,13 @@ describe('websocket/socketio/server', () => {
     mockGetConfig.mockReturnValue(false);
     mockGetClient.mockReturnValue(mockMongoClient);
     mockCreateIndex.mockResolvedValue(undefined as never);
-    mockAuthenticate.mockResolvedValue({ user: { id: '1' } } as never);
+    mockAuthenticate.mockResolvedValue({
+      user: { id: '1' },
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      roles: [],
+    } as never);
     mockRunLiveMethod.mockResolvedValue({ fetch: async () => [], watch: () => undefined });
+    fetchSockets.mockResolvedValue([remoteSocket]);
   });
 
   afterEach(() => vi.unstubAllEnvs());
@@ -96,7 +112,11 @@ describe('websocket/socketio/server', () => {
     const socketEvents: Record<string, (...args: unknown[]) => void> = {};
     const socket = {
       id: 'socket-1',
-      data: { user: { id: '1' } },
+      data: {
+        user: { id: '1' },
+        session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+        roles: [],
+      },
       handshake: {
         auth: { token: 'token' },
         address: '192.0.2.1',
@@ -141,7 +161,7 @@ describe('websocket/socketio/server', () => {
     } as unknown as Socket;
     await middleware?.(authSocket, next);
     expect(mockAuthenticate).toHaveBeenCalledWith('abc', { persistNewSession: false });
-    expect(authSocket.data).toEqual({ user: { id: '1' } });
+    expect(authSocket.data).toEqual(expect.objectContaining({ user: { id: '1' } }));
     expect(next).toHaveBeenCalled();
 
     // Simulate connection lifecycle
@@ -153,7 +173,7 @@ describe('websocket/socketio/server', () => {
     const joinHandler = socketEvents.joinChannel;
     expect(joinHandler).toBeDefined();
     await joinHandler?.('chat:room1');
-    expect(accessSpy).toHaveBeenCalledWith(socket.data);
+    expect(accessSpy).toHaveBeenCalledWith(expect.objectContaining({ user: { id: '1' } }));
     expect(socket.join).toHaveBeenCalledWith('chat:room1');
     expect(socket.emit).toHaveBeenCalledWith('joinedChannel', 'chat:room1');
 
@@ -234,6 +254,7 @@ describe('websocket/socketio/server', () => {
         expect(mockAuthenticate.mock.calls).toEqual([
           ['token', { persistNewSession: false }],
           ['subscription-token', { persistNewSession: false }],
+          ['subscription-token', { persistNewSession: false }],
         ]);
         expect(mockRunLiveMethod).toHaveBeenCalledWith(
           'test',
@@ -249,7 +270,7 @@ describe('websocket/socketio/server', () => {
   test('init skips mongo adapter when multiInstance is disabled', async () => {
     await websocketProvider.init({
       httpServer: {} as Server,
-      channels: [],
+      channels: [new ServerChannelClass('chat')],
     });
 
     expect(mockCollectionFn).not.toHaveBeenCalled();
@@ -277,7 +298,7 @@ describe('websocket/socketio/server', () => {
     mockGetClient.mockReturnValue(null);
     await websocketProvider.init({
       httpServer: {} as Server,
-      channels: [],
+      channels: [new ServerChannelClass('chat')],
     });
 
     websocketProvider.broadcast({
@@ -288,5 +309,34 @@ describe('websocket/socketio/server', () => {
 
     expect((mockTo as Mock).mock.calls[0]?.[0]).toBe('chat:room');
     expect(toEmit).toHaveBeenCalledWith('chat', { text: 'hello' });
+  });
+
+  test('does not broadcast to a recipient whose access was revoked', async () => {
+    const canAccess = vi.fn().mockResolvedValue(false);
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', canAccess)],
+    });
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: { secret: 'x' } });
+
+    await vi.waitFor(() => expect(remoteSocket.leave).toHaveBeenCalledWith('private:room'));
+    expect(remoteSocket.emit).not.toHaveBeenCalled();
+    expect(canAccess).toHaveBeenCalled();
+  });
+
+  test('broadcasts to a recipient who still has access', async () => {
+    const canAccess = vi.fn().mockResolvedValue(true);
+    await websocketProvider.init({
+      httpServer: {} as Server,
+      channels: [new ServerChannelClass('private', canAccess)],
+    });
+
+    websocketProvider.broadcast({ category: 'private', id: 'room', data: { secret: 'x' } });
+
+    await vi.waitFor(() =>
+      expect(remoteSocket.emit).toHaveBeenCalledWith('private', { secret: 'x' })
+    );
+    expect(remoteSocket.leave).not.toHaveBeenCalled();
   });
 });

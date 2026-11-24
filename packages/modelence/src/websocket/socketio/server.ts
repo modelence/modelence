@@ -16,6 +16,7 @@ import { logError } from '@/telemetry';
 import { createClientIpResolver } from '@/app/clientIp';
 
 let socketServer: SocketServer | null = null;
+let activeChannels: ServerChannel[] = [];
 
 const COLLECTION = '_modelenceSocketio';
 const ADAPTER_TTL_SECONDS = 60;
@@ -30,6 +31,7 @@ export async function init({
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
   const resolveClientIp = createClientIpResolver();
+  activeChannels = channels;
 
   console.log('Initializing Socket.IO server...');
 
@@ -101,12 +103,24 @@ export async function init({
     });
 
     socket.on('joinChannel', async (channelName: string) => {
+      if (typeof channelName !== 'string') {
+        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+        return;
+      }
       const [category] = channelName.split(':');
       let authorized = false;
 
       for (const channel of channels) {
         if (channel.category === category) {
-          if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
+          // A connection may have outlived its session or a role change.
+          const current = await authenticate(socket.data.session?.authToken ?? null, {
+            persistNewSession: false,
+          });
+          if (
+            current.user?.id === socket.data.user?.id &&
+            current.session.expiresAt > new Date() &&
+            (!channel.canAccessChannel || (await channel.canAccessChannel(current)))
+          ) {
             void socket.join(channelName);
             authorized = true;
             socket.emit('joinedChannel', channelName);
@@ -136,7 +150,45 @@ export async function init({
 }
 
 function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
-  socketServer?.to(`${category}:${id}`).emit(category, data);
+  if (!socketServer) return;
+  const room = `${category}:${id}`;
+  const channel = activeChannels.find((item) => item.category === category);
+  if (!channel) return;
+  if (!channel.canAccessChannel) {
+    socketServer.to(room).emit(category, data);
+    return;
+  }
+
+  // Authorize each recipient at delivery time. Room membership alone remains
+  // after logout, session expiry, or a role change. fetchSockets includes peers
+  // on other instances when the MongoDB adapter is enabled.
+  void socketServer
+    .in(room)
+    .fetchSockets()
+    .then(async (sockets) => {
+      await Promise.all(
+        sockets.map(async (socket) => {
+          try {
+            const current = await authenticate(socket.data.session?.authToken ?? null, {
+              persistNewSession: false,
+            });
+            if (
+              current.user?.id !== socket.data.user?.id ||
+              !(current.session.expiresAt > new Date()) ||
+              !(await channel.canAccessChannel!(current))
+            ) {
+              await socket.leave(room);
+              return;
+            }
+            socket.emit(category, data);
+          } catch (error) {
+            await socket.leave(room);
+            logError('Failed to authorize channel recipient:', { error, category });
+          }
+        })
+      );
+    })
+    .catch((error) => logError('Failed to broadcast channel message:', { error, category }));
 }
 
 export default {

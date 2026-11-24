@@ -50,4 +50,41 @@ describe('live-query/handlers', () => {
 
     expect(mockAuthenticate).toHaveBeenCalledWith(null, { persistNewSession: false });
   });
+
+  test('stops publishing after the subscriber loses access', async () => {
+    const socket = buildSocket('socket-revoked');
+    const cleanup = vi.fn();
+    const fetch = vi.fn().mockResolvedValue([{ secret: 'private' }]);
+    let publish: (() => void) | undefined;
+    const authenticated = {
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      user: { id: 'user-1', roles: ['reader'] },
+      roles: ['reader'],
+    };
+    mockAuthenticate.mockResolvedValue(authenticated);
+    mockRunLiveMethod.mockResolvedValue({
+      fetch,
+      watch: ({ publish: callback }: { publish: () => void }) => {
+        publish = callback;
+        return cleanup;
+      },
+    });
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-revoked',
+      method: 'secrets.list',
+      authToken: 'token',
+    });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+
+    mockAuthenticate.mockResolvedValue({
+      ...authenticated,
+      user: null,
+      roles: [],
+    });
+    publish?.();
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(socket.emit).toHaveBeenCalledTimes(1);
+  });
 });
