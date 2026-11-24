@@ -1379,6 +1379,272 @@ describe('auth/providers/oauthCommon', () => {
       );
     });
   });
+
+  describe('errorCode reported to the app', () => {
+    const mobileOutcome = {
+      platform: 'mobile' as const,
+      redirectUri: 'myapp://auth',
+      codeChallenge: 'challenge',
+    };
+
+    const mobileRes = () =>
+      ({
+        ...res,
+        set: vi.fn(),
+        redirect: vi.fn(),
+      }) as unknown as Response;
+
+    const reportedErrorCode = (response: Response) => {
+      const target = vi.mocked(response.redirect).mock.calls[0][0] as unknown as string;
+      return new URL(target).searchParams.get('errorCode');
+    };
+
+    const providerUser = {
+      id: 'google-id',
+      email: 'user@example.com',
+      emailVerified: true,
+      providerName: 'google' as const,
+    };
+
+    describe('sign-in', () => {
+      test('account_inactive when the linked user is disabled', async () => {
+        mockUsersFindOne.mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'disabled',
+        } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          providerUser,
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('account_inactive');
+      });
+
+      test('account_inactive when auto-linking to a disabled user', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'disabled',
+          emails: [{ address: 'user@example.com', verified: true }],
+        } as never);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, oauthAccountLinking: 'auto' });
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          providerUser,
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('account_inactive');
+      });
+
+      test('email_exists when the email belongs to another account (manual linking)', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'active',
+        } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          providerUser,
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('email_exists');
+      });
+
+      test('email_exists when auto-linking finds the local email unverified', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'active',
+          emails: [{ address: 'user@example.com', verified: false }],
+        } as never);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, oauthAccountLinking: 'auto' });
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          providerUser,
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('email_exists');
+      });
+
+      test('email_exists when the auto-link update matches no user', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never).mockResolvedValueOnce({
+          _id: new ObjectId(),
+          status: 'active',
+          emails: [{ address: 'user@example.com', verified: true }],
+        } as never);
+        mockUsersUpdateOne.mockResolvedValue({ matchedCount: 0 } as never);
+        mockGetAuthConfig.mockReturnValue({ ...authConfig, oauthAccountLinking: 'auto' });
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          providerUser,
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('email_exists');
+      });
+
+      test('email_required when the provider returns no email', async () => {
+        mockUsersFindOne.mockResolvedValueOnce(null as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthUserAuthentication(
+          req,
+          response,
+          { ...providerUser, email: '' as never },
+          mobileOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('email_required');
+      });
+    });
+
+    describe('linking', () => {
+      const linkOutcome = { platform: 'mobile' as const, redirectUri: 'myapp://auth' };
+
+      beforeEach(() => {
+        mockGetAuthConfig.mockReturnValue({
+          ...authConfig,
+          onAfterOAuthLink: vi.fn(),
+          onOAuthLinkError: vi.fn(),
+        });
+      });
+
+      const signedIn = () => {
+        const userId = new ObjectId();
+        mockGetCallContext.mockResolvedValue({
+          session: { authToken: 'token', userId },
+          connectionInfo: { ip: '1.1.1.1' },
+        } as never);
+        return userId;
+      };
+
+      test('not_signed_in without a signed-in user', async () => {
+        mockGetCallContext.mockResolvedValue({
+          session: { authToken: 'token', userId: null },
+          connectionInfo: { ip: '1.1.1.1' },
+        } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          undefined,
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('not_signed_in');
+      });
+
+      test('invalid_state when the linking state holds a malformed user id', async () => {
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          'not-an-object-id',
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('invalid_state');
+      });
+
+      test('account_inactive when the user is disabled', async () => {
+        const userId = signedIn();
+        mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+        mockUsersFindOne.mockResolvedValueOnce({ _id: userId, status: 'disabled' } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          undefined,
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('account_inactive');
+      });
+
+      test('link_failed when a different provider account is already linked', async () => {
+        const userId = signedIn();
+        mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+        mockUsersFindOne.mockResolvedValueOnce({
+          _id: userId,
+          status: 'active',
+          authMethods: { google: { id: 'different-google-id' } },
+        } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          undefined,
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('link_failed');
+      });
+
+      test('link_failed when the linking state is unexpected', async () => {
+        const userId = signedIn();
+        mockUsersUpdateOne.mockResolvedValueOnce({ matchedCount: 0 } as never);
+        mockUsersFindOne.mockResolvedValueOnce({
+          _id: userId,
+          status: 'active',
+          authMethods: { google: {} },
+        } as never);
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          undefined,
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('link_failed');
+      });
+
+      test('link_failed when the provider account belongs to another user', async () => {
+        signedIn();
+        mockUsersUpdateOne.mockRejectedValueOnce(
+          new MongoServerError({ message: 'E11000 duplicate key error', code: 11000 }) as never
+        );
+        const response = mobileRes();
+
+        await moduleExports.handleOAuthProviderLink(
+          req,
+          response,
+          providerUser,
+          undefined,
+          linkOutcome
+        );
+
+        expect(reportedErrorCode(response)).toBe('link_failed');
+      });
+    });
+  });
+
   describe('sendOAuthError', () => {
     test('returns JSON error when no errorComponent is configured', () => {
       mockGetAuthConfig.mockReturnValue({});

@@ -161,7 +161,8 @@ async function handleGitHubAuthenticationCallback(req: Request, res: Response) {
         res,
         400,
         'Unable to retrieve a primary verified email from GitHub. Please ensure your GitHub account has a verified email set as primary.',
-        outcome
+        outcome,
+        'email_required'
       );
       return;
     }
