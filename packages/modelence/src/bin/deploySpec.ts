@@ -17,7 +17,8 @@ import { dependsOnModelence } from './deployKind';
   Cloud: the CLI reads it, checks what only the local file system can tell
   (the file exists, root is a real directory in the upload) and sends
   it on. Studio validates it against the schema and fills in the runtime's
-  defaults; nothing is inferred here.
+  defaults. The one thing added here is the MongoDB and Elastic a Modelence
+  framework app always needs, when its file leaves them out.
 */
 
 const KNOWN_TOP_LEVEL_KEYS = ['$schema', 'resources', 'env'];
@@ -34,14 +35,17 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
     throw new Error(missingSpecMessage(cwd));
   }
   assertKnownKeys(file);
-  const { spec, added } = (await dependsOnModelence(cwd))
-    ? addFrameworkResources(file)
-    : { spec: file, added: [] };
-  for (const resource of Object.values(spec.resources ?? {})) {
+  // A service in a subfolder (`root`) has its package.json there, so each
+  // one is checked for the framework, not only the project's own.
+  const serviceRoots: string[] = [];
+  for (const resource of Object.values(file.resources ?? {})) {
     if (resource && isServiceResource(resource) && resource.root !== undefined) {
-      await resolveAppRoot(cwd, resource.root);
+      serviceRoots.push(await resolveAppRoot(cwd, resource.root));
     }
   }
+  const { spec, added } = (await usesModelence([cwd, ...serviceRoots]))
+    ? addFrameworkResources(file)
+    : { spec: file, added: [] };
 
   console.log(`Build plan (${APP_SPEC_FILE_NAME}):`);
   for (const line of formatAppSpec(spec)) {
@@ -51,6 +55,15 @@ export async function prepareSpec(cwd: string): Promise<AppSpec> {
     console.log(`  (${added.join(' and ')} added: a Modelence app always needs them)`);
   }
   return spec;
+}
+
+async function usesModelence(directories: string[]): Promise<boolean> {
+  for (const directory of directories) {
+    if (await dependsOnModelence(directory)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function missingSpecMessage(cwd: string): string {

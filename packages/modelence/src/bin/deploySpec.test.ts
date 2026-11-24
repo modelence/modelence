@@ -100,6 +100,19 @@ describe('Modelence framework apps', () => {
     });
   });
 
+  it('finds the framework in a service root', async () => {
+    await mkdir(join(dir, 'apps/web'), { recursive: true });
+    await writeFile(
+      join(dir, 'apps/web/package.json'),
+      JSON.stringify({ dependencies: { modelence: '^0.18.0' } })
+    );
+    const resources = { web: { type: 'service', root: 'apps/web' } };
+    await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources }));
+    expect(await prepareSpec(dir)).toEqual({
+      resources: { ...resources, db: { type: 'mongodb' }, metrics: { type: 'elastic' } },
+    });
+  });
+
   it('adds nothing to an app that does not depend on modelence', async () => {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ dependencies: { express: '^4' } }));
     await writeFile(join(dir, 'modelence.config.json'), JSON.stringify({ resources: service }));
