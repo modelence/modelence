@@ -4,6 +4,7 @@ import { authenticate } from '../auth';
 import { isAuthStillCurrent } from '../auth/revalidation';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
+import { ACCESS_REVOKED_ERROR } from './constants';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
 
@@ -110,7 +111,7 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
       // A replacement may now own the same subscription ID.
       if (subs.get(subscriptionId) === subscription) {
         subs.delete(subscriptionId);
-        socket.emit('liveQueryError', { subscriptionId, error: 'Access revoked' });
+        socket.emit('liveQueryError', { subscriptionId, error: ACCESS_REVOKED_ERROR });
       }
     };
 

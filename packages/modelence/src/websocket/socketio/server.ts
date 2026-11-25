@@ -2,7 +2,7 @@ import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
 import { authenticate } from '@/auth';
-import { isSameAuthenticatedUser } from '@/auth/revalidation';
+import { isIdentityStillValid } from '@/auth/revalidation';
 import { getConfig } from '@/config/server';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
@@ -127,13 +127,8 @@ export async function init({
       }
       try {
         if (channel.canAccessChannel) {
-          const current = await authenticate(socket.data.session?.authToken ?? null, {
-            persistNewSession: false,
-          });
-          if (
-            !isSameAuthenticatedUser(socket.data, current) ||
-            !(await channel.canAccessChannel(current))
-          ) {
+          const current = await reauthenticate(socket);
+          if (!current || !(await channel.canAccessChannel(current))) {
             socket.emit('joinError', { channel: channelName, error: 'Access denied' });
             return;
           }
@@ -159,6 +154,18 @@ export async function init({
   });
 
   console.log('Socket.IO server initialized');
+}
+
+/** Returns the socket's fresh auth, or null if its access was revoked. */
+async function reauthenticate(socket: Pick<Socket, 'data'>) {
+  const current = await authenticate(socket.data.session?.authToken ?? null, {
+    persistNewSession: false,
+  });
+  if (!isIdentityStillValid(socket.data, current)) return null;
+  // An anonymous token can gain a user. Remember it, so that a later sign-out
+  // or switch to another user counts as a revocation.
+  if (current.user) socket.data = current;
+  return current;
 }
 
 function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
@@ -211,13 +218,8 @@ async function deliverProtectedBroadcast<T>({
     await Promise.all(
       sockets.map(async (socket) => {
         try {
-          const current = await authenticate(socket.data.session?.authToken ?? null, {
-            persistNewSession: false,
-          });
-          if (
-            !isSameAuthenticatedUser(socket.data, current) ||
-            !(await channel.canAccessChannel!(current))
-          ) {
+          const current = await reauthenticate(socket);
+          if (!current || !(await channel.canAccessChannel!(current))) {
             await socket.leave(room);
             socket.emit('leftChannel', room);
             return;

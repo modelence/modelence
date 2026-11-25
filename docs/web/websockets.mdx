@@ -483,7 +483,7 @@ server {
 For channels with a `canAccessChannel` callback, Modelence checks the current
 session and user when a client joins and before each broadcast. If access is
 revoked, the socket leaves the channel and receives `leftChannel`. A role granted
-after connection can take effect on the next join or broadcast without reconnecting.
+after connection takes effect on the next join, without reconnecting.
 Channels without an access callback remain public.
 
 ### Channel Security

@@ -101,6 +101,11 @@ describe('websocket/socketio/server', () => {
     } as never);
     mockRunLiveMethod.mockResolvedValue({ fetch: async () => [], watch: () => undefined });
     fetchSockets.mockResolvedValue([remoteSocket]);
+    remoteSocket.data = {
+      user: { id: '1' },
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      roles: [],
+    };
   });
 
   afterEach(() => vi.unstubAllEnvs());
@@ -429,6 +434,75 @@ describe('websocket/socketio/server', () => {
     expect(socket.join).toHaveBeenCalledWith('private:room');
     await vi.waitFor(() => expect(remoteSocket.emit).toHaveBeenCalledWith('private', 1));
     expect(remoteSocket.leave).not.toHaveBeenCalled();
+  });
+
+  describe('when an anonymous socket gains a user on the same token', () => {
+    const anonymousAuth = {
+      user: null,
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      roles: [],
+    };
+    const authFor = (id: string) => ({ ...anonymousAuth, user: { id } });
+    const signedInOnly = vi.fn(async ({ user }: { user: UserInfo | null }) => Boolean(user));
+
+    async function connectAnonymously() {
+      await websocketProvider.init({
+        httpServer: {} as Server,
+        channels: [new ServerChannelClass('private', signedInOnly)],
+      });
+      const { socket, socketEvents } = buildSocket();
+      socket.data = anonymousAuth;
+      eventHandlers.connection?.(socket);
+      return { socket, socketEvents };
+    }
+
+    test('lets it join a protected channel', async () => {
+      const { socket, socketEvents } = await connectAnonymously();
+      mockAuthenticate.mockResolvedValue(authFor('1'));
+
+      await socketEvents.joinChannel('private:room');
+
+      expect(socket.join).toHaveBeenCalledWith('private:room');
+    });
+
+    test.each([
+      ['switches to another user', authFor('2')],
+      ['loses the user', anonymousAuth],
+    ])('rejects a join after the token %s', async (_name, laterAuth) => {
+      const { socket, socketEvents } = await connectAnonymously();
+      mockAuthenticate.mockResolvedValueOnce(authFor('1'));
+      await socketEvents.joinChannel('private:room');
+      (socket.join as Mock).mockClear();
+      // Only the identity check can reject the join here.
+      signedInOnly.mockResolvedValueOnce(true);
+      mockAuthenticate.mockResolvedValue(laterAuth);
+
+      await socketEvents.joinChannel('private:other');
+
+      expect(socket.join).not.toHaveBeenCalled();
+      expect(socket.emit).toHaveBeenCalledWith('joinError', {
+        channel: 'private:other',
+        error: 'Access denied',
+      });
+      signedInOnly.mockReset();
+      signedInOnly.mockImplementation(async ({ user }) => Boolean(user));
+    });
+
+    test('keeps delivering broadcasts until the token switches to another user', async () => {
+      await connectAnonymously();
+      Object.assign(remoteSocket, { data: anonymousAuth });
+      mockAuthenticate.mockResolvedValue(authFor('1'));
+
+      websocketProvider.broadcast({ category: 'private', id: 'room', data: 1 });
+      await vi.waitFor(() => expect(remoteSocket.emit).toHaveBeenCalledWith('private', 1));
+      expect(remoteSocket.leave).not.toHaveBeenCalled();
+
+      mockAuthenticate.mockResolvedValue(authFor('2'));
+      websocketProvider.broadcast({ category: 'private', id: 'room', data: 2 });
+
+      await vi.waitFor(() => expect(remoteSocket.leave).toHaveBeenCalledWith('private:room'));
+      expect(remoteSocket.emit).not.toHaveBeenCalledWith('private', 2);
+    });
   });
 
   test('delivers consecutive protected broadcasts in order', async () => {

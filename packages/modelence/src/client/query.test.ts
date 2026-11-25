@@ -139,4 +139,104 @@ describe('modelenceLiveQuery', () => {
     unsubscribeObserver();
     queryClient.clear();
   });
+
+  describe('when the server revokes access', () => {
+    type LiveCallbacks = { onData: (data: unknown) => void; onError: (error: string) => void };
+
+    function observeLiveQuery(args: Record<string, unknown> = {}) {
+      // @ts-expect-error minimal window stub
+      globalThis.window = {};
+      const live: LiveCallbacks[] = [];
+      const unsubscribeLive = vi.fn();
+      mockSubscribeLiveQuery.mockImplementation((_method, _args, onData, onError) => {
+        live.push({ onData, onError });
+        return unsubscribeLive;
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      connectModelenceQueryClient(queryClient);
+      const observer = new QueryObserver(queryClient, modelenceLiveQuery('todos.list', args));
+      const stopObserving = observer.subscribe(() => {});
+      return {
+        live,
+        observer,
+        queryClient,
+        unsubscribeLive,
+        cleanup: () => {
+          stopObserving();
+          queryClient.clear();
+        },
+      };
+    }
+
+    async function pushFirstFrame({ live, observer }: ReturnType<typeof observeLiveQuery>) {
+      await vi.waitFor(() => expect(live).toHaveLength(1));
+      live[0].onData(['old']);
+      await vi.waitFor(() => expect(observer.getCurrentResult().data).toEqual(['old']));
+    }
+
+    test('subscribes again and shows the new data', async () => {
+      const query = observeLiveQuery();
+      await pushFirstFrame(query);
+
+      query.live[0].onError('Access revoked');
+
+      await vi.waitFor(() => expect(query.live).toHaveLength(2));
+      expect(query.unsubscribeLive).toHaveBeenCalledTimes(1);
+      query.live[1].onData(['new']);
+      await vi.waitFor(() => expect(query.observer.getCurrentResult().data).toEqual(['new']));
+      expect(query.observer.getCurrentResult().status).toBe('success');
+      query.cleanup();
+    });
+
+    test('reports an error, without looping, when the new subscription is rejected', async () => {
+      const query = observeLiveQuery();
+      await pushFirstFrame(query);
+
+      query.live[0].onError('Access revoked');
+      await vi.waitFor(() => expect(query.live).toHaveLength(2));
+      query.live[1].onError('Access revoked');
+
+      await vi.waitFor(() => expect(query.observer.getCurrentResult().status).toBe('error'));
+      expect(query.observer.getCurrentResult().error).toEqual(new Error('Access revoked'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(query.live).toHaveLength(2);
+      query.cleanup();
+    });
+
+    test('does not refetch other live queries of the same method', async () => {
+      const query = observeLiveQuery();
+      await pushFirstFrame(query);
+      const otherOptions = modelenceLiveQuery('todos.list', { done: true });
+      const other = new QueryObserver(query.queryClient, otherOptions);
+      const stopOther = other.subscribe(() => {});
+      await vi.waitFor(() => expect(query.live).toHaveLength(2));
+      query.live[1].onData(['other']);
+      await vi.waitFor(() => expect(other.getCurrentResult().data).toEqual(['other']));
+      const otherUpdateCount = () =>
+        query.queryClient.getQueryState(otherOptions.queryKey)?.dataUpdateCount;
+      // The first frame updates the query twice: setQueryData, then the resolved queryFn.
+      await vi.waitFor(() => expect(other.getCurrentResult().fetchStatus).toBe('idle'));
+      const updatesBefore = otherUpdateCount();
+
+      query.live[0].onError('Access revoked');
+
+      await vi.waitFor(() => expect(query.live).toHaveLength(3));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(otherUpdateCount()).toBe(updatesBefore);
+      stopOther();
+      query.cleanup();
+    });
+
+    test('does not subscribe again after other errors', async () => {
+      const query = observeLiveQuery();
+      await pushFirstFrame(query);
+
+      query.live[0].onError('fetch failed');
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(query.live).toHaveLength(1);
+      query.cleanup();
+    });
+  });
 });
