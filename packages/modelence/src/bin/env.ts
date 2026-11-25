@@ -11,6 +11,7 @@ import {
 } from './environmentSession';
 import { formatTable, printJson, printLine, printNote } from './output';
 import { promptHidden, readStdin } from './secretInput';
+import { isTransientError } from './studioApi';
 
 /*
   `modelence env`: the environment variables of a cloud environment.
@@ -21,15 +22,32 @@ import { promptHidden, readStdin } from './secretInput';
   local file (`push`), stdin or a hidden prompt (`set`).
 */
 
-export interface EnvVarSummary {
+// Only a text variable comes with its value.
+export type EnvVarSummary = TextEnvVar | SecretEnvVar | ResourceEnvVar;
+
+interface EnvVarBase {
   key: string;
-  status: 'set' | 'default' | 'missing' | 'optional' | 'resource';
-  secret: boolean;
   scopes: string[];
-  value: string | null;
-  resource: string | null;
+}
+
+interface ValueEnvVar extends EnvVarBase {
+  status: 'set' | 'default' | 'missing' | 'optional';
   declared: boolean;
   updatedAt: string | null;
+}
+
+export interface TextEnvVar extends ValueEnvVar {
+  kind: 'text';
+  value: string | null;
+}
+
+export interface SecretEnvVar extends ValueEnvVar {
+  kind: 'secret';
+}
+
+export interface ResourceEnvVar extends EnvVarBase {
+  kind: 'resource';
+  resource: string;
 }
 
 interface EnvList {
@@ -74,7 +92,7 @@ export async function envList(options: EnvironmentOptions & { json?: boolean }):
   }
   const rows = result.variables.map((variable) => [
     variable.key,
-    variable.status === 'missing' ? 'not set' : variable.status,
+    describeStatus(variable),
     variable.scopes.join('+'),
     describeValue(variable),
   ]);
@@ -82,26 +100,39 @@ export async function envList(options: EnvironmentOptions & { json?: boolean }):
   noteRestart(result.restartNeeded, options);
 }
 
-function describeValue({ secret, resource, status, value }: EnvVarSummary): string {
-  if (resource) {
-    return `from ${resource}`;
+function describeStatus(variable: EnvVarSummary): string {
+  if (variable.kind === 'resource') {
+    return 'resource';
   }
-  if (secret && (status === 'set' || status === 'default')) {
-    return '(secret)';
+  return variable.status === 'missing' ? 'not set' : variable.status;
+}
+
+function describeValue(variable: EnvVarSummary): string {
+  if (variable.kind === 'resource') {
+    return `from ${variable.resource}`;
   }
-  return value ?? '';
+  if (variable.kind === 'text') {
+    return variable.value ?? '';
+  }
+  const hasValue = variable.status === 'set' || variable.status === 'default';
+  return hasValue ? '(secret)' : '';
 }
 
 export async function envSet(entries: string[], options: EnvSetOptions): Promise<void> {
   const requested = parseFlags(options);
-  const changes = await readEntries(entries, options);
+  const parsed = parseEntries(entries, options);
+  // Every name is checked before a value is asked for or anyone signs in.
   const declarations = await readDeclarations();
-  const session = await openEnvironment(options);
-  await save(
-    session,
-    changes.map((change) => ({ ...change, requested, ...declarationOf(declarations, change.key) })),
-    options
-  );
+  const named = parsed.map((entry) => ({
+    ...entry,
+    requested,
+    ...declarationOf(declarations, entry.key),
+  }));
+  const changes: EnvVarChange[] = [];
+  for (const entry of named) {
+    changes.push({ ...entry, value: entry.value ?? (await readValue(entry.key, options)) });
+  }
+  await save(await openEnvironment(options), changes, options);
 }
 
 function parseFlags({ text, secret, scopes }: EnvSetOptions): EnvVarFlags {
@@ -119,7 +150,10 @@ function parseFlags({ text, secret, scopes }: EnvSetOptions): EnvVarFlags {
   };
 }
 
-async function readEntries(entries: string[], options: EnvSetOptions): Promise<EnvVarChange[]> {
+// A name without a value still has to be asked for one.
+type EnvEntry = Pick<EnvVarChange, 'key' | 'plainOnly'> & { value?: string };
+
+function parseEntries(entries: string[], options: EnvSetOptions): EnvEntry[] {
   const inline = entries.filter((entry) => entry.includes('='));
   if (inline.length === entries.length) {
     if (options.stdin) {
@@ -143,8 +177,7 @@ async function readEntries(entries: string[], options: EnvSetOptions): Promise<E
   if (entries.length > 1) {
     throw new Error('Set one name at a time, or several as NAME=value.');
   }
-  const [key] = entries;
-  return [{ key, value: await readValue(key, options) }];
+  return [{ key: entries[0] }];
 }
 
 async function readValue(key: string, options: EnvSetOptions): Promise<string> {
@@ -203,7 +236,9 @@ export async function envRequest(names: string[], options: EnvRequestOptions): P
   const keys =
     names.length > 0
       ? names
-      : before.variables.filter(({ status }) => status === 'missing').map(({ key }) => key);
+      : before.variables.flatMap((variable) =>
+          variable.kind !== 'resource' && variable.status === 'missing' ? [variable.key] : []
+        );
   if (keys.length === 0) {
     printLine('Every required variable has a value.');
     return;
@@ -238,7 +273,11 @@ async function waitForValues(
   let waiting = keys;
   while (Date.now() < deadline) {
     await new Promise((done) => setTimeout(done, REQUEST_POLL_INTERVAL_MS));
-    const { variables, restartNeeded } = await session.get<EnvList>('/api/cli/env');
+    const list = await fetchListIfReachable(session);
+    if (!list) {
+      continue;
+    }
+    const { variables, restartNeeded } = list;
     const saved = waiting.filter((key) => isSavedSince(key, before, variables));
     saved.forEach((key) => printLine(`${key}: set`));
     waiting = waiting.filter((key) => !saved.includes(key));
@@ -252,15 +291,32 @@ async function waitForValues(
   );
 }
 
+// Null when Studio can't be reached just now: the person is still typing.
+async function fetchListIfReachable(session: EnvironmentSession): Promise<EnvList | null> {
+  try {
+    return await session.get<EnvList>('/api/cli/env');
+  } catch (error) {
+    if (isTransientError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 // A value saved again counts, so an existing one can be replaced this way.
 export function isSavedSince(
   key: string,
   before: EnvVarSummary[],
   after: EnvVarSummary[]
 ): boolean {
-  const find = (variables: EnvVarSummary[]) => variables.find((variable) => variable.key === key);
-  const current = find(after);
-  return current?.status === 'set' && current.updatedAt !== (find(before)?.updatedAt ?? null);
+  const savedAt = (variables: EnvVarSummary[]) => {
+    const variable = variables.find((candidate) => candidate.key === key);
+    return variable && variable.kind !== 'resource' && variable.status === 'set'
+      ? variable.updatedAt
+      : null;
+  };
+  const current = savedAt(after);
+  return current !== null && current !== savedAt(before);
 }
 
 async function save(
@@ -278,9 +334,11 @@ async function save(
   noteRestart(restartNeeded, options);
 }
 
-function noteRestart(restartNeeded: boolean, { app, env }: EnvironmentOptions): void {
+function noteRestart(restartNeeded: boolean, { app, env, host }: EnvironmentOptions): void {
   if (restartNeeded) {
-    const target = [app ? `--app ${app}` : null, `--env ${env}`].filter(Boolean).join(' ');
+    const target = [app ? `--app ${app}` : null, `--env ${env}`, host ? `--host ${host}` : null]
+      .filter(Boolean)
+      .join(' ');
     printNote(`Restart to apply runtime variables: npx modelence@latest restart ${target}`);
   }
 }

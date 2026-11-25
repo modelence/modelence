@@ -4,7 +4,7 @@ import {
   type EnvironmentSession,
 } from './environmentSession';
 import { parseCount, printLine, printNote } from './output';
-import { StudioApiError } from './studioApi';
+import { isTransientError } from './studioApi';
 
 /*
   `modelence logs`: the recent output of an environment's containers, crashed
@@ -33,7 +33,7 @@ const FOLLOW_LINES = 1000;
   Lines reach the log a little late and out of order between containers, so
   each poll reads this far back again and skips what it already printed.
 */
-const FOLLOW_OVERLAP_MS = 15 * 1000;
+const FOLLOW_OVERLAP_MS = 60 * 1000;
 
 const DURATION_MS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -146,7 +146,8 @@ async function follow({
   const oldest = first[0]?.timestamp ?? since;
   let printed = selectNewLines(first, new Map()).counts;
   let newest = first.at(-1)?.timestamp;
-  let warned = false;
+  let warnedUnread = false;
+  let warnedOffline = false;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, FOLLOW_INTERVAL_MS));
     try {
@@ -155,24 +156,28 @@ async function follow({
       lines.forEach(print);
       // A service that wasn't read this time still has its lines printed.
       printed = page.unreadServices.length > 0 ? mergeCounts(printed, counts) : counts;
-      newest = page.lines.at(-1)?.timestamp ?? newest;
-      warned = page.unreadServices.length > 0 && (warned || warnUnread(page.unreadServices));
+      newest = latest(newest, page.lines.at(-1)?.timestamp);
+      // Each is said once, until it has cleared, rather than on every poll.
+      if (!warnedUnread) {
+        noteUnread(page.unreadServices);
+      }
+      warnedUnread = page.unreadServices.length > 0;
+      warnedOffline = false;
     } catch (error) {
-      if (!isTransient(error)) {
+      if (!isTransientError(error)) {
         throw error;
       }
-      // Said once rather than on every poll.
-      if (!warned) {
-        warned = true;
+      if (!warnedOffline) {
+        warnedOffline = true;
         printNote(`Could not read the logs, retrying: ${String(error)}`);
       }
     }
   }
 }
 
-function warnUnread(services: string[]): true {
-  noteUnread(services);
-  return true;
+// A poll that missed a service can end earlier than the one before it.
+function latest(first: string | undefined, second: string | undefined): string | undefined {
+  return first && second && first > second ? first : (second ?? first);
 }
 
 function mergeCounts(
@@ -180,12 +185,4 @@ function mergeCounts(
   later: ReadonlyMap<string, number>
 ): Map<string, number> {
   return new Map([...earlier, ...later]);
-}
-
-function isTransient(error: unknown): boolean {
-  if (error instanceof StudioApiError) {
-    return error.status === 429 || error.status >= 500;
-  }
-  // What fetch throws when there is no network.
-  return error instanceof TypeError;
 }

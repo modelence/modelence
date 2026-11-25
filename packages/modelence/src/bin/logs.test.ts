@@ -87,10 +87,26 @@ describe('logs', () => {
   });
 });
 
+it('says that a service is unread even after a network warning', async () => {
+  vi.useFakeTimers();
+  get
+    .mockResolvedValueOnce({ lines: [line(1, 'a')], unreadServices: [] })
+    .mockRejectedValueOnce(new StudioApiError('busy', 503))
+    .mockResolvedValueOnce({ lines: [line(1, 'a')], unreadServices: ['worker'] })
+    .mockResolvedValueOnce({ lines: [line(1, 'a')], unreadServices: ['worker'] })
+    .mockRejectedValueOnce(new StudioApiError('no access', 400));
+  const following = logs({ ...target, follow: true }).catch((error: Error) => error);
+  await vi.advanceTimersByTimeAsync(20_000);
+  await following;
+  expect(noted.filter((text) => text.includes('retrying'))).toHaveLength(1);
+  expect(noted.filter((text) => text.includes('worker'))).toHaveLength(1);
+  expect(printed).toHaveLength(1);
+});
+
 describe('nextSince', () => {
   it('reads back a little, but not past what was shown first', () => {
     const newest = line(40, '').timestamp;
-    expect(nextSince(newest, line(0, '').timestamp)).toBe(line(25, '').timestamp);
+    expect(nextSince(newest, line(-60, '').timestamp)).toBe(line(-20, '').timestamp);
     expect(nextSince(newest, line(38, '').timestamp)).toBe(line(38, '').timestamp);
   });
 

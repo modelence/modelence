@@ -10,10 +10,12 @@ import {
   envRequest,
   envSet,
   isSavedSince,
-  type EnvVarSummary,
+  type SecretEnvVar,
+  type TextEnvVar,
 } from './env';
 import { openEnvironment } from './environmentSession';
 import { promptHidden, readStdin } from './secretInput';
+import { StudioApiError } from './studioApi';
 
 vi.mock('open', () => ({ default: vi.fn(async () => {}) }));
 vi.mock('./environmentSession', () => ({ openEnvironment: vi.fn() }));
@@ -26,17 +28,30 @@ let dir: string;
 let printed: string;
 const isTTY = process.stdin.isTTY;
 
-const summary = (fields: Partial<EnvVarSummary>): EnvVarSummary => ({
+const shared = {
+  scopes: ['runtime'],
+  declared: true,
+  updatedAt: '2026-11-25T10:00:00.000Z' as string | null,
+};
+
+const text = (fields: Partial<TextEnvVar> = {}): TextEnvVar => ({
+  kind: 'text',
   key: 'A',
   status: 'set',
-  secret: false,
-  scopes: ['runtime'],
   value: 'v',
-  resource: null,
-  declared: true,
-  updatedAt: '2026-11-25T10:00:00.000Z',
+  ...shared,
   ...fields,
 });
+
+const secret = (fields: Partial<SecretEnvVar> = {}): SecretEnvVar => ({
+  kind: 'secret',
+  key: 'A',
+  status: 'set',
+  ...shared,
+  ...fields,
+});
+
+const missing = text({ key: 'TODO', status: 'missing', value: null, updatedAt: null });
 
 beforeEach(async () => {
   vi.resetAllMocks();
@@ -76,10 +91,11 @@ describe('env list', () => {
   it('prints plain values and hides secrets', async () => {
     get.mockResolvedValue({
       variables: [
-        summary({ key: 'LOG_LEVEL', value: 'debug' }),
-        summary({ key: 'STRIPE_KEY', secret: true, value: null }),
-        summary({ key: 'DATABASE_URL', status: 'resource', resource: 'main-db.url', value: null }),
-        summary({ key: 'TODO', status: 'missing', value: null }),
+        text({ key: 'LOG_LEVEL', value: 'debug' }),
+        secret({ key: 'STRIPE_KEY' }),
+        secret({ key: 'UNSET_KEY', status: 'missing', updatedAt: null }),
+        { kind: 'resource', key: 'DATABASE_URL', scopes: ['runtime'], resource: 'main-db.url' },
+        missing,
       ],
       restartNeeded: true,
     });
@@ -88,6 +104,7 @@ describe('env list', () => {
     expect(printed).toMatch(/STRIPE_KEY\s+set\s+runtime\s+\(secret\)/);
     expect(printed).toMatch(/DATABASE_URL\s+resource\s+runtime\s+from main-db.url/);
     expect(printed).toMatch(/TODO\s+not set/);
+    expect(printed).toMatch(/UNSET_KEY\s+not set\s+runtime\n/);
     expect(printed).toContain('npx modelence@latest restart --app shop --env prod');
   });
 });
@@ -144,6 +161,23 @@ describe('env set', () => {
     expect(openEnvironment).not.toHaveBeenCalled();
   });
 
+  it('names the host in the restart command when one was given', async () => {
+    post.mockResolvedValue({
+      saved: [{ key: 'LOG_LEVEL', secret: false, scopes: ['runtime'] }],
+      restartNeeded: true,
+    });
+    await envSet(['LOG_LEVEL=x'], { ...target, host: 'https://h' });
+    expect(printed).toContain('restart --app shop --env prod --host https://h');
+  });
+
+  it('refuses a resource name before reading a value or signing in', async () => {
+    await expect(envSet(['DATABASE_URL'], { ...target, stdin: true })).rejects.toThrow(
+      'resource "main-db"'
+    );
+    expect(readStdin).not.toHaveBeenCalled();
+    expect(openEnvironment).not.toHaveBeenCalled();
+  });
+
   it('refuses a name a resource supplies, and an empty piped value', async () => {
     await expect(envSet(['DATABASE_URL=x'], target)).rejects.toThrow('resource "main-db"');
     vi.mocked(readStdin).mockResolvedValue('');
@@ -189,7 +223,7 @@ describe('env request', () => {
 
   it('asks for what is missing by default and can leave it at the link', async () => {
     get.mockResolvedValue({
-      variables: [summary({}), summary({ key: 'TODO', status: 'missing', updatedAt: null })],
+      variables: [text(), missing],
     });
     await envRequest([], { ...target, wait: false });
     expect(post).toHaveBeenCalledWith('/api/cli/env/request', { keys: ['TODO'] });
@@ -199,12 +233,11 @@ describe('env request', () => {
 
   it('waits until every value is saved, reporting names only', async () => {
     vi.useFakeTimers();
-    const missing = summary({ key: 'TODO', status: 'missing', value: null, updatedAt: null });
     get
       .mockResolvedValueOnce({ variables: [missing] })
       .mockResolvedValueOnce({ variables: [missing] })
       .mockResolvedValueOnce({
-        variables: [summary({ key: 'TODO', value: 'hunter22' })],
+        variables: [text({ key: 'TODO', value: 'hunter22' })],
         restartNeeded: true,
       });
     const done = envRequest(['TODO'], { ...target, wait: true });
@@ -215,8 +248,21 @@ describe('env request', () => {
     expect(printed).not.toContain('hunter22');
   });
 
+  it('keeps waiting while Studio cannot be reached, but not once it refuses', async () => {
+    vi.useFakeTimers();
+    get
+      .mockResolvedValueOnce({ variables: [missing] })
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new StudioApiError('restarting', 502))
+      .mockRejectedValueOnce(new StudioApiError('no access', 400));
+    const done = envRequest(['TODO'], { ...target, wait: true }).catch((error: Error) => error);
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(String(await done)).toContain('no access');
+    expect(get).toHaveBeenCalledTimes(4);
+  });
+
   it('does nothing when nothing is missing', async () => {
-    get.mockResolvedValue({ variables: [summary({})] });
+    get.mockResolvedValue({ variables: [text()] });
     await envRequest([], { ...target, wait: true });
     expect(post).not.toHaveBeenCalled();
   });
@@ -229,11 +275,9 @@ describe('env request', () => {
   });
 
   it('only counts a value saved after the request', () => {
-    const before = [summary({})];
-    expect(isSavedSince('A', before, [summary({})])).toBe(false);
-    expect(isSavedSince('A', before, [summary({ updatedAt: '2026-11-25T11:00:00.000Z' })])).toBe(
-      true
-    );
-    expect(isSavedSince('A', [], [summary({})])).toBe(true);
+    const before = [text()];
+    expect(isSavedSince('A', before, [text()])).toBe(false);
+    expect(isSavedSince('A', before, [text({ updatedAt: '2026-11-25T11:00:00.000Z' })])).toBe(true);
+    expect(isSavedSince('A', [], [text()])).toBe(true);
   });
 });

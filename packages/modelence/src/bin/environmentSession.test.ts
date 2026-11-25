@@ -62,6 +62,22 @@ describe('resolveEnvironmentTarget', () => {
 });
 
 describe('openEnvironment', () => {
+  it("shows Studio's own reason for a 404", async () => {
+    await writeCachedToken(host, 'cached', inMinutes(30));
+    request.mockRejectedValue(new StudioApiError('No such build', 404, true));
+    const session = await openEnvironment(options);
+    await expect(session.get('/api/cli/status')).rejects.toThrow('No such build');
+  });
+
+  it('keeps the saved login when the rejected token came from the environment', async () => {
+    await writeCachedToken(host, 'cached', inMinutes(60));
+    vi.stubEnv('MODELENCE_TOKEN', 'from-env');
+    request.mockRejectedValue(new StudioApiError('Invalid token', 401));
+    const session = await openEnvironment(options);
+    await expect(session.get('/api/cli/status')).rejects.toThrow('Set a fresh MODELENCE_TOKEN');
+    expect(await readCachedToken(host)).toBe('cached');
+  });
+
   it('uses a saved login for nearly its whole hour, without the browser', async () => {
     await writeCachedToken(host, 'cached', inMinutes(5));
     const session = await openEnvironment(options);

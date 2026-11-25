@@ -1,14 +1,7 @@
-import { authenticateCli } from './auth';
-import { clearCachedToken } from './authCache';
-import {
-  assertEnvTokenHost,
-  isUnauthorized,
-  rememberToken,
-  resolveHost,
-  resolveToken,
-} from './deploySession';
+import { assertEnvTokenHost, isUnauthorized, resolveHost, resolveToken } from './deploySession';
 import { describeOtherHosts, resolveTargetFromOptions, type CliTarget } from './deployTarget';
 import { otherAppHosts, projectForHost, readProject, type HostProject } from './project';
+import { signIn, signInAgain } from './signIn';
 import { StudioApiError, studioRequest } from './studioApi';
 import { isCI } from './terminal';
 
@@ -55,12 +48,6 @@ export function resolveEnvironmentTarget(
   throw new Error(`Pass ${needed.join(' and ')} to say where.${hostNote}`);
 }
 
-async function signIn(host: string, appId: string | undefined): Promise<string> {
-  const auth = await authenticateCli(host, { purpose: 'deploy', appId });
-  await rememberToken(host, auth.token, auth.expiresAt);
-  return auth.token;
-}
-
 export async function openEnvironment(options: EnvironmentOptions): Promise<EnvironmentSession> {
   const cwd = process.cwd();
   const host = await resolveHost(options.host, cwd);
@@ -92,14 +79,12 @@ export async function openEnvironment(options: EnvironmentOptions): Promise<Envi
       if (!isUnauthorized(error)) {
         throw error;
       }
-      if (!canSignIn) {
-        throw new Error(
-          'Modelence Cloud rejected the token (expired, revoked, or not allowed to manage environments). Set a fresh MODELENCE_TOKEN.'
-        );
-      }
-      await clearCachedToken(host);
-      process.stderr.write('Please sign in again.\n');
-      token = await signIn(host, project.appId);
+      token = await signInAgain(host, {
+        appId: project.appId,
+        canSignIn,
+        refusal:
+          'Modelence Cloud rejected the token (expired, revoked, or not allowed to manage environments). Set a fresh MODELENCE_TOKEN.',
+      });
       return await send();
     }
   };
@@ -111,9 +96,9 @@ export async function openEnvironment(options: EnvironmentOptions): Promise<Envi
   };
 }
 
-// A Studio without these routes answers 404, or with its web page.
+// A Studio without these routes answers with its web page, or a bare 404.
 function explain(error: unknown): never {
-  const isMissingRoute = error instanceof StudioApiError && error.status === 404;
+  const isMissingRoute = error instanceof StudioApiError && error.status === 404 && !error.isJson;
   if (isMissingRoute || error instanceof SyntaxError) {
     throw new Error('This Modelence Studio does not support this command yet.');
   }
