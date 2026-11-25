@@ -688,7 +688,10 @@ describe('auth/session', () => {
     });
 
     test('consume looks the nonce up by its hash', async () => {
-      findOneAndDeleteMock.mockResolvedValueOnce({ userId: 'user-id' });
+      findOneAndDeleteMock.mockResolvedValueOnce({
+        userId: 'user-id',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
 
       await expect(consumeLinkNonce('auth-token')).resolves.toBe('user-id');
 
@@ -697,7 +700,10 @@ describe('auth/session', () => {
     });
 
     test('consume still accepts a nonce issued before hashing, from unmarked docs only', async () => {
-      findOneAndDeleteMock.mockResolvedValueOnce(null).mockResolvedValueOnce({ userId: 'user-id' });
+      findOneAndDeleteMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        userId: 'user-id',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
 
       await expect(consumeLinkNonce('auth-token')).resolves.toBe('user-id');
 
@@ -710,6 +716,15 @@ describe('auth/session', () => {
 
     test('consume returns null for an unknown nonce', async () => {
       findOneAndDeleteMock.mockResolvedValue(null);
+
+      await expect(consumeLinkNonce('auth-token')).resolves.toBeNull();
+    });
+
+    test('consume rejects an expired nonce that MongoDB has not swept yet', async () => {
+      findOneAndDeleteMock.mockResolvedValueOnce({
+        userId: 'user-id',
+        expiresAt: new Date(Date.now() - 1),
+      });
 
       await expect(consumeLinkNonce('auth-token')).resolves.toBeNull();
     });

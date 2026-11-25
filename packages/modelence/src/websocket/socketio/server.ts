@@ -2,6 +2,7 @@ import { Server } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/mongo-adapter';
 import { authenticate } from '@/auth';
+import { isIdentityStillValid } from '@/auth/revalidation';
 import { getConfig } from '@/config/server';
 import { getClient } from '@/db/client';
 import { WebsocketServerProvider } from '../types';
@@ -16,6 +17,9 @@ import { logError } from '@/telemetry';
 import { createClientIpResolver } from '@/app/clientIp';
 
 let socketServer: SocketServer | null = null;
+let activeChannels: ServerChannel[] = [];
+let multiInstance = false;
+const roomDeliveryQueues = new Map<string, Promise<void>>();
 
 const COLLECTION = '_modelenceSocketio';
 const ADAPTER_TTL_SECONDS = 60;
@@ -30,6 +34,7 @@ export async function init({
   const mongodbClient = getClient();
   const isMultiInstance = Boolean(getConfig('_system.multiInstance'));
   const resolveClientIp = createClientIpResolver();
+  activeChannels = channels;
 
   console.log('Initializing Socket.IO server...');
 
@@ -66,6 +71,8 @@ export async function init({
     }
   }
 
+  multiInstance = Boolean(mongoCollection);
+
   socketServer = new SocketServer(httpServer, {
     cors: {
       origin: '*',
@@ -79,6 +86,13 @@ export async function init({
   socketServer.on('error', (error) => {
     logError('Socket.IO error:', { error });
   });
+
+  socketServer.on(
+    '_modelenceSecureBroadcast',
+    (payload: { category: string; id: string; data: unknown }) => {
+      queueProtectedBroadcast(payload);
+    }
+  );
 
   socketServer.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
@@ -101,22 +115,29 @@ export async function init({
     });
 
     socket.on('joinChannel', async (channelName: string) => {
-      const [category] = channelName.split(':');
-      let authorized = false;
-
-      for (const channel of channels) {
-        if (channel.category === category) {
-          if (!channel.canAccessChannel || (await channel.canAccessChannel(socket.data))) {
-            void socket.join(channelName);
-            authorized = true;
-            socket.emit('joinedChannel', channelName);
-          }
-          break; // Found matching channel - stop searching
-        }
-      }
-
-      if (!authorized) {
+      if (typeof channelName !== 'string') {
         socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+        return;
+      }
+      const [category] = channelName.split(':');
+      const channel = channels.find((item) => item.category === category);
+      if (!channel) {
+        socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+        return;
+      }
+      try {
+        if (channel.canAccessChannel) {
+          const current = await reauthenticate(socket);
+          if (!current || !(await channel.canAccessChannel(current))) {
+            socket.emit('joinError', { channel: channelName, error: 'Access denied' });
+            return;
+          }
+        }
+        await socket.join(channelName);
+        socket.emit('joinedChannel', channelName);
+      } catch (error) {
+        logError('Failed to authorize channel join:', { error, category });
+        socket.emit('joinError', { channel: channelName, error: 'Unable to join channel' });
       }
     });
 
@@ -135,8 +156,83 @@ export async function init({
   console.log('Socket.IO server initialized');
 }
 
+/** Returns the socket's fresh auth, or null if its access was revoked. */
+async function reauthenticate(socket: Pick<Socket, 'data'>) {
+  const current = await authenticate(socket.data.session?.authToken ?? null, {
+    persistNewSession: false,
+  });
+  if (!isIdentityStillValid(socket.data, current)) return null;
+  // An anonymous token can gain a user. Remember it, so that a later sign-out
+  // or switch to another user counts as a revocation.
+  if (current.user) socket.data = current;
+  return current;
+}
+
 function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
-  socketServer?.to(`${category}:${id}`).emit(category, data);
+  if (!socketServer) return;
+  const room = `${category}:${id}`;
+  const channel = activeChannels.find((item) => item.category === category);
+  if (!channel) return;
+  if (!channel.canAccessChannel) {
+    socketServer.to(room).emit(category, data);
+    return;
+  }
+
+  // Each instance reauthorizes its own sockets. Do not fetch remote sockets:
+  // their data includes bearer session tokens, which would otherwise travel
+  // through the MongoDB adapter's request/response collection.
+  queueProtectedBroadcast({ category, id, data });
+  if (multiInstance) {
+    try {
+      socketServer.serverSideEmit('_modelenceSecureBroadcast', { category, id, data });
+    } catch (error) {
+      logError('Failed to forward channel broadcast:', { error, category });
+    }
+  }
+}
+
+function queueProtectedBroadcast<T>(payload: { category: string; id: string; data: T }) {
+  const room = `${payload.category}:${payload.id}`;
+  const previous = roomDeliveryQueues.get(room) ?? Promise.resolve();
+  const next = previous.then(() => deliverProtectedBroadcast(payload));
+  roomDeliveryQueues.set(room, next);
+  void next.finally(() => {
+    if (roomDeliveryQueues.get(room) === next) roomDeliveryQueues.delete(room);
+  });
+}
+
+async function deliverProtectedBroadcast<T>({
+  category,
+  id,
+  data,
+}: {
+  category: string;
+  id: string;
+  data: T;
+}) {
+  const channel = activeChannels.find((item) => item.category === category);
+  if (!socketServer || !channel?.canAccessChannel) return;
+  const room = `${category}:${id}`;
+  try {
+    const sockets = await socketServer.local.in(room).fetchSockets();
+    await Promise.all(
+      sockets.map(async (socket) => {
+        try {
+          const current = await reauthenticate(socket);
+          if (!current || !(await channel.canAccessChannel!(current))) {
+            await socket.leave(room);
+            socket.emit('leftChannel', room);
+            return;
+          }
+          socket.emit(category, data);
+        } catch (error) {
+          logError('Failed to authorize channel recipient:', { error, category });
+        }
+      })
+    );
+  } catch (error) {
+    logError('Failed to broadcast channel message:', { error, category });
+  }
 }
 
 export default {

@@ -1,8 +1,10 @@
 import { Socket } from 'socket.io';
 import { z } from 'zod';
 import { authenticate } from '../auth';
+import { isAuthStillCurrent } from '../auth/revalidation';
 import { runLiveMethod } from '../methods';
 import { getResponseTypeMap, sanitizeResult } from '../methods/serialize';
+import { ACCESS_REVOKED_ERROR } from './constants';
 import { LiveQueryCleanup } from './context';
 import { Context } from '@/methods/types';
 
@@ -99,7 +101,29 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
 
     const liveData = await runLiveMethod(method, args, context);
 
+    const stopRevokedSubscription = () => {
+      subscription.aborted = true;
+      try {
+        subscription.cleanup?.();
+      } catch (error) {
+        console.error('[LiveQuery] Error cleaning up revoked subscription:', error);
+      }
+      // A replacement may now own the same subscription ID.
+      if (subs.get(subscriptionId) === subscription) {
+        subs.delete(subscriptionId);
+        socket.emit('liveQueryError', { subscriptionId, error: ACCESS_REVOKED_ERROR });
+      }
+    };
+
     const fetchAndEmit = async () => {
+      if (subscription.aborted) return;
+      // The subscription can remain open after logout, expiry, or a role
+      // change. Stop it before using the handler's captured auth context.
+      const current = await authenticate(authToken ?? null, { persistNewSession: false });
+      if (!isAuthStillCurrent({ session, user, roles }, current)) {
+        stopRevokedSubscription();
+        return;
+      }
       const data = sanitizeResult(await liveData.fetch());
       if (subscription.aborted) {
         return;

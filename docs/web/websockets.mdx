@@ -480,6 +480,12 @@ server {
 - **Access Control** - Use the second parameter in `ServerChannel` to restrict channel access
 - **Token Validation** - Session tokens are validated on every connection
 
+For channels with a `canAccessChannel` callback, Modelence checks the current
+session and user when a client joins and before each broadcast. If access is
+revoked, the socket leaves the channel and receives `leftChannel`. A role granted
+after connection takes effect on the next join, without reconnecting.
+Channels without an access callback remain public.
+
 ### Channel Security
 
 ```typescript
@@ -523,6 +529,8 @@ chatChannel.broadcast(roomId, validated);
 - **Fine-grained** - Create specific channels for individual resources (e.g., `chat:room123`)
 - **User-specific** - Use user IDs for personal channels (e.g., `notifications:user456`)
 - **Avoid Global** - Don't broadcast to all users; use targeted channels
+- **Protected channels** - Each broadcast rechecks access for its recipients. Keep
+  rooms focused when broadcasts are frequent.
 
 ### Message Size
 

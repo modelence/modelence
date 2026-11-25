@@ -1,9 +1,9 @@
-import { Session, User } from '@/auth/types';
+import { Session, UserInfo } from '@/auth/types';
 import { getWebsocketConfig } from '@/app/websocketConfig';
 import { logError } from '../telemetry';
 
 type canAccessChannel = (props: {
-  user: User | null;
+  user: UserInfo | null;
   session: Session | null;
   roles: string[];
 }) => Promise<boolean>;

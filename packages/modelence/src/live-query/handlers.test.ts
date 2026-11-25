@@ -50,4 +50,82 @@ describe('live-query/handlers', () => {
 
     expect(mockAuthenticate).toHaveBeenCalledWith(null, { persistNewSession: false });
   });
+
+  test('stops publishing after the subscriber loses access', async () => {
+    const socket = buildSocket('socket-revoked');
+    const cleanup = vi.fn();
+    const fetch = vi.fn().mockResolvedValue([{ secret: 'private' }]);
+    let publish: (() => void) | undefined;
+    const authenticated = {
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      user: { id: 'user-1', roles: ['reader'] },
+      roles: ['reader'],
+    };
+    mockAuthenticate.mockResolvedValue(authenticated);
+    mockRunLiveMethod.mockResolvedValue({
+      fetch,
+      watch: ({ publish: callback }: { publish: () => void }) => {
+        publish = callback;
+        return cleanup;
+      },
+    });
+
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-revoked',
+      method: 'secrets.list',
+      authToken: 'token',
+    });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+
+    mockAuthenticate.mockResolvedValue({
+      ...authenticated,
+      user: null,
+      roles: [],
+    });
+    publish?.();
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(socket.emit).toHaveBeenCalledWith('liveQueryError', {
+      subscriptionId: 'sub-revoked',
+      error: 'Access revoked',
+    });
+  });
+
+  test('reports revocation even if watcher cleanup throws', async () => {
+    const socket = buildSocket('socket-cleanup-error');
+    const cleanup = vi.fn(() => {
+      throw new Error('cleanup failed');
+    });
+    let publish: (() => void) | undefined;
+    const authenticated = {
+      session: { authToken: 'token', expiresAt: new Date(Date.now() + 60_000) },
+      user: { id: 'user-1', roles: [] },
+      roles: [],
+    };
+    mockAuthenticate.mockResolvedValue(authenticated);
+    mockRunLiveMethod.mockResolvedValue({
+      fetch: vi.fn().mockResolvedValue([]),
+      watch: ({ publish: callback }: { publish: () => void }) => {
+        publish = callback;
+        return cleanup;
+      },
+    });
+    await handleSubscribeLiveQuery(socket, {
+      subscriptionId: 'sub-cleanup-error',
+      method: 'secrets.list',
+      authToken: 'token',
+    });
+    await vi.waitFor(() =>
+      expect(socket.emit).toHaveBeenCalledWith('liveQueryData', expect.anything())
+    );
+    mockAuthenticate.mockResolvedValue({ ...authenticated, user: null, roles: [] });
+    publish?.();
+    await vi.waitFor(() =>
+      expect(socket.emit).toHaveBeenCalledWith('liveQueryError', {
+        subscriptionId: 'sub-cleanup-error',
+        error: 'Access revoked',
+      })
+    );
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
 });

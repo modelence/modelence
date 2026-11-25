@@ -1,6 +1,7 @@
 'use client';
 
 import { QueryClient, hashKey } from '@tanstack/react-query';
+import { ACCESS_REVOKED_ERROR } from '../live-query/constants';
 import { callMethod } from './method';
 import { startWebsockets, subscribeLiveQuery, reconnectWebsockets } from '../websocket/client';
 
@@ -170,6 +171,13 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
                 }
                 currentSub.unsubscribe();
                 subscriptions.delete(subscriptionKey);
+
+                // Nothing is pending to reject once data has arrived, so the query
+                // would keep showing old data. Refetch to subscribe with the current
+                // token; if that is refused too, the query reports the error.
+                if (error === ACCESS_REVOKED_ERROR && currentSub.latest) {
+                  void queryClientRef?.invalidateQueries({ queryKey, exact: true });
+                }
               }
             }
           );

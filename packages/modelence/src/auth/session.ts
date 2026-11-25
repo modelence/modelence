@@ -43,7 +43,9 @@ export async function consumeLinkNonce(nonce: string): Promise<string | null> {
     // copied from the db from matching its own doc. Remove once no unmarked
     // docs remain (nonces expire 10 minutes after issue).
     (await linkNoncesCollection.findOneAndDelete({ nonce, hashed: { $ne: true } }));
-  if (!entry) return null;
+  // MongoDB's TTL cleanup is asynchronous; a nonce must be rejected even if
+  // its expired document has not been removed yet.
+  if (!entry || !(new Date(entry.expiresAt).getTime() > Date.now())) return null;
   return entry.userId;
 }
 
