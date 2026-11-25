@@ -124,15 +124,17 @@ export async function authenticateCli(
     url.searchParams.set(key, value);
   }
 
-  console.log(`Please visit ${url} to authenticate`);
-  console.log(`Code: ${code}`);
+  // On stderr, which isn't buffered and leaves stdout to the command's output.
+  process.stderr.write(`Please visit ${url} to authenticate\nCode: ${code}\n`);
 
   try {
     await open(url.toString());
   } catch {
     // Headless/SSH/container — no browser to open. The URL and code above
     // are already printed, so authentication can proceed manually.
-    console.log('Could not open a browser automatically. Please open the URL above manually.');
+    process.stderr.write(
+      'Could not open a browser automatically. Please open the URL above manually.\n'
+    );
   }
 
   return await waitForAuth(host, code, codeChallengeAccepted ? codeVerifier : undefined);

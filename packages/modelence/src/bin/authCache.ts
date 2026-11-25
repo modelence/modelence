@@ -48,13 +48,17 @@ async function writeAuthFile(content: AuthFile): Promise<void> {
   await fs.writeFile(path, JSON.stringify(content, null, 2) + '\n', { mode: 0o600 });
 }
 
-export async function readCachedToken(host: string): Promise<string | null> {
+// `expiryMarginMs` is how long the token still has to last.
+export async function readCachedToken(
+  host: string,
+  expiryMarginMs = EXPIRY_MARGIN_MS
+): Promise<string | null> {
   const { hosts = {} } = await readAuthFile();
   const cached = hosts[host];
   if (!cached?.token || !cached.expiresAt) {
     return null;
   }
-  if (new Date(cached.expiresAt).getTime() - EXPIRY_MARGIN_MS <= Date.now()) {
+  if (new Date(cached.expiresAt).getTime() - expiryMarginMs <= Date.now()) {
     return null;
   }
   return cached.token;

@@ -12,6 +12,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   tokenResponses = [];
   codeChallengeAccepted = true;
   vi.stubGlobal(
@@ -93,7 +94,9 @@ describe('authenticateCli token pickup', () => {
     const printed = JSON.stringify([
       vi.mocked(console.log).mock.calls,
       vi.mocked(console.error).mock.calls,
+      vi.mocked(process.stderr.write).mock.calls,
     ]);
+    expect(printed).toContain('Code: c1');
     expect(printed).not.toContain(codeVerifier);
   });
 
