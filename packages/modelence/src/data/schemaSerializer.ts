@@ -34,6 +34,10 @@ type ZodNullableDef = ZodDefWithTypeName & {
   innerType: z.ZodType;
 };
 
+type ZodDefaultDef = ZodDefWithTypeName & {
+  innerType: z.ZodType;
+};
+
 type ZodEnumDef = ZodDefWithTypeName & {
   values: readonly [string, ...string[]];
 };
@@ -111,6 +115,10 @@ function serializeZodSchema(zodType: z.ZodType): SerializedSchema {
       ...serializeZodSchema(nullableDef.innerType),
       optional: true,
     };
+  }
+  if (def.typeName === 'ZodDefault') {
+    const defaultDef = def as ZodDefaultDef;
+    return serializeZodSchema(defaultDef.innerType);
   }
   if (def.typeName === 'ZodEnum') {
     const enumDef = def as ZodEnumDef;
