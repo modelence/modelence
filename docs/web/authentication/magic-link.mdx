@@ -55,7 +55,7 @@ The magic link token never reaches your client code or appears in a browser URL 
 
 ### Base URL requirement
 
-The magic link is built from your site's base URL, so you must set it via the `_system.site.url` config (or the `MODELENCE_SITE_URL` environment variable). If it isn't set, sending a magic link fails with a clear error rather than emailing a broken link.
+The magic link is built from your site's base URL, so you must set it via the `_system.site.url` config (or the `MODELENCE_SITE_URL` environment variable). Under `modelence dev` only, an unset base URL defaults to the local server (`http://localhost:<port>`). Anywhere else, sending a magic link without it fails with a clear error rather than emailing a broken link.
 
 ### Sender address requirement
 

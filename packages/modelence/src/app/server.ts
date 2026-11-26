@@ -25,7 +25,7 @@ import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
 import { issueLinkNonce } from '@/auth/session';
-import { configureTrustedProxies, getClientIp } from './clientIp';
+import { configureTrustedProxies, getClientIp, isTrustedProxyPeer } from './clientIp';
 
 function getBodyParserMiddleware(config?: {
   json?: boolean | { limit?: string };
@@ -562,10 +562,13 @@ function corsRouteMiddleware(): express.RequestHandler {
 function getRequestBaseUrl(req: Request): string {
   // Behind a reverse proxy the inbound Host header / connection protocol can
   // reflect the internal container address rather than the public URL. Honor
-  // the X-Forwarded-Host / X-Forwarded-Proto headers when present (the first
-  // value in each comma-separated list is the original client-facing value),
-  // falling back to the direct request values otherwise.
-  const forwardedHost = req.headers['x-forwarded-host'];
+  // X-Forwarded-Host (its first comma-separated value is the client-facing
+  // one) only from a trusted proxy, as Express does for the protocol: a direct
+  // caller could otherwise point the base URL at any host.
+  //
+  // This value is still request-derived, so links that carry a credential
+  // must not be built from it — they use `requireSiteUrl`.
+  const forwardedHost = isTrustedProxyPeer(req) ? req.headers['x-forwarded-host'] : undefined;
   const host =
     (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost?.split(',')[0])?.trim() ||
     req.get('host');

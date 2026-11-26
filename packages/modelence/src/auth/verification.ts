@@ -15,6 +15,7 @@ import { validateEmail } from './validators';
 import { consumeRateLimit } from '@/rate-limit/rules';
 import { getConfig } from '@/config/server';
 import { hashToken } from './tokenHash';
+import { requireSiteUrl } from './siteUrl';
 import { setQueryParams, fireAuthHook } from './utils';
 
 const USER_COLLATION = { locale: 'en', strength: 2 } as const;
@@ -245,19 +246,30 @@ export async function handleVerifyEmail(params: RouteParams): Promise<RouteRespo
   }
 }
 
+const VERIFICATION_LINK_NAME = 'verification link';
+
+/**
+ * Throws when a verification email would be sent but its link can't be built.
+ * Lets signup fail before it creates the user, and a resend before it looks the
+ * user up, instead of after.
+ */
+export function assertVerificationEmailConfigured(): void {
+  if (getEmailConfig().provider) {
+    requireSiteUrl(VERIFICATION_LINK_NAME);
+  }
+}
+
 export async function sendVerificationEmail({
   userId,
   email,
-  baseUrl: requestBaseUrl,
 }: {
   userId: ObjectId;
   email: string;
-  baseUrl?: string;
 }) {
-  const baseUrl = (getConfig('_system.site.url') as string | undefined) || requestBaseUrl;
-
   if (getEmailConfig().provider) {
     const emailProvider = getEmailConfig().provider;
+    // Resolved before the token is stored, and never from the request host.
+    const baseUrl = requireSiteUrl(VERIFICATION_LINK_NAME);
 
     // Generate verification token
     const verificationToken = randomBytes(32).toString('hex');
@@ -309,6 +321,13 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
     });
   }
 
+  // Checked before the user lookup, so these errors never depend on whether the
+  // email is registered.
+  if (!getEmailConfig().provider) {
+    throw new Error('Email provider is not configured');
+  }
+  assertVerificationEmailConfigured();
+
   // Find user by email, excluding deleted/disabled accounts
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
@@ -327,10 +346,6 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
     return resendVerificationResponse;
   }
 
-  if (!getEmailConfig().provider) {
-    throw new Error('Email provider is not configured');
-  }
-
   await consumeRateLimit({
     bucket: 'verification',
     type: 'user',
@@ -341,7 +356,6 @@ export async function handleResendEmailVerification(args: Args, { connectionInfo
   await sendVerificationEmail({
     userId: userDoc._id,
     email,
-    baseUrl: connectionInfo?.baseUrl,
   });
 
   return resendVerificationResponse;

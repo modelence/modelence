@@ -41,13 +41,24 @@ function getTrustedHeaderIp(
   return (Array.isArray(value) ? value[0] : value)?.trim() || undefined;
 }
 
+function isTrustedByApp(req: Request, peerIp: string): boolean {
+  const trust = req.app?.get?.('trust proxy fn');
+  return typeof trust === 'function'
+    ? Boolean(trust(peerIp, 0))
+    : req.app?.get?.('trust proxy') !== false;
+}
+
+/**
+ * Whether the direct peer is a proxy allowed to set `X-Forwarded-*` headers,
+ * by the same `trust proxy` setting Express applies to `req.protocol`.
+ */
+export function isTrustedProxyPeer(req: Request): boolean {
+  const peerIp = req.socket?.remoteAddress;
+  return peerIp ? isTrustedByApp(req, peerIp) : false;
+}
+
 export function getClientIp(req: Request): string | undefined {
-  const headerIp = getTrustedHeaderIp(req, (peerIp) => {
-    const trust = req.app?.get?.('trust proxy fn');
-    return typeof trust === 'function'
-      ? Boolean(trust(peerIp, 0))
-      : req.app?.get?.('trust proxy') !== false;
-  });
+  const headerIp = getTrustedHeaderIp(req, (peerIp) => isTrustedByApp(req, peerIp));
   const ip = headerIp || req.ip || req.socket?.remoteAddress;
   return ip ? normalizeIp(ip) : undefined;
 }

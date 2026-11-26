@@ -3,7 +3,7 @@ import { SignupProps, Context, Args, UpdateProfileProps } from '../methods/types
 import { usersCollection } from './db';
 import { isDisposableEmail } from './disposableEmails';
 import { consumeRateLimit } from '../rate-limit/rules';
-import { sendVerificationEmail } from './verification';
+import { assertVerificationEmailConfigured, sendVerificationEmail } from './verification';
 import { validateEmail, validatePassword, validateProfileFields } from './validators';
 import { getAuthConfig } from '@/app/authConfig';
 import { resolveUniqueHandle, isDuplicateEmailError, fireAuthHook } from './utils';
@@ -65,6 +65,11 @@ export async function handleSignupWithPassword(
       email,
       context: 'signup',
     });
+
+    // A config error, the same for every email, so it can't reveal whether the
+    // address is registered. Checked before insert so a misconfigured server
+    // doesn't leave behind an account whose verification email never went out.
+    assertVerificationEmailConfigured();
 
     const resolvedHandle = await resolveSignupHandle(profileFields, email);
 
@@ -141,7 +146,6 @@ export async function handleSignupWithPassword(
     await sendVerificationEmail({
       userId: result?.insertedId,
       email,
-      baseUrl: connectionInfo?.baseUrl,
     });
 
     fireAuthHook('onAfterSignup', () =>

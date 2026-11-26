@@ -108,6 +108,7 @@ const {
   handleVerifyEmailMutation,
   sendVerificationEmail,
   handleResendEmailVerification,
+  assertVerificationEmailConfigured,
 } = verificationModule;
 
 describe('auth/verification', () => {
@@ -129,6 +130,7 @@ describe('auth/verification', () => {
       onAfterEmailVerification: vi.fn(),
       onEmailVerificationError: vi.fn(),
     });
+    mockGetConfig.mockReturnValue(undefined);
     mockHtmlToText.mockImplementation((html: string) => html);
     mockTemplate.mockImplementation(
       ({ email, verificationUrl }: { email: string; verificationUrl: string }) =>
@@ -725,10 +727,11 @@ describe('auth/verification', () => {
         verification: {},
       });
 
+      mockGetConfig.mockReturnValue('https://example.com');
+
       await sendVerificationEmail({
         userId: 'user123' as never,
         email: 'user@example.com',
-        baseUrl: 'https://example.com',
       });
 
       expect(mockRandomBytes).toHaveBeenCalledWith(32);
@@ -769,7 +772,7 @@ describe('auth/verification', () => {
       expect(mockTokensInsertOne).not.toHaveBeenCalled();
     });
 
-    test('prefers _system.site.url over the request-derived baseUrl', async () => {
+    test('builds the link from _system.site.url', async () => {
       const provider = { sendEmail: vi.fn() };
       mockGetEmailConfig.mockReturnValue({ provider, verification: {} });
       mockGetConfig.mockReturnValue('https://app.example.com');
@@ -777,8 +780,6 @@ describe('auth/verification', () => {
       await sendVerificationEmail({
         userId: 'user123' as never,
         email: 'user@example.com',
-        // Simulates the internal container host seen behind a reverse proxy.
-        baseUrl: 'http://10.1.118.6:3000',
       });
 
       expect(mockTemplate).toHaveBeenCalledWith(
@@ -788,23 +789,43 @@ describe('auth/verification', () => {
       );
     });
 
-    test('falls back to the request-derived baseUrl when config is unset', async () => {
+    test('throws without storing a token when _system.site.url is unset', async () => {
+      // No fallback to the request host: Host / X-Forwarded-Host are caller
+      // controlled, so the emailed token could be sent to the caller's host.
       const provider = { sendEmail: vi.fn() };
       mockGetEmailConfig.mockReturnValue({ provider, verification: {} });
       mockGetConfig.mockReturnValue(undefined);
 
-      await sendVerificationEmail({
-        userId: 'user123' as never,
-        email: 'user@example.com',
-        baseUrl: 'https://custom-domain.example.com',
-      });
-
-      expect(mockTemplate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          verificationUrl:
-            'https://custom-domain.example.com/api/_internal/auth/verify-email?token=token123',
+      await expect(
+        sendVerificationEmail({
+          userId: 'user123' as never,
+          email: 'user@example.com',
         })
-      );
+      ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
+
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
+      expect(provider.sendEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('assertVerificationEmailConfigured', () => {
+    test('throws when a provider is set but _system.site.url is not', () => {
+      mockGetConfig.mockReturnValue(undefined);
+
+      expect(() => assertVerificationEmailConfigured()).toThrow(/site\.url|MODELENCE_SITE_URL/);
+    });
+
+    test('passes when _system.site.url is set', () => {
+      mockGetConfig.mockReturnValue('https://app.example.com');
+
+      expect(() => assertVerificationEmailConfigured()).not.toThrow();
+    });
+
+    test('passes when no email provider is configured (no email is sent)', () => {
+      mockGetEmailConfig.mockReturnValue({ provider: null });
+      mockGetConfig.mockReturnValue(undefined);
+
+      expect(() => assertVerificationEmailConfigured()).not.toThrow();
     });
   });
 
@@ -815,6 +836,10 @@ describe('auth/verification', () => {
         baseUrl: 'https://app.example.com',
       },
     };
+
+    beforeEach(() => {
+      mockGetConfig.mockReturnValue('https://app.example.com');
+    });
 
     test('returns generic response when email is not found', async () => {
       mockUsersFindOne.mockResolvedValue(null as never);
@@ -836,7 +861,7 @@ describe('auth/verification', () => {
         message:
           'If that email is registered and not yet verified, a verification email has been sent',
       });
-      expect(mockGetEmailConfig).not.toHaveBeenCalled();
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
     });
 
     test('returns generic response when email already verified', async () => {
@@ -917,6 +942,7 @@ describe('auth/verification', () => {
         from: 'no-reply@example.com',
         verification: {},
       });
+      mockGetConfig.mockReturnValue('https://app.example.com');
 
       const result = await handleResendEmailVerification(
         { email: 'user@example.com' } as never,
@@ -955,6 +981,74 @@ describe('auth/verification', () => {
         message:
           'If that email is registered and not yet verified, a verification email has been sent',
       });
+    });
+
+    // Config errors must not depend on the account, or they reveal whether an
+    // address is registered.
+    const accounts = [
+      ['unknown', null],
+      ['verified', { _id: 'user123', emails: [{ address: 'user@example.com', verified: true }] }],
+      [
+        'unverified',
+        { _id: 'user123', emails: [{ address: 'user@example.com', verified: false }] },
+      ],
+    ] as const;
+
+    test.each(accounts)(
+      'fails before the lookup without a site URL (%s email)',
+      async (_, user) => {
+        mockUsersFindOne.mockResolvedValue(user as never);
+        mockGetConfig.mockReturnValue(undefined);
+
+        await expect(
+          handleResendEmailVerification(
+            { email: 'user@example.com' } as never,
+            baseContext as never
+          )
+        ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
+
+        expect(mockUsersFindOne).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(accounts)(
+      'fails before the lookup without a provider (%s email)',
+      async (_, user) => {
+        mockUsersFindOne.mockResolvedValue(user as never);
+        mockGetEmailConfig.mockReturnValue({ provider: null });
+
+        await expect(
+          handleResendEmailVerification(
+            { email: 'user@example.com' } as never,
+            baseContext as never
+          )
+        ).rejects.toThrow('Email provider is not configured');
+
+        expect(mockUsersFindOne).not.toHaveBeenCalled();
+      }
+    );
+
+    test('refuses to email a link to the request host when _system.site.url is unset', async () => {
+      const userId = new ObjectId('64b64b64b64b64b64b64b64b');
+      mockUsersFindOne.mockResolvedValue({
+        _id: userId,
+        emails: [{ address: 'user@example.com', verified: false }],
+      } as never);
+      const provider = { sendEmail: vi.fn() };
+      mockGetEmailConfig.mockReturnValue({ provider, verification: {} });
+      mockGetConfig.mockReturnValue(undefined);
+
+      await expect(
+        handleResendEmailVerification(
+          { email: 'user@example.com' } as never,
+          {
+            connectionInfo: { ip: '203.0.113.10', baseUrl: 'http://attacker.example' },
+          } as never
+        )
+      ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
+
+      expect(mockTokensInsertOne).not.toHaveBeenCalled();
+      expect(provider.sendEmail).not.toHaveBeenCalled();
     });
   });
 });

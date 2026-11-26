@@ -16,6 +16,7 @@ import { isDisposableEmail } from './disposableEmails';
 import { setAuthTokenCookie, startUserSession } from './session';
 import { claimUnverifiedEmail } from './claimEmail';
 import { hashToken } from './tokenHash';
+import { requireSiteUrl } from './siteUrl';
 import { magicLinkTemplate } from './templates/magicLinkTemplate';
 import {
   setQueryParams,
@@ -133,9 +134,8 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
     value: email,
   });
 
-  // Checked up front (unlike password reset): with `allowSignup` on, unknown
-  // emails also get a real email, so there is no guaranteed early-out path
-  // that could otherwise skip this.
+  // Checked before the user lookup, so the error never depends on whether the
+  // email is registered.
   const emailProvider = getEmailConfig().provider;
   if (!emailProvider) {
     throw new Error('Email provider is not configured');
@@ -154,10 +154,7 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
   // Config ONLY — no fallback to the request's Host-derived base URL: the
   // emailed link IS the credential, and a request-derived base would let a
   // spoofed Host header poison the link's destination (login-link poisoning).
-  const baseUrl = getConfig('_system.site.url') as string | undefined;
-  if (!baseUrl) {
-    throw new Error('Unable to build magic link: set _system.site.url (MODELENCE_SITE_URL)');
-  }
+  const baseUrl = requireSiteUrl('magic link');
 
   // Runs identically for known and unknown emails, so the thrown error reveals
   // only a property of the email domain, never account existence.
@@ -237,9 +234,9 @@ export async function handleSendMagicLink(args: Args, { connectionInfo }: Contex
 export async function handleMagicLinkLanding(params: RouteParams): Promise<RouteResponse> {
   // Config ONLY — no fallback to the request's Host header, which is
   // attacker-controlled and must never decide where an auth flow redirects.
-  // A link can only have been emailed with `_system.site.url` set, so this is
-  // normally present; if it was unset since, fall back to a same-origin
-  // relative redirect rather than trusting the request.
+  // Set on any deployed server that emailed a link; unset under the dev server,
+  // or if it was removed since. Fall back to a same-origin relative redirect
+  // rather than trusting the request.
   const baseUrl = (getConfig('_system.site.url') as string | undefined) || '';
   const magicLinkPageUrl = resolveUrl(baseUrl, getEmailConfig().magicLink?.redirectUrl) || '/';
 

@@ -34,6 +34,10 @@ startApp({
 4. When clicked, the token is validated and the user's email is marked as verified
 5. The user is redirected to your configured `redirectUrl` with `?status=verified`, or `?status=error&message=...` if the link is invalid or expired
 
+### Base URL requirement
+
+The verification link is built from your site's base URL, so you must set it via the `_system.site.url` config (or the `MODELENCE_SITE_URL` environment variable). It is never taken from the request's `Host` or `X-Forwarded-Host` header, which the caller controls. Under `modelence dev` only, an unset base URL defaults to the local server (`http://localhost:<port>`). Anywhere else, if an email provider is configured and the base URL isn't set, signup and resending the verification email fail with a clear error, before any account or token is created.
+
 Opening the link does not sign the user in, so your `redirectUrl` page should send them to sign in. Corporate mail scanners often open links before the user does. Opening a link again after it has verified the address still redirects with `status=verified`, so the user's own click succeeds. Tokens are stored hashed and expire after 24 hours.
 
 ## Custom Verification Templates

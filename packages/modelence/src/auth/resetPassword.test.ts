@@ -393,6 +393,21 @@ describe('auth/resetPassword', () => {
       ).rejects.toThrow('Email provider is not configured');
     });
 
+    test('fails the same way for unknown emails when the provider is not configured', async () => {
+      mockValidateEmail.mockReturnValue('nobody@example.com');
+      mockGetEmailConfig.mockReturnValue({ provider: null });
+      mockUsersFindOne.mockResolvedValue(null);
+
+      await expect(
+        handleSendResetPasswordToken(
+          { email: 'nobody@example.com' },
+          createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+        )
+      ).rejects.toThrow('Email provider is not configured');
+
+      expect(mockUsersFindOne).not.toHaveBeenCalled();
+    });
+
     test('uses default email template if custom template not provided', async () => {
       const email = 'user@example.com';
       const resetToken = 'token123';
@@ -502,12 +517,13 @@ describe('auth/resetPassword', () => {
       );
     });
 
-    test('uses connection info baseUrl as fallback', async () => {
+    test('never builds the link from the request host when _system.site.url is unset', async () => {
+      // The request-derived base URL comes from Host / X-Forwarded-Host, which
+      // an anonymous caller controls. Using it would email a genuine reset token
+      // inside a link to the caller's host (password reset poisoning).
       const email = 'user@example.com';
-      const resetToken = 'token789';
 
-      mockGetConfig.mockReturnValue(undefined);
-
+      mockGetConfig.mockReturnValue(undefined); // no _system.site.url
       mockValidateEmail.mockReturnValue(email);
       mockUsersFindOne.mockResolvedValue(
         createMockUser({
@@ -516,22 +532,34 @@ describe('auth/resetPassword', () => {
           status: 'active',
         })
       );
-      mockRandomBytes.mockReturnValue({
-        toString: () => resetToken,
-      });
+      mockRandomBytes.mockReturnValue({ toString: () => 'tok' });
 
-      await handleSendResetPasswordToken(
-        { email },
-        createContext({ connectionInfo: { baseUrl: 'https://connection.com' } })
-      );
+      await expect(
+        handleSendResetPasswordToken(
+          { email },
+          createContext({ connectionInfo: { baseUrl: 'http://attacker.example' } })
+        )
+      ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
 
-      expect(mockEmailProvider.sendEmail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          html: expect.stringContaining(
-            'https://connection.com/api/_internal/auth/reset-password?token='
-          ),
-        })
-      );
+      expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
+      expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
+    });
+
+    test('fails the same way for unknown emails when _system.site.url is unset', async () => {
+      // The config check runs before the user lookup, so the error never
+      // depends on whether the address is registered.
+      mockGetConfig.mockReturnValue(undefined);
+      mockValidateEmail.mockReturnValue('nobody@example.com');
+      mockUsersFindOne.mockResolvedValue(null);
+
+      await expect(
+        handleSendResetPasswordToken(
+          { email: 'nobody@example.com' },
+          createContext({ connectionInfo: { baseUrl: 'https://example.com' } })
+        )
+      ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
+
+      expect(mockUsersFindOne).not.toHaveBeenCalled();
     });
 
     test('throws (no email sent) when no base URL can be resolved', async () => {
@@ -549,11 +577,11 @@ describe('auth/resetPassword', () => {
       mockRandomBytes.mockReturnValue({ toString: () => 'tok' });
 
       await expect(
-        // connectionInfo.baseUrl also absent
         handleSendResetPasswordToken({ email }, createContext({ connectionInfo: {} }))
       ).rejects.toThrow(/site\.url|MODELENCE_SITE_URL/);
 
-      // A broken link must never be emailed.
+      // Neither an orphaned token nor a broken link.
+      expect(mockResetTokensInsertOne).not.toHaveBeenCalled();
       expect(mockEmailProvider.sendEmail).not.toHaveBeenCalled();
     });
 

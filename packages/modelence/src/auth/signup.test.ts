@@ -8,6 +8,7 @@ const createObjectId = (value: string): ObjectId =>
 
 const mockConsumeRateLimit = vi.fn();
 const mockSendVerificationEmail = vi.fn();
+const mockAssertVerificationEmailConfigured = vi.fn();
 const mockValidateEmail = vi.fn();
 const mockValidatePassword = vi.fn();
 const mockValidateHandle = vi.fn();
@@ -33,6 +34,7 @@ vi.doMock('../rate-limit/rules', () => ({
 
 vi.doMock('./verification', () => ({
   sendVerificationEmail: mockSendVerificationEmail,
+  assertVerificationEmailConfigured: mockAssertVerificationEmailConfigured,
 }));
 
 vi.doMock('./validators', () => ({
@@ -164,10 +166,11 @@ describe('auth/signup', () => {
       value: '1.1.1.1',
     });
     expect(mockHash).toHaveBeenCalled();
+    // The request-derived baseUrl is caller controlled; the link is built from
+    // _system.site.url alone.
     expect(mockSendVerificationEmail).toHaveBeenCalledWith({
       userId: insertedId,
       email: 'test@example.com',
-      baseUrl: baseContext.connectionInfo?.baseUrl,
     });
     expect(authConfig.onAfterSignup).toHaveBeenCalled();
     expect(result).toBe(insertedId);
@@ -252,6 +255,24 @@ describe('auth/signup', () => {
     expect(mockSendVerificationEmail).not.toHaveBeenCalled();
     // A rejected password is a signup failure like any other.
     expect(authConfig.onSignupError).toHaveBeenCalled();
+  });
+
+  test('rejects the signup before creating a user when the verification link cannot be built', async () => {
+    mockAssertVerificationEmailConfigured.mockImplementationOnce(() => {
+      throw new Error(
+        'Unable to build verification link: set _system.site.url (MODELENCE_SITE_URL)'
+      );
+    });
+
+    await expect(
+      handleSignupWithPassword({ email: 'test@example.com', password: 'Secret123' }, baseContext)
+    ).rejects.toThrow(/site\.url/);
+
+    // Runs before the duplicate check, so the error never depends on whether
+    // the email is registered, and no unverifiable account is left behind.
+    expect(mockFindOne).not.toHaveBeenCalled();
+    expect(mockInsertOne).not.toHaveBeenCalled();
+    expect(mockSendVerificationEmail).not.toHaveBeenCalled();
   });
 
   test('uses provided handle when supplied', async () => {

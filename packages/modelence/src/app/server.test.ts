@@ -609,6 +609,8 @@ describe('app/server getCallContext', () => {
       // Express resolves `protocol` from X-Forwarded-Proto for a trusted proxy.
       protocol: 'https',
     });
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
     mockGetMongodbUri.mockReturnValue('');
 
     const ctx = await getCallContext(req, {} as Response);
@@ -626,11 +628,44 @@ describe('app/server getCallContext', () => {
       // Express already takes the left-most X-Forwarded-Proto value itself.
       protocol: 'https',
     });
+    req.socket = { remoteAddress: '10.0.0.5' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
     mockGetMongodbUri.mockReturnValue('');
 
     const ctx = await getCallContext(req, {} as Response);
 
     expect(ctx.connectionInfo.baseUrl).toBe('https://public.example.com');
+  });
+
+  test('ignores X-Forwarded-Host from a peer that is not a trusted proxy', async () => {
+    const req = createRequest({
+      headers: {
+        host: 'app.example.com',
+        // A direct caller can send this to poison links built from baseUrl.
+        'x-forwarded-host': 'attacker.example',
+      },
+      protocol: 'http',
+    });
+    req.socket = { remoteAddress: '203.0.113.9' } as unknown as Request['socket'];
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('http://app.example.com');
+  });
+
+  test('ignores X-Forwarded-Host when the peer address is unknown', async () => {
+    const req = createRequest({
+      headers: { host: 'app.example.com', 'x-forwarded-host': 'attacker.example' },
+      protocol: 'http',
+    });
+    req.app = createTrustingApp(['10.0.0.0/8']);
+    mockGetMongodbUri.mockReturnValue('');
+
+    const ctx = await getCallContext(req, {} as Response);
+
+    expect(ctx.connectionInfo.baseUrl).toBe('http://app.example.com');
   });
 
   test('ignores X-Forwarded-Proto that Express did not trust', async () => {

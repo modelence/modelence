@@ -16,6 +16,7 @@ import { getConfig } from '@/config/server';
 import { invalidateAllUserSessions } from './session';
 import { claimUnverifiedEmail } from './claimEmail';
 import { hashToken } from './tokenHash';
+import { requireSiteUrl } from './siteUrl';
 import { setQueryParams, resolveUrl } from './utils';
 
 // Short-lived httpOnly cookie carrying the reset token from the landing route to
@@ -93,6 +94,14 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
     value: email,
   });
 
+  // Checked before the user lookup, so these errors never depend on whether the
+  // email is registered, and before the token is stored, so no orphaned token.
+  const emailProvider = getEmailConfig().provider;
+  if (!emailProvider) {
+    throw new Error('Email provider is not configured');
+  }
+  const baseUrl = requireSiteUrl('password reset link');
+
   // Find user by email
   const userDoc = await usersCollection.findOne(
     { 'emails.address': email, status: { $nin: ['deleted', 'disabled'] } },
@@ -112,11 +121,6 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
   // Ownership is still proven by receiving the emailed token, and the response
   // stays generic either way, so this doesn't enable account enumeration.
 
-  const emailProvider = getEmailConfig().provider;
-  if (!emailProvider) {
-    throw new Error('Email provider is not configured');
-  }
-
   // Generate reset token
   const resetToken = randomBytes(32).toString('hex');
   const now = Date.now();
@@ -134,13 +138,6 @@ export async function handleSendResetPasswordToken(args: Args, { connectionInfo 
 
   // Point the email at the server landing route, not the SPA page, so the raw
   // token never reaches a client-rendered URL.
-  const baseUrl = (getConfig('_system.site.url') as string | undefined) || connectionInfo?.baseUrl;
-  if (!baseUrl) {
-    // Without a base URL we'd email a broken `undefined/...` link — fail loudly.
-    throw new Error(
-      'Unable to build password reset link: set _system.site.url (MODELENCE_SITE_URL)'
-    );
-  }
   const resetUrl = `${baseUrl}/api/_internal/auth/reset-password?token=${resetToken}`;
 
   // Send email
