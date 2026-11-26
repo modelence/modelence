@@ -5,6 +5,12 @@ import { ClientChannel } from './clientChannel';
 export interface WebsocketServerProvider {
   init(props: { httpServer: Server; channels: ServerChannel[] }): Promise<void>;
   broadcast<T>(props: { category: string; id: string; data: T }): void;
+  /**
+   * Called after some or all of the user's sessions were revoked. Must close
+   * the user's connections, on every instance, whose session no longer
+   * resolves to that user. Without it, they stay open with the revoked session.
+   */
+  revalidateUser?(userId: string): Promise<void>;
 }
 
 export interface WebsocketClientProvider {

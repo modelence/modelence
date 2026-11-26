@@ -71,6 +71,7 @@ const serverInstance = {
   }),
   to: mockTo,
   local: { in: mockIn },
+  sockets: { sockets: new Map<string, unknown>() },
   serverSideEmit: vi.fn(),
 };
 
@@ -299,6 +300,58 @@ describe('websocket/socketio/server', () => {
 
     expect(mockDropIndex).toHaveBeenCalledWith('createdAt_1');
     expect(mockCreateIndex).toHaveBeenCalledTimes(2);
+  });
+
+  describe('revalidateUser', () => {
+    const close = vi.fn();
+
+    beforeEach(() => {
+      serverInstance.sockets.sockets = new Map([
+        [
+          'socket-1',
+          {
+            data: { user: { id: 'alice' }, session: { authToken: 'revoked' } },
+            conn: { close },
+          },
+        ],
+      ]);
+      mockAuthenticate.mockResolvedValue({ user: null });
+    });
+
+    afterEach(() => serverInstance.sockets.sockets.clear());
+
+    test('tells the other instances, without sending them a token', async () => {
+      mockGetConfig.mockReturnValue(true);
+      await websocketProvider.init({ httpServer: {} as Server, channels: [] });
+
+      await websocketProvider.revalidateUser?.('alice');
+
+      expect(serverInstance.serverSideEmit).toHaveBeenCalledWith(
+        'modelence:revalidateUser',
+        'alice'
+      );
+      expect(close).toHaveBeenCalledWith(true);
+    });
+
+    test('closes connections when another instance says so', async () => {
+      mockGetConfig.mockReturnValue(true);
+      await websocketProvider.init({ httpServer: {} as Server, channels: [] });
+
+      eventHandlers['modelence:revalidateUser']?.('alice');
+
+      await vi.waitFor(() => expect(close).toHaveBeenCalledWith(true));
+      // Passing it on would make the instances notify each other forever.
+      expect(serverInstance.serverSideEmit).not.toHaveBeenCalled();
+    });
+
+    test('stays local with a single instance', async () => {
+      await websocketProvider.init({ httpServer: {} as Server, channels: [] });
+
+      await websocketProvider.revalidateUser?.('alice');
+
+      expect(serverInstance.serverSideEmit).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledWith(true);
+    });
   });
 
   test('broadcast emits messages to connected sockets when initialized', async () => {

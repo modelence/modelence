@@ -23,6 +23,7 @@ const roomDeliveryQueues = new Map<string, Promise<void>>();
 
 const COLLECTION = '_modelenceSocketio';
 const ADAPTER_TTL_SECONDS = 60;
+const REVALIDATE_USER_EVENT = 'modelence:revalidateUser';
 
 export async function init({
   httpServer,
@@ -81,6 +82,8 @@ export async function init({
     adapter: mongoCollection ? createAdapter(mongoCollection) : undefined,
     transports: ['websocket'],
     perMessageDeflate: false,
+    // Don't enable `connectionStateRecovery`: it would put a connection closed
+    // by `closeConnection` back into its rooms without checking its session.
   });
 
   socketServer.on('error', (error) => {
@@ -93,6 +96,11 @@ export async function init({
       queueProtectedBroadcast(payload);
     }
   );
+
+  // Sent by the instance that handled the revocation to all the others.
+  socketServer.on(REVALIDATE_USER_EVENT, (userId: string) => {
+    void revalidateLocalConnections(userId);
+  });
 
   socketServer.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
@@ -168,6 +176,62 @@ async function reauthenticate(socket: Pick<Socket, 'data'>) {
   return current;
 }
 
+/**
+ * Cuts a connection that is no longer entitled to its user's data, including
+ * anything still being prepared for it.
+ *
+ * Closes the transport rather than calling `socket.disconnect()`, which tells
+ * the client not to come back. A legitimate client reconnects by itself, sends
+ * the token it holds now and re-joins and re-subscribes with it.
+ */
+function closeConnection(socket: Socket) {
+  // Discard pending packets, so a client that stopped reading can't delay it.
+  socket.conn.close(true);
+}
+
+async function isConnectionRevoked(socket: Socket) {
+  try {
+    return (await reauthenticate(socket)) === null;
+  } catch (error) {
+    logError('Failed to revalidate a WebSocket connection', { error });
+    return true;
+  }
+}
+
+/*
+  Finds the connections by scanning rather than with a room per user: a client
+  can leave any room by name, and would be missed here if it left that one.
+*/
+async function revalidateLocalConnections(userId: string) {
+  const connectionsByToken = new Map<string, Socket[]>();
+  for (const socket of socketServer?.sockets.sockets.values() ?? []) {
+    if (socket.data.user?.id === userId) {
+      const { authToken } = socket.data.session;
+      connectionsByToken.set(authToken, [...(connectionsByToken.get(authToken) ?? []), socket]);
+    }
+  }
+
+  await Promise.all(
+    [...connectionsByToken.values()].map(async (connections) => {
+      if (await isConnectionRevoked(connections[0])) {
+        connections.forEach(closeConnection);
+      }
+    })
+  );
+}
+
+async function revalidateUser(userId: string) {
+  // The in-memory adapter has no other instances to tell, and warns if asked to.
+  if (multiInstance) {
+    try {
+      socketServer?.serverSideEmit(REVALIDATE_USER_EVENT, userId);
+    } catch (error) {
+      logError('Failed to forward a WebSocket revalidation', { error });
+    }
+  }
+  await revalidateLocalConnections(userId);
+}
+
 function broadcast<T>({ category, id, data }: { category: string; id: string; data: T }) {
   if (!socketServer) return;
   const room = `${category}:${id}`;
@@ -238,4 +302,5 @@ async function deliverProtectedBroadcast<T>({
 export default {
   init,
   broadcast,
+  revalidateUser,
 } as WebsocketServerProvider;

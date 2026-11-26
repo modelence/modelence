@@ -162,7 +162,7 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
                 queryClientRef.setQueryData(queryKey, data);
               }
             },
-            (error) => {
+            (error, details) => {
               const currentSub = subscriptions.get(subscriptionKey);
               if (currentSub) {
                 if (currentSub.resolvers.size) {
@@ -175,7 +175,8 @@ export function modelenceLiveQuery<T = unknown>(methodName: string, args: Args =
                 // Nothing is pending to reject once data has arrived, so the query
                 // would keep showing old data. Refetch to subscribe with the current
                 // token; if that is refused too, the query reports the error.
-                if (error === ACCESS_REVOKED_ERROR && currentSub.latest) {
+                const isAccessLost = error === ACCESS_REVOKED_ERROR || details?.isResubscribe;
+                if (isAccessLost && currentSub.latest) {
                   void queryClientRef?.invalidateQueries({ queryKey, exact: true });
                 }
               }

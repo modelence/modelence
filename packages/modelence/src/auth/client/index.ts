@@ -7,6 +7,7 @@ import {
 } from '@/client/localStorage';
 import { getClientConfig } from '@/client/clientConfig';
 import type { ClientInfo } from '@/methods/types';
+import { reconnectWebsockets } from '@/websocket/client';
 import { OAuthProvider } from '../types';
 import {
   awaitCodeFromPopup,
@@ -45,6 +46,9 @@ function persistSession(session: { authToken: string }) {
   } else {
     setLocalStorageSession(session);
   }
+  // The WebSocket sends its token only when it connects. Reconnect it so it uses
+  // the new session, then rejoins its channels and resubscribes its live queries.
+  reconnectWebsockets();
 }
 
 /**

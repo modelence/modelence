@@ -11,8 +11,13 @@ interface ActiveLiveSubscription {
   subscriptionId: string;
   method: string;
   args: Record<string, unknown>;
+  // Whether the subscription was sent on an earlier connection.
+  sent: boolean;
 }
 const activeLiveSubscriptions = new Map<string, ActiveLiveSubscription>();
+
+// Subscriptions sent again after a reconnect that the server has not answered yet.
+const pendingResubscribes = new Set<string>();
 
 // Socket.IO rooms belong to the server-side socket, and a reconnect gets a new one that is
 // in no rooms, so joined channels are tracked here and re-joined on every connect.
@@ -29,6 +34,12 @@ function resubscribeAll() {
   const authToken = getAuthToken();
   const clientInfo = getClientInfo();
   for (const sub of activeLiveSubscriptions.values()) {
+    // A subscription made before the first connect is sent here for the first time.
+    if (sub.sent) {
+      pendingResubscribes.add(sub.subscriptionId);
+    } else {
+      activeLiveSubscriptions.set(sub.subscriptionId, { ...sub, sent: true });
+    }
     socketClient?.emit('subscribeLiveQuery', {
       subscriptionId: sub.subscriptionId,
       method: sub.method,
@@ -127,7 +138,7 @@ export function subscribeLiveQuery<T = unknown>(
   method: string,
   args: Record<string, unknown>,
   onData: (data: T) => void,
-  onError?: (error: string) => void
+  onError?: (error: string, details: { isResubscribe: boolean }) => void
 ): () => void {
   const subscriptionId = `sub-${++liveQueryCounter}-${Date.now()}`;
 
@@ -141,6 +152,7 @@ export function subscribeLiveQuery<T = unknown>(
     typeMap?: Record<string, unknown>;
   }) => {
     if (sid === subscriptionId) {
+      pendingResubscribes.delete(subscriptionId);
       onData(reviveResponseTypes(data, typeMap));
     }
   };
@@ -154,7 +166,8 @@ export function subscribeLiveQuery<T = unknown>(
   }) => {
     if (sid === subscriptionId) {
       console.error(`[Modelence] Live query error for ${method}:`, error);
-      onError?.(error);
+      // Whether the server refused to resume the subscription after a reconnect.
+      onError?.(error, { isResubscribe: pendingResubscribes.delete(subscriptionId) });
     }
   };
 
@@ -162,7 +175,12 @@ export function subscribeLiveQuery<T = unknown>(
   socket.on('liveQueryData', handleData);
   socket.on('liveQueryError', handleError);
 
-  activeLiveSubscriptions.set(subscriptionId, { subscriptionId, method, args });
+  activeLiveSubscriptions.set(subscriptionId, {
+    subscriptionId,
+    method,
+    args,
+    sent: socket.connected,
+  });
 
   // Only emit if already connected; otherwise the connect handler will handle it
   if (socket.connected) {
@@ -178,6 +196,7 @@ export function subscribeLiveQuery<T = unknown>(
   // Return unsubscribe function
   return () => {
     activeLiveSubscriptions.delete(subscriptionId);
+    pendingResubscribes.delete(subscriptionId);
     socket.emit('unsubscribeLiveQuery', { subscriptionId });
     socket.off('liveQueryData', handleData);
     socket.off('liveQueryError', handleError);

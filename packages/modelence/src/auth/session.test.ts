@@ -40,6 +40,11 @@ vi.doMock('@/config/server', () => ({
   getPublicConfigs: vi.fn(() => ({})),
 }));
 
+const mockRevalidateUserConnections = vi.fn();
+vi.doMock('./revocation', () => ({
+  revalidateUserConnections: mockRevalidateUserConnections,
+}));
+
 const sessionModule = await import('./session');
 const {
   createSession,
@@ -47,6 +52,7 @@ const {
   setSessionUser,
   startUserSession,
   clearSessionUser,
+  invalidateAllUserSessions,
   isSessionSaved,
   sessionsCollection,
   issueOAuthExchangeCode,
@@ -62,9 +68,13 @@ describe('auth/session', () => {
   const insertOneMock: Mock = vi.fn();
   const findOneMock: Mock = vi.fn();
   const updateOneMock: Mock = vi.fn();
+  const findOneAndUpdateMock: Mock = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (
+      sessionsCollection as unknown as { findOneAndUpdate: typeof findOneAndUpdateMock }
+    ).findOneAndUpdate = findOneAndUpdateMock;
     (sessionsCollection as unknown as { insertOne: typeof insertOneMock }).insertOne =
       insertOneMock;
     (sessionsCollection as unknown as { findOne: typeof findOneMock }).findOne = findOneMock;
@@ -214,28 +224,54 @@ describe('auth/session', () => {
     expect(isSessionSaved(result)).toBe(true);
   });
 
-  test('setSessionUser stores user id for session', async () => {
-    updateOneMock.mockResolvedValue({ acknowledged: true } as never);
+  describe('setSessionUser', () => {
     const userId = new ObjectId();
 
-    await setSessionUser('token', userId);
+    test('stores user id for session', async () => {
+      findOneAndUpdateMock.mockResolvedValue({ userId: null } as never);
 
-    expect(updateOneMock).toHaveBeenCalledWith(
-      { authToken: 'hashed-auth-token' },
-      {
-        $set: { userId },
-      }
-    );
+      await setSessionUser('token', userId);
+
+      expect(findOneAndUpdateMock).toHaveBeenCalledWith(
+        { authToken: 'hashed-auth-token' },
+        {
+          $set: { userId },
+        },
+        { returnDocument: 'before' }
+      );
+    });
+
+    test('cuts the connections of the user the session belonged to before', async () => {
+      const previousUserId = new ObjectId();
+      findOneAndUpdateMock.mockResolvedValue({ userId: previousUserId } as never);
+
+      await setSessionUser('token', userId);
+
+      expect(mockRevalidateUserConnections).toHaveBeenCalledWith(previousUserId);
+    });
+
+    test.each([
+      ['anonymous', { userId: null }],
+      ["already the user's", { userId: new ObjectId(userId.toString()) }],
+      ['unknown', null],
+    ])('cuts no connections when the session was %s', async (_case, previousSession) => {
+      findOneAndUpdateMock.mockResolvedValue(previousSession as never);
+
+      await setSessionUser('token', userId);
+
+      expect(mockRevalidateUserConnections).not.toHaveBeenCalled();
+    });
   });
 
   describe('startUserSession', () => {
-    const deleteOneMock: Mock = vi.fn();
+    const findOneAndDeleteMock: Mock = vi.fn();
 
     beforeEach(() => {
-      (sessionsCollection as unknown as { deleteOne: typeof deleteOneMock }).deleteOne =
-        deleteOneMock;
+      (
+        sessionsCollection as unknown as { findOneAndDelete: typeof findOneAndDeleteMock }
+      ).findOneAndDelete = findOneAndDeleteMock;
       insertOneMock.mockResolvedValue({ acknowledged: true } as never);
-      deleteOneMock.mockResolvedValue({ acknowledged: true } as never);
+      findOneAndDeleteMock.mockResolvedValue({ userId: null } as never);
     });
 
     test('issues a fresh token bound to the user instead of reusing the pre-login one', async () => {
@@ -254,20 +290,21 @@ describe('auth/session', () => {
       expect(result.userId).toBe(userId);
       // The pre-login session must never be bound to the user.
       expect(updateOneMock).not.toHaveBeenCalled();
+      expect(findOneAndUpdateMock).not.toHaveBeenCalled();
     });
 
     test('deletes the pre-login session so a planted token goes nowhere', async () => {
       await startUserSession('pre-login-token', new ObjectId());
 
       expect(mockUpdate).toHaveBeenCalledWith('pre-login-token');
-      expect(deleteOneMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
+      expect(findOneAndDeleteMock).toHaveBeenCalledWith({ authToken: 'hashed-auth-token' });
     });
 
     test('creates the new session before deleting the old one', async () => {
       await startUserSession('pre-login-token', new ObjectId());
 
       expect(insertOneMock.mock.invocationCallOrder[0]).toBeLessThan(
-        deleteOneMock.mock.invocationCallOrder[0]
+        findOneAndDeleteMock.mock.invocationCallOrder[0]
       );
     });
 
@@ -275,20 +312,70 @@ describe('auth/session', () => {
       await startUserSession(null, new ObjectId());
 
       expect(insertOneMock).toHaveBeenCalled();
-      expect(deleteOneMock).not.toHaveBeenCalled();
+      expect(findOneAndDeleteMock).not.toHaveBeenCalled();
     });
+
+    test('cuts the connections of a previous session that was signed in', async () => {
+      const previousUserId = new ObjectId();
+      findOneAndDeleteMock.mockResolvedValue({ userId: previousUserId } as never);
+
+      await startUserSession('signed-in-token', new ObjectId());
+
+      expect(mockRevalidateUserConnections).toHaveBeenCalledWith(previousUserId);
+    });
+
+    test.each([{ userId: null }, null])(
+      'cuts no connections when the previous session was %o',
+      async (previousSession) => {
+        findOneAndDeleteMock.mockResolvedValue(previousSession as never);
+
+        await startUserSession('pre-login-token', new ObjectId());
+
+        expect(mockRevalidateUserConnections).not.toHaveBeenCalled();
+      }
+    );
   });
 
   test('clearSessionUser removes user reference from session', async () => {
-    updateOneMock.mockResolvedValue({ acknowledged: true } as never);
+    const userId = new ObjectId();
+    findOneAndUpdateMock.mockResolvedValue({ userId } as never);
 
     await clearSessionUser('token');
 
-    expect(updateOneMock).toHaveBeenCalledWith(
+    expect(findOneAndUpdateMock).toHaveBeenCalledWith(
       { authToken: 'hashed-auth-token' },
       {
         $set: { userId: null },
-      }
+      },
+      { returnDocument: 'before' }
+    );
+    expect(mockRevalidateUserConnections).toHaveBeenCalledWith(userId);
+  });
+
+  test.each([{ userId: null }, null])(
+    'clearSessionUser cuts no connections when the session was %o',
+    async (previousSession) => {
+      findOneAndUpdateMock.mockResolvedValue(previousSession as never);
+
+      await clearSessionUser('token');
+
+      expect(mockRevalidateUserConnections).not.toHaveBeenCalled();
+    }
+  );
+
+  test("invalidateAllUserSessions cuts the user's connections after deleting the sessions", async () => {
+    const userId = new ObjectId();
+    const deleteManyMock: Mock = vi.fn().mockResolvedValue({ acknowledged: true } as never);
+    (sessionsCollection as unknown as { deleteMany: typeof deleteManyMock }).deleteMany =
+      deleteManyMock;
+
+    await invalidateAllUserSessions(userId);
+
+    expect(deleteManyMock).toHaveBeenCalledWith({ userId });
+    expect(mockRevalidateUserConnections).toHaveBeenCalledWith(userId);
+    // Checked before the delete, the sessions would still look valid.
+    expect(deleteManyMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRevalidateUserConnections.mock.invocationCallOrder[0]
     );
   });
 

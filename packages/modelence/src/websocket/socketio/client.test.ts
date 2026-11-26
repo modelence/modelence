@@ -52,7 +52,7 @@ vi.doMock('@/client/localStorage', () => ({
   setLocalStorageSession: vi.fn(),
 }));
 
-const websocketProvider = (await import('./client')).default;
+const { default: websocketProvider, subscribeLiveQuery } = await import('./client');
 
 describe('websocket/socketio/client', () => {
   beforeEach(() => {
@@ -60,6 +60,80 @@ describe('websocket/socketio/client', () => {
     mockGetLocalStorageSession.mockReturnValue(null);
     mockSocket.connected = true;
     mockSocket.auth = {};
+  });
+
+  describe('subscribeLiveQuery errors', () => {
+    const fire = (event: string, payload: Record<string, unknown>) =>
+      mockSocket.on.mock.calls
+        .filter(([name]) => name === event)
+        .forEach(([, handler]) => (handler as (value: unknown) => void)(payload));
+
+    function subscribe() {
+      websocketProvider.init({ channels: [] });
+      const onError = vi.fn();
+      const unsubscribe = subscribeLiveQuery('todos.list', {}, vi.fn(), onError);
+      const [, payload] = mockSocket.emit.mock.calls.find(
+        ([event]) => event === 'subscribeLiveQuery'
+      )!;
+      const { subscriptionId } = payload as { subscriptionId: string };
+      return { onError, unsubscribe, subscriptionId };
+    }
+
+    beforeEach(() => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    test('say when the server refused to resume the subscription after a reconnect', () => {
+      const { onError, unsubscribe, subscriptionId } = subscribe();
+
+      fireConnect();
+      fire('liveQueryError', { subscriptionId, error: 'Access denied' });
+
+      expect(onError).toHaveBeenCalledWith('Access denied', { isResubscribe: true });
+      unsubscribe();
+    });
+
+    test.each([
+      ['the first subscription', () => {}],
+      [
+        'a resumed one that has sent data',
+        (subscriptionId: string) => {
+          fireConnect();
+          fire('liveQueryData', { subscriptionId, data: [] });
+        },
+      ],
+    ])('do not say so for %s', (_case, prepare) => {
+      const { onError, unsubscribe, subscriptionId } = subscribe();
+
+      prepare(subscriptionId);
+      fire('liveQueryError', { subscriptionId, error: 'fetch failed' });
+
+      expect(onError).toHaveBeenCalledWith('fetch failed', { isResubscribe: false });
+      unsubscribe();
+    });
+
+    test('do not say so for one made before the first connect', () => {
+      mockSocket.connected = false;
+      websocketProvider.init({ channels: [] });
+      const onError = vi.fn();
+      const unsubscribe = subscribeLiveQuery('todos.list', {}, vi.fn(), onError);
+
+      mockSocket.connected = true;
+      fireConnect();
+      const [, payload] = mockSocket.emit.mock.calls.find(
+        ([event]) => event === 'subscribeLiveQuery'
+      )!;
+      const { subscriptionId } = payload as { subscriptionId: string };
+      fire('liveQueryError', { subscriptionId, error: 'Not authorized' });
+      expect(onError).toHaveBeenLastCalledWith('Not authorized', { isResubscribe: false });
+
+      // Once sent, a later reconnect does resume it.
+      fireConnect();
+      fire('liveQueryError', { subscriptionId, error: 'Access denied' });
+      expect(onError).toHaveBeenLastCalledWith('Access denied', { isResubscribe: true });
+      unsubscribe();
+    });
   });
 
   describe('init', () => {

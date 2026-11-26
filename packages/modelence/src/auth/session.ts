@@ -7,6 +7,7 @@ import { getPublicConfigs } from '../config/server';
 import { Store } from '../data/store';
 import { schema } from '../data/types';
 import { time } from '../time';
+import { revalidateUserConnections } from './revocation';
 import { hashToken } from './tokenHash';
 import { OAuthProvider, Session } from './types';
 
@@ -261,32 +262,48 @@ export async function startUserSession(
   const session = await createSession(userId);
 
   if (previousAuthToken) {
-    await sessionsCollection.deleteOne({ authToken: hashToken(previousAuthToken) });
+    const previousSession = await sessionsCollection.findOneAndDelete({
+      authToken: hashToken(previousAuthToken),
+    });
+    // Set when the client was already signed in.
+    if (previousSession?.userId) {
+      await revalidateUserConnections(previousSession.userId);
+    }
   }
 
   return session;
 }
 
 export async function setSessionUser(authToken: string, userId: ObjectId) {
-  await sessionsCollection.updateOne(
+  const previousSession = await sessionsCollection.findOneAndUpdate(
     { authToken: hashToken(authToken) },
     {
       $set: { userId },
-    }
+    },
+    { returnDocument: 'before' }
   );
+  // Moved from one user to another.
+  if (previousSession?.userId && !previousSession.userId.equals(userId)) {
+    await revalidateUserConnections(previousSession.userId);
+  }
 }
 
 export async function clearSessionUser(authToken: string) {
-  await sessionsCollection.updateOne(
+  const previousSession = await sessionsCollection.findOneAndUpdate(
     { authToken: hashToken(authToken) },
     {
       $set: { userId: null },
-    }
+    },
+    { returnDocument: 'before' }
   );
+  if (previousSession?.userId) {
+    await revalidateUserConnections(previousSession.userId);
+  }
 }
 
 export async function invalidateAllUserSessions(userId: ObjectId) {
   await sessionsCollection.deleteMany({ userId });
+  await revalidateUserConnections(userId);
 }
 
 export async function createSession(userId: ObjectId | null = null): Promise<Session> {

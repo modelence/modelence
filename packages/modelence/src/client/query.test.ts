@@ -141,7 +141,10 @@ describe('modelenceLiveQuery', () => {
   });
 
   describe('when the server revokes access', () => {
-    type LiveCallbacks = { onData: (data: unknown) => void; onError: (error: string) => void };
+    type LiveCallbacks = {
+      onData: (data: unknown) => void;
+      onError: (error: string, details?: { isResubscribe: boolean }) => void;
+    };
 
     function observeLiveQuery(args: Record<string, unknown> = {}) {
       // @ts-expect-error minimal window stub
@@ -225,6 +228,21 @@ describe('modelenceLiveQuery', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(otherUpdateCount()).toBe(updatesBefore);
       stopOther();
+      query.cleanup();
+    });
+
+    test('reports an error when the subscription is refused after a reconnect', async () => {
+      const query = observeLiveQuery();
+      await pushFirstFrame(query);
+
+      query.live[0].onError('Access denied', { isResubscribe: true });
+      await vi.waitFor(() => expect(query.live).toHaveLength(2));
+      query.live[1].onError('Access denied');
+
+      await vi.waitFor(() => expect(query.observer.getCurrentResult().status).toBe('error'));
+      expect(query.observer.getCurrentResult().error).toEqual(new Error('Access denied'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(query.live).toHaveLength(2);
       query.cleanup();
     });
 

@@ -119,6 +119,11 @@ export async function handleSubscribeLiveQuery(socket: Socket, payload: unknown,
       if (subscription.aborted) return;
       // The subscription can remain open after logout, expiry, or a role
       // change. Stop it before using the handler's captured auth context.
+      //
+      // This is the main protection for live queries, not a backup for closing
+      // revoked connections: that finds them by the token they connected with,
+      // and a client that signed in after connecting only has its current token
+      // here. Don't remove it, or cache its result past a revocation.
       const current = await authenticate(authToken ?? null, { persistNewSession: false });
       if (!isAuthStillCurrent({ session, user, roles }, current)) {
         stopRevokedSubscription();
@@ -236,14 +241,14 @@ export function handleLiveQueryDisconnect(socket: Socket) {
   if (subs) {
     // Clean up all subscriptions for this socket
     for (const sub of subs.values()) {
+      // Also drops an update that was queued before the disconnect.
+      sub.aborted = true;
       if (sub.cleanup) {
         try {
           sub.cleanup();
         } catch (err) {
           console.error('[LiveQuery] Error in cleanup on disconnect:', err);
         }
-      } else {
-        sub.aborted = true;
       }
     }
     socketSubscriptions.delete(socket.id);
