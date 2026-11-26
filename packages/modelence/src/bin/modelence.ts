@@ -12,6 +12,7 @@ import { start } from './start';
 import { logout } from './logout';
 import { init } from './init';
 import { verify } from './verify';
+import { registerEnvironmentCommands } from './environmentCommands';
 import { loadEnv } from './config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -107,6 +108,8 @@ program
       process.exit(1);
     }
   });
+
+registerEnvironmentCommands(program);
 
 program
   .command('logout')

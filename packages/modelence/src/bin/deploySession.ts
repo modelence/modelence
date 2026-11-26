@@ -17,11 +17,11 @@ export function isUnauthorized(error: unknown): boolean {
   return error instanceof StudioApiError && error.status === 401;
 }
 
-export async function resolveToken(host: string): Promise<string | null> {
+export async function resolveToken(host: string, expiryMarginMs?: number): Promise<string | null> {
   if (process.env.MODELENCE_TOKEN) {
     return process.env.MODELENCE_TOKEN;
   }
-  return await readCachedToken(host);
+  return await readCachedToken(host, expiryMarginMs);
 }
 
 export async function rememberToken(host: string, token: string, expiresAt?: string) {

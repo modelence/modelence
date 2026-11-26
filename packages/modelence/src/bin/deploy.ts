@@ -2,7 +2,6 @@ import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
 import { authenticateCli } from './auth';
-import { clearCachedToken } from './authCache';
 import { loadEnv, getProjectPath } from './config';
 import { otherAppHosts, projectForHost, readProject } from './project';
 import { packSource } from './source';
@@ -24,6 +23,7 @@ import {
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
 import { readSourceRevision } from './revision';
 import { followDeploy } from './deployStatus';
+import { signInAgain } from './signIn';
 
 /*
   `modelence deploy`: ship the current directory to a Modelence Cloud
@@ -153,19 +153,14 @@ export async function deploy(options: DeployOptions) {
     // Cached token expired or was revoked: authorize once more. The deploy
     // itself is never repeated — an upload that failed authentication did not
     // start anything, and a build already running is simply followed again.
-    const signInAgain = async () => {
-      await clearCachedToken(host);
-      if (ci) {
-        throw new Error(
+    const renewSession = async () => {
+      session.token = await signInAgain(host, {
+        appId: project.appId,
+        canSignIn: !ci,
+        refusal:
           'Modelence Cloud rejected the token (expired or revoked), and CI deploys never sign in again in the browser. ' +
-            'Set a fresh MODELENCE_TOKEN. A deployment that already started keeps running; check the dashboard.'
-        );
-      }
-      // The target is already picked, so the page only authorizes.
-      console.log('Your login has expired; please sign in again.');
-      const auth = await authenticateCli(host, { purpose: 'deploy', appId: project.appId });
-      await rememberToken(host, auth.token, auth.expiresAt);
-      session.token = auth.token;
+          'Set a fresh MODELENCE_TOKEN. A deployment that already started keeps running; check the dashboard.',
+      });
     };
 
     // A deploy picked in the browser had its variables asked for there.
@@ -188,11 +183,11 @@ export async function deploy(options: DeployOptions) {
       if (!isUnauthorized(error)) {
         throw error;
       }
-      await signInAgain();
+      await renewSession();
       started = await start();
     }
     if (started.buildId) {
-      await followDeploy(session, signInAgain, started.environmentId, started.buildId);
+      await followDeploy(session, renewSession, started.environmentId, started.buildId);
     }
   } finally {
     await fs.rm(archivePath, { force: true });

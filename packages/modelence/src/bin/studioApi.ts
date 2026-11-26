@@ -6,11 +6,22 @@
 export class StudioApiError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    // Whether the body was a JSON error, which only Studio's routes answer with.
+    public readonly isJson = false
   ) {
     super(message);
     this.name = 'StudioApiError';
   }
+}
+
+// Worth trying again: no network, or a Studio that is busy or restarting.
+export function isTransientError(error: unknown): boolean {
+  if (error instanceof StudioApiError) {
+    return error.status === 429 || error.status >= 500;
+  }
+  // What fetch throws when there is no network.
+  return error instanceof TypeError;
 }
 
 export async function studioRequest<T>(
@@ -52,13 +63,16 @@ export async function studioRequest<T>(
   if (!response.ok) {
     const text = await response.text();
     let message = text || response.statusText;
+    let isJson = false;
     try {
       const parsed = JSON.parse(text);
-      message = parsed.error || parsed.message || message;
+      const reason = parsed.error || parsed.message;
+      isJson = Boolean(reason);
+      message = reason || message;
     } catch {
       // Plain-text error body.
     }
-    throw new StudioApiError(message, response.status);
+    throw new StudioApiError(message, response.status, isJson);
   }
 
   return (await response.json()) as T;
