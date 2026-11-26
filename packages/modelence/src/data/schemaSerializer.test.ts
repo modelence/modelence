@@ -718,4 +718,51 @@ describe('data/schemaSerializer', () => {
       expect(result['field.name']).toEqual({ type: 'boolean' });
     });
   });
+
+  describe('serializeModelSchema - default fields', () => {
+    test('unwraps ZodDefault for primitive, array, and object types', () => {
+      const schema = {
+        status: z.string().default('pending'),
+        completed: z.boolean().default(false),
+        retries: z.number().default(0),
+        tags: z.array(z.string()).default([]),
+        meta: z
+          .object({
+            count: z.number().default(1),
+          })
+          .default({ count: 1 }),
+      };
+
+      const result = serializeModelSchema(schema);
+
+      expect(result).toEqual({
+        status: { type: 'string' },
+        completed: { type: 'boolean' },
+        retries: { type: 'number' },
+        tags: { type: 'array', items: { type: 'string' } },
+        meta: {
+          type: 'object',
+          items: {
+            count: { type: 'number' },
+          },
+        },
+      });
+    });
+
+    test('preserves optional flag when combined with default', () => {
+      const schema = {
+        optionalThenDefault: z.string().optional().default('a'),
+        defaultThenOptional: z.string().default('a').optional(),
+        nullableThenDefault: z.number().nullable().default(null),
+      };
+
+      const result = serializeModelSchema(schema);
+
+      expect(result).toEqual({
+        optionalThenDefault: { type: 'string', optional: true },
+        defaultThenOptional: { type: 'string', optional: true },
+        nullableThenDefault: { type: 'number', optional: true },
+      });
+    });
+  });
 });
