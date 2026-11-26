@@ -486,6 +486,21 @@ revoked, the socket leaves the channel and receives `leftChannel`. A role grante
 after connection takes effect on the next join, without reconnecting.
 Channels without an access callback remain public.
 
+When a session ends (logout, password reset, or a disabled or deleted user), the
+connections opened with it are closed. The default client also reconnects when the
+user signs in, so its connection uses the current session. A custom client that
+keeps a connection opened before signing in can't join channels that require a
+signed-in user until it reconnects.
+
+The default client reconnects with its current session, joins its channels again,
+and resumes its live queries. A custom client must reconnect by itself, for example
+if it uses Socket.IO with `reconnection: false`.
+
+<Note>
+If you use a custom `WebsocketServerProvider`, implement `revalidateUser` to close
+these connections.
+</Note>
+
 ### Channel Security
 
 ```typescript

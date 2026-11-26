@@ -53,3 +53,25 @@ Defined in: [packages/modelence/src/websocket/types.ts:6](https://github.com/mod
 #### Returns
 
 `Promise`\<`void`\>
+
+***
+
+### revalidateUser()?
+
+> `optional` **revalidateUser**(`userId`): `Promise`\<`void`\>
+
+Defined in: [packages/modelence/src/websocket/types.ts:13](https://github.com/modelence/modelence/blob/main/packages/modelence/src/websocket/types.ts#L13)
+
+Called after some or all of the user's sessions were revoked. Must close
+the user's connections, on every instance, whose session no longer
+resolves to that user. Without it, they stay open with the revoked session.
+
+#### Parameters
+
+| Parameter | Type |
+| ------ | ------ |
+| `userId` | `string` |
+
+#### Returns
+
+`Promise`\<`void`\>
