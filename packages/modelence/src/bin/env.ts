@@ -231,19 +231,29 @@ export async function envRemove(keys: string[], options: EnvironmentOptions): Pr
 
 // Sends a person to the dashboard for the values, and waits for them.
 export async function envRequest(names: string[], options: EnvRequestOptions): Promise<void> {
+  // As for `env set`, a resource name is refused before anyone signs in.
+  const declarations = await readDeclarations();
+  names.forEach((key) => declarationOf(declarations, key));
   const session = await openEnvironment(options);
   const before = await session.get<EnvList>('/api/cli/env');
   const keys =
     names.length > 0
       ? names
       : before.variables.flatMap((variable) =>
-          variable.kind !== 'resource' && variable.status === 'missing' ? [variable.key] : []
+          variable.kind !== 'resource' &&
+          variable.status === 'missing' &&
+          findDeclaration(declarations, variable.key)?.type !== 'resource'
+            ? [variable.key]
+            : []
         );
   if (keys.length === 0) {
     printLine('Every required variable has a value.');
     return;
   }
-  const { url } = await session.post<{ url: string }>('/api/cli/env/request', { keys });
+  const { url } = await session.post<{ url: string }>(
+    '/api/cli/env/request',
+    requestBody(keys, declarations)
+  );
   printLine(`Enter ${keys.join(', ')} at ${url}`);
   if (!options.wait) {
     return;
@@ -256,6 +266,22 @@ export async function envRequest(names: string[], options: EnvRequestOptions): P
     }
   }
   await waitForValues(session, keys, before.variables, options);
+}
+
+/*
+  The names, with how the local modelence.config.json declares them. It can be
+  ahead of the deployed file: without this, a name added there would be stored
+  as a runtime-only secret, and the next build would run without it.
+*/
+function requestBody(
+  keys: string[],
+  declarations: Record<string, EnvDeclaration> | null
+): { keys: string[]; declarations?: Record<string, EnvVarChange['declaration']> } {
+  const declared = keys.flatMap((key) => {
+    const { declaration } = declarationOf(declarations, key);
+    return declaration ? [[key, declaration] as const] : [];
+  });
+  return declared.length > 0 ? { keys, declarations: Object.fromEntries(declared) } : { keys };
 }
 
 // Only a page of the Studio in use is opened; any other link is just printed.

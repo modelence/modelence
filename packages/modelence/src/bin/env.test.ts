@@ -221,6 +221,9 @@ describe('env request', () => {
     post.mockResolvedValue({ url: 'https://h/config?request=TODO' });
   });
 
+  // modelence.config.json is read for real first, so the clock only matters after that.
+  const linkPrinted = () => vi.waitFor(() => expect(printed).toContain('Enter TODO at'));
+
   it('asks for what is missing by default and can leave it at the link', async () => {
     get.mockResolvedValue({
       variables: [text(), missing],
@@ -229,6 +232,26 @@ describe('env request', () => {
     expect(post).toHaveBeenCalledWith('/api/cli/env/request', { keys: ['TODO'] });
     expect(printed).toContain('Enter TODO at https://h/config?request=TODO');
     expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends how the local file declares each name, never a value', async () => {
+    get.mockResolvedValue({ variables: [] });
+    await envRequest(['STRIPE_KEY', 'LOG_LEVEL', 'OTHER'], { ...target, wait: false });
+    expect(post).toHaveBeenCalledWith('/api/cli/env/request', {
+      keys: ['STRIPE_KEY', 'LOG_LEVEL', 'OTHER'],
+      declarations: { STRIPE_KEY: { type: 'secret' }, LOG_LEVEL: {} },
+    });
+  });
+
+  it('refuses a resource name before signing in, and does not ask for one', async () => {
+    await expect(envRequest(['DATABASE_URL'], { ...target, wait: false })).rejects.toThrow(
+      'resource "main-db"'
+    );
+    expect(openEnvironment).not.toHaveBeenCalled();
+    get.mockResolvedValue({ variables: [text({ key: 'DATABASE_URL', status: 'missing' })] });
+    await envRequest([], { ...target, wait: false });
+    expect(post).not.toHaveBeenCalled();
+    expect(printed).toContain('Every required variable has a value.');
   });
 
   it('waits until every value is saved, reporting names only', async () => {
@@ -241,6 +264,7 @@ describe('env request', () => {
         restartNeeded: true,
       });
     const done = envRequest(['TODO'], { ...target, wait: true });
+    await linkPrinted();
     await vi.advanceTimersByTimeAsync(6000);
     await done;
     expect(printed).toContain('TODO: set');
@@ -256,6 +280,7 @@ describe('env request', () => {
       .mockRejectedValueOnce(new StudioApiError('restarting', 502))
       .mockRejectedValueOnce(new StudioApiError('no access', 400));
     const done = envRequest(['TODO'], { ...target, wait: true }).catch((error: Error) => error);
+    await linkPrinted();
     await vi.advanceTimersByTimeAsync(9000);
     expect(String(await done)).toContain('no access');
     expect(get).toHaveBeenCalledTimes(4);
