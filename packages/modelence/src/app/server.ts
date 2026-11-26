@@ -24,7 +24,7 @@ import { crossOriginProtection, requireJsonBody } from './requestGuards';
 import { getWebsocketConfig } from './websocketConfig';
 import { getConfig } from '@/config/server';
 import { getLocalSiteUrl } from '@/config/local';
-import { issueLinkNonce } from '@/auth/session';
+import { clearAuthTokenCookie, issueLinkNonce } from '@/auth/session';
 import { configureTrustedProxies, getClientIp } from './clientIp';
 
 function getBodyParserMiddleware(config?: {
@@ -328,6 +328,13 @@ export async function getCallContext(req: Request, res: Response | null = null) 
     // Only _system.session.init returns a new token to the client, and it saves
     // the session itself. Other requests must not leave unusable records.
     const { session, user, roles } = await authenticate(authToken, { persistNewSession: false });
+
+    // Clear stale authToken cookies when the request is unauthenticated. If a
+    // slow request raced a concurrent login, this clear might wipe the new
+    // cookie, but the client falls back to its stored token.
+    if (res && req.cookies?.authToken && !user) {
+      clearAuthTokenCookie(res);
+    }
     return {
       clientInfo,
       connectionInfo,
