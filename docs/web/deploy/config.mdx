@@ -98,7 +98,7 @@ A database, cache or telemetry endpoint that a deploy creates in the environment
 The file doesn't set the size of a database or cache. `modelence deploy` asks for it in the browser,
 on the deploy that creates it, so staging can use a free database and production a bigger one from
 the same file. A deploy from CI can't ask, so it fails with a link: pick the size there, then deploy
-again. The prices of every size are on the **Usage and Plans** page.
+again. The picker shows the monthly price of each size.
 
 Every plan, Free included, can create free PostgreSQL databases (up to 3 per organization). A free
 database sleeps after 5 minutes without queries, and the next query wakes it in under a second. Other
