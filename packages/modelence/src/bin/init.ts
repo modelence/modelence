@@ -52,7 +52,7 @@ export async function init(options: InitOptions) {
   console.log('');
   console.log(`Reference: ${SETUP_DOCS_URL}`);
   console.log(
-    `Once ${APP_SPEC_FILE_NAME} describes your app, run \`npx modelence@latest deploy\`.`
+    `Once ${APP_SPEC_FILE_NAME} describes your app, run \`npx modelence@latest deploy --env <environment>\`, e.g. --env production.`
   );
 }
 

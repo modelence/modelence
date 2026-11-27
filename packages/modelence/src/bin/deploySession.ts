@@ -1,8 +1,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseDotenv } from 'dotenv';
-import { readCachedToken, writeCachedToken } from './authCache';
-import type { CliAuthTarget } from './auth';
+import { readLogin, type AppRef } from './authCache';
 import { DEFAULT_HOST, updateProject, withHostProject } from './project';
 import { StudioApiError } from './studioApi';
 
@@ -17,29 +16,29 @@ export function isUnauthorized(error: unknown): boolean {
   return error instanceof StudioApiError && error.status === 401;
 }
 
-export async function resolveToken(host: string, expiryMarginMs?: number): Promise<string | null> {
+/*
+  The token for a command on this app: MODELENCE_TOKEN (CI), else the saved
+  login for the app, with its app id (to record in the project) when known.
+*/
+export async function resolveLogin(
+  host: string,
+  app: AppRef,
+  expiryMarginMs?: number
+): Promise<{ token: string; appId?: string } | null> {
   if (process.env.MODELENCE_TOKEN) {
-    return process.env.MODELENCE_TOKEN;
+    return { token: process.env.MODELENCE_TOKEN };
   }
-  return await readCachedToken(host, expiryMarginMs);
+  if (!app.appId && !app.appAlias) {
+    return null;
+  }
+  const login = await readLogin(host, app, expiryMarginMs);
+  return login ? { token: login.token, appId: login.appId } : null;
 }
 
-export async function rememberToken(host: string, token: string, expiresAt?: string) {
-  if (!expiresAt) {
-    // Older Studio: the token lasts an hour, not worth caching.
-    return;
-  }
+// Only the app: the environment is named again on every command.
+export async function rememberApp(appId: string, host: string) {
   try {
-    await writeCachedToken(host, token, expiresAt);
-  } catch (error) {
-    console.warn('Could not save the login for next time:', error);
-  }
-}
-
-// Only the app: the environment is picked again on the next deploy.
-export async function rememberApp(target: CliAuthTarget, host: string) {
-  try {
-    await updateProject((project) => withHostProject(project, host, { appId: target.appId }));
+    await updateProject((project) => withHostProject(project, host, { appId }));
   } catch (error) {
     console.warn('Could not record the app in .modelence/project.json:', error);
   }

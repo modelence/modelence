@@ -48,10 +48,10 @@ program
 program
   .command('deploy')
   .description(
-    'Deploy the project described by modelence.config.json to Modelence Cloud (picks the target in the browser; in CI from --app/--env or the saved target)'
+    'Deploy the project described by modelence.config.json to a Modelence Cloud environment'
   )
-  .option('-a, --app <app>', 'Application alias (preselected in the browser; the target in CI)')
-  .option('-e, --env <env>', 'Environment alias (preselected in the browser; the target in CI)')
+  .option('-a, --app <app>', 'Application alias (default: the app in .modelence/project.json)')
+  .option('-e, --env <env>', 'Environment alias (required)')
   .option('-h, --host <host>', 'Modelence host')
   .option(
     '--prebuilt',
@@ -59,7 +59,7 @@ program
   )
   .option(
     '--skip-env-check',
-    'In CI, deploy even when variables modelence.config.json requires have no value'
+    'Deploy even when variables modelence.config.json requires have no value'
   )
   .option(
     '--rebuild-all',
@@ -113,8 +113,8 @@ registerEnvironmentCommands(program);
 
 program
   .command('logout')
-  .description('Forget the saved Modelence Cloud login')
-  .option('-h, --host <host>', 'Only forget the login for this host')
+  .description('Sign out: revoke and forget the saved Modelence Cloud logins')
+  .option('-h, --host <host>', 'Only the logins for this host')
   .action(async (options) => {
     await logout(options);
   });

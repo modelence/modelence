@@ -1,7 +1,6 @@
 import { createWriteStream, promises as fs } from 'fs';
 import { join } from 'path';
 import archiver from 'archiver';
-import { authenticateCli } from './auth';
 import { loadEnv, getProjectPath } from './config';
 import { otherAppHosts, projectForHost, readProject } from './project';
 import { packSource } from './source';
@@ -9,21 +8,22 @@ import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
 import { getServices, readAppSpecFile, type AppSpec } from './appSpec';
-import { describeOtherHosts, resolveTargetFromOptions } from './deployTarget';
+import { describeOtherHosts, type CliTarget } from './deployTarget';
 import { isCI } from './terminal';
+import type { AppRef } from './authCache';
 import {
   assertEnvTokenHost,
   resolveHost,
-  resolveToken,
-  rememberToken,
+  resolveLogin,
   rememberApp,
   isUnauthorized,
   type Session,
 } from './deploySession';
+import { appRefFor } from './environmentSession';
 import { runDeploy, type StartedDeploy, type UploadKind } from './deployUpload';
 import { readSourceRevision } from './revision';
 import { followDeploy } from './deployStatus';
-import { signInAgain } from './signIn';
+import { signIn, signInAgain, SignInRequiredError } from './signIn';
 
 /*
   `modelence deploy`: ship the current directory to a Modelence Cloud
@@ -38,22 +38,24 @@ import { signInAgain } from './signIn';
   Modelence framework app that has no modelence.config.json, so projects that
   deployed before the file existed keep deploying unchanged (deployKind.ts).
 
-  Target: picked in the browser on every deploy, since the same code goes
-  to several environments (staging, production). The target named by -a/-e
-  (or -e with the app recorded in project.json) is only preselected there;
-  that is how an agent that knows the target passes it. Only the app is
-  recorded for next time, never the environment: project.json is
-  committed, and nothing environment specific belongs in the codebase. The
-  picker also asks for the variables modelence.config.json requires that
-  the target has no value for.
+  Target: always named, with --env, plus --app unless .modelence/project.json
+  records the app. The environment is never remembered: project.json is
+  committed, and the same code goes to several environments (staging,
+  production), so a deploy must say which.
 
-  CI is the one exception: the browser is never opened, the target comes
-  from the flags (--env, plus --app unless project.json records the app)
-  and the token from MODELENCE_TOKEN, and a missing one fails at once
-  instead of waiting for an approval nobody will give. Agents run without a TTY too, but they go through the browser like
-  anyone else. Since nobody picked anything, Studio refuses a CI deploy
-  while a required declared variable has no value (--skip-env-check
-  deploys anyway).
+  Login: the app's saved login (signIn.ts), approved once in the browser for
+  the environments and access chosen there. With it, deploys run without a
+  browser, which is what lets an agent deploy unattended. Without one, the
+  sign-in comes before the build, so in an agent's shell, where the command
+  stops at the link, nothing is built for nothing. A project with no app yet
+  gets one picked (or created) on that page, and recorded.
+
+  Studio refuses a deploy while a variable modelence.config.json requires
+  has no value, naming the ways to set it (--skip-env-check deploys anyway).
+
+  CI: the browser is never opened. The token comes from MODELENCE_TOKEN, and
+  a missing one fails at once instead of waiting for an approval nobody will
+  give.
 */
 
 export interface DeployOptions {
@@ -78,101 +80,88 @@ export async function deploy(options: DeployOptions) {
   }
   const savedProject = await readProject(cwd);
   const project = projectForHost(savedProject, host);
-  // An app saved for another Studio doesn't apply here, but say so: a picker
-  // or a "pass --app and --env" out of the blue would be a puzzle.
+  // An app saved for another Studio doesn't apply here, but say so: an app
+  // picker or a "pass --app" out of the blue would be a puzzle.
   const otherHosts = project.appId ? [] : otherAppHosts(savedProject, host);
-  const ci = isCI();
-  // In CI the deploy target; anywhere else what the picker preselects.
-  const namedTarget = resolveTargetFromOptions(options, project, otherHosts);
-  let token = ci ? await resolveToken(host) : null;
-  if (ci && (!token || !namedTarget)) {
+  const envAlias = options.env;
+  if (!envAlias) {
     throw new Error(
-      nonInteractiveMessage(
-        Boolean(token),
-        Boolean(namedTarget),
-        Boolean(project.appId),
-        otherHosts
-      )
+      'Pass --env <environment> to say where to deploy, e.g. --env production. ' +
+        'Deploys never pick the environment for you.'
     );
   }
-  if (!ci && !namedTarget && otherHosts.length > 0) {
+  const app = appRefFor(options, project);
+  const ci = isCI();
+  const canSignIn = !ci && !process.env.MODELENCE_TOKEN;
+  if (!app.appId && !app.appAlias && !canSignIn) {
+    throw new Error(nonInteractiveMessage(Boolean(process.env.MODELENCE_TOKEN), otherHosts));
+  }
+  if (!app.appId && !app.appAlias && otherHosts.length > 0) {
     console.log(
-      `Note: ${describeOtherHosts(otherHosts)} Pick a target for ${host} in the browser, or pass --host to deploy there.`
+      `Note: ${describeOtherHosts(otherHosts)} Pick the app for ${host} in the browser, or pass --host to deploy there.`
     );
   }
 
-  // Local work first, so nothing is uploaded — and nobody is asked to sign
-  // in — when it fails; a missing modelence.config.json stops right here.
-  // A --prebuilt deploy still sends the file when there is one, for its
-  // variable declarations.
-  let spec: AppSpec | undefined;
+  // A missing or invalid modelence.config.json stops here, before anyone is
+  // asked to sign in. A --prebuilt deploy still sends the file when there is
+  // one, for its variable declarations.
+  const spec: AppSpec | undefined =
+    kind === 'bundle' ? ((await readAppSpecFile(cwd)) ?? undefined) : await prepareSpec(cwd);
+
+  const login = await ensureLogin(host, {
+    app,
+    envAlias,
+    canSignIn,
+    otherHosts,
+    services: getDeclaredServices(kind, spec),
+  });
+  const appId = app.appId ?? login.appId;
+  // Also drops the environment earlier CLIs saved next to the app.
+  if (login.appId && (!project.appId || project.appId === login.appId)) {
+    await rememberApp(login.appId, host);
+  }
+  const target = deployTarget(app, appId, envAlias);
+
   // Before the build and archive are written into the project.
   const revision = await readSourceRevision(cwd);
   const archivePath = join(cwd, '.modelence', 'tmp', `${kind}.zip`);
   if (kind === 'bundle') {
-    spec = (await readAppSpecFile(cwd)) ?? undefined;
     await loadEnv();
     await build();
     await createBundle(archivePath);
   } else {
-    spec = await prepareSpec(cwd);
     reportPackedSource(await packSource(cwd, archivePath));
   }
 
   try {
-    let target = namedTarget;
-    if (!ci) {
-      // The browser hands back a token and the environment picked there,
-      // where the named target is preselected; one visit covers a fresh
-      // machine and a fresh project.
-      const auth = await authenticateCli(host, {
-        pick: 'deploy',
-        purpose: 'deploy',
-        appId: project.appId,
-        hint: namedTarget ?? undefined,
-        env: spec?.env,
-        services: getPickerServices(kind, spec),
-      });
-      token = auth.token;
-      await rememberToken(host, auth.token, auth.expiresAt);
-      if (!auth.target) {
-        throw new Error(
-          'No deploy target selected. Run again and pick an environment in the browser.'
-        );
-      }
-      target = { environmentId: auth.target.environmentId };
-      await rememberApp(auth.target, host);
-    }
-    if (!token || !target) {
-      // Unreachable: CI checked both above, and the browser returns both.
-      throw new Error('No token or deploy target to deploy with.');
-    }
-    const deployTarget = target;
-
-    const session: Session = { host, token };
-    // Cached token expired or was revoked: authorize once more. The deploy
-    // itself is never repeated — an upload that failed authentication did not
-    // start anything, and a build already running is simply followed again.
-    const renewSession = async () => {
+    const session: Session = { host, token: login.token };
+    /*
+      Studio rejected the login: it expired, was revoked, or doesn't cover
+      this environment (or only reads it). Sign in once more. The deploy
+      itself is never repeated — an upload that failed authentication did
+      not start anything, and a build already running is simply followed
+      again.
+    */
+    const renewSession = async (reason?: string) => {
       session.token = await signInAgain(host, {
-        appId: project.appId,
-        canSignIn: !ci,
+        app: appId ? { appId } : app,
+        envAlias,
+        canSignIn,
+        reason,
         refusal:
-          'Modelence Cloud rejected the token (expired or revoked), and CI deploys never sign in again in the browser. ' +
-          'Set a fresh MODELENCE_TOKEN. A deployment that already started keeps running; check the dashboard.',
+          'CI deploys never sign in again in the browser. Set a MODELENCE_TOKEN that covers this environment. ' +
+          'A deployment that already started keeps running; check the dashboard.',
       });
     };
 
-    // A deploy picked in the browser had its variables asked for there.
-    const checkEnv = ci && !options.skipEnvCheck;
     const start = () =>
       runDeploy({
         session,
-        target: deployTarget,
+        target,
         kind,
         archivePath,
         spec,
-        checkEnv,
+        checkEnv: !options.skipEnvCheck,
         rebuildAll: options.rebuildAll ?? false,
         revision,
       });
@@ -183,35 +172,87 @@ export async function deploy(options: DeployOptions) {
       if (!isUnauthorized(error)) {
         throw error;
       }
-      await renewSession();
+      await renewSession(error instanceof Error ? error.message : undefined);
       started = await start();
     }
     if (started.buildId) {
-      await followDeploy(session, renewSession, started.environmentId, started.buildId);
+      const { buildId } = started;
+      await followDeploy(
+        session,
+        () =>
+          renewSession().catch((error: unknown) => explainRunningBuild(error, buildId, envAlias)),
+        started.environmentId,
+        buildId
+      );
     }
   } finally {
     await fs.rm(archivePath, { force: true });
   }
 }
 
-function nonInteractiveMessage(
-  hasToken: boolean,
-  hasTarget: boolean,
-  hasApp: boolean,
-  otherHosts: string[]
-): string {
-  const needed = [
-    hasTarget ? null : `pass ${hasApp ? '--env' : '--app and --env'}`,
-    hasToken ? null : 'set MODELENCE_TOKEN',
-  ].filter(Boolean);
+async function ensureLogin(
+  host: string,
+  {
+    app,
+    envAlias,
+    canSignIn,
+    otherHosts,
+    services,
+  }: {
+    app: AppRef;
+    envAlias: string;
+    canSignIn: boolean;
+    otherHosts: string[];
+    services?: string[];
+  }
+): Promise<{ token: string; appId?: string }> {
+  const saved = await resolveLogin(host, app);
+  if (saved) {
+    return saved;
+  }
+  if (!canSignIn) {
+    throw new Error(nonInteractiveMessage(false, otherHosts));
+  }
+  const login = await signIn(host, { app, envAlias, services });
+  return { token: login.token, appId: login.appId };
+}
+
+function deployTarget(app: AppRef, appId: string | undefined, envAlias: string): CliTarget {
+  if (app.appAlias) {
+    return { appAlias: app.appAlias, envAlias };
+  }
+  if (appId) {
+    return { appId, envAlias };
+  }
+  // Without an app, the login comes from a sign-in, which always names one.
+  throw new Error('No app to deploy to. Pass --app.');
+}
+
+/*
+  The login stopped working while a build runs. Running the same command
+  again, as a sign-in normally asks, would start a second deploy of the same
+  code, so the message says to follow this one instead.
+*/
+function explainRunningBuild(error: unknown, buildId: string, envAlias: string): never {
+  if (!(error instanceof SignInRequiredError)) {
+    throw error;
+  }
+  throw new Error(
+    `The deploy already started (build ${buildId}) and keeps running; do not deploy again. ` +
+      `Sign in at ${error.verificationUrl}, then follow it with ` +
+      `\`npx modelence@latest builds logs --env ${envAlias}\`.`
+  );
+}
+
+function nonInteractiveMessage(hasToken: boolean, otherHosts: string[]): string {
   const hostNote =
-    !hasTarget && otherHosts.length > 0
+    otherHosts.length > 0
       ? ` Note: ${describeOtherHosts(otherHosts)} Pass --host to deploy there.`
       : '';
-  return (
-    'CI deploys never open the browser to sign in or pick a target. ' +
-    `To deploy from here, ${needed.join(' and ')}.${hostNote}`
-  );
+  if (hasToken) {
+    return `CI deploys never open the browser to pick the app. Pass --app, or record the app in .modelence/project.json.${hostNote}`;
+  }
+  return `CI deploys never open the browser to sign in. Set MODELENCE_TOKEN.${hostNote}`;
 }
 
 const LISTED_PATHS_LIMIT = 10;
@@ -300,9 +341,11 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-// The picker sizes a new environment for these. Studio builds a --prebuilt
-// bundle as one service whatever the file declares, so a bundle sends none
-// and the picker counts one container, as it did before.
-function getPickerServices(kind: UploadKind, spec: AppSpec | undefined): string[] | undefined {
+/*
+  The sign-in page sizes a new environment for these. Studio builds a
+  --prebuilt bundle as one service whatever the file declares, so a bundle
+  sends none and the page counts one container.
+*/
+function getDeclaredServices(kind: UploadKind, spec: AppSpec | undefined): string[] | undefined {
   return kind === 'source' && spec ? getServices(spec).map(([name]) => name) : undefined;
 }

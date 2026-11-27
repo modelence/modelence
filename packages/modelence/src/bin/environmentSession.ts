@@ -1,4 +1,11 @@
-import { assertEnvTokenHost, isUnauthorized, resolveHost, resolveToken } from './deploySession';
+import type { AppRef } from './authCache';
+import {
+  assertEnvTokenHost,
+  isUnauthorized,
+  rememberApp,
+  resolveHost,
+  resolveLogin,
+} from './deploySession';
 import { describeOtherHosts, resolveTargetFromOptions, type CliTarget } from './deployTarget';
 import { otherAppHosts, projectForHost, readProject, type HostProject } from './project';
 import { signIn, signInAgain } from './signIn';
@@ -9,8 +16,9 @@ import { isCI } from './terminal';
   What the commands that work on a deployed environment share (`status`,
   `logs`, `builds`, `env`, `restart`): which environment, and a login to use
   it with. The environment is always named with --env, never picked for the
-  user; the app can come from .modelence/project.json. The login is the one
-  `modelence deploy` saves, asked for in the browser when there is none.
+  user; the app can come from .modelence/project.json. The login is the
+  app's, shared with `modelence deploy`, asked for in the browser when there
+  is none or Studio says it doesn't cover what the command does.
 */
 
 export interface EnvironmentOptions {
@@ -25,8 +33,13 @@ export interface EnvironmentSession {
   post<T>(path: string, body?: object): Promise<T>;
 }
 
-// A command takes seconds, unlike a deploy, so most of a login's hour is usable.
+// A command takes seconds, unlike a deploy, so a login is usable to its last minute.
 const EXPIRY_MARGIN_MS = 60 * 1000;
+
+// The app as the command names it: --app, else the one in .modelence/project.json.
+export function appRefFor(options: { app?: string }, project: HostProject): AppRef {
+  return options.app ? { appAlias: options.app } : { appId: project.appId };
+}
 
 export function resolveEnvironmentTarget(
   options: EnvironmentOptions,
@@ -57,14 +70,20 @@ export async function openEnvironment(options: EnvironmentOptions): Promise<Envi
   const otherHosts = project.appId ? [] : otherAppHosts(savedProject, host);
   const target = resolveEnvironmentTarget(options, project, otherHosts);
 
+  const app = appRefFor(options, project);
+  const envAlias = options.env;
   // A token from the environment can't be replaced by signing in again.
   const canSignIn = !isCI() && !process.env.MODELENCE_TOKEN;
-  let token = await resolveToken(host, EXPIRY_MARGIN_MS);
+  let token = (await resolveLogin(host, app, EXPIRY_MARGIN_MS))?.token ?? null;
   if (!token) {
     if (!canSignIn) {
       throw new Error('CI runs never open the browser to sign in. Set MODELENCE_TOKEN.');
     }
-    token = await signIn(host, project.appId);
+    const login = await signIn(host, { app, envAlias });
+    token = login.token;
+    if (!project.appId) {
+      await rememberApp(login.appId, host);
+    }
   }
 
   const request = async <T>(
@@ -80,10 +99,11 @@ export async function openEnvironment(options: EnvironmentOptions): Promise<Envi
         throw error;
       }
       token = await signInAgain(host, {
-        appId: project.appId,
+        app,
+        envAlias,
         canSignIn,
-        refusal:
-          'Modelence Cloud rejected the token (expired, revoked, or not allowed to manage environments). Set a fresh MODELENCE_TOKEN.',
+        reason: error instanceof Error ? error.message : undefined,
+        refusal: 'Set a MODELENCE_TOKEN that covers this environment.',
       });
       return await send();
     }

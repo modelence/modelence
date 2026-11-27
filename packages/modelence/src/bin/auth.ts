@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import open from 'open';
 import type { EnvDeclaration } from './appSpec';
-import type { CliTarget } from './deployTarget';
 
 /*
   Browser device authorization: the CLI mints a code, the user approves it in
@@ -26,13 +25,15 @@ import type { CliTarget } from './deployTarget';
                     there (and records the app in .modelence/project.json).
   Without `pick` the page only authorizes the device.
 
-  `purpose: 'deploy'` asks for a deploy-lifetime token (one hour) without a
-  picker — for signing in again during a deploy whose target is already
-  picked. `pick: 'deploy'` implies it.
+  `purpose: 'cli'` is a login for `modelence deploy` and the environment
+  commands: the page asks which app, and what the terminal may do in each of
+  its environments, and the login lasts 30 days. `purpose: 'deploy'` is what
+  released CLIs ask for (the same, for an hour).
 
   `appId` is the hint from .modelence/project.json used to preselect the app.
-  `hint` is the deploy target -a/-e name (the app may come from
-  .modelence/project.json), which the deploy picker preselects.
+  `hint` is the target -a/-e name (the app may come from
+  .modelence/project.json), which the page preselects, or offers to create
+  when the app has no such environment.
 
   `env` is what modelence.config.json declares. With the deploy picker, the
   page asks for those variables' values as a separate step after the target,
@@ -49,14 +50,66 @@ export interface CliAuthTarget {
   envAlias: string;
 }
 
+// What a 'cli' login covers, as Studio reports it when the token is collected.
+export interface CliAuthLogin {
+  appId: string;
+  appAlias: string;
+  environments: { id: string; alias: string; access: 'read' | 'write' }[];
+}
+
 export interface CliAuthResult {
   token: string;
   // Absent on older Studio versions (tokens then last one hour).
   expiresAt?: string;
   target?: CliAuthTarget;
+  // Absent for setup tokens and on Studio versions before scoped logins.
+  login?: CliAuthLogin;
 }
 
+export interface CliAuthOptions {
+  pick?: CliAuthPick;
+  purpose?: 'deploy' | 'cli';
+  pickEnvironment?: boolean;
+  createOnly?: boolean;
+  appId?: string;
+  hint?: Partial<Record<'appId' | 'appAlias' | 'envAlias' | 'environmentId', string>>;
+  env?: Record<string, EnvDeclaration>;
+  // The services modelence.config.json declares, by name.
+  services?: string[];
+}
+
+// A sign-in waiting for approval in the browser.
+export interface StartedSignIn {
+  code: string;
+  verificationUrl: string;
+  // Absent for a Studio that predates PKCE, which is polled by the code alone.
+  codeVerifier?: string;
+}
+
+// Opens the browser too, for a person at the terminal; waits for the approval.
 export async function authenticateCli(
+  host: string,
+  options: CliAuthOptions = {}
+): Promise<CliAuthResult> {
+  const started = await startSignIn(host, options);
+  try {
+    await open(started.verificationUrl);
+  } catch {
+    // Headless/SSH/container — no browser to open. The URL and code are
+    // already printed, so authentication can proceed manually.
+    process.stderr.write(
+      'Could not open a browser automatically. Please open the URL above manually.\n'
+    );
+  }
+  return await waitForAuth(host, started.code, started.codeVerifier);
+}
+
+/*
+  Creates the code and prints the link, before anything else and on stderr:
+  stdout may be piped through something that holds it until the command
+  exits (`| tail`), and an agent then never sees the link it has to pass on.
+*/
+export async function startSignIn(
   host: string,
   {
     pick,
@@ -67,24 +120,15 @@ export async function authenticateCli(
     hint,
     env,
     services,
-  }: {
-    pick?: CliAuthPick;
-    purpose?: 'deploy';
-    pickEnvironment?: boolean;
-    createOnly?: boolean;
-    appId?: string;
-    hint?: CliTarget;
-    env?: Record<string, EnvDeclaration>;
-    // The services modelence.config.json declares, by name.
-    services?: string[];
-  } = {}
-): Promise<CliAuthResult> {
+  }: CliAuthOptions = {}
+): Promise<StartedSignIn> {
   // Only the picker has a variables step; nothing is sent otherwise.
   const declaredEnv = pick === 'deploy' && env && Object.keys(env).length > 0 ? env : undefined;
-  // The picker sizes a new environment for every service, so a free size that
-  // can't hold them all isn't offered.
+  // A new environment created on the page is sized for every service, so a
+  // free size that can't hold them all isn't offered.
+  const sizesEnvironments = pick === 'deploy' || purpose === 'cli';
   const declaredServices =
-    pick === 'deploy' && services && services.length > 0 ? services : undefined;
+    sizesEnvironments && services && services.length > 0 ? services : undefined;
   const codeVerifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   const response = await fetch(`${host}/api/cli/auth`, {
@@ -124,26 +168,19 @@ export async function authenticateCli(
     url.searchParams.set(key, value);
   }
 
-  // On stderr, which isn't buffered and leaves stdout to the command's output.
-  process.stderr.write(`Please visit ${url} to authenticate\nCode: ${code}\n`);
+  process.stderr.write(`Sign in to Modelence Cloud: ${url}\nCode: ${code}\n`);
 
-  try {
-    await open(url.toString());
-  } catch {
-    // Headless/SSH/container — no browser to open. The URL and code above
-    // are already printed, so authentication can proceed manually.
-    process.stderr.write(
-      'Could not open a browser automatically. Please open the URL above manually.\n'
-    );
-  }
-
-  return await waitForAuth(host, code, codeChallengeAccepted ? codeVerifier : undefined);
+  return {
+    code,
+    verificationUrl: url.toString(),
+    ...(codeChallengeAccepted ? { codeVerifier } : {}),
+  };
 }
 
 // The code can no longer be approved: it expired, was used, or never existed.
-class DeadCodeError extends Error {}
+export class DeadCodeError extends Error {}
 
-async function waitForAuth(
+export async function waitForAuth(
   host: string,
   code: string,
   codeVerifier: string | undefined
@@ -188,7 +225,8 @@ async function requestToken(host: string, code: string, codeVerifier: string | u
   });
 }
 
-async function pollForToken(
+// One poll: the token once approved, null while still pending.
+export async function pollForToken(
   host: string,
   code: string,
   codeVerifier: string | undefined
@@ -219,11 +257,11 @@ async function pollForToken(
     );
   }
 
-  const { token, expiresAt, target } = await response.json();
+  const { token, expiresAt, target, login } = await response.json();
   if (!token) {
     return null;
   }
-  return { token, expiresAt, target };
+  return { token, expiresAt, target, login: login ?? undefined };
 }
 
 // Studio's `{ error }` message from a failed response body. Anything else
