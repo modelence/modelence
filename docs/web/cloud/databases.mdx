@@ -21,7 +21,7 @@ connection string to the app:
       "build": { "commands": ["npm ci"] },
       "start": { "commands": ["node server.js"] }
     },
-    "main-db": { "type": "postgres", "plan": "postgres-1gb" },
+    "main-db": { "type": "postgres" },
     "cache": { "type": "redis" }
   },
   "env": {
@@ -33,7 +33,17 @@ connection string to the app:
 
 A `url` output is the full connection string, over TLS. The other outputs are its parts, for
 clients that read them separately. The [reference](/deploy/config)
-lists every plan and output.
+lists every output.
+
+## Sizes
+
+`modelence deploy` asks for the size of a new PostgreSQL database or Redis cache in the browser, on
+the deploy that creates it. A deploy from CI fails with a link instead: pick the size there, then
+deploy again. The prices of every size are on the **Usage and Plans** page.
+
+The free PostgreSQL size is available on every plan, Free included, up to 3 per organization. It
+sleeps after 5 minutes without queries, and the next query wakes it in under a second, so it suits
+staging and small apps. The other sizes never sleep and need a paid plan.
 
 ## Lifecycle
 
@@ -41,8 +51,7 @@ A deploy creates every managed resource the file declares that the environment d
 the new version starts only once they are ready. Resources are matched by name, so the same file
 works in every environment:
 
-- A resource that already exists is kept as it is, with its data. `plan` is read only when the
-  resource is created, so changing it later has no effect.
+- A resource that already exists is kept as it is, with its data and its size.
 - A resource removed from the file is not deleted, and it is billed until it is.
 - Renaming a resource creates a new, empty one, and the old one stays until it is deleted.
 

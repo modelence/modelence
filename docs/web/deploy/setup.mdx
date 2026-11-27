@@ -36,7 +36,8 @@ URL:
   environment's own services.
 - **Optional managed PostgreSQL databases and Redis caches**, declared in `resources` next to the
   services. A deploy creates each one, and the app gets its connection details through the variables
-  `env` ties to it. They need a paid plan.
+  `env` ties to it. The user picks each one's size in the browser on the deploy that creates it.
+  A free, sleeping PostgreSQL works on every plan; other sizes and Redis need a paid plan.
 - **Optional telemetry**, a `resources` entry of type `"telemetry"`, for the app's traces and metrics.
   It needs a plan with monitoring (Pro and up). Logs need no setup.
 - **Environment variables injected at start**, in every service:
@@ -138,7 +139,7 @@ app reads them from `DATABASE_URL` and `REDIS_URL`:
       "build": { "commands": ["npm ci"] },
       "start": { "commands": ["node server.js"] }
     },
-    "main-db": { "type": "postgres", "plan": "postgres-1gb" },
+    "main-db": { "type": "postgres" },
     "cache": { "type": "redis" }
   },
   "env": {

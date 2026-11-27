@@ -9,7 +9,7 @@ import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
-import { getServices, readAppSpecFile, type AppSpec } from './appSpec';
+import { getServices, isManagedResource, readAppSpecFile, type AppSpec } from './appSpec';
 import { describeOtherHosts, resolveTargetFromOptions } from './deployTarget';
 import { isCI } from './terminal';
 import {
@@ -45,7 +45,8 @@ import { followDeploy } from './deployStatus';
   recorded for next time, never the environment: project.json is
   committed, and nothing environment specific belongs in the codebase. The
   picker also asks for the variables modelence.config.json requires that
-  the target has no value for.
+  the target has no value for, and for the size of each new database or
+  cache.
 
   CI is the one exception: the browser is never opened, the target comes
   from the flags (--env, plus --app unless project.json records the app)
@@ -53,7 +54,8 @@ import { followDeploy } from './deployStatus';
   instead of waiting for an approval nobody will give. Agents run without a TTY too, but they go through the browser like
   anyone else. Since nobody picked anything, Studio refuses a CI deploy
   while a required declared variable has no value (--skip-env-check
-  deploys anyway).
+  deploys anyway), and one that adds a database with no size yet, with a
+  link to pick it.
 */
 
 export interface DeployOptions {
@@ -132,6 +134,7 @@ export async function deploy(options: DeployOptions) {
         hint: namedTarget ?? undefined,
         env: spec?.env,
         services: getPickerServices(kind, spec),
+        resources: getPickerResources(kind, spec),
       });
       token = auth.token;
       await rememberToken(host, auth.token, auth.expiresAt);
@@ -310,4 +313,19 @@ async function pathExists(path: string): Promise<boolean> {
 // and the picker counts one container, as it did before.
 function getPickerServices(kind: UploadKind, spec: AppSpec | undefined): string[] | undefined {
   return kind === 'source' && spec ? getServices(spec).map(([name]) => name) : undefined;
+}
+
+// The picker asks for the size of each new one. A --prebuilt deploy can't
+// declare them.
+function getPickerResources(kind: UploadKind, spec: AppSpec | undefined) {
+  if (kind !== 'source' || !spec) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(spec.resources ?? {}).flatMap(([name, resource]) =>
+      isManagedResource(resource) && resource.type !== 'telemetry'
+        ? [[name, { type: resource.type, ...(resource.plan ? { plan: resource.plan } : {}) }]]
+        : []
+    )
+  );
 }

@@ -205,6 +205,26 @@ describe('deploy orchestration', () => {
     );
   });
 
+  // The picker asks for their size; telemetry has none.
+  it('sends the declared databases and caches to the picker', async () => {
+    const declared = {
+      resources: {
+        ...spec.resources,
+        db: { type: 'postgres', plan: 'postgres-1gb' },
+        cache: { type: 'redis' },
+        telemetry: { type: 'telemetry' },
+      },
+    };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    await deploy(options);
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({
+        resources: { db: { type: 'postgres', plan: 'postgres-1gb' }, cache: { type: 'redis' } },
+      })
+    );
+  });
+
   // Studio runs a bundle as one container, whatever the file declares.
   it('sends no services to the picker for a --prebuilt deploy', async () => {
     const declared = {
