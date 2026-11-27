@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import open from 'open';
-import type { EnvDeclaration } from './appSpec';
+import type { EnvDeclaration, SizedResource } from './appSpec';
 import type { CliTarget } from './deployTarget';
 
 /*
@@ -79,7 +79,7 @@ export async function authenticateCli(
     // The services modelence.config.json declares, by name.
     services?: string[];
     // The databases and caches it declares, whose size the picker asks for.
-    resources?: Record<string, { type: 'postgres' | 'redis'; plan?: string }>;
+    resources?: Record<string, SizedResource>;
   } = {}
 ): Promise<CliAuthResult> {
   // Only the picker has a variables step; nothing is sent otherwise.

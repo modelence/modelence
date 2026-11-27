@@ -9,7 +9,13 @@ import { packSource } from './source';
 import { build } from './build';
 import { prepareSpec } from './deploySpec';
 import { describeDeployKind, resolveDeployKind } from './deployKind';
-import { getServices, isManagedResource, readAppSpecFile, type AppSpec } from './appSpec';
+import {
+  getServices,
+  isManagedResource,
+  readAppSpecFile,
+  type AppSpec,
+  type SizedResource,
+} from './appSpec';
 import { describeOtherHosts, resolveTargetFromOptions } from './deployTarget';
 import { isCI } from './terminal';
 import {
@@ -317,7 +323,10 @@ function getPickerServices(kind: UploadKind, spec: AppSpec | undefined): string[
 
 // The picker asks for the size of each new one. A --prebuilt deploy can't
 // declare them.
-function getPickerResources(kind: UploadKind, spec: AppSpec | undefined) {
+function getPickerResources(
+  kind: UploadKind,
+  spec: AppSpec | undefined
+): Record<string, SizedResource> | undefined {
   if (kind !== 'source' || !spec) {
     return undefined;
   }

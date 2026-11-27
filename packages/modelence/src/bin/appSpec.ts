@@ -111,6 +111,9 @@ export interface ManagedResource {
   plan?: string;
 }
 
+// A database or cache, whose size the deploy picker asks for.
+export type SizedResource = ManagedResource & { type: Exclude<ManagedResourceType, 'telemetry'> };
+
 /*
   The platform's MongoDB database or Elastic metrics storage. Unlike a
   managed resource it has no plan and no outputs. Other apps get one only
