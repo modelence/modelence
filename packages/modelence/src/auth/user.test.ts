@@ -231,9 +231,9 @@ describe('auth/user', () => {
       expect(mockTime.days).toHaveBeenCalledWith(1);
     });
 
-    test('produces exactly 27 rules covering all auth buckets', () => {
+    test('produces exactly 29 rules covering all auth buckets', () => {
       const rules = buildAuthRateLimits();
-      expect(rules).toHaveLength(27);
+      expect(rules).toHaveLength(29);
 
       const buckets = new Set(rules.map((r) => r.bucket));
       expect(buckets).toEqual(
@@ -242,6 +242,7 @@ describe('auth/user', () => {
           'signupAttempt',
           'signin',
           'verification',
+          'verifyEmail',
           'passwordReset',
           'magicLink',
           'oneTimeCode',
@@ -308,6 +309,31 @@ describe('auth/user', () => {
       );
       expect(ip15m?.limit).toBe(3);
       expect(ipDay?.limit).toBe(100);
+    });
+
+    test('limits email verification token redemptions per IP by default', () => {
+      const rules = buildAuthRateLimits();
+
+      const verifyEmailRules = rules.filter((r) => r.bucket === 'verifyEmail');
+      expect(verifyEmailRules).toEqual([
+        { bucket: 'verifyEmail', type: 'ip', window: 15 * 60 * 1000, limit: 60 },
+        { bucket: 'verifyEmail', type: 'ip', window: 24 * 60 * 60 * 1000, limit: 600 },
+      ]);
+    });
+
+    test('allows the per-IP verifyEmail limits to be overridden', () => {
+      const rules = buildAuthRateLimits({
+        verifyEmail: [{ type: 'ip', window: 15 * 60 * 1000, limit: 5 }],
+      });
+
+      const ip15m = rules.find(
+        (r) => r.bucket === 'verifyEmail' && r.type === 'ip' && r.window === 15 * 60 * 1000
+      );
+      const ipDay = rules.find(
+        (r) => r.bucket === 'verifyEmail' && r.type === 'ip' && r.window === 24 * 60 * 60 * 1000
+      );
+      expect(ip15m?.limit).toBe(5);
+      expect(ipDay?.limit).toBe(600);
     });
 
     test('allows profile update limits to be overridden', () => {
