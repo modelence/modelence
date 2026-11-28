@@ -321,8 +321,8 @@ function getPickerServices(kind: UploadKind, spec: AppSpec | undefined): string[
   return kind === 'source' && spec ? getServices(spec).map(([name]) => name) : undefined;
 }
 
-// The picker asks for the size of each new one. A --prebuilt deploy can't
-// declare them.
+// The picker asks for the size of each new database or cache the file
+// declares. A --prebuilt deploy can't declare them.
 function getPickerResources(
   kind: UploadKind,
   spec: AppSpec | undefined

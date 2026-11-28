@@ -216,6 +216,13 @@ describe('authenticateCli declared variables', () => {
     await authenticateCli(host, { purpose: 'deploy', services: ['web', 'worker'] });
     expect(JSON.parse(String(authRequest()?.body)).services).toBeUndefined();
   });
+
+  // No picker, no sizes step.
+  it('sends no databases when the page only authorizes', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { purpose: 'deploy', resources: { db: { type: 'postgres' } } });
+    expect(JSON.parse(String(authRequest()?.body)).resources).toBeUndefined();
+  });
 });
 
 describe('authenticateCli deploy target hint', () => {

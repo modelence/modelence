@@ -94,19 +94,19 @@ A database, cache or telemetry endpoint that a deploy creates in the environment
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `type` | `"postgres"` \| `"redis"` \| `"telemetry"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache, `"telemetry"` the environment's OpenTelemetry endpoint. |
+| `plan` | string | none | Deprecated. The size to create a database or cache with, such as `postgres-free`, `postgres-hobby`, `postgres-1gb` or `redis-250mb`. When set, the deploy that creates it uses this size without asking, so it also works from CI. Read only when the resource is created. Telemetry takes no `plan`. |
 
 The file doesn't set the size of a database or cache. `modelence deploy` asks for it in the browser,
 on the deploy that creates it, so staging can use a free database and production a bigger one from
 the same file. A deploy from CI can't ask, so it fails with a link: pick the size there, then deploy
 again. The picker shows the monthly price of each size.
 
-`plan` (for example `"plan": "postgres-1gb"`) is deprecated but still works. When it is set, a deploy
-that creates the resource uses that size without asking, so it also works from CI.
-
 Every plan, Free included, can create free PostgreSQL databases (up to 3 per organization). A free
-database sleeps after 5 minutes without queries, and the next query wakes it in under a second. Other
-PostgreSQL sizes and Redis need a paid plan. Telemetry needs a plan with monitoring (Pro and up). It gives
-the environment a private OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days
+database sleeps after 5 minutes without queries, and the next query wakes it in under a second.
+Other PostgreSQL sizes and Redis need a paid plan.
+
+Telemetry needs a plan with monitoring (Pro and up). It gives the environment a private OpenTelemetry
+endpoint for the app's traces and metrics, kept for 30 days
 and shown on the environment's **Monitoring** page. Logs need no setup: the app's output is
 collected and shown on the **Logs** page.
 
