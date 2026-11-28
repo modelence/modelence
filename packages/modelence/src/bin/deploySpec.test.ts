@@ -402,7 +402,7 @@ describe('plan formatting', () => {
       '  build:   default (npm install)',
       '  start:   node server.js',
       '  db:      main-db (postgres, postgres-1gb)',
-      '  db:      cache (redis, default plan)',
+      '  db:      cache (redis)',
       '  telemetry: telemetry',
       '  env:     DATABASE_URL (main-db.url)',
       '  env:     OTEL_EXPORTER_OTLP_ENDPOINT (telemetry.endpoint)',

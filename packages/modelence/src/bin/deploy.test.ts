@@ -205,6 +205,26 @@ describe('deploy orchestration', () => {
     );
   });
 
+  // The picker asks for their size; telemetry has none.
+  it('sends the declared databases and caches to the picker', async () => {
+    const declared = {
+      resources: {
+        ...spec.resources,
+        db: { type: 'postgres', plan: 'postgres-1gb' },
+        cache: { type: 'redis' },
+        telemetry: { type: 'telemetry' },
+      },
+    };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    await deploy(options);
+    expect(authenticateCli).toHaveBeenCalledWith(
+      options.host,
+      expect.objectContaining({
+        resources: { db: { type: 'postgres', plan: 'postgres-1gb' }, cache: { type: 'redis' } },
+      })
+    );
+  });
+
   // Studio runs a bundle as one container, whatever the file declares.
   it('sends no services to the picker for a --prebuilt deploy', async () => {
     const declared = {
@@ -214,6 +234,15 @@ describe('deploy orchestration', () => {
     vi.mocked(getProjectPath).mockImplementation((...parts: string[]) => join(project, ...parts));
     await deploy({ ...options, prebuilt: true });
     expect(vi.mocked(authenticateCli).mock.calls[0][1]?.services).toBeUndefined();
+  });
+
+  // Studio refuses databases in a --prebuilt deploy, so the picker gets none.
+  it('sends no databases to the picker for a --prebuilt deploy', async () => {
+    const declared = { resources: { ...spec.resources, db: { type: 'postgres' } } };
+    await writeFile(join(project, 'modelence.config.json'), JSON.stringify(declared));
+    vi.mocked(getProjectPath).mockImplementation((...parts: string[]) => join(project, ...parts));
+    await deploy({ ...options, prebuilt: true });
+    expect(vi.mocked(authenticateCli).mock.calls[0][1]?.resources).toBeUndefined();
   });
 
   it('reauthorizes once when the upload authorization is rejected', async () => {

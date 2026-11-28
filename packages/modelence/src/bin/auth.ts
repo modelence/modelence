@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import open from 'open';
-import type { EnvDeclaration } from './appSpec';
+import type { EnvDeclaration, SizedResource } from './appSpec';
 import type { CliTarget } from './deployTarget';
 
 /*
@@ -67,6 +67,7 @@ export async function authenticateCli(
     hint,
     env,
     services,
+    resources,
   }: {
     pick?: CliAuthPick;
     purpose?: 'deploy';
@@ -77,6 +78,8 @@ export async function authenticateCli(
     env?: Record<string, EnvDeclaration>;
     // The services modelence.config.json declares, by name.
     services?: string[];
+    // The databases and caches it declares, whose size the picker asks for.
+    resources?: Record<string, SizedResource>;
   } = {}
 ): Promise<CliAuthResult> {
   // Only the picker has a variables step; nothing is sent otherwise.
@@ -85,6 +88,8 @@ export async function authenticateCli(
   // can't hold them all isn't offered.
   const declaredServices =
     pick === 'deploy' && services && services.length > 0 ? services : undefined;
+  const declaredResources =
+    pick === 'deploy' && resources && Object.keys(resources).length > 0 ? resources : undefined;
   const codeVerifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   const response = await fetch(`${host}/api/cli/auth`, {
@@ -94,6 +99,7 @@ export async function authenticateCli(
       codeChallenge,
       ...(declaredEnv ? { env: declaredEnv } : {}),
       ...(declaredServices ? { services: declaredServices } : {}),
+      ...(declaredResources ? { resources: declaredResources } : {}),
     }),
   });
 

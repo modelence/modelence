@@ -94,10 +94,19 @@ A database, cache or telemetry endpoint that a deploy creates in the environment
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `type` | `"postgres"` \| `"redis"` \| `"telemetry"` | required | `"postgres"` is a PostgreSQL database, `"redis"` a Redis cache, `"telemetry"` the environment's OpenTelemetry endpoint. |
-| `plan` | string | the smallest | The size to create it with. PostgreSQL: `postgres-1gb`, `postgres-2gb`, `postgres-4gb`, `postgres-8gb`, `postgres-16gb` (the RAM of the database). Redis: `redis-250mb`, `redis-1gb`, `redis-5gb` (the data it holds). Telemetry takes no `plan`. |
+| `plan` | string | none | Deprecated. The size to create a database or cache with, such as `postgres-free`, `postgres-hobby`, `postgres-1gb` or `redis-250mb`. When set, the deploy that creates it uses this size without asking, so it also works from CI. Read only when the resource is created. Telemetry takes no `plan`. |
 
-PostgreSQL and Redis need a paid plan. Telemetry needs a plan with monitoring (Pro and up). It gives
-the environment a private OpenTelemetry endpoint for the app's traces and metrics, kept for 30 days
+The file doesn't set the size of a database or cache. `modelence deploy` asks for it in the browser,
+on the deploy that creates it, so staging can use a free database and production a bigger one from
+the same file. A deploy from CI can't ask, so it fails with a link: pick the size there, then deploy
+again. The picker shows the monthly price of each size.
+
+Every plan, Free included, can create free PostgreSQL databases (up to 3 per organization). A free
+database sleeps after 5 minutes without queries, and the next query wakes it in under a second.
+Other PostgreSQL sizes and Redis need a paid plan.
+
+Telemetry needs a plan with monitoring (Pro and up). It gives the environment a private OpenTelemetry
+endpoint for the app's traces and metrics, kept for 30 days
 and shown on the environment's **Monitoring** page. Logs need no setup: the app's output is
 collected and shown on the **Logs** page.
 
@@ -105,8 +114,7 @@ A deploy creates every managed resource the file declares that the environment d
 and the new version starts only once they are ready. Resources are matched by name, so the same file
 works in every environment:
 
-- A resource that already exists is kept as it is, with its data. `plan` is read only when the
-  resource is created, so changing it later has no effect.
+- A resource that already exists is kept as it is, with its data and its size.
 - A resource removed from the file is not deleted. Delete it in the dashboard under **Resources**
   when it is no longer needed; a database or cache is billed until then.
 - Renaming a resource creates a new, empty one. The old one stays until it is deleted.

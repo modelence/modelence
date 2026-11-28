@@ -203,11 +203,25 @@ describe('authenticateCli declared variables', () => {
     expect(JSON.parse(String(authRequest()?.body))).toMatchObject({ services: ['web', 'worker'] });
   });
 
+  it('sends the declared databases to the deploy picker', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    const resources = { db: { type: 'postgres' as const } };
+    await authenticateCli(host, { pick: 'deploy', purpose: 'deploy', resources });
+    expect(JSON.parse(String(authRequest()?.body))).toMatchObject({ resources });
+  });
+
   // No picker, no new environment to size.
   it('sends no services when the page only authorizes', async () => {
     tokenResponses.push(() => Response.json({ token: 'tok' }));
     await authenticateCli(host, { purpose: 'deploy', services: ['web', 'worker'] });
     expect(JSON.parse(String(authRequest()?.body)).services).toBeUndefined();
+  });
+
+  // No picker, no sizes step.
+  it('sends no databases when the page only authorizes', async () => {
+    tokenResponses.push(() => Response.json({ token: 'tok' }));
+    await authenticateCli(host, { purpose: 'deploy', resources: { db: { type: 'postgres' } } });
+    expect(JSON.parse(String(authRequest()?.body)).resources).toBeUndefined();
   });
 });
 

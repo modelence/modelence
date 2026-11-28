@@ -106,10 +106,13 @@ export function isDockerfileService(
 // A database, cache or telemetry ingest the deploy creates in the environment.
 export interface ManagedResource {
   type: ManagedResourceType;
-  // A plan name such as "postgres-1gb"; the server picks the smallest without it.
-  // Telemetry has no plans.
+  // Deprecated: the size is picked in the browser on the deploy that creates
+  // it. When set, a plan name such as "postgres-1gb". Telemetry has no plans.
   plan?: string;
 }
+
+// A database or cache, whose size the deploy picker asks for.
+export type SizedResource = ManagedResource & { type: Exclude<ManagedResourceType, 'telemetry'> };
 
 /*
   The platform's MongoDB database or Elastic metrics storage. Unlike a
@@ -272,7 +275,9 @@ export function formatAppSpec(spec: AppSpec): string[] {
       const label = resource.type === 'mongodb' ? 'db:' : 'metrics:';
       lines.push(`  ${label.padEnd(8)} ${name} (${resource.type})`);
     } else if (isManagedResource(resource)) {
-      lines.push(`  db:      ${name} (${resource.type}, ${resource.plan ?? 'default plan'})`);
+      lines.push(
+        `  db:      ${name} (${[resource.type, resource.plan].filter(Boolean).join(', ')})`
+      );
     }
   }
 
